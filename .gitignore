@@ -1,0 +1,38 @@
+# IDE and operating system
+.idea/
+*.iml
+.DS_Store
+Thumbs.db
+
+# Secrets and local environment
+local.properties
+.env
+.env.*
+!.env.example
+*.jks
+*.keystore
+
+# Android
+**/.gradle/
+**/.kotlin/
+**/build/
+**/captures/
+**/.cxx/
+**/.externalNativeBuild/
+*.apk
+*.aab
+
+# iOS
+**/DerivedData/
+**/*.xcuserstate
+**/xcuserdata/
+
+# Server and tooling
+node_modules/
+.pnpm-store/
+.venv/
+__pycache__/
+
+# Local output
+output/
+tmp/

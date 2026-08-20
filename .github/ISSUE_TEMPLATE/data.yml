@@ -1,0 +1,68 @@
+name: 데이터 작업
+description: 수집, 검증, 정규화 또는 seed 변경을 추적합니다.
+title: "[DATA] "
+body:
+  - type: textarea
+    id: goal
+    attributes:
+      label: 목표
+      description: 데이터 작업의 목적과 필요한 결과를 설명해 주세요.
+    validations:
+      required: true
+  - type: input
+    id: source
+    attributes:
+      label: 데이터 출처
+      description: 기관명과 원문 URL 또는 공식 식별자를 적어 주세요.
+    validations:
+      required: true
+  - type: input
+    id: collected_at
+    attributes:
+      label: 수집일 또는 확인일
+      placeholder: YYYY-MM-DD
+    validations:
+      required: true
+  - type: textarea
+    id: request
+    attributes:
+      label: Endpoint와 요청 조건
+      description: 해당하는 경우 endpoint, 파라미터, pagination 조건을 적되 실제 키는 넣지 마세요.
+  - type: textarea
+    id: counts
+    attributes:
+      label: 건수
+      description: 현재 건수, 예상 건수와 차이가 있다면 그 상태를 적어 주세요.
+    validations:
+      required: true
+  - type: textarea
+    id: normalization
+    attributes:
+      label: 정규화와 중복 기준
+      description: 업체명, 주소, source ID와 중복 판단 기준을 적어 주세요.
+    validations:
+      required: true
+  - type: textarea
+    id: scope
+    attributes:
+      label: 작업 범위와 제외 범위
+    validations:
+      required: true
+  - type: textarea
+    id: validation
+    attributes:
+      label: 검증 방법과 완료 조건
+      description: 재현 명령, 스키마 검증과 사람이 확인할 항목을 적어 주세요.
+    validations:
+      required: true
+  - type: checkboxes
+    id: safety
+    attributes:
+      label: 확인
+      options:
+        - label: 개인정보와 비밀정보가 포함되지 않았습니다.
+          required: true
+        - label: 수집 및 저장소 재배포 권한을 확인했거나 미확인 상태를 명시했습니다.
+          required: true
+        - label: 확인되지 않은 혜택을 사실로 확정하지 않았습니다.
+          required: true

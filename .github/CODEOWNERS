@@ -1,7 +1,18 @@
-# 저장소 소유자가 기본 리뷰를 담당합니다.
-* @jelleoo
+# 현재 역할은 초기 작업 분담 기준이며 영구적인 소유권을 의미하지 않습니다.
+# 모든 주요 PR은 다른 영역 담당자도 함께 리뷰할 수 있습니다.
+* @jelleoo @ilwoo-maker
 
-# 영역별 담당자가 정해지면 아래 패턴에 팀원을 추가하세요.
-/apps/android/ @jelleoo
-/data/ @jelleoo
-/.github/ @jelleoo
+# Repository 관리 및 공동개발 규칙
+/.github/ @jelleoo @ilwoo-maker
+/AGENTS.md @jelleoo @ilwoo-maker
+/CONTRIBUTING.md @jelleoo @ilwoo-maker
+/docs/ @jelleoo @ilwoo-maker
+
+# Android Core: @ilwoo-maker, 교차 리뷰: @jelleoo
+/apps/android/ @ilwoo-maker @jelleoo
+
+# Map / UX: @jelleoo, 교차 리뷰: @ilwoo-maker
+/apps/android/app/src/main/java/com/example/militarybenefits/ui/ @jelleoo @ilwoo-maker
+
+# Data 담당자의 실제 GitHub ID는 Pending입니다.
+# 확정 전까지 /data/와 /tools/data/에는 위 기본 소유자가 적용됩니다.

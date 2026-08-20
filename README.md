@@ -14,7 +14,7 @@
 ## 저장소 구조
 
 ```text
-military-benefit-platform/
+MILIMAP/
 ├─ apps/
 │  ├─ android/          # Kotlin + Jetpack Compose Android 앱
 │  └─ ios/              # 향후 SwiftUI 앱
@@ -74,12 +74,15 @@ cd apps/android
 ./gradlew lintDebug testDebugUnitTest assembleDebug
 ```
 
-Pull Request에도 같은 Android 검사가 자동 실행되고, 성공한 디버그 APK가 GitHub Actions artifact로 저장됩니다.
+Android 또는 CI 파일을 변경한 Pull Request에는 같은 검사가 자동 실행되고, 성공한 디버그 APK가 GitHub Actions artifact로 저장됩니다.
 
 ## 팀 개발 규칙
 
-- `main`에는 직접 푸시하지 않고 기능 브랜치와 Pull Request를 사용합니다.
-- 예: `feature/android-map-search`, `feature/api-auth`, `fix/android-location`.
+- `main`은 검증된 안정 버전, `dev`는 기본 통합 개발 브랜치입니다.
+- `main`과 `dev`에는 직접 커밋하거나 푸시하지 않습니다.
+- 작업 브랜치는 최신 `dev`에서 만들고 Pull Request를 통해 `dev`에 병합합니다.
+- 안정 버전 반영은 `dev`에서 `main`으로 향하는 Pull Request로 진행합니다.
+- 예: `feature/android-map-search`, `fix/android-location`, `data/seoul-verification`, `docs/local-setup`, `chore/collaboration-foundation`.
 - API 키, `local.properties`, 서명 키는 절대 커밋하지 않습니다.
 - 혜택 데이터 변경에는 출처 URL과 확인일을 함께 기록합니다.
 - 아직 구현되지 않은 영역은 해당 디렉터리의 README에서 범위를 먼저 합의합니다.

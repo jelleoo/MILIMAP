@@ -3,9 +3,21 @@
 ## 저장소 복제
 
 ```powershell
-git clone https://github.com/jelleoo/military-benefit-platform.git
-cd military-benefit-platform
+git clone https://github.com/jelleoo/MILIMAP.git
+cd MILIMAP
 ```
+
+## 작업 브랜치
+
+제품과 문서 작업은 최신 `dev`에서 별도 브랜치를 만든 뒤 `dev` 대상 Pull Request로 반영합니다. `main`과 `dev`에는 직접 커밋하거나 푸시하지 않습니다.
+
+```powershell
+git switch dev
+git pull --ff-only
+git switch -c feature/issue-summary
+```
+
+문서, 데이터, 유지보수 작업에는 각각 `docs/`, `data/`, `chore/` 접두사를 사용합니다.
 
 ## Android
 

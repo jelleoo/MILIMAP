@@ -1,5 +1,6 @@
 package com.example.militarybenefits.ui
 
+import android.graphics.PointF
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -29,6 +30,7 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.example.militarybenefits.BuildConfig
 import com.example.militarybenefits.data.Benefit
 import com.example.militarybenefits.data.GeoPoint
+import com.example.militarybenefits.ui.map.createBenefitMarkerIcon
 import com.naver.maps.geometry.LatLng
 import com.naver.maps.map.CameraAnimation
 import com.naver.maps.map.CameraUpdate
@@ -62,6 +64,7 @@ private fun NaverMapView(
     val context = LocalContext.current
     val lifecycle = LocalLifecycleOwner.current.lifecycle
     val mapView = remember { MapView(context).also { it.onCreate(null) } }
+    val benefitMarkerIcon = remember(context) { createBenefitMarkerIcon(context) }
     val markers = remember { mutableListOf<Marker>() }
     val renderedSignature = remember { mutableStateOf("") }
     val cameraCenter = remember { mutableStateOf<GeoPoint?>(null) }
@@ -115,10 +118,11 @@ private fun NaverMapView(
                         .forEach { benefit ->
                             markers += Marker().apply {
                                 position = LatLng(benefit.latitude!!, benefit.longitude!!)
+                                icon = benefitMarkerIcon
+                                anchor = PointF(0.5f, 1f)
                                 captionText = benefit.name
                                 captionMinZoom = 13.0
                                 captionTextSize = 11f
-                                iconTintColor = android.graphics.Color.parseColor(categoryHex(benefit.category))
                                 setOnClickListener {
                                     onSelect(benefit)
                                     true

@@ -2,6 +2,7 @@ package com.example.militarybenefits.ui
 
 import android.content.Intent
 import android.net.Uri
+import android.widget.Toast
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -61,6 +62,7 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
@@ -69,9 +71,11 @@ import androidx.compose.ui.unit.sp
 import com.example.militarybenefits.AppController
 import com.example.militarybenefits.AppDestination
 import com.example.militarybenefits.BuildConfig
+import com.example.militarybenefits.R
 import com.example.militarybenefits.data.Benefit
 import com.example.militarybenefits.data.BenefitStatus
 import com.example.militarybenefits.data.GeoPoint
+import com.example.militarybenefits.ui.map.openNaverMap
 import kotlin.math.hypot
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -571,6 +575,7 @@ private fun BenefitDetailSheet(
     onFavorite: () -> Unit,
 ) {
     val context = LocalContext.current
+    val mapOpenFailedMessage = stringResource(R.string.naver_map_open_failed)
     ModalBottomSheet(onDismissRequest = onDismiss, containerColor = Color.White) {
         LazyColumn(
             modifier = Modifier.fillMaxWidth(),
@@ -629,6 +634,24 @@ private fun BenefitDetailSheet(
                             modifier = Modifier.weight(1f), shape = RoundedCornerShape(14.dp),
                         ) { Text("전화하기", fontWeight = FontWeight.Bold) }
                     }
+                }
+            }
+            item {
+                Button(
+                    onClick = {
+                        if (!context.openNaverMap(benefit)) {
+                            Toast.makeText(context, mapOpenFailedMessage, Toast.LENGTH_SHORT).show()
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth().height(50.dp),
+                    shape = RoundedCornerShape(14.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = PrimaryBlue),
+                ) {
+                    Text(
+                        stringResource(R.string.open_in_naver_map),
+                        color = Navy,
+                        fontWeight = FontWeight.ExtraBold,
+                    )
                 }
             }
             if (!benefit.sourceUrl.isNullOrBlank()) {

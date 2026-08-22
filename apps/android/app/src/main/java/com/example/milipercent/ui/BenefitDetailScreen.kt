@@ -139,7 +139,7 @@ private fun BenefitDetailContent(
         DetailField(label = "지역", value = benefit.district)
         DetailField(label = "정보 출처", value = benefit.sourceLabel)
         Text(
-            text = "현재 공공데이터에서 제공되는 정보만 표시하고 있습니다.",
+            text = benefit.sourceNotice,
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )

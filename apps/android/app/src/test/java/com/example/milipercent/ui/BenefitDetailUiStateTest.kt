@@ -17,6 +17,10 @@ class BenefitDetailUiStateTest {
         assertEquals("테스트 가게", success.benefit.name)
         assertEquals("할인", success.benefit.benefitType)
         assertEquals("병무청 나라사랑가게", success.benefit.sourceLabel)
+        assertEquals(
+            "병무청 API 제공 정보이며, 이용 전 업체에 최신 내용을 확인하세요.",
+            success.benefit.sourceNotice,
+        )
     }
 
     @Test
@@ -64,6 +68,10 @@ class BenefitDetailUiStateTest {
         assertEquals("전화 문의", state.benefit.verificationMethod)
         assertEquals("2026-08-17", state.benefit.lastVerifiedDate)
         assertEquals("정보 확인 필요", state.benefit.statusNotice)
+        assertEquals(
+            "직접 확인하거나 입력한 정보이며, 이용 전 업체에 최신 내용을 확인하세요.",
+            state.benefit.sourceNotice,
+        )
     }
 
     private fun detail(

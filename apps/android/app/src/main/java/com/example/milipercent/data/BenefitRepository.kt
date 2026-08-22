@@ -2,6 +2,7 @@ package com.example.milipercent.data
 
 import com.example.milipercent.analysis.BenefitAnalysisResult
 import com.example.milipercent.analysis.BenefitAnalyzer
+import com.example.milipercent.data.local.BenefitEntity
 import com.example.milipercent.data.local.BenefitLocalDataSource
 import com.example.milipercent.data.local.MMA_SOURCE_TYPE
 import com.example.milipercent.data.local.toDetail
@@ -49,16 +50,33 @@ class BenefitRepository(
         val collection = collectAllBenefits(onProgress)
         val analysis = BenefitAnalyzer.analyze(collection)
         val syncedAt = currentTimeMillis()
-        val seoulEntities = analysis.seoulBenefits.map { it.toEntity(syncedAt) }
+        // 완전히 같은 API 행은 첫 항목을 유지하고, 서로 다른 행의 stable ID 충돌은 거부한다.
+        val seoulEntities = analysis.seoulBenefits
+            .distinct()
+            .map { it.toEntity(syncedAt) }
+        val collidingIds = seoulEntities
+            .groupBy(BenefitEntity::id)
+            .filterValues { entities -> entities.size > 1 }
+            .keys
+        if (collidingIds.isNotEmpty()) {
+            throw BenefitIdentityCollisionException(collidingIds.size)
+        }
 
         localDataSource.replaceBenefits(
             sourceType = MMA_SOURCE_TYPE,
             benefits = seoulEntities,
         )
+        val roomStoredCount = localDataSource.countBenefits(MMA_SOURCE_TYPE)
+        if (roomStoredCount != seoulEntities.size) {
+            throw BenefitStorageCountMismatchException(
+                expectedCount = seoulEntities.size,
+                actualCount = roomStoredCount,
+            )
+        }
 
         return BenefitSyncResult(
             analysis = analysis,
-            roomStoredCount = localDataSource.countBenefits(MMA_SOURCE_TYPE),
+            roomStoredCount = roomStoredCount,
         )
     }
 
@@ -173,3 +191,12 @@ class IncompleteBenefitCollectionException(
     actualCount: Int,
     detail: String,
 ) : IOException("$detail (예상: $expectedCount, 실제: $actualCount)")
+
+class BenefitIdentityCollisionException(
+    collisionCount: Int,
+) : IOException("서로 다른 MMA 행의 stable ID가 충돌했습니다. (충돌 ID: ${collisionCount}개)")
+
+class BenefitStorageCountMismatchException(
+    expectedCount: Int,
+    actualCount: Int,
+) : IOException("Room 저장 건수가 올바르지 않습니다. (예상: $expectedCount, 실제: $actualCount)")

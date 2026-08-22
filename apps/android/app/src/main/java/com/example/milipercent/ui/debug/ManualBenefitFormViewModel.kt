@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import com.example.milipercent.data.manual.ManualBenefitAdminRepository
 import com.example.milipercent.data.manual.ManualBenefitInput
 import com.example.milipercent.data.manual.ManualBenefitRecord
+import com.example.milipercent.ui.runCatchingPreservingCancellation
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -34,7 +35,7 @@ class ManualBenefitFormViewModel(
 
     private fun observeExisting(id: String) {
         viewModelScope.launch {
-            runCatching {
+            runCatchingPreservingCancellation {
                 repository.observeById(id).collect { record ->
                     _uiState.value = if (record == null) {
                         ManualBenefitFormUiState(
@@ -58,7 +59,7 @@ class ManualBenefitFormViewModel(
         if (_uiState.value.isSaving) return
         _uiState.value = _uiState.value.copy(isSaving = true, errorMessage = null)
         viewModelScope.launch {
-            runCatching {
+            runCatchingPreservingCancellation {
                 if (benefitId == null) {
                     repository.create(input)
                 } else {

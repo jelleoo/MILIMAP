@@ -11,6 +11,7 @@
 - `main`: 검증된 안정 버전
 - `dev`: 기본 통합 개발 브랜치
 - 작업 브랜치: 최신 `dev`에서 분기하고 Pull Request를 통해 `dev`에 병합
+- Android Room 통합 단계의 예외: phase 브랜치는 `feature/android-room-integration`에서 분기하고 해당 공유 통합 브랜치로 Pull Request를 연다. 전체 기능 검증 뒤 공유 통합 브랜치에서 `dev`로 최종 Pull Request를 연다.
 - 안정 버전 반영: `dev`에서 `main`으로 향하는 Pull Request
 - `main`과 `dev` 직접 commit/push 금지
 - 공동개발 규칙은 `chore/collaboration-foundation` 작업에서 도입
@@ -21,6 +22,8 @@
 - Room v2 is the single local database; schema v1/v2 and `MIGRATION_1_2` are retained.
 - Data flow is Repository -> ViewModel -> UiState -> Compose.
 - Current integrated features are list, Seoul district filter, name/address search, detail, MMA pagination/retry/cache, Manual Seed 12 rows, and Debug-only MANUAL_LOCAL CRUD.
+- Gradle launcher and daemon runtime contract is JDK 17; CI verifies the daemon criterion before the full gate.
+- Exact duplicate MMA rows are deterministically deduplicated; materially different stable-ID collisions fail before Room replacement, and stored source counts are verified before success is reported.
 - Naver Map, current location, MILIMAP 484-row reconciliation, login, and favorites are deferred on the integration branch and are not yet restored.
 
 위 기능은 현재 MVP 동작에 대한 설명이며 운영 서비스에 적합하다는 의미는 아닙니다. 데이터 건수와 검증 상태는 별도 데이터 Issue에서 다시 대조해야 합니다.

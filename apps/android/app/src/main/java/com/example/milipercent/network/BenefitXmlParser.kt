@@ -4,8 +4,10 @@ import com.example.milipercent.model.Benefit
 import com.example.milipercent.model.BenefitPage
 import java.io.IOException
 import java.io.InputStream
+import javax.xml.parsers.ParserConfigurationException
 import javax.xml.parsers.SAXParserFactory
 import org.xml.sax.Attributes
+import org.xml.sax.InputSource
 import org.xml.sax.SAXException
 import org.xml.sax.helpers.DefaultHandler
 
@@ -15,6 +17,8 @@ class BenefitXmlParser {
 
         try {
             createParserFactory().newSAXParser().parse(inputStream, handler)
+        } catch (exception: ParserConfigurationException) {
+            throw BenefitParsingException("XML parser 보안 설정을 적용하지 못했습니다.", exception)
         } catch (exception: SAXException) {
             throw BenefitParsingException("XML 응답을 해석하지 못했습니다.", exception)
         } catch (exception: RuntimeException) {
@@ -49,11 +53,9 @@ class BenefitXmlParser {
         SAXParserFactory.newInstance().apply {
             isNamespaceAware = false
 
-            // Parser implementations differ by Android version, so apply each protection
-            // only when the implementation supports it.
-            runCatching { setFeature(DISALLOW_DOCTYPE, true) }
-            runCatching { setFeature(EXTERNAL_GENERAL_ENTITIES, false) }
-            runCatching { setFeature(EXTERNAL_PARAMETER_ENTITIES, false) }
+            setFeature(DISALLOW_DOCTYPE, true)
+            setFeature(EXTERNAL_GENERAL_ENTITIES, false)
+            setFeature(EXTERNAL_PARAMETER_ENTITIES, false)
         }
 
     private class BenefitXmlHandler : DefaultHandler() {
@@ -83,6 +85,10 @@ class BenefitXmlParser {
 
         override fun characters(characters: CharArray, start: Int, length: Int) {
             text.append(characters, start, length)
+        }
+
+        override fun resolveEntity(publicId: String?, systemId: String?): InputSource {
+            throw SAXException("외부 XML 엔터티는 허용되지 않습니다.")
         }
 
         override fun endElement(uri: String?, localName: String?, qName: String?) {

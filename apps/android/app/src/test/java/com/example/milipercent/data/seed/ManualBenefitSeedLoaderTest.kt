@@ -82,6 +82,41 @@ class ManualBenefitSeedLoaderTest {
         }
     }
 
+    @Test
+    fun `trim 후 같은 Seed ID는 Room 교체 전에 중복으로 거부한다`() {
+        val existing = entity("manual_seed_existing", BenefitSourceType.MANUAL_SEED)
+        val local = FakeLocalDataSource(listOf(existing))
+        val source = MutableJsonSource(
+            seedJson(
+                item("x", id = "manual_seed_x"),
+                item("x-space", id = "manual_seed_x "),
+            ),
+        )
+
+        assertThrows(ManualBenefitSeedValidationException::class.java) {
+            runBlocking { synchronizer(source, local).synchronize() }
+        }
+
+        assertEquals(0, local.replaceCallCount)
+        assertEquals(listOf(existing), local.bySource(BenefitSourceType.MANUAL_SEED))
+    }
+
+    @Test
+    fun `교체 후 저장 건수가 entity 수와 다르면 성공 건수를 보고하지 않는다`() {
+        val local = FakeLocalDataSource(reportedCountOverride = 0)
+
+        assertThrows(IllegalStateException::class.java) {
+            runBlocking {
+                synchronizer(
+                    MutableJsonSource(seedJson(item("one"))),
+                    local,
+                ).synchronize()
+            }
+        }
+
+        assertEquals(1, local.replaceCallCount)
+    }
+
     private fun synchronizer(source: MutableJsonSource, local: FakeLocalDataSource) =
         RoomManualSeedSynchronizer(
             loader = ManualBenefitSeedLoader(
@@ -97,6 +132,7 @@ class ManualBenefitSeedLoaderTest {
 
     private class FakeLocalDataSource(
         initial: List<BenefitEntity> = emptyList(),
+        private val reportedCountOverride: Int? = null,
     ) : BenefitLocalDataSource {
         private val state = MutableStateFlow(initial)
         var replaceCallCount = 0
@@ -121,7 +157,7 @@ class ManualBenefitSeedLoaderTest {
         }
 
         override suspend fun countBenefits(sourceType: String): Int =
-            state.value.count { it.sourceType == sourceType }
+            reportedCountOverride ?: state.value.count { it.sourceType == sourceType }
 
         override suspend fun upsertBenefit(benefit: BenefitEntity) {
             state.value = state.value.filterNot { it.id == benefit.id } + benefit

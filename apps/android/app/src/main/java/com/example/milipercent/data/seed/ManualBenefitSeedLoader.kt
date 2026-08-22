@@ -67,9 +67,12 @@ class ManualBenefitSeedLoader(
             throw ManualBenefitSeedValidationException("Seed JSON 형식이 올바르지 않습니다.", exception)
         }
 
-        validateAll(document.items)
+        val normalizedItems = document.items.map { item ->
+            item.copy(id = item.id.trim())
+        }
+        validateAll(normalizedItems)
         val syncedAt = currentTimeMillis()
-        return document.items.map { item -> item.toEntity(syncedAt) }
+        return normalizedItems.map { item -> item.toEntity(syncedAt) }
     }
 
     private fun validateAll(items: List<ManualBenefitSeedItem>) {
@@ -140,7 +143,16 @@ class RoomManualSeedSynchronizer(
             sourceType = BenefitSourceType.MANUAL_SEED.name,
             benefits = entities,
         )
-        return ManualSeedSyncResult(entities.size)
+        val storedCount = localDataSource.countBenefits(
+            BenefitSourceType.MANUAL_SEED.name,
+        )
+        if (storedCount != entities.size) {
+            throw ManualBenefitSeedStorageException(
+                expectedCount = entities.size,
+                actualCount = storedCount,
+            )
+        }
+        return ManualSeedSyncResult(storedCount)
     }
 }
 
@@ -152,6 +164,13 @@ class ManualBenefitSeedValidationException(
     message: String,
     cause: Throwable? = null,
 ) : IllegalArgumentException(message, cause)
+
+class ManualBenefitSeedStorageException(
+    expectedCount: Int,
+    actualCount: Int,
+) : IllegalStateException(
+    "MANUAL_SEED 저장 건수가 올바르지 않습니다. (예상: $expectedCount, 실제: $actualCount)",
+)
 
 internal fun validateRequired(value: String, label: String) {
     if (value.isBlank()) throw ManualBenefitSeedValidationException("$label 값이 비어 있습니다.")

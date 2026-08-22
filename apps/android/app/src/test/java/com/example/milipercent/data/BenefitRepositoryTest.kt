@@ -85,6 +85,72 @@ class BenefitRepositoryTest {
     }
 
     @Test
+    fun `정규화 ID가 같은 서로 다른 MMA 행은 캐시 교체 전에 실패한다`() {
+        val old = entity(id = "mma_old", sourceRowNumber = 999, name = "기존 가게")
+        val local = FakeLocalDataSource(listOf(old))
+        val source = SinglePageSource(
+            listOf(
+                Benefit(
+                    id = 10,
+                    name = "충돌 가게",
+                    address = "서울특별시 마포구 월드컵로 1",
+                    phone = "02-1111-1111",
+                    benefitType = "할인",
+                ),
+                Benefit(
+                    id = 20,
+                    name = "충 돌 가게",
+                    address = "서울특별시 마포구 월드컵로 1",
+                    phone = "02-2222-2222",
+                    benefitType = "증정",
+                ),
+            ),
+        )
+
+        assertThrows(IOException::class.java) {
+            runBlocking { BenefitRepository(source, local).refreshBenefits() }
+        }
+
+        assertEquals(0, local.replaceCallCount)
+        assertEquals(listOf(old), local.current)
+    }
+
+    @Test
+    fun `완전히 같은 MMA 행은 첫 행을 남겨 결정적으로 한 건만 저장한다`() = runBlocking {
+        val duplicate = Benefit(
+            id = 10,
+            name = "중복 가게",
+            address = "서울특별시 마포구 월드컵로 1",
+            phone = "02-1111-1111",
+            benefitType = "할인",
+        )
+        val local = FakeLocalDataSource()
+
+        val result = BenefitRepository(
+            SinglePageSource(listOf(duplicate, duplicate)),
+            local,
+        ).refreshBenefits()
+
+        assertEquals(1, result.roomStoredCount)
+        assertEquals(1, local.current.count { it.sourceType == MMA_SOURCE_TYPE })
+        assertEquals(10, local.current.single().sourceRowNumber)
+    }
+
+    @Test
+    fun `교체 후 저장 건수가 distinct entity 수와 다르면 성공을 보고하지 않는다`() {
+        val local = FakeLocalDataSource(reportedCountOverride = 0)
+        val source = SinglePageSource(
+            listOf(Benefit(1, "새 MMA", "서울특별시 강남구 테스트로 1", null, "할인")),
+        )
+
+        assertThrows(IOException::class.java) {
+            runBlocking { BenefitRepository(source, local).refreshBenefits() }
+        }
+
+        assertEquals(1, local.replaceCallCount)
+    }
+
+    @Test
     fun `일부 페이지 수집 실패 시 기존 캐시를 교체하지 않는다`() {
         val old = entity(id = "mma_old", sourceRowNumber = 999, name = "기존 가게")
         val local = FakeLocalDataSource(listOf(old))
@@ -220,6 +286,7 @@ class BenefitRepositoryTest {
 
     private class FakeLocalDataSource(
         initial: List<BenefitEntity> = emptyList(),
+        private val reportedCountOverride: Int? = null,
     ) : BenefitLocalDataSource {
         private val state = MutableStateFlow(initial)
         var replaceCallCount = 0
@@ -248,7 +315,7 @@ class BenefitRepositoryTest {
         }
 
         override suspend fun countBenefits(sourceType: String): Int =
-            state.value.count { it.sourceType == sourceType }
+            reportedCountOverride ?: state.value.count { it.sourceType == sourceType }
 
         override suspend fun upsertBenefit(benefit: BenefitEntity) {
             state.value = state.value.filterNot { it.id == benefit.id } + benefit

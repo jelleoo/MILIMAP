@@ -6,6 +6,7 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.example.milipercent.data.manual.ManualBenefitAdminRepository
 import com.example.milipercent.data.manual.ManualBenefitRecord
+import com.example.milipercent.ui.runCatchingPreservingCancellation
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -26,7 +27,7 @@ class ManualBenefitAdminViewModel(
     init {
         Log.d(TAG, "MANUAL_LOCAL 관리자 목록 관찰 시작")
         viewModelScope.launch {
-            runCatching {
+            runCatchingPreservingCancellation {
                 repository.observeAll().collect { benefits ->
                     Log.d(TAG, "MANUAL_LOCAL 관리자 목록: ${benefits.size}건")
                     _uiState.value = ManualBenefitAdminUiState(
@@ -46,7 +47,7 @@ class ManualBenefitAdminViewModel(
 
     fun delete(id: String) {
         viewModelScope.launch {
-            runCatching { repository.delete(id) }
+            runCatchingPreservingCancellation { repository.delete(id) }
                 .onFailure { exception ->
                     _uiState.value = _uiState.value.copy(
                         errorMessage = exception.message ?: "삭제하지 못했습니다.",

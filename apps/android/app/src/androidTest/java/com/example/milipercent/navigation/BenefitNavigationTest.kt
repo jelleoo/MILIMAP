@@ -53,6 +53,8 @@ class BenefitNavigationTest {
                                     benefitType = "할인",
                                     district = "강남구",
                                     sourceLabel = "병무청 나라사랑가게",
+                                    sourceNotice =
+                                        "병무청 API 제공 정보이며, 이용 전 업체에 최신 내용을 확인하세요.",
                                 ),
                             ),
                             onBack = onBack,

@@ -37,6 +37,13 @@ jobs:
       - name: Grant Gradle wrapper permission
         run: chmod +x gradlew
 
+      - name: Verify Gradle daemon JDK 17 contract
+        shell: bash
+        run: |
+          gradle_version="$(./gradlew --version)"
+          printf '%s\n' "$gradle_version"
+          grep -Eq '^Daemon JVM:.*Java 17' <<< "$gradle_version"
+
       - name: Lint, test, and build
         run: ./gradlew lintDebug testDebugUnitTest assembleDebug --stacktrace
 

@@ -1,8 +1,12 @@
 package com.example.milipercent.network
 
 import java.io.ByteArrayInputStream
+import java.io.PrintWriter
+import java.io.StringWriter
+import java.nio.file.Files
 import kotlin.text.Charsets.UTF_8
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
@@ -120,6 +124,86 @@ class BenefitXmlParserTest {
         }
     }
 
+    @Test
+    fun `필수 보안 기능을 지원하지 않는 parser는 fail closed 처리한다`() {
+        withSaxParserFactory(RejectingSecurityFeatureSaxParserFactory::class.java) {
+            assertThrows(BenefitParsingException::class.java) {
+                parse(emptySuccessXml())
+            }
+        }
+    }
+
+    @Test
+    fun `외부 file entity는 내용 확장 없이 파싱에 실패한다`() {
+        val sentinel = "LOCAL_FILE_ENTITY_MUST_NEVER_BE_EXPANDED"
+        val externalFile = Files.createTempFile("milispot-xxe-", ".txt")
+        Files.writeString(externalFile, sentinel, UTF_8)
+
+        try {
+            val exception = withSaxParserFactory(
+                IgnoringSecurityFeatureSaxParserFactory::class.java,
+            ) {
+                assertThrows(BenefitParsingException::class.java) {
+                    parse(
+                        """
+                        <!DOCTYPE response [
+                          <!ENTITY xxe SYSTEM "${externalFile.toUri().toASCIIString()}">
+                        ]>
+                        <response>
+                            <header><resultCode>00</resultCode></header>
+                            <body>
+                                <items><item><rnum>1</rnum><udaeGgm>&xxe;</udaeGgm></item></items>
+                                <numOfRows>100</numOfRows>
+                                <pageNo>1</pageNo>
+                                <totalCount>1</totalCount>
+                            </body>
+                        </response>
+                        """.trimIndent(),
+                    )
+                }
+            }
+
+            assertFalse(exception.renderCompleteThrowable().contains(sentinel))
+        } finally {
+            Files.deleteIfExists(externalFile)
+        }
+    }
+
     private fun parse(xml: String) =
         ByteArrayInputStream(xml.toByteArray(UTF_8)).use(parser::parse)
+
+    private fun emptySuccessXml() =
+        """
+        <response>
+            <header><resultCode>00</resultCode></header>
+            <body>
+                <items></items>
+                <numOfRows>100</numOfRows>
+                <pageNo>1</pageNo>
+                <totalCount>0</totalCount>
+            </body>
+        </response>
+        """.trimIndent()
+
+    private fun <T> withSaxParserFactory(
+        factoryClass: Class<out javax.xml.parsers.SAXParserFactory>,
+        block: () -> T,
+    ): T {
+        val propertyName = "javax.xml.parsers.SAXParserFactory"
+        val previous = System.getProperty(propertyName)
+        System.setProperty(propertyName, factoryClass.name)
+        return try {
+            block()
+        } finally {
+            if (previous == null) {
+                System.clearProperty(propertyName)
+            } else {
+                System.setProperty(propertyName, previous)
+            }
+        }
+    }
+
+    private fun Throwable.renderCompleteThrowable(): String = StringWriter().also { writer ->
+        PrintWriter(writer).use(::printStackTrace)
+    }.toString()
 }

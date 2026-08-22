@@ -41,7 +41,7 @@ class BenefitViewModel(
     private fun synchronizeManualSeed() {
         val synchronizer = manualSeedSynchronizer ?: return
         viewModelScope.launch {
-            runCatching { synchronizer.synchronize() }
+            runCatchingPreservingCancellation { synchronizer.synchronize() }
                 .onSuccess { result ->
                     Log.d(TAG, "MANUAL_SEED 동기화 완료: ${result.storedCount}")
                 }

@@ -29,16 +29,21 @@ class BenefitApiClient(
         require(pageNo > 0) { "pageNo는 1 이상이어야 합니다." }
         require(numOfRows > 0) { "numOfRows는 1 이상이어야 합니다." }
 
+        val baseUrl = try {
+            URL(apiUrl.trim())
+        } catch (_: Exception) {
+            throw BenefitNetworkException("API 요청을 준비하지 못했습니다.")
+        }
         val connection = try {
-            (buildRequestUrl(pageNo, numOfRows).openConnection() as HttpURLConnection).apply {
+            (buildRequestUrl(baseUrl, pageNo, numOfRows).openConnection() as HttpURLConnection).apply {
                 requestMethod = "GET"
                 connectTimeout = TIMEOUT_MILLIS
                 readTimeout = TIMEOUT_MILLIS
                 setRequestProperty("Accept", "application/xml")
             }
-        } catch (exception: Exception) {
-            // URL-related exception messages can contain the complete query string.
-            throw BenefitNetworkException("API 요청을 준비하지 못했습니다.", exception)
+        } catch (_: Exception) {
+            // URL-related exception messages can contain the complete credential query.
+            throw BenefitNetworkException("API 요청을 준비하지 못했습니다.")
         }
 
         try {
@@ -53,17 +58,18 @@ class BenefitApiClient(
             throw exception
         } catch (exception: BenefitParsingException) {
             throw exception
-        } catch (exception: SocketTimeoutException) {
-            throw BenefitNetworkException("API 요청 시간이 초과되었습니다.", exception)
-        } catch (exception: IOException) {
-            throw BenefitNetworkException("서버와 통신하지 못했습니다.", exception)
+        } catch (_: SocketTimeoutException) {
+            throw BenefitNetworkException("API 요청 시간이 초과되었습니다.")
+        } catch (_: IOException) {
+            throw BenefitNetworkException("서버와 통신하지 못했습니다.")
         } finally {
             connection.disconnect()
         }
     }
 
-    private fun buildRequestUrl(pageNo: Int, numOfRows: Int): URL {
-        val separator = if (apiUrl.contains('?')) "&" else "?"
+    private fun buildRequestUrl(baseUrl: URL, pageNo: Int, numOfRows: Int): URL {
+        val baseUrlText = baseUrl.toExternalForm()
+        val separator = if (baseUrlText.contains('?')) "&" else "?"
         val query = buildString {
             append("serviceKey=")
             append(encodeServiceKey(serviceKey.trim()))
@@ -72,7 +78,7 @@ class BenefitApiClient(
             append("&numOfRows=")
             append(numOfRows)
         }
-        return URL(apiUrl.trim() + separator + query)
+        return URL(baseUrlText + separator + query)
     }
 
     private fun encodeServiceKey(key: String): String {
@@ -98,5 +104,4 @@ class BenefitApiClient(
     }
 }
 
-class BenefitNetworkException(message: String, cause: Throwable? = null) :
-    IOException(message, cause)
+class BenefitNetworkException(message: String) : IOException(message)

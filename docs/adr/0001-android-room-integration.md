@@ -1,6 +1,6 @@
 # ADR 0001: MiliPercent Room 기반 Android 통합
 
-- 상태: Proposed
+- 상태: Accepted
 - 날짜: 2026-08-22
 - 관련 이슈: https://github.com/jelleoo/MILIMAP/issues/4
 - 결정 참여자: Android 공동 개발팀
@@ -22,7 +22,7 @@ MILIMAP과 MiliPercent에는 서로 다른 Android 구현이 있다.
 
 ## 결정
 
-다음 결정을 팀 승인 대상으로 제안한다.
+다음 결정을 팀 승인 결과로 채택한다.
 
 1. 공동 저장소와 모노레포 구조는 MILIMAP을 유지한다.
 2. `apps/android`의 Core 기준선은 MiliPercent를 사용한다.
@@ -117,6 +117,6 @@ Gradle root, package, manifest와 동일 역할 파일의 대규모 충돌을 �
 
 지도와 현재 위치가 복구되기 전에 공동 개발 기준에서 기존 기능이 사라지므로 제외한다.
 
-## 승인 조건
+## 승인 기록
 
-이 ADR이 `Accepted`로 변경되고 Issue #4에서 팀 합의가 확인되기 전에는 Android Core 교체를 시작하지 않는다.
+2026-08-22 사용자가 팀원 승인 완료를 전달했으며, 이를 Issue #4에 사용자 전달 기반 승인으로 기록했다. 이 ADR은 `Accepted` 상태이며 Android Core 교체를 시작할 수 있다.

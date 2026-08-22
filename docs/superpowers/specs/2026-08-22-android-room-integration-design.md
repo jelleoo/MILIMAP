@@ -319,7 +319,6 @@ Core 기준선 PR은 한 명이 책임지고 다른 팀원은 같은 핵심 파�
 
 ## Pending Team Decisions
 
-- ADR 0001의 `Accepted` 승인
 - Naver Cloud Console package 등록 담당자
 - 통합 작업 책임자와 backup tag 생성·push 담당자
 - 단계별 파일 소유자와 PR reviewer

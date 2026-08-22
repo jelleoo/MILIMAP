@@ -59,9 +59,9 @@ MiliPercent 로컬 프로젝트의 untracked 파일, `.git`, `.idea`, `.gradle`,
 ## Target Architecture
 
 ```text
-Remote MMA API -----+
-Manual Seed --------+--> BenefitRepository --> Room --> BenefitViewModel --> BenefitUiState
-Verified Dataset ---+                                              |
+Remote MMA API --> Verified MMA Enrichment --+
+Manual Seed ---------------------------------+--> BenefitRepository --> Room --> BenefitViewModel --> BenefitUiState
+Verified Non-MMA Seed -----------------------+                                              |
                                                                  +--> List / Detail
                                                                  +--> BenefitMapItem --> Naver Map
 
@@ -71,7 +71,8 @@ Android Location Provider --> LocationDataSource --> Location ViewModel/State --
 ### Data ownership
 
 - Room의 `benefits` 테이블이 사용자에게 보이는 혜택의 유일한 기준이다.
-- API, bundled Seed와 이후 검증 데이터는 source별 transaction으로 Room을 갱신한다.
+- 동적 MMA 행은 검증된 enrichment를 메모리에서 적용한 뒤 `MMA_API` source transaction으로 Room을 교체한다.
+- 검증된 bundled Seed의 여러 source는 전체 parsing·validation 후 하나의 Room transaction에서 함께 교체한다.
 - 한 source의 refresh는 다른 source의 행을 삭제하지 않는다.
 - 전체 parsing·validation 성공 전에는 기존 source 데이터를 교체하지 않는다.
 - `ENDED` 데이터는 일반 사용자 Flow에서 제외하되 관리·검증 경로에서는 조회 가능해야 한다.
@@ -165,6 +166,7 @@ MILIMAP 필드를 손실 없이 표현하기 위해 import보다 먼저 Room con
 
 - 기존 유지: `sourceType`, `sourceRowNumber`, `sourceUrl`, `lastVerifiedDate`, `verificationMethod`, `status`, `eligibleTarget`, `usageCondition`, `latitude`, `longitude`
 - 추가: `category`, `sourceLabel`, `sourceReferencesJson`
+- source type에 `LOCAL_GOV`, `PUBLIC_EVIDENCE`를 추가하고, `MMA_API`, `MANUAL_SEED`, `MANUAL_LOCAL`의 기존 의미는 유지한다.
 - `benefitType`과 `category`는 의미가 다르므로 같은 컬럼으로 합치지 않는다.
 - `sourceUrl`은 대표 출처 URL을 유지한다. 원본에 ` | `로 구분된 복수 URL이 있으면 각 URL을 검증한 뒤 JSON 배열로 `sourceReferencesJson`에 모두 보존한다.
 - `category`, `sourceLabel`, `sourceReferencesJson` 추가는 database v2에서 v3로 올리고, explicit `MIGRATION_2_3`, exported schema 3과 migration test를 같은 PR에 포함한다.
@@ -180,8 +182,9 @@ MILIMAP 필드를 손실 없이 표현하기 위해 import보다 먼저 Room con
 7. MILIMAP의 `MMA_API` Seed 행은 별도 혜택으로 삽입하지 않는다. 동일한 실시간 MMA 행을 source ID 또는 검증된 업체명+주소로 찾았을 때 좌표·출처 보강 후보로만 사용한다.
 8. `LOCAL_GOV`와 `PUBLIC_EVIDENCE` 행은 동적 MMA 데이터 및 MiliPercent Manual Seed와 충돌하지 않는다고 확인된 경우에만 bundled Seed 후보로 사용한다.
 9. 출처·검증일·상태가 없는 값은 추측해 채우지 않는다.
-10. 검증된 결과와 입력·출력 건수·제외 사유를 재현 가능한 파일로 남긴다.
-11. 검증된 결과만 source별 transaction으로 Room에 적재한다.
+10. pipeline은 `mma_benefit_enrichment.json`, `verified_benefits_seed.json`, 입력·출력 건수와 제외 사유를 담은 reconciliation report를 생성한다.
+11. repository는 MMA refresh 때 stable benefit ID로 enrichment를 적용한 후 `MMA_API` 행을 교체한다. 매칭되지 않은 enrichment는 자동 적용하지 않고 report에 남긴다.
+12. bundled Seed loader는 모든 항목을 먼저 검증한 뒤 `LOCAL_GOV`와 `PUBLIC_EVIDENCE` source를 하나의 Room transaction에서 교체한다.
 
 지도 PR은 synthetic map item으로 상태와 click 경로를 검증할 수 있지만, 실제 Marker 동등성은 이 pipeline 이후 최종 gate에서 확인한다.
 
@@ -233,12 +236,14 @@ MILIMAP 필드를 손실 없이 표현하기 위해 import보다 먼저 Room con
 ### Phase 5: Data contract
 
 - `category`, `sourceLabel`, `sourceReferencesJson`을 Room과 domain/detail model에 추가한다.
+- `LOCAL_GOV`, `PUBLIC_EVIDENCE` source type과 bundled Seed의 다중-source transaction을 추가한다.
 - database v3, `MIGRATION_2_3`, schema 3과 migration test를 함께 추가한다.
 
 ### Phase 6: Data reconciliation
 
 - 동적 MMA 데이터와 MILIMAP Seed의 중복을 분석한다.
-- 검증된 비-MMA 및 좌표 데이터를 재현 가능한 pipeline으로 생성한다.
+- 검증된 비-MMA Seed, MMA enrichment와 reconciliation report를 재현 가능한 pipeline으로 생성한다.
+- MMA refresh가 enrichment 좌표·출처를 유지하고 미매칭 값을 추측 적용하지 않는지 검증한다.
 - production Seed와 실제 marker를 검증한다.
 
 ### Phase 7: Final integration

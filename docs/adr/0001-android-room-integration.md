@@ -34,13 +34,14 @@ MILIMAP과 MiliPercent에는 서로 다른 Android 구현이 있다.
 8. 통합 작업은 최신 `dev`에서 분기한 공유 통합 브랜치에서 수행하고, 핵심 기능 동등성을 회복한 뒤에만 `dev`로 최종 병합한다.
 9. 전체 통합 기간에는 package와 applicationId를 `com.example.milipercent`로 유지한다. Naver Cloud Console에는 이 개발 package를 등록하고, 출시용 applicationId 결정은 통합 완료 후 별도 Issue로 처리한다.
 10. 실제 비밀값은 커밋하지 않는다. 저장소에는 키 이름과 주입 구조만 둔다.
+11. MILIMAP의 `MMA_API` Seed 행은 실시간 MMA 행과 중복 삽입하지 않고 검증된 좌표·출처 enrichment 자산으로 분리한다. 검증된 `LOCAL_GOV`와 `PUBLIC_EVIDENCE` 행은 별도 bundled Seed로 관리한다.
 
 ## 목표 데이터 흐름
 
 ```text
-MMA API ---------+
-Manual Seed -----+--> Repository --> Room --> ViewModel --> UiState --> Compose UI
-Verified Data ---+
+MMA API --> Verified MMA Enrichment --+
+Manual Seed --------------------------+--> Repository --> Room --> ViewModel --> UiState --> Compose UI
+Verified Non-MMA Seed ----------------+
 
 LocationDataSource --> ViewModel --> UiState --> Naver Map
 ```

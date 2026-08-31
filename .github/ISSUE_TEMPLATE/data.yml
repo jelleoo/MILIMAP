@@ -2,6 +2,16 @@ name: 데이터 작업
 description: 수집, 검증, 정규화 또는 seed 변경을 추적합니다.
 title: "[DATA] "
 body:
+  - type: dropdown
+    id: area
+    attributes:
+      label: 담당 영역
+      options:
+        - 데이터 수집·검증
+        - 서버·API
+        - 공용 계약
+    validations:
+      required: true
   - type: textarea
     id: goal
     attributes:
@@ -48,11 +58,42 @@ body:
       label: 작업 범위와 제외 범위
     validations:
       required: true
+  - type: input
+    id: branch
+    attributes:
+      label: 작업 브랜치
+      placeholder: data/seoul-benefit-verification
+    validations:
+      required: true
+  - type: textarea
+    id: reserved_paths
+    attributes:
+      label: 수정 예정 경로 (파일 예약)
+      description: 수정할 데이터, 스크립트와 계약 파일을 구체적으로 적어 주세요.
+    validations:
+      required: true
+  - type: textarea
+    id: shared_hotspots
+    attributes:
+      label: 공용 계약·스키마와 통합 담당자
+      description: 해당 파일, 담당자와 선행 PR을 적고 없으면 '해당 없음'으로 적어 주세요.
+    validations:
+      required: true
   - type: textarea
     id: validation
     attributes:
       label: 검증 방법과 완료 조건
       description: 재현 명령, 스키마 검증과 사람이 확인할 항목을 적어 주세요.
+    validations:
+      required: true
+  - type: input
+    id: dependencies
+    attributes:
+      label: 의존 Issue·PR과 병합 순서
+  - type: input
+    id: owner_reviewer
+    attributes:
+      label: 담당자와 리뷰어
     validations:
       required: true
   - type: checkboxes
@@ -65,4 +106,6 @@ body:
         - label: 수집 및 저장소 재배포 권한을 확인했거나 미확인 상태를 명시했습니다.
           required: true
         - label: 확인되지 않은 혜택을 사실로 확정하지 않았습니다.
+          required: true
+        - label: 다른 In Progress Issue가 같은 파일이나 데이터셋을 예약하지 않았음을 확인했습니다.
           required: true

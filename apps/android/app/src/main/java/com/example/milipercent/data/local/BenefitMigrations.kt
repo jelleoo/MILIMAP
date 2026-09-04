@@ -134,3 +134,41 @@ val MIGRATION_2_3 = object : Migration(2, 3) {
         )
     }
 }
+
+val MIGRATION_3_4 = object : Migration(3, 4) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL(
+            """
+            CREATE TABLE IF NOT EXISTS `users` (
+                `id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                `email` TEXT NOT NULL COLLATE NOCASE,
+                `displayName` TEXT NOT NULL,
+                `passwordSalt` TEXT NOT NULL,
+                `passwordHash` TEXT NOT NULL,
+                `isAdmin` INTEGER NOT NULL
+            )
+            """.trimIndent(),
+        )
+        db.execSQL(
+            "CREATE UNIQUE INDEX IF NOT EXISTS `index_users_email` ON `users` (`email`)",
+        )
+        db.execSQL(
+            """
+            CREATE TABLE IF NOT EXISTS `favorites` (
+                `userId` INTEGER NOT NULL,
+                `benefitId` TEXT NOT NULL,
+                `createdAt` INTEGER NOT NULL,
+                PRIMARY KEY(`userId`, `benefitId`),
+                FOREIGN KEY(`userId`) REFERENCES `users`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE,
+                FOREIGN KEY(`benefitId`) REFERENCES `benefits`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE
+            )
+            """.trimIndent(),
+        )
+        db.execSQL(
+            "CREATE INDEX IF NOT EXISTS `index_favorites_userId` ON `favorites` (`userId`)",
+        )
+        db.execSQL(
+            "CREATE INDEX IF NOT EXISTS `index_favorites_benefitId` ON `favorites` (`benefitId`)",
+        )
+    }
+}

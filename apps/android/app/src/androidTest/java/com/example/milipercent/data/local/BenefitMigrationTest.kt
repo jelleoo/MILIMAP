@@ -119,6 +119,46 @@ class BenefitMigrationTest {
         database.close()
     }
 
+    @Test
+    fun migrate3To4AddsEmptyAccountTablesAndPreservesBenefits() {
+        var database = helper.createDatabase(TEST_DATABASE, 3)
+        database.execSQL(
+            """
+            INSERT INTO benefits (
+                id, sourceType, sourceRowNumber, name, address, latitude, longitude,
+                category, benefitType, benefitDescription, phone, eligibleTarget,
+                usageCondition, verificationMethod, sourceLabel, sourceUrl,
+                lastVerifiedAt, status, district, syncedAt
+            ) VALUES (
+                'v3_fixture', 'MMA_API', 1, '기존 혜택', '서울특별시 마포구', NULL, NULL,
+                '기타', '할인', '기존 설명', NULL, NULL, NULL, NULL,
+                '병무청 나라사랑가게 API', NULL, NULL, 'NEEDS_VERIFICATION', '마포구', 1
+            )
+            """.trimIndent(),
+        )
+        database.close()
+
+        database = helper.runMigrationsAndValidate(
+            TEST_DATABASE,
+            4,
+            true,
+            MIGRATION_3_4,
+        )
+
+        database.query("SELECT id FROM benefits WHERE id = 'v3_fixture'").use { cursor ->
+            assertEquals(1, cursor.count)
+        }
+        database.query("SELECT COUNT(*) FROM users").use { cursor ->
+            cursor.moveToFirst()
+            assertEquals(0, cursor.getInt(0))
+        }
+        database.query("SELECT COUNT(*) FROM favorites").use { cursor ->
+            cursor.moveToFirst()
+            assertEquals(0, cursor.getInt(0))
+        }
+        database.close()
+    }
+
     private companion object {
         const val TEST_DATABASE = "benefit-migration-test"
         val NEW_COLUMNS = listOf(

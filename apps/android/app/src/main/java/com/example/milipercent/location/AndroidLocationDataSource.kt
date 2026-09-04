@@ -1,6 +1,7 @@
 package com.example.milipercent.location
 
 import android.Manifest
+import android.annotation.SuppressLint
 import android.content.Context
 import android.content.pm.PackageManager
 import android.location.Location
@@ -16,6 +17,7 @@ import kotlinx.coroutines.flow.callbackFlow
 class AndroidLocationDataSource(context: Context) : LocationDataSource {
     private val appContext = context.applicationContext
 
+    @SuppressLint("MissingPermission") // Runtime permission gates above distinguish fine GPS from coarse network access.
     override fun updates(): Flow<LocationUpdate> = callbackFlow {
         val manager = appContext.getSystemService(Context.LOCATION_SERVICE) as LocationManager
         val hasFine = appContext.hasPermission(Manifest.permission.ACCESS_FINE_LOCATION)

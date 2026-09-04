@@ -39,9 +39,7 @@ data class ManualBenefitSeedItem(
     val status: String,
 )
 
-fun interface ManualBenefitSeedJsonSource {
-    fun readText(): String
-}
+typealias ManualBenefitSeedJsonSource = SeedJsonSource
 
 class AssetManualBenefitSeedJsonSource(
     context: Context,
@@ -54,13 +52,13 @@ class AssetManualBenefitSeedJsonSource(
 }
 
 class ManualBenefitSeedLoader(
-    private val jsonSource: ManualBenefitSeedJsonSource,
+    private val jsonSource: SeedJsonSource,
     private val currentTimeMillis: () -> Long = System::currentTimeMillis,
     private val json: Json = Json {
         ignoreUnknownKeys = true
     },
-) {
-    fun loadAndValidate(): List<BenefitEntity> {
+) : BenefitSeedSource {
+    override fun loadAndValidate(): List<BenefitEntity> {
         val document = try {
             json.decodeFromString<ManualBenefitSeedDocument>(jsonSource.readText())
         } catch (exception: SerializationException) {

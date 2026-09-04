@@ -52,11 +52,13 @@ class BenefitXmlParserTest {
         assertEquals(100, page.numOfRows)
         assertEquals(202, page.totalCount)
         assertEquals(2, benefits.size)
+        assertEquals(1, benefits[0].sourceRowNumber)
         assertEquals("홍안경", benefits[0].name)
         assertEquals("경기도 화성시", benefits[0].address)
         assertEquals("031-372-1001", benefits[0].phone)
         assertEquals("할인", benefits[0].benefitType)
         assertNull(benefits[1].address)
+        assertEquals(2, benefits[1].sourceRowNumber)
         assertNull(benefits[1].phone)
         assertNull(benefits[1].benefitType)
     }

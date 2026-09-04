@@ -24,7 +24,7 @@ android {
     }
 
     defaultConfig {
-        applicationId = "com.example.milipercent"
+        applicationId = "com.example.militarybenefits"
         minSdk = 24
         targetSdk = 37
         versionCode = 1
@@ -43,6 +43,13 @@ android {
             "MMA_SERVICE_KEY",
             buildConfigString(localProperties.getProperty("MMA_SERVICE_KEY", "")),
         )
+        buildConfigField(
+            "String",
+            "NAVER_MAP_NCP_KEY_ID",
+            buildConfigString(localProperties.getProperty("NAVER_MAP_NCP_KEY_ID", "")),
+        )
+        manifestPlaceholders["naverMapNcpKeyId"] =
+            localProperties.getProperty("NAVER_MAP_NCP_KEY_ID", "MISSING_NCP_KEY_ID")
     }
 
     buildTypes {
@@ -88,6 +95,7 @@ dependencies {
     implementation(libs.androidx.room.runtime)
     implementation(libs.kotlinx.serialization.json)
     implementation(libs.material)
+    implementation(libs.naver.map)
     ksp(libs.androidx.room.compiler)
     testImplementation(libs.junit)
     testImplementation(libs.kotlinx.coroutines.test)

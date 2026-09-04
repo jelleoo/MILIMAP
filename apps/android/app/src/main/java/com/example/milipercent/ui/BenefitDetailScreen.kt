@@ -1,10 +1,13 @@
 package com.example.milipercent.ui
 
+import android.content.Intent
+import android.net.Uri
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -22,8 +25,10 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.example.milipercent.model.Benefit
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -158,5 +163,83 @@ private fun DetailField(label: String, value: String) {
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         Text(text = value, style = MaterialTheme.typography.bodyLarge)
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun BenefitDetailScreen(
+    benefit: Benefit,
+    isFavorite: Boolean,
+    onBack: () -> Unit,
+    onFavorite: () -> Unit,
+    onOpenNaverMap: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    BackHandler(onBack = onBack)
+    val context = LocalContext.current
+    Scaffold(
+        modifier = modifier.fillMaxSize(),
+        topBar = {
+            TopAppBar(
+                title = { Text("혜택 상세") },
+                navigationIcon = {
+                    TextButton(onClick = onBack, modifier = Modifier.testTag("detail_back")) {
+                        Text("← 뒤로")
+                    }
+                },
+            )
+        },
+    ) { contentPadding ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(contentPadding)
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 24.dp, vertical = 20.dp)
+                .testTag("benefit_detail_${benefit.id}"),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+        ) {
+            Text(benefit.name, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+            Text(statusLabel(benefit.status), color = when (benefit.status) {
+                com.example.milipercent.model.BenefitStatus.ACTIVE -> Success
+                com.example.milipercent.model.BenefitStatus.NEEDS_VERIFICATION -> Warning
+                com.example.milipercent.model.BenefitStatus.ENDED -> Danger
+            })
+            DetailField("혜택 내용", benefit.benefitDescription)
+            DetailField("주소", benefit.address)
+            DetailField("적용 대상", benefit.eligibleTarget ?: "정보 없음")
+            DetailField("이용 조건", benefit.usageCondition ?: "정보 없음")
+            DetailField("인증 방법", benefit.verificationMethod ?: "방문 전 업소 확인")
+            DetailField("전화번호", benefit.phone ?: "정보 없음")
+            HorizontalDivider()
+            DetailField("출처", benefit.sourceLabel)
+            DetailField("최근 확인", benefit.lastVerifiedAt ?: "확인일 정보 없음")
+            Text("혜택은 변경될 수 있으니 결제·예약 전에 업소에 다시 확인해 주세요.", style = MaterialTheme.typography.bodySmall, color = Warning)
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                TextButton(onClick = onFavorite, modifier = Modifier.weight(1f)) {
+                    Text(if (isFavorite) "♥ 찜 해제" else "♡ 찜하기")
+                }
+                if (!benefit.phone.isNullOrBlank()) {
+                    TextButton(
+                        onClick = {
+                            val intent = Intent(Intent.ACTION_DIAL, Uri.parse("tel:${benefit.phone}"))
+                            runCatching { context.startActivity(intent) }
+                        },
+                        modifier = Modifier.weight(1f),
+                    ) { Text("전화하기") }
+                }
+            }
+            TextButton(onClick = onOpenNaverMap, modifier = Modifier.fillMaxWidth()) { Text("네이버 지도에서 보기") }
+            benefit.sourceUrl?.takeIf(String::isNotBlank)?.let { sourceUrl ->
+                TextButton(
+                    onClick = {
+                        val intent = Intent(Intent.ACTION_VIEW, Uri.parse(sourceUrl.substringBefore(" | ").trim()))
+                        runCatching { context.startActivity(intent) }
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                ) { Text("출처 원문 확인") }
+            }
+        }
     }
 }

@@ -15,12 +15,16 @@ data class BundledSeedSyncResult(
     val storedCount: Int,
 )
 
+interface BundledSeedInstaller {
+    suspend fun synchronizeIfNeeded(): BundledSeedSyncResult
+}
+
 class BundledSeedSynchronizer(
     private val database: BenefitDatabase,
     private val sources: List<BenefitSeedSource>,
     private val currentTimeMillis: () -> Long = System::currentTimeMillis,
-) {
-    suspend fun synchronizeIfNeeded(): BundledSeedSyncResult {
+) : BundledSeedInstaller {
+    override suspend fun synchronizeIfNeeded(): BundledSeedSyncResult {
         // 모든 입력은 transaction 진입 전에 parsing과 validation을 끝낸다.
         val entities = sources.flatMap { source -> source.loadAndValidate() }
         require(entities.size == BUNDLED_SEED_EXPECTED_COUNT) {

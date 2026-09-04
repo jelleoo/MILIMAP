@@ -9,6 +9,9 @@ import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface BenefitDao {
+    @Query("SELECT * FROM benefits ORDER BY district ASC, name COLLATE NOCASE ASC, id ASC")
+    fun observeAll(): Flow<List<BenefitEntity>>
+
     @Query(
         """
         SELECT * FROM benefits
@@ -21,7 +24,22 @@ interface BenefitDao {
     @Query(
         """
         SELECT * FROM benefits
-        WHERE status IS NULL OR status != :endedStatus
+        WHERE sourceType = :sourceType
+        ORDER BY district ASC, name COLLATE NOCASE ASC, id ASC
+        """,
+    )
+    suspend fun getBySource(sourceType: String): List<BenefitEntity>
+
+    @Query("SELECT * FROM benefits ORDER BY district ASC, name COLLATE NOCASE ASC, id ASC")
+    suspend fun getAllOnce(): List<BenefitEntity>
+
+    @Query("SELECT COUNT(*) FROM benefits")
+    suspend fun countAll(): Int
+
+    @Query(
+        """
+        SELECT * FROM benefits
+        WHERE status != :endedStatus
         ORDER BY district ASC, name COLLATE NOCASE ASC, id ASC
         """,
     )

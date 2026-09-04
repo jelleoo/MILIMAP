@@ -1,8 +1,8 @@
 package com.example.milipercent.analysis
 
-import com.example.milipercent.model.Benefit
 import com.example.milipercent.model.BenefitCollection
 import com.example.milipercent.model.BenefitDistrict
+import com.example.milipercent.model.MmaBenefit
 
 data class DataQuality(
     val missingAddressCount: Int,
@@ -20,7 +20,7 @@ data class BenefitAnalysisResult(
     val collectedCount: Int,
     val pageSize: Int,
     val totalPages: Int,
-    val seoulBenefits: List<Benefit>,
+    val seoulBenefits: List<MmaBenefit>,
     val allDataQuality: DataQuality,
     val seoulDataQuality: DataQuality,
     val unclassifiedDistrictCount: Int,
@@ -80,7 +80,7 @@ object BenefitAnalyzer {
         return seoulDistricts.firstOrNull(normalizedAddress::contains)
     }
 
-    fun findSuspectedDuplicates(benefits: List<Benefit>): DuplicateAnalysis {
+    fun findSuspectedDuplicates(benefits: List<MmaBenefit>): DuplicateAnalysis {
         val duplicateGroups = benefits.mapNotNull { benefit ->
             val normalizedName = normalizeForComparison(benefit.name)
             val normalizedAddress = normalizeForComparison(benefit.address)
@@ -140,13 +140,13 @@ object BenefitAnalyzer {
         }
     }
 
-    private fun analyzeDataQuality(benefits: List<Benefit>): DataQuality = DataQuality(
+    private fun analyzeDataQuality(benefits: List<MmaBenefit>): DataQuality = DataQuality(
         missingAddressCount = benefits.count { it.address.isNullOrBlank() },
         missingPhoneCount = benefits.count { it.phone.isNullOrBlank() },
         missingNameCount = benefits.count { it.name.isBlank() },
     )
 
-    private fun countBenefitTypes(benefits: List<Benefit>): Map<String, Int> =
+    private fun countBenefitTypes(benefits: List<MmaBenefit>): Map<String, Int> =
         benefits.groupingBy { benefit ->
             benefit.benefitType?.trim()?.takeIf(String::isNotEmpty)
                 ?: MISSING_BENEFIT_TYPE

@@ -1,6 +1,6 @@
 package com.example.milipercent.analysis
 
-import com.example.milipercent.model.Benefit
+import com.example.milipercent.model.MmaBenefit as Benefit
 import com.example.milipercent.model.BenefitCollection
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse

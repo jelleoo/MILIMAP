@@ -4,6 +4,8 @@ enum class BenefitSourceType {
     MMA_API,
     MANUAL_SEED,
     MANUAL_LOCAL,
+    LOCAL_GOV,
+    PUBLIC_EVIDENCE,
     ;
 
     companion object {

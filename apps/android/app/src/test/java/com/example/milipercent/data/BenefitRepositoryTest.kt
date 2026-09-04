@@ -4,7 +4,7 @@ import com.example.milipercent.data.local.BenefitEntity
 import com.example.milipercent.data.local.BenefitLocalDataSource
 import com.example.milipercent.data.local.BenefitSourceType
 import com.example.milipercent.data.local.MMA_SOURCE_TYPE
-import com.example.milipercent.model.Benefit
+import com.example.milipercent.model.MmaBenefit as Benefit
 import com.example.milipercent.model.BenefitPage
 import com.example.milipercent.model.CollectionProgress
 import com.example.milipercent.network.BenefitPageSource
@@ -29,7 +29,7 @@ class BenefitRepositoryTest {
         val result = repository(source).collectAllBenefits(progress::add)
 
         assertEquals(listOf(1, 2, 3), source.requestedPages)
-        assertEquals((1..250).toList(), result.benefits.map(Benefit::id))
+        assertEquals((1..250).toList(), result.benefits.map(Benefit::sourceRowNumber))
         assertEquals(listOf(1, 2, 3), progress.map(CollectionProgress::currentPage))
         assertEquals(listOf(100, 200, 250), progress.map(CollectionProgress::collectedCount))
         assertEquals(250, result.apiTotalCount)
@@ -91,14 +91,14 @@ class BenefitRepositoryTest {
         val source = SinglePageSource(
             listOf(
                 Benefit(
-                    id = 10,
+                    sourceRowNumber = 10,
                     name = "충돌 가게",
                     address = "서울특별시 마포구 월드컵로 1",
                     phone = "02-1111-1111",
                     benefitType = "할인",
                 ),
                 Benefit(
-                    id = 20,
+                    sourceRowNumber = 20,
                     name = "충 돌 가게",
                     address = "서울특별시 마포구 월드컵로 1",
                     phone = "02-2222-2222",
@@ -118,7 +118,7 @@ class BenefitRepositoryTest {
     @Test
     fun `완전히 같은 MMA 행은 첫 행을 남겨 결정적으로 한 건만 저장한다`() = runBlocking {
         val duplicate = Benefit(
-            id = 10,
+            sourceRowNumber = 10,
             name = "중복 가게",
             address = "서울특별시 마포구 월드컵로 1",
             phone = "02-1111-1111",
@@ -249,7 +249,7 @@ class BenefitRepositoryTest {
             val benefits = if (start <= end) {
                 (start..end).map { rowNumber ->
                     Benefit(
-                        id = rowNumber,
+                        sourceRowNumber = rowNumber,
                         name = "가게 $rowNumber",
                         address = "주소 $rowNumber",
                         phone = null,
@@ -334,20 +334,28 @@ class BenefitRepositoryTest {
             sourceRowNumber: Int?,
             name: String,
             sourceType: BenefitSourceType = BenefitSourceType.MMA_API,
-            status: String? = null,
+            status: String = "NEEDS_VERIFICATION",
         ) = BenefitEntity(
             id = id,
             sourceType = sourceType.name,
             sourceRowNumber = sourceRowNumber,
             name = name,
             address = "서울특별시 마포구",
-            phone = null,
-            benefitType = "할인",
-            district = "마포구",
             latitude = null,
             longitude = null,
-            syncedAt = 1L,
+            category = "기타",
+            benefitType = "할인",
+            benefitDescription = "혜택 내용은 업소에 확인",
+            phone = null,
+            eligibleTarget = null,
+            usageCondition = null,
+            verificationMethod = null,
+            sourceLabel = "테스트 출처",
+            sourceUrl = null,
+            lastVerifiedAt = null,
             status = status,
+            district = "마포구",
+            syncedAt = 1L,
         )
     }
 }

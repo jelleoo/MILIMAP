@@ -1,7 +1,7 @@
 package com.example.milipercent.network
 
-import com.example.milipercent.model.Benefit
 import com.example.milipercent.model.BenefitPage
+import com.example.milipercent.model.MmaBenefit
 import java.io.IOException
 import java.io.InputStream
 import javax.xml.parsers.ParserConfigurationException
@@ -59,7 +59,7 @@ class BenefitXmlParser {
         }
 
     private class BenefitXmlHandler : DefaultHandler() {
-        val benefits = mutableListOf<Benefit>()
+        val benefits = mutableListOf<MmaBenefit>()
         var resultCode: String? = null
         var resultMessage: String? = null
         var returnReasonCode: String? = null
@@ -103,7 +103,7 @@ class BenefitXmlParser {
                 "pageNo" -> pageNo = value?.toIntOrNull()
                 "numOfRows" -> numOfRows = value?.toIntOrNull()
                 "totalCount" -> totalCount = value?.toIntOrNull()
-                "rnum" -> currentItem?.id = value?.toIntOrNull()
+                "rnum" -> currentItem?.sourceRowNumber = value?.toIntOrNull()
                 "udaeGgm" -> currentItem?.name = value
                 "juso" -> currentItem?.address = value
                 "udgigwanTelno" -> currentItem?.phone = value
@@ -116,10 +116,10 @@ class BenefitXmlParser {
 
         private fun finishCurrentItem() {
             val item = currentItem ?: return
-            val id = item.id ?: throw SAXException("item의 rnum이 없거나 숫자가 아닙니다.")
+            val sourceRowNumber = item.sourceRowNumber
 
-            benefits += Benefit(
-                id = id,
+            benefits += MmaBenefit(
+                sourceRowNumber = sourceRowNumber,
                 name = item.name.orEmpty(),
                 address = item.address,
                 phone = item.phone,
@@ -133,7 +133,7 @@ class BenefitXmlParser {
     }
 
     private class MutableBenefit(
-        var id: Int? = null,
+        var sourceRowNumber: Int? = null,
         var name: String? = null,
         var address: String? = null,
         var phone: String? = null,

@@ -17,11 +17,13 @@ The repository currently has two useful but incomplete lines of Android work:
 | Baseline | Commit | Purpose |
 | --- | --- | --- |
 | Room integration branch | `af8851a33cc5ba7b595b51992e11250620feaab1` | Room, Repository, ViewModel, UiState, Navigation, API client, and tests |
-| Current `dev` | `e452536d54469ee957d216683c053990afe58360` | Working product UI, Naver Map, benefit data, login, favorites, and administrator behavior |
+| Current `dev` | `39a5d3570895bead2fba0de7fa74f9a1731dce9a` | Working product UI, Naver Map, fully geocoded 484-row benefit data, login, favorites, and administrator behavior |
 | Local live-location work | `67e34fd2894b7b35157eba6e8125527c1c14fddd` | Foreground live GPS updates and camera-control corrections |
 | Original MiliPercent core | `5e3d7331d59979e172a67921fb45acedde11da26` | Historical source of the imported Room architecture |
 
 The Room branch is not safe to merge into `dev` as-is because it does not yet contain every working product feature. The purpose of this integration is to complete that branch without sacrificing behavior that already works.
+
+The pinned `dev` includes PR #11 (`4f8e660`, merged as `39a5d35`). That data-only change preserves all 484 benefit IDs and all non-coordinate fields, adds coordinates to 145 rows, corrects one invalid existing coordinate, and leaves all 484 rows with validated WGS84 map coordinates. Its geocoding script, report, summary, and updated data policy are part of the current-product baseline and must not be lost during integration.
 
 ## Goals
 
@@ -122,7 +124,9 @@ Room gains user and favorite tables that reproduce the current local-only behavi
 
 ### Bundled data
 
-- The current bundled benefit dataset is retained; no row is removed merely because the Room branch originally used a smaller seed.
+- The current 484-row bundled benefit dataset is retained together with the Room branch's 12 unique manual rows, producing 496 unique initial rows before a live API refresh.
+- All 484 current-product rows keep their PR #11 coordinates. The 12 manual rows may remain without coordinates and therefore do not produce map markers until verified coordinates exist.
+- The PR #11 geocoding report, summary, source CSV provenance, script, and data-policy rules remain tracked evidence; integration must not regenerate or silently replace those coordinates.
 - The entire bundled file is parsed and validated before database replacement begins.
 - A failed parse or validation leaves the last valid Room data untouched.
 - Inserts or replacements for a source happen in one Room transaction.

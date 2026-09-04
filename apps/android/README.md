@@ -1,55 +1,39 @@
-# 군 장병 지역 혜택 탐색 Android MVP
+# MILIMAP Android
 
-Kotlin과 Jetpack Compose로 만든 네이티브 Android 앱입니다. 앱을 열면 위치 권한을 요청하고 바로 현재 위치 중심의 지도와 군 장병 혜택 마커를 표시합니다. 서비스명은 아직 정하지 않아 임시 명칭 `군 혜택 지도`를 사용합니다.
+현재 Android Core 기준선은 MiliPercent의 Room/Repository/ViewModel 구현입니다.
 
-## 구현 기능
+## Source baseline
 
-- 네이버 지도 Android SDK 3.23.3 연동
-- 첫 진입 즉시 현재 위치 탐색과 지도 마커 표시
-- 병무청 나라사랑가게 OpenAPI XML 전체 페이지 동기화
-- 자체 조사·지자체·병무청 데이터를 합친 수도권 484건 내장 DB
-- 좌표가 있는 339건의 오프라인 마커와 API 실패 시 폴백 지도
-- 지역 검색, 목적지 검색, 음식·카페·미용·숙박 필터
-- 혜택 상세, 대상, 조건, 인증 방법, 출처, 최근 확인일, 상태 표시
-- 로컬 회원가입·로그인, 사용자별 찜
-- 관리자 혜택 등록·조회·수정·종료 처리
+- MiliPercent source: `5e3d7331d59979e172a67921fb45acedde11da26`
+- Package/applicationId: `com.example.milipercent`
+- Room database: version 2
 
-## API 키 설정
+## Open in Android Studio
 
-`local.properties.example`을 복사해 `local.properties`를 만들고 다음 값을 입력합니다.
+Repository root가 아니라 `apps/android`를 엽니다. JDK 17과 Android SDK 37을 사용합니다.
 
-```properties
-sdk.dir=C\:\\Users\\YOUR_NAME\\AppData\\Local\\Android\\Sdk
-NAVER_MAP_NCP_KEY_ID=YOUR_NCP_KEY_ID
-MMA_SERVICE_KEY=YOUR_DATA_GO_KR_SERVICE_KEY
-```
+Windows에서는 저장소를 ASCII 문자만 포함한 경로(예: `C:\Users\PC\AndroidStudioProjects\MILIMAP`)에 두고 `apps/android`를 여세요. 현재 제어 저장소처럼 한글 경로에서는 AGP 설정을 우회해도 Gradle 단위 테스트 클래스 탐색이 실패할 수 있습니다.
 
-네이버 클라우드 Maps 애플리케이션에는 다음을 설정합니다.
+Gradle launcher와 daemon runtime은 모두 JDK 17 계약을 사용합니다. `gradle/gradle-daemon-jvm.properties`의 `toolchainVersion=17`을 유지하며, 로컬에 JDK 17이 없으면 Gradle이 지원 플랫폼용 JDK를 자동으로 준비할 수 있습니다. `.\gradlew.bat --version`의 `Daemon JVM` 항목에서 Java 17 기준을 확인할 수 있습니다.
 
-- API: Dynamic Map
-- Android 패키지명: `com.example.militarybenefits`
-- 인증값: NCP Key ID
+## Local configuration
 
-키가 비어 있어도 앱은 실행됩니다. 이 경우 네이버 지도 대신 수도권 좌표 폴백 지도를 사용하며, 나라사랑가게 API 대신 내장 DB를 보여줍니다.
+`local.properties.example`을 `local.properties`로 복사하고 개인 SDK 경로와 MMA 값을 설정합니다. 실제 key는 commit하지 않습니다. Key가 없으면 API 갱신은 실패할 수 있지만 기존 Room/Seed 목록은 유지됩니다.
 
-## 빌드와 설치
+## Verification
 
 ```powershell
-.\gradlew.bat assembleDebug
+.\gradlew.bat lintDebug testDebugUnitTest assembleDebug
 ```
 
-빌드 결과는 `app/build/outputs/apk/debug/app-debug.apk`입니다. Android Studio에서 프로젝트를 열고 실제 기기를 연결해 Run해도 됩니다.
-
-## MVP 계정 정책
-
-현재 로그인과 찜은 서버 없이 기기 로컬 DB에서 동작합니다. 첫 번째로 만든 계정에 해당 기기의 관리자 권한이 부여됩니다. 외부 사용자에게 배포하기 전에는 Firebase/Supabase 인증과 서버 DB로 바꾸고, 공공데이터 서비스 키도 서버 프록시 뒤로 옮기는 것이 안전합니다.
-
-## 데이터 갱신
-
-수도권 CSV를 앱 자산으로 다시 변환하려면 저장소 루트에서 다음 스크립트를 사용합니다.
+Emulator가 준비된 경우:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\tools\data\convert-benefits.ps1 `
-  -SourceCsv ".\data\seed\capital-area-military-benefits-20260815.csv" `
-  -DestinationJson ".\apps\android\app\src\main\assets\benefits.seed.json"
+.\gradlew.bat connectedDebugAndroidTest
 ```
+
+## Current phase
+
+목록, 서울 25개 구 필터, 검색, 상세, MMA 동기화, Room cache, Manual Seed와 Debug 전용 MANUAL_LOCAL 관리가 포함됩니다. Naver Map, 현재 위치, 검증 데이터 통합, 로그인과 즐겨찾기는 후속 Issue에서 진행합니다.
+
+MMA refresh는 값이 완전히 같은 API 행만 입력 순서대로 한 건으로 정리합니다. 정규화한 업체명과 주소가 같지만 내용이 다른 행은 stable ID 충돌로 간주해 Room 교체 전에 실패하며 기존 cache를 유지합니다. 교체 후 실제 source 건수가 예상 entity 수와 다르면 성공을 보고하지 않습니다. Manual Seed ID는 trim한 뒤 중복을 검증합니다.

@@ -48,6 +48,9 @@ interface BenefitDao {
     @Query("SELECT * FROM benefits WHERE id = :id LIMIT 1")
     fun observeById(id: String): Flow<BenefitEntity?>
 
+    @Query("SELECT * FROM benefits WHERE id = :id LIMIT 1")
+    suspend fun getByIdOnce(id: String): BenefitEntity?
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertAll(benefits: List<BenefitEntity>)
 

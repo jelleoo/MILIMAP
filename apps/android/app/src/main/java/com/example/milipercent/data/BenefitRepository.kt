@@ -6,7 +6,9 @@ import com.example.milipercent.data.local.BenefitEntity
 import com.example.milipercent.data.local.BenefitLocalDataSource
 import com.example.milipercent.data.local.MMA_SOURCE_TYPE
 import com.example.milipercent.data.local.toDetail
+import com.example.milipercent.data.local.toDomain
 import com.example.milipercent.data.local.toUiModel
+import com.example.milipercent.model.Benefit
 import com.example.milipercent.model.BenefitCollection
 import com.example.milipercent.model.BenefitDetail
 import com.example.milipercent.model.BenefitPage
@@ -17,10 +19,13 @@ import java.io.IOException
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.map
 
 interface BenefitDataRepository {
     fun observeBenefits(): Flow<List<BenefitUiModel>>
+
+    fun observeDomainBenefits(): Flow<List<Benefit>> = emptyFlow()
 
     fun observeBenefitById(id: String): Flow<BenefitDetail?>
 
@@ -37,6 +42,10 @@ class BenefitRepository(
     override fun observeBenefits(): Flow<List<BenefitUiModel>> =
         localDataSource.observeUserVisibleBenefits()
             .map { entities -> entities.map { it.toUiModel() } }
+
+    override fun observeDomainBenefits(): Flow<List<Benefit>> =
+        localDataSource.observeUserVisibleBenefits()
+            .map { entities -> entities.map { it.toDomain() } }
 
     override fun observeBenefitById(id: String): Flow<BenefitDetail?> =
         localDataSource.observeBenefitById(id)

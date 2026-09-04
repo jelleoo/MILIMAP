@@ -195,6 +195,26 @@ class BenefitRepositoryTest {
     }
 
     @Test
+    fun `domain cache observation retains coordinates and final benefit fields`() = runBlocking {
+        val cached = entity(id = "domain_cached", sourceRowNumber = 1, name = "도메인 가게").copy(
+            latitude = 37.5665,
+            longitude = 126.9780,
+            category = "음식점",
+            benefitDescription = "현역 할인",
+        )
+
+        val observed = BenefitRepository(FakePageSource(), FakeLocalDataSource(listOf(cached)))
+            .observeDomainBenefits()
+            .first()
+            .single()
+
+        assertEquals("domain_cached", observed.id)
+        assertEquals(37.5665, observed.latitude ?: 0.0, 0.0)
+        assertEquals("음식점", observed.category)
+        assertEquals("현역 할인", observed.benefitDescription)
+    }
+
+    @Test
     fun `상세 관찰은 ID에 해당하는 로컬 데이터만 반환하고 API를 호출하지 않는다`() = runBlocking {
         val cached = entity(id = "mma_detail", sourceRowNumber = 7, name = "상세 가게")
         val local = FakeLocalDataSource(listOf(cached))

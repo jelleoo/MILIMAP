@@ -46,6 +46,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavHostController
+import com.example.milipercent.data.admin.AdminBenefitInput
 import com.example.milipercent.model.BenefitDistrict
 import com.example.milipercent.model.BenefitStatus
 import com.example.milipercent.ui.map.toMapItemOrNull
@@ -65,6 +66,12 @@ fun MilitaryBenefitApp(
     onRefresh: () -> Unit,
     onCurrentLocation: () -> Unit,
     onMessageShown: () -> Unit,
+    onRegister: suspend (String, String, String) -> Result<com.example.milipercent.model.LocalUser> = { _, _, _ -> Result.failure(UnsupportedOperationException()) },
+    onLogin: suspend (String, String) -> Result<com.example.milipercent.model.LocalUser> = { _, _ -> Result.failure(UnsupportedOperationException()) },
+    onLogout: () -> Unit = {},
+    onAdminSave: (AdminBenefitInput, String?) -> Unit = { _, _ -> },
+    onAdminEnd: (String) -> Unit = {},
+    onAdminDelete: (String) -> Unit = {},
 ) {
     val snackbarHost = remember { SnackbarHostState() }
     LaunchedEffect(state.transientMessage) {
@@ -94,9 +101,9 @@ fun MilitaryBenefitApp(
                 onCurrentLocation = onCurrentLocation,
                 modifier = Modifier.padding(padding),
             )
-            AppDestination.SAVED -> PlaceholderScreen("찜한 혜택", "로그인 후 저장한 혜택을 여기에서 확인할 수 있어요.", Modifier.padding(padding))
-            AppDestination.ACCOUNT -> PlaceholderScreen("MY", "로그인과 회원가입 화면을 준비 중입니다.", Modifier.padding(padding))
-            AppDestination.ADMIN -> PlaceholderScreen("관리", "관리자 혜택 관리 화면을 준비 중입니다.", Modifier.padding(padding))
+            AppDestination.SAVED -> SavedScreen(state.savedBenefits, state.favoriteIds, onBenefitSelected, onFavorite, Modifier.padding(padding))
+            AppDestination.ACCOUNT -> AccountScreen(state.user, onRegister, onLogin, onLogout, Modifier.padding(padding))
+            AppDestination.ADMIN -> AdminScreen(state.user, state.benefits, onAdminSave, onAdminEnd, onAdminDelete, Modifier.padding(padding))
         }
     }
 }
@@ -344,7 +351,7 @@ private fun BenefitCard(
 }
 
 @Composable
-private fun PlaceholderScreen(title: String, description: String, modifier: Modifier = Modifier) {
+internal fun PlaceholderScreen(title: String, description: String, modifier: Modifier = Modifier) {
     Box(modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
         Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text(title, color = Navy, fontWeight = FontWeight.ExtraBold, fontSize = 20.sp)

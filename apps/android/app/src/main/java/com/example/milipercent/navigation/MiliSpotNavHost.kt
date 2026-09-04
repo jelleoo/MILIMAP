@@ -14,12 +14,14 @@ import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.toRoute
+import com.example.milipercent.data.admin.AdminBenefitInput
 import com.example.milipercent.model.BenefitDistrict
 import com.example.milipercent.ui.AppDestination
 import com.example.milipercent.ui.BenefitDetailScreen
 import com.example.milipercent.ui.MiliSpotUiState
 import com.example.milipercent.ui.MilitaryBenefitApp
 import com.example.milipercent.ui.map.openNaverMap
+import com.example.milipercent.model.LocalUser
 
 @Composable
 fun MiliSpotNavHost(
@@ -36,27 +38,33 @@ fun MiliSpotNavHost(
     onRefresh: () -> Unit,
     onCurrentLocation: () -> Unit,
     onMessageShown: () -> Unit,
+    onRegister: suspend (String, String, String) -> Result<LocalUser> = { _, _, _ -> Result.failure(UnsupportedOperationException()) },
+    onLogin: suspend (String, String) -> Result<LocalUser> = { _, _ -> Result.failure(UnsupportedOperationException()) },
+    onLogout: () -> Unit = {},
+    onAdminSave: (AdminBenefitInput, String?) -> Unit = { _, _ -> },
+    onAdminEnd: (String) -> Unit = {},
+    onAdminDelete: (String) -> Unit = {},
 ) {
     NavHost(navController = navController, startDestination = DiscoverRoute) {
         composable<DiscoverRoute> { AppRoute(
             state, navController, onNavigate, onSearchTextChanged, onSearch, onPresetSelected,
             onCategorySelected, onDistrictSelected, onBenefitSelected, onFavorite, onRefresh,
-            onCurrentLocation, onMessageShown,
+            onCurrentLocation, onMessageShown, onRegister, onLogin, onLogout, onAdminSave, onAdminEnd, onAdminDelete,
         ) }
         composable<SavedRoute> { AppRoute(
             state, navController, onNavigate, onSearchTextChanged, onSearch, onPresetSelected,
             onCategorySelected, onDistrictSelected, onBenefitSelected, onFavorite, onRefresh,
-            onCurrentLocation, onMessageShown,
+            onCurrentLocation, onMessageShown, onRegister, onLogin, onLogout, onAdminSave, onAdminEnd, onAdminDelete,
         ) }
         composable<AccountRoute> { AppRoute(
             state, navController, onNavigate, onSearchTextChanged, onSearch, onPresetSelected,
             onCategorySelected, onDistrictSelected, onBenefitSelected, onFavorite, onRefresh,
-            onCurrentLocation, onMessageShown,
+            onCurrentLocation, onMessageShown, onRegister, onLogin, onLogout, onAdminSave, onAdminEnd, onAdminDelete,
         ) }
         composable<AdminRoute> { AppRoute(
             state, navController, onNavigate, onSearchTextChanged, onSearch, onPresetSelected,
             onCategorySelected, onDistrictSelected, onBenefitSelected, onFavorite, onRefresh,
-            onCurrentLocation, onMessageShown,
+            onCurrentLocation, onMessageShown, onRegister, onLogin, onLogout, onAdminSave, onAdminEnd, onAdminDelete,
         ) }
         composable<BenefitDetailRoute> { entry ->
             val benefitId = entry.toRoute<BenefitDetailRoute>().benefitId
@@ -92,6 +100,12 @@ private fun AppRoute(
     onRefresh: () -> Unit,
     onCurrentLocation: () -> Unit,
     onMessageShown: () -> Unit,
+    onRegister: suspend (String, String, String) -> Result<LocalUser>,
+    onLogin: suspend (String, String) -> Result<LocalUser>,
+    onLogout: () -> Unit,
+    onAdminSave: (AdminBenefitInput, String?) -> Unit,
+    onAdminEnd: (String) -> Unit,
+    onAdminDelete: (String) -> Unit,
 ) {
     MilitaryBenefitApp(
         state = state,
@@ -118,5 +132,11 @@ private fun AppRoute(
         onRefresh = onRefresh,
         onCurrentLocation = onCurrentLocation,
         onMessageShown = onMessageShown,
+        onRegister = onRegister,
+        onLogin = onLogin,
+        onLogout = onLogout,
+        onAdminSave = onAdminSave,
+        onAdminEnd = onAdminEnd,
+        onAdminDelete = onAdminDelete,
     )
 }

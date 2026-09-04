@@ -133,20 +133,20 @@ class MiliSpotViewModel(
         }
     }
 
-    fun register(email: String, displayName: String, password: String) {
-        viewModelScope.launch {
-            accountRepository.register(email, displayName, password)
-                .onSuccess { user -> completeLogin(user, "회원가입이 완료되었습니다.") }
-                .onFailure { error -> showMessage(error.message ?: "회원가입에 실패했습니다.") }
-        }
+    suspend fun register(email: String, displayName: String, password: String): Result<LocalUser> {
+        val result = accountRepository.register(email, displayName, password)
+        result.onSuccess { user ->
+            val message = if (user.isAdmin) "첫 계정이 관리자 권한으로 등록되었습니다." else "회원가입이 완료되었습니다."
+            completeLogin(user, message)
+        }.onFailure { error -> showMessage(error.message ?: "회원가입에 실패했습니다.") }
+        return result
     }
 
-    fun login(email: String, password: String) {
-        viewModelScope.launch {
-            accountRepository.login(email, password)
-                .onSuccess { user -> completeLogin(user, "로그인되었습니다.") }
-                .onFailure { error -> showMessage(error.message ?: "로그인에 실패했습니다.") }
-        }
+    suspend fun login(email: String, password: String): Result<LocalUser> {
+        val result = accountRepository.login(email, password)
+        result.onSuccess { user -> completeLogin(user, "로그인되었습니다.") }
+            .onFailure { error -> showMessage(error.message ?: "로그인에 실패했습니다.") }
+        return result
     }
 
     fun logout() {
@@ -293,7 +293,14 @@ class MiliSpotViewModel(
         )
         _uiState.value = state.copy(
             visibleBenefits = visible,
-            savedBenefits = visible.filter { it.benefit.id in state.favoriteIds },
+            savedBenefits = createBenefitListItems(
+                state.benefits,
+                category = "전체",
+                district = com.example.milipercent.model.BenefitDistrict.ALL,
+                activeSearch = "",
+                center = state.center,
+                currentLocation = state.currentLocation,
+            ).filter { it.benefit.id in state.favoriteIds },
         )
     }
 

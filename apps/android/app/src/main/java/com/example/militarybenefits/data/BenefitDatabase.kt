@@ -11,7 +11,9 @@ import java.security.SecureRandom
 import java.util.UUID
 
 class BenefitDatabase(private val appContext: Context) :
-    SQLiteOpenHelper(appContext, "military-benefits-v2.db", null, 1) {
+    SQLiteOpenHelper(appContext, "military-benefits-v2.db", null, 2) {
+
+    private val mmaCoordinateIndex by lazy { MmaCoordinateIndex.fromAssets(appContext) }
 
     override fun onCreate(db: SQLiteDatabase) {
         db.execSQL(
@@ -46,7 +48,9 @@ class BenefitDatabase(private val appContext: Context) :
         seedBenefits(db)
     }
 
-    override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) = Unit
+    override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
+        if (oldVersion < 2) backfillMmaCoordinates(db)
+    }
 
     fun allBenefits(includeEnded: Boolean = false): List<Benefit> {
         val where = if (includeEnded) null else "status != ?"
@@ -84,21 +88,30 @@ class BenefitDatabase(private val appContext: Context) :
                 store.address.startsWith("인천")
         }
         val existing = allBenefits(includeEnded = true)
-            .associateBy { normalizedKey(it.name, it.address) }
+            .associateBy { normalizedBenefitKey(it.name, it.address) }
         val knownKeys = existing.keys.toMutableSet()
         var added = 0
         var matched = 0
         writableDatabase.beginTransaction()
         try {
             capitalArea.forEach { store ->
-                val key = normalizedKey(store.name, store.address)
+                val key = normalizedBenefitKey(store.name, store.address)
                 val local = existing[key]
+                val cachedCoordinate = mmaCoordinateIndex.find(store.name, store.address)
                 if (local != null) {
                     matched += 1
+                    val values = ContentValues()
                     if (local.phone.isNullOrBlank() && !store.phone.isNullOrBlank()) {
+                        values.put("phone", store.phone)
+                    }
+                    if ((local.latitude == null || local.longitude == null) && cachedCoordinate != null) {
+                        values.put("latitude", cachedCoordinate.latitude)
+                        values.put("longitude", cachedCoordinate.longitude)
+                    }
+                    if (values.size() > 0) {
                         writableDatabase.update(
                             "benefits",
-                            ContentValues().apply { put("phone", store.phone) },
+                            values,
                             "id = ?",
                             arrayOf(local.id),
                         )
@@ -111,8 +124,8 @@ class BenefitDatabase(private val appContext: Context) :
                         id = id,
                         name = store.name,
                         address = store.address.ifBlank { "주소 확인 필요" },
-                        latitude = null,
-                        longitude = null,
+                        latitude = cachedCoordinate?.latitude,
+                        longitude = cachedCoordinate?.longitude,
                         category = inferCategory(store.benefitGroup, store.name),
                         benefitType = store.benefitGroup ?: "나라사랑가게 우대",
                         benefitDescription = store.benefitGroup?.let { "$it 분야 나라사랑가게 우대" }
@@ -247,6 +260,38 @@ class BenefitDatabase(private val appContext: Context) :
         }
     }
 
+    private fun backfillMmaCoordinates(db: SQLiteDatabase) {
+        val updates = buildList {
+            db.query(
+                "benefits",
+                arrayOf("id", "name", "address"),
+                "source_type = ? AND (latitude IS NULL OR longitude IS NULL)",
+                arrayOf("MMA_API"),
+                null,
+                null,
+                null,
+            ).use { cursor ->
+                while (cursor.moveToNext()) {
+                    val coordinate = mmaCoordinateIndex.find(cursor.text("name"), cursor.text("address"))
+                        ?: continue
+                    add(Triple(cursor.text("id"), coordinate.latitude, coordinate.longitude))
+                }
+            }
+        }
+        if (updates.isEmpty()) return
+        updates.forEach { (id, latitude, longitude) ->
+            db.update(
+                "benefits",
+                ContentValues().apply {
+                    put("latitude", latitude)
+                    put("longitude", longitude)
+                },
+                "id = ?",
+                arrayOf(id),
+            )
+        }
+    }
+
     companion object {
         fun newManualBenefit(): Benefit = Benefit(
             id = "manual-${UUID.randomUUID()}", name = "", address = "",
@@ -310,9 +355,6 @@ private fun Cursor.nullableDouble(name: String): Double? = getColumnIndexOrThrow
 private fun ByteArray.toHex() = joinToString("") { "%02x".format(it) }
 private fun hashPassword(password: String, salt: String) = MessageDigest.getInstance("SHA-256")
     .digest("$salt:$password".toByteArray()).toHex()
-
-private fun normalizedKey(name: String, address: String) =
-    (name + "|" + address).lowercase().replace(Regex("[\\s,()]"), "")
 
 private fun inferCategory(group: String?, name: String): String {
     val value = "${group.orEmpty()} $name"

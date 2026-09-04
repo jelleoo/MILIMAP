@@ -48,6 +48,7 @@ import androidx.compose.ui.unit.sp
 import androidx.navigation.NavHostController
 import com.example.milipercent.model.BenefitDistrict
 import com.example.milipercent.model.BenefitStatus
+import com.example.milipercent.ui.map.toMapItemOrNull
 
 @Composable
 fun MilitaryBenefitApp(
@@ -172,17 +173,17 @@ private fun DiscoverScreen(
     modifier: Modifier = Modifier,
 ) {
     Column(modifier.fillMaxSize()) {
-        Surface(
+        BenefitMap(
+            benefits = state.visibleBenefits.mapNotNull { it.benefit.toMapItemOrNull() },
+            center = state.center,
+            currentLocation = state.currentLocation,
+            cameraRequestId = state.cameraRequestId,
+            onSelect = onBenefitSelected,
             modifier = Modifier
                 .fillMaxWidth()
                 .height(176.dp)
                 .testTag("map_slot"),
-            color = PrimarySoft,
-        ) {
-            Box(contentAlignment = Alignment.Center) {
-                Text("지도 불러오는 중", color = PrimaryDark, fontWeight = FontWeight.Bold)
-            }
-        }
+        )
         Surface(
             modifier = Modifier.fillMaxWidth(),
             color = androidx.compose.ui.graphics.Color.White,

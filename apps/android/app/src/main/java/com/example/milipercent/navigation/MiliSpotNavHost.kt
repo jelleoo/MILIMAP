@@ -9,8 +9,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.unit.dp
+import androidx.compose.ui.platform.LocalContext
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -20,6 +19,7 @@ import com.example.milipercent.ui.AppDestination
 import com.example.milipercent.ui.BenefitDetailScreen
 import com.example.milipercent.ui.MiliSpotUiState
 import com.example.milipercent.ui.MilitaryBenefitApp
+import com.example.milipercent.ui.map.openNaverMap
 
 @Composable
 fun MiliSpotNavHost(
@@ -64,12 +64,13 @@ fun MiliSpotNavHost(
             if (benefit == null) {
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Text("해당 혜택 정보를 찾을 수 없습니다.") }
             } else {
+                val context = LocalContext.current
                 BenefitDetailScreen(
                     benefit = benefit,
                     isFavorite = benefit.id in state.favoriteIds,
                     onBack = navController::popBackStack,
                     onFavorite = { onFavorite(benefit.id) },
-                    onOpenNaverMap = {},
+                    onOpenNaverMap = { context.openNaverMap(benefit) },
                 )
             }
         }

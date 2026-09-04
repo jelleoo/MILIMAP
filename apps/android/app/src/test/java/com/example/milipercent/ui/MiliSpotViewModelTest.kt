@@ -14,6 +14,7 @@ import com.example.milipercent.model.BenefitCollection
 import com.example.milipercent.model.BenefitDetail
 import com.example.milipercent.data.local.BenefitSourceType
 import com.example.milipercent.model.BenefitStatus
+import com.example.milipercent.model.BenefitDistrict
 import com.example.milipercent.model.BenefitUiModel
 import com.example.milipercent.model.CollectionProgress
 import com.example.milipercent.model.LocalUser
@@ -69,6 +70,37 @@ class MiliSpotViewModelTest {
         assertEquals(listOf("cached"), viewModel.uiState.value.visibleBenefits.map { it.benefit.id })
     }
 
+    @Test
+    fun discoverEventsRetainFiltersAndRequireLoginBeforeFavoriting() = runTest(dispatcher.scheduler) {
+        val favorites = FakeFavoriteRepository()
+        val viewModel = MiliSpotViewModel(
+            FakeBenefitRepository(listOf(benefit("mapo"))),
+            FakeAccountRepository(),
+            favorites,
+            FakeAdminRepository(),
+            FakeSeedInstaller(),
+            FakeSessionStorage(),
+            mmaConfigured = false,
+        )
+        advanceUntilIdle()
+
+        viewModel.updateSearchText("마포")
+        viewModel.submitSearch()
+        viewModel.selectCategory("기타")
+        viewModel.selectDistrict(BenefitDistrict.MAPO)
+        viewModel.selectBenefit("mapo")
+        viewModel.toggleFavorite("mapo")
+        advanceUntilIdle()
+
+        assertEquals("마포", viewModel.uiState.value.activeSearch)
+        assertEquals("기타", viewModel.uiState.value.selectedCategory)
+        assertEquals(BenefitDistrict.MAPO, viewModel.uiState.value.selectedDistrict)
+        assertEquals("mapo", viewModel.uiState.value.selectedBenefit?.id)
+        assertEquals(AppDestination.ACCOUNT, viewModel.uiState.value.destination)
+        assertEquals("찜을 저장하려면 먼저 로그인해 주세요.", viewModel.uiState.value.transientMessage)
+        assertEquals(0, favorites.toggleCalls)
+    }
+
     private class FakeSessionStorage(initial: Long? = null) : SessionStorage {
         private var id = initial
         override fun userId(): Long? = id
@@ -105,8 +137,12 @@ class MiliSpotViewModelTest {
         override suspend fun login(email: String, password: String) = Result.failure<LocalUser>(UnsupportedOperationException())
     }
     private class FakeFavoriteRepository : FavoriteRepository {
+        var toggleCalls = 0
         override fun observeIds(userId: Long) = flowOf(emptySet<String>())
-        override suspend fun toggle(userId: Long, benefitId: String) = false
+        override suspend fun toggle(userId: Long, benefitId: String): Boolean {
+            toggleCalls += 1
+            return false
+        }
     }
     private class FakeAdminRepository : AdminBenefitRepository {
         override fun observeAll(): Flow<List<Benefit>> = flowOf(emptyList())

@@ -26,6 +26,7 @@ data class MiliSpotUiState(
     val activeSearch: String = "",
     val center: GeoPoint = SEOUL_CENTER,
     val currentLocation: GeoPoint? = null,
+    val isLocationFocusPending: Boolean = false,
     val cameraRequestId: Long = 0,
     val locationLabel: String = "서울 전체",
     val isLoading: Boolean = true,

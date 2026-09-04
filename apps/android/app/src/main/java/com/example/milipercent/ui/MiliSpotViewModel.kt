@@ -10,6 +10,9 @@ import com.example.milipercent.data.admin.AdminBenefitRepository
 import com.example.milipercent.data.favorite.FavoriteRepository
 import com.example.milipercent.data.seed.BundledSeedInstaller
 import com.example.milipercent.data.session.SessionStorage
+import com.example.milipercent.location.LocationDataSource
+import com.example.milipercent.location.LocationFocusState
+import com.example.milipercent.location.LocationUpdate
 import com.example.milipercent.model.LocalUser
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -31,6 +34,8 @@ class MiliSpotViewModel(
     private val _uiState = MutableStateFlow(MiliSpotUiState())
     val uiState: StateFlow<MiliSpotUiState> = _uiState.asStateFlow()
     private var favoriteJob: kotlinx.coroutines.Job? = null
+    private var locationTrackingJob: kotlinx.coroutines.Job? = null
+    private var locationFocusState = LocationFocusState()
 
     init {
         observeBenefits()
@@ -77,6 +82,7 @@ class MiliSpotViewModel(
     }
 
     fun submitSearch() {
+        cancelPendingLocationFocus()
         val query = _uiState.value.searchText.trim()
         val center = destinationCenters[query] ?: SEOUL_CENTER
         publish(_uiState.value.copy(
@@ -93,6 +99,7 @@ class MiliSpotViewModel(
     }
 
     fun clearSearch() {
+        cancelPendingLocationFocus()
         publish(_uiState.value.copy(
             searchText = "",
             activeSearch = "",
@@ -182,6 +189,46 @@ class MiliSpotViewModel(
         _uiState.value = _uiState.value.copy(transientMessage = null)
     }
 
+    fun startLocationTracking(dataSource: LocationDataSource) {
+        if (locationTrackingJob?.isActive == true) return
+        locationTrackingJob = viewModelScope.launch {
+            dataSource.updates().collectLatest { update ->
+                when (update) {
+                    is LocationUpdate.Position -> updateLocation(update.point)
+                    is LocationUpdate.Unavailable -> showMessage(update.message)
+                }
+            }
+        }
+    }
+
+    fun stopLocationTracking() {
+        locationTrackingJob?.cancel()
+        locationTrackingJob = null
+    }
+
+    /** Returns true when an existing location was focused; false means a fresh fix is still needed. */
+    fun requestCurrentLocationFocus(): Boolean {
+        locationFocusState = locationFocusState.copy(cameraRequestId = _uiState.value.cameraRequestId).requestFocus()
+        val latest = locationFocusState.latestLocation
+        if (latest == null) {
+            _uiState.value = _uiState.value.copy(isLocationFocusPending = true)
+            return false
+        }
+        publish(_uiState.value.copy(
+            center = latest,
+            currentLocation = latest,
+            isLocationFocusPending = false,
+            cameraRequestId = locationFocusState.cameraRequestId,
+            locationLabel = "현재 위치",
+        ))
+        return true
+    }
+
+    fun locationPermissionDenied() {
+        cancelPendingLocationFocus()
+        showMessage("위치 권한이 없어 서울 전체를 표시합니다.")
+    }
+
     private fun observeBenefits() {
         viewModelScope.launch {
             benefitRepository.observeDomainBenefits().collectLatest { benefits ->
@@ -211,6 +258,31 @@ class MiliSpotViewModel(
             } catch (_: Exception) {
                 _uiState.value = _uiState.value.copy(isLoading = false, refreshFailed = true)
             }
+        }
+    }
+
+    private fun updateLocation(point: com.example.milipercent.model.GeoPoint) {
+        val previousCameraRequest = locationFocusState.cameraRequestId
+        locationFocusState = locationFocusState.withLocation(point)
+        val focused = locationFocusState.cameraRequestId > previousCameraRequest
+        val next = if (focused) {
+            _uiState.value.copy(
+                currentLocation = point,
+                center = point,
+                locationLabel = "현재 위치",
+                cameraRequestId = locationFocusState.cameraRequestId,
+                isLocationFocusPending = false,
+            )
+        } else {
+            _uiState.value.copy(currentLocation = point, isLocationFocusPending = false)
+        }
+        publish(next)
+    }
+
+    private fun cancelPendingLocationFocus() {
+        locationFocusState = locationFocusState.cancelPendingFocus()
+        if (_uiState.value.isLocationFocusPending) {
+            _uiState.value = _uiState.value.copy(isLocationFocusPending = false)
         }
     }
 

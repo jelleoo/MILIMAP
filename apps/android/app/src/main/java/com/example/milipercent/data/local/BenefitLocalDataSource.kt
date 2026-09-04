@@ -9,6 +9,8 @@ interface BenefitLocalDataSource {
 
     fun observeBenefitById(id: String): Flow<BenefitEntity?>
 
+    suspend fun getBenefits(sourceType: String): List<BenefitEntity> = emptyList()
+
     suspend fun replaceBenefits(sourceType: String, benefits: List<BenefitEntity>)
 
     suspend fun countBenefits(sourceType: String): Int
@@ -29,6 +31,9 @@ class RoomBenefitLocalDataSource(
 
     override fun observeBenefitById(id: String): Flow<BenefitEntity?> =
         dao.observeById(id)
+
+    override suspend fun getBenefits(sourceType: String): List<BenefitEntity> =
+        dao.getBySource(sourceType)
 
     override suspend fun replaceBenefits(
         sourceType: String,

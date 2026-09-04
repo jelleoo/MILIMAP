@@ -58,12 +58,14 @@ class BenefitRepositoryTest {
     }
 
     @Test
-    fun `전체 API에서 서울 데이터만 변환해 로컬 저장소를 교체한다`() = runBlocking {
+    fun `current product regions are reconciled and persisted once`() = runBlocking {
         val source = SinglePageSource(
             listOf(
                 Benefit(10, "마포 가게", "서울특별시 마포구 월드컵로 1", "02-1", "할인"),
                 Benefit(20, "강남 가게", "서울시 강남구 테헤란로 2", "02-2", "면제"),
                 Benefit(30, "경기 가게", "경기도 성남시 분당구", "031-3", "할인"),
+                Benefit(40, "인천 가게", "인천광역시 부평구", "032-4", "우대"),
+                Benefit(50, "그 외 가게", "강원특별자치도 춘천시", "033-5", "할인"),
             ),
         )
         val local = FakeLocalDataSource()
@@ -71,17 +73,17 @@ class BenefitRepositoryTest {
 
         val result = repository.refreshBenefits()
 
-        assertEquals(3, result.analysis.collectedCount)
+        assertEquals(5, result.analysis.collectedCount)
         assertEquals(2, result.analysis.seoulBenefits.size)
-        assertEquals(2, result.roomStoredCount)
+        assertEquals(4, result.roomStoredCount)
         assertEquals(1, local.replaceCallCount)
         assertEquals(MMA_SOURCE_TYPE, local.replacedSourceType)
-        assertEquals(listOf(10, 20), local.current.mapNotNull(BenefitEntity::sourceRowNumber).sorted())
+        assertEquals(listOf(10, 20, 30, 40), local.current.mapNotNull(BenefitEntity::sourceRowNumber).sorted())
         assertTrue(local.current.all { it.id.startsWith("mma_") })
         assertTrue(local.current.all { it.sourceType == MMA_SOURCE_TYPE })
         assertTrue(local.current.all { it.syncedAt == 123_456L })
         assertTrue(local.current.all { it.latitude == null && it.longitude == null })
-        assertEquals(setOf("마포구", "강남구"), local.current.map { it.district }.toSet())
+        assertEquals(setOf("마포구", "강남구", "UNKNOWN"), local.current.map { it.district }.toSet())
     }
 
     @Test
@@ -158,6 +160,19 @@ class BenefitRepositoryTest {
 
         assertThrows(BenefitPageCollectionException::class.java) {
             runBlocking { BenefitRepository(source, local).refreshBenefits() }
+        }
+
+        assertEquals(0, local.replaceCallCount)
+        assertEquals(listOf(old), local.current)
+    }
+
+    @Test
+    fun `empty completed API result cannot replace existing cache`() {
+        val old = entity(id = "mma_old", sourceRowNumber = 999, name = "기존 가게")
+        val local = FakeLocalDataSource(listOf(old))
+
+        assertThrows(IllegalArgumentException::class.java) {
+            runBlocking { BenefitRepository(SinglePageSource(emptyList()), local).refreshBenefits() }
         }
 
         assertEquals(0, local.replaceCallCount)
@@ -304,6 +319,9 @@ class BenefitRepositoryTest {
 
         override fun observeBenefitById(id: String): Flow<BenefitEntity?> =
             state.map { benefits -> benefits.firstOrNull { it.id == id } }
+
+        override suspend fun getBenefits(sourceType: String): List<BenefitEntity> =
+            state.value.filter { it.sourceType == sourceType }
 
         override suspend fun replaceBenefits(
             sourceType: String,

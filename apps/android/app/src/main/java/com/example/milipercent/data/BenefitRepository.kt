@@ -6,7 +6,6 @@ import com.example.milipercent.data.local.BenefitEntity
 import com.example.milipercent.data.local.BenefitLocalDataSource
 import com.example.milipercent.data.local.MMA_SOURCE_TYPE
 import com.example.milipercent.data.local.toDetail
-import com.example.milipercent.data.local.toEntity
 import com.example.milipercent.data.local.toUiModel
 import com.example.milipercent.model.BenefitCollection
 import com.example.milipercent.model.BenefitDetail
@@ -46,30 +45,29 @@ class BenefitRepository(
     override suspend fun refreshBenefits(
         onProgress: (CollectionProgress) -> Unit,
     ): BenefitSyncResult {
-        // DB에는 전국 페이지 수집과 분석이 모두 끝난 뒤에만 접근한다.
+        // DB에는 전체 페이지 수집과 병합이 모두 끝난 뒤에만 접근한다.
         val collection = collectAllBenefits(onProgress)
         val analysis = BenefitAnalyzer.analyze(collection)
-        val syncedAt = currentTimeMillis()
-        // 완전히 같은 API 행은 첫 항목을 유지하고, 서로 다른 행의 stable ID 충돌은 거부한다.
-        val seoulEntities = analysis.seoulBenefits
-            .distinct()
-            .map { it.toEntity(syncedAt) }
-        val collidingIds = seoulEntities
-            .groupBy(BenefitEntity::id)
-            .filterValues { entities -> entities.size > 1 }
-            .keys
-        if (collidingIds.isNotEmpty()) {
-            throw BenefitIdentityCollisionException(collidingIds.size)
+        val reconciler = BenefitReconciler()
+        val scopedRemote = collection.benefits.filter { reconciler.isCurrentProductRegion(it.address) }
+        val reconciliation = try {
+            reconciler.reconcile(
+                existing = localDataSource.getBenefits(MMA_SOURCE_TYPE),
+                remote = scopedRemote,
+                syncedAt = currentTimeMillis(),
+            )
+        } catch (exception: RemoteBenefitConflictException) {
+            throw BenefitIdentityCollisionException(cause = exception)
         }
 
         localDataSource.replaceBenefits(
             sourceType = MMA_SOURCE_TYPE,
-            benefits = seoulEntities,
+            benefits = reconciliation.entities,
         )
         val roomStoredCount = localDataSource.countBenefits(MMA_SOURCE_TYPE)
-        if (roomStoredCount != seoulEntities.size) {
+        if (roomStoredCount != reconciliation.entities.size) {
             throw BenefitStorageCountMismatchException(
-                expectedCount = seoulEntities.size,
+                expectedCount = reconciliation.entities.size,
                 actualCount = roomStoredCount,
             )
         }
@@ -193,8 +191,8 @@ class IncompleteBenefitCollectionException(
 ) : IOException("$detail (예상: $expectedCount, 실제: $actualCount)")
 
 class BenefitIdentityCollisionException(
-    collisionCount: Int,
-) : IOException("서로 다른 MMA 행의 stable ID가 충돌했습니다. (충돌 ID: ${collisionCount}개)")
+    cause: Throwable,
+) : IOException("서로 다른 MMA 행의 stable ID가 충돌했습니다.", cause)
 
 class BenefitStorageCountMismatchException(
     expectedCount: Int,

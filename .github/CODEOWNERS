@@ -1,5 +1,5 @@
-# 현재 역할은 초기 작업 분담 기준이며 영구적인 소유권을 의미하지 않습니다.
-# 모든 주요 PR은 다른 영역 담당자도 함께 리뷰할 수 있습니다.
+# CODEOWNERS는 리뷰 요청 경로이며 수정 권한이나 파일 예약을 뜻하지 않습니다.
+# 실제 작업 경계와 동시 수정 규칙은 docs/team-workflow.md를 따릅니다.
 * @jelleoo @ilwoo-maker
 
 # Repository 관리 및 공동개발 규칙
@@ -8,11 +8,18 @@
 /CONTRIBUTING.md @jelleoo @ilwoo-maker
 /docs/ @jelleoo @ilwoo-maker
 
-# Android Core: @ilwoo-maker, 교차 리뷰: @jelleoo
+# Product / Design / QA: @jelleoo, 교차 리뷰: @ilwoo-maker
+/docs/design/ @jelleoo @ilwoo-maker
+
+# Android Client: @ilwoo-maker, 제품·디자인 리뷰: @jelleoo
 /apps/android/ @ilwoo-maker @jelleoo
 
-# Map / UX: @jelleoo, 교차 리뷰: @ilwoo-maker
-/apps/android/app/src/main/java/com/example/militarybenefits/ui/ @jelleoo @ilwoo-maker
+# Shared API contract: Android 소비자 리뷰를 우선 요청합니다.
+/packages/contracts/ @ilwoo-maker @jelleoo
 
-# Data 담당자의 실제 GitHub ID는 Pending입니다.
-# 확정 전까지 /data/와 /tools/data/에는 위 기본 소유자가 적용됩니다.
+# Server / Data 담당자의 실제 GitHub ID는 Pending입니다.
+# 확정 전까지 아래 경로는 두 명이 임시 리뷰합니다.
+/services/api/ @jelleoo @ilwoo-maker
+/data/ @jelleoo @ilwoo-maker
+/tools/data/ @jelleoo @ilwoo-maker
+/infra/ @jelleoo @ilwoo-maker

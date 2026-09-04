@@ -2,6 +2,18 @@ name: 기능 요청
 description: 사용자 기능 또는 제품 동작을 Issue 단위로 정의합니다.
 title: "[FEATURE] "
 body:
+  - type: dropdown
+    id: area
+    attributes:
+      label: 담당 영역
+      options:
+        - 제품·디자인·QA
+        - Android 클라이언트
+        - 서버·API
+        - 데이터
+        - 공용 계약·저장소 운영
+    validations:
+      required: true
   - type: textarea
     id: problem
     attributes:
@@ -30,11 +42,28 @@ body:
       description: 관련 있어 보이지만 이번 Issue에서는 다루지 않을 내용을 적어 주세요.
     validations:
       required: true
+  - type: input
+    id: branch
+    attributes:
+      label: 작업 브랜치
+      description: 최신 dev에서 만들 Issue 전용 브랜치 이름을 적어 주세요.
+      placeholder: feature/android-nearby-search
+    validations:
+      required: true
   - type: textarea
     id: expected_files
     attributes:
-      label: 예상 변경 파일
-      description: 알고 있다면 예상 경로나 모듈을 적어 주세요.
+      label: 수정 예정 경로 (파일 예약)
+      description: 수정할 파일을 가능한 한 구체적으로 적고 새 파일은 예상 경로를 적어 주세요.
+    validations:
+      required: true
+  - type: textarea
+    id: shared_hotspots
+    attributes:
+      label: 공용 핵심 파일과 통합 담당자
+      description: 공용 핵심 파일을 수정한다면 파일, 담당자와 선행 PR을 적고 없으면 '해당 없음'으로 적어 주세요.
+    validations:
+      required: true
   - type: textarea
     id: acceptance
     attributes:
@@ -52,17 +81,21 @@ body:
   - type: input
     id: dependencies
     attributes:
-      label: 의존 Issue
-      description: 선행 또는 연관 Issue 번호가 있으면 적어 주세요.
+      label: 의존 Issue·PR과 병합 순서
+      description: 선행 또는 연관 Issue/PR과 먼저 병합해야 할 작업을 적어 주세요.
   - type: input
     id: owner_reviewer
     attributes:
       label: 담당자와 리뷰어
       description: 제안하는 담당자와 교차 리뷰어를 적어 주세요.
+    validations:
+      required: true
   - type: checkboxes
     id: safety
     attributes:
       label: 확인
       options:
         - label: 비밀정보나 개인정보를 Issue 본문에 포함하지 않았습니다.
+          required: true
+        - label: 다른 In Progress Issue가 같은 파일을 예약하지 않았음을 확인했습니다.
           required: true

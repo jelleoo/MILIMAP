@@ -1,0 +1,24 @@
+{
+  "generatedAt": "2026-09-04T16:30:20.5730427+09:00",
+  "sourceCsv": "data/seed/capital-area-military-benefits-20260815.csv",
+  "geocodingEndpoint": "https://maps.apigw.ntruss.com/map-geocode/v2/geocode",
+  "counts": {
+    "total": 484,
+    "previousValidCoordinates": 338,
+    "missingCoordinates": 145,
+    "invalidExistingCoordinates": 1,
+    "requestedUniqueRows": 146,
+    "matched": 146,
+    "geocodedMissingCoordinates": 145,
+    "correctedInvalidExistingCoordinates": 1,
+    "finalCoordinates": 484,
+    "manualReviewRequired": 0,
+    "existingCoordinatesWithoutRecordedSource": 338
+  },
+  "validation": {
+    "region": "서울특별시·경기도·인천광역시",
+    "coordinateSystem": "WGS84",
+    "acceptanceRule": "시도·도로명·건물번호가 일치하는 단일 결과",
+    "reportRows": 146
+  }
+}

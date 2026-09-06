@@ -1,0 +1,20 @@
+{
+  "notice": "TEST ONLY - 가상 데이터이며 Production Seed에 포함하지 않습니다.",
+  "items": [
+    {
+      "id": "manual_seed_00000000-0000-0000-0000-000000000001",
+      "name": "TEST ONLY 가상 업체",
+      "address": "서울특별시 마포구 테스트로 1",
+      "district": "마포구",
+      "phone": null,
+      "benefitType": "TEST ONLY",
+      "benefitDescription": "TEST ONLY 가상 혜택",
+      "eligibleTarget": null,
+      "usageCondition": null,
+      "verificationMethod": "TEST ONLY",
+      "sourceUrl": null,
+      "lastVerifiedDate": "2026-08-17",
+      "status": "ACTIVE"
+    }
+  ]
+}

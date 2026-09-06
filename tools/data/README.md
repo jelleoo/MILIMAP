@@ -62,6 +62,6 @@ NAVER_MAP_NCP_KEY_ID=네이버_지도_Client_ID
 NAVER_MAP_NCP_SECRET=네이버_지도_Client_Secret
 ```
 
-`NAVER_MAP_NCP_SECRET`은 이 로컬 생성 과정에서만 사용하며 앱과 Git에는 포함하지 않습니다. 앱에는 검증 결과인 `mma.coordinates.seed.json`만 들어갑니다. 같은 좌표 캐시는 기존 DB의 좌표 없는 `MMA_API` 행을 마이그레이션하고 이후 API 동기화 항목에도 적용됩니다.
+`NAVER_MAP_NCP_SECRET`은 이 로컬 생성 과정에서만 사용하며 앱과 Git에는 포함하지 않습니다. 앱에는 검증 결과인 `mma.coordinates.seed.json`만 들어갑니다. 현재 Room DB와 API 동기화 흐름에 이 캐시를 적용하는 코드는 후속 Android PR에서 연결합니다.
 
 API 호출 없이 수집·필터·기존 좌표 재사용 범위만 확인하려면 `-DryRun`을 사용하고 출력 경로를 임시 파일로 지정합니다.

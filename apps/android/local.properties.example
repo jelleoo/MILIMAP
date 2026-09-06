@@ -1,3 +1,4 @@
 sdk.dir=C\:\\Users\\YOUR_NAME\\AppData\\Local\\Android\\Sdk
-NAVER_MAP_NCP_KEY_ID=YOUR_NCP_KEY_ID
+MMA_API_URL=https://apis.data.go.kr/1300000/JwctMmaUdhygigwan/getjwctMmaUdhygigwan
 MMA_SERVICE_KEY=YOUR_DATA_GO_KR_SERVICE_KEY
+NAVER_MAP_NCP_KEY_ID=YOUR_NCP_KEY_ID

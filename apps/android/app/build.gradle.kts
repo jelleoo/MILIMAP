@@ -1,80 +1,108 @@
 import java.util.Properties
 
 plugins {
-    id("com.android.application")
-    id("org.jetbrains.kotlin.android")
-    id("org.jetbrains.kotlin.plugin.compose")
+    alias(libs.plugins.android.application)
+    alias(libs.plugins.compose.compiler)
+    alias(libs.plugins.kotlin.serialization)
+    alias(libs.plugins.ksp)
 }
 
 val localProperties = Properties().apply {
-    val file = rootProject.file("local.properties")
-    if (file.exists()) file.inputStream().use(::load)
+    val localPropertiesFile = rootProject.file("local.properties")
+    if (localPropertiesFile.exists()) {
+        localPropertiesFile.inputStream().use(::load)
+    }
 }
 
-fun configuredValue(name: String, fallback: String): String =
-    (localProperties.getProperty(name) ?: System.getenv(name) ?: fallback)
-        .replace("\\", "\\\\")
-        .replace("\"", "\\\"")
+fun buildConfigString(value: String): String =
+    "\"${value.replace("\\", "\\\\").replace("\"", "\\\"")}\""
 
 android {
-    namespace = "com.example.militarybenefits"
-    compileSdk = 35
+    namespace = "com.example.milipercent"
+    compileSdk {
+        version = release(37)
+    }
 
     defaultConfig {
         applicationId = "com.example.militarybenefits"
-        minSdk = 26
-        targetSdk = 35
+        minSdk = 24
+        targetSdk = 37
         versionCode = 1
-        versionName = "0.1.0"
+        versionName = "1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
-        vectorDrawables.useSupportLibrary = true
+
+        // local.properties keeps values out of Git, but they are still extractable from an APK.
         buildConfigField(
             "String",
-            "NAVER_MAP_NCP_KEY_ID",
-            "\"${configuredValue("NAVER_MAP_NCP_KEY_ID", "")}\"",
+            "MMA_API_URL",
+            buildConfigString(localProperties.getProperty("MMA_API_URL", "")),
         )
         buildConfigField(
             "String",
             "MMA_SERVICE_KEY",
-            "\"${configuredValue("MMA_SERVICE_KEY", "")}\"",
+            buildConfigString(localProperties.getProperty("MMA_SERVICE_KEY", "")),
         )
-        manifestPlaceholders["naverMapNcpKeyId"] = configuredValue(
+        buildConfigField(
+            "String",
             "NAVER_MAP_NCP_KEY_ID",
-            "MISSING_NCP_KEY_ID",
+            buildConfigString(localProperties.getProperty("NAVER_MAP_NCP_KEY_ID", "")),
         )
+        manifestPlaceholders["naverMapNcpKeyId"] =
+            localProperties.getProperty("NAVER_MAP_NCP_KEY_ID", "MISSING_NCP_KEY_ID")
     }
 
     buildTypes {
         release {
-            isMinifyEnabled = false
-            proguardFiles(
-                getDefaultProguardFile("proguard-android-optimize.txt"),
-                "proguard-rules.pro",
-            )
+            optimization {
+                enable = false
+            }
         }
     }
-
     compileOptions {
-        sourceCompatibility = JavaVersion.VERSION_17
-        targetCompatibility = JavaVersion.VERSION_17
+        sourceCompatibility = JavaVersion.VERSION_11
+        targetCompatibility = JavaVersion.VERSION_11
     }
-    kotlinOptions { jvmTarget = "17" }
-    buildFeatures { compose = true }
-    buildFeatures { buildConfig = true }
-    packaging.resources.excludes += "/META-INF/{AL2.0,LGPL2.1}"
+    buildFeatures {
+        buildConfig = true
+        compose = true
+    }
+    sourceSets {
+        getByName("androidTest").assets.directories.add("$projectDir/schemas")
+    }
+    testOptions {
+        unitTests.isReturnDefaultValues = true
+    }
+}
+
+ksp {
+    arg("room.schemaLocation", "$projectDir/schemas")
 }
 
 dependencies {
-    implementation("androidx.core:core-ktx:1.15.0")
-    implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.8.7")
-    implementation("androidx.activity:activity-compose:1.9.2")
-    implementation("androidx.compose.ui:ui:1.7.8")
-    implementation("androidx.compose.ui:ui-graphics:1.7.8")
-    implementation("androidx.compose.ui:ui-tooling-preview:1.7.8")
-    implementation("androidx.compose.foundation:foundation:1.7.8")
-    implementation("androidx.compose.material3:material3:1.3.1")
-    implementation("com.naver.maps:map-sdk:3.23.3")
-    testImplementation("junit:junit:4.13.2")
-    debugImplementation("androidx.compose.ui:ui-tooling:1.7.8")
+    val composeBom = platform(libs.androidx.compose.bom)
+
+    implementation(composeBom)
+    implementation(libs.androidx.appcompat)
+    implementation(libs.androidx.activity.compose)
+    implementation(libs.androidx.compose.material3)
+    implementation(libs.androidx.core.ktx)
+    implementation(libs.androidx.lifecycle.runtime.compose)
+    implementation(libs.androidx.lifecycle.viewmodel.compose)
+    implementation(libs.androidx.lifecycle.viewmodel.ktx)
+    implementation(libs.androidx.navigation.compose)
+    implementation(libs.androidx.room.ktx)
+    implementation(libs.androidx.room.runtime)
+    implementation(libs.kotlinx.serialization.json)
+    implementation(libs.material)
+    implementation(libs.naver.map)
+    ksp(libs.androidx.room.compiler)
+    testImplementation(libs.junit)
+    testImplementation(libs.kotlinx.coroutines.test)
+    androidTestImplementation(libs.androidx.espresso.core)
+    androidTestImplementation(libs.androidx.junit)
+    androidTestImplementation(libs.androidx.room.testing)
+    androidTestImplementation(composeBom)
+    androidTestImplementation(libs.androidx.compose.ui.test.junit4)
+    debugImplementation(libs.androidx.compose.ui.test.manifest)
 }

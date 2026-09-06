@@ -39,3 +39,29 @@ powershell -ExecutionPolicy Bypass -File .\tools\data\geocode-benefits.ps1 `
 실제 좌표 보강은 `-DryRun`만 제외해 별도 결과 파일로 생성합니다. 결과 CSV와 검토 보고서를 확인한 뒤에만 seed 원본과 Android JSON을 갱신합니다.
 
 Android의 `benefits.seed.json`은 로컬 DB가 처음 만들어질 때만 들어갑니다. 이미 앱을 실행한 개발 기기에서 갱신된 seed를 확인하려면 앱 데이터 삭제 또는 앱 재설치가 필요합니다. 이 작업은 해당 기기의 로컬 계정, 찜과 관리자 수정 데이터도 함께 삭제하므로 필요한 데이터가 없는 개발 기기에서만 진행합니다.
+
+## 나라사랑가게 좌표 캐시
+
+병무청 나라사랑가게 API 응답에는 위도·경도가 없습니다. `build-mma-coordinate-cache.ps1`은 다음 순서로 Android용 좌표 캐시를 만듭니다.
+
+1. API의 `totalCount`를 읽고 전체 페이지를 수집
+2. 주소가 서울특별시·경기도·인천광역시로 시작하는 항목만 선택
+3. 업체명·주소가 기존 검증 seed와 정확히 일치하면 좌표 재사용
+4. 나머지는 네이버 Geocoding API에서 시·도, 도로명과 건물번호가 일치하는 단일 결과만 채택
+5. 검증 실패 항목은 캐시에서 제외하고 CSV 보고서로 분리
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\tools\data\build-mma-coordinate-cache.ps1
+```
+
+입력 키는 `apps/android/local.properties` 또는 같은 이름의 환경 변수에서 읽습니다.
+
+```properties
+MMA_SERVICE_KEY=공공데이터포털_서비스키
+NAVER_MAP_NCP_KEY_ID=네이버_지도_Client_ID
+NAVER_MAP_NCP_SECRET=네이버_지도_Client_Secret
+```
+
+`NAVER_MAP_NCP_SECRET`은 이 로컬 생성 과정에서만 사용하며 앱과 Git에는 포함하지 않습니다. 앱에는 검증 결과인 `mma.coordinates.seed.json`만 들어갑니다. 현재 Room DB와 API 동기화 흐름에 이 캐시를 적용하는 코드는 후속 Android PR에서 연결합니다.
+
+API 호출 없이 수집·필터·기존 좌표 재사용 범위만 확인하려면 `-DryRun`을 사용하고 출력 경로를 임시 파일로 지정합니다.

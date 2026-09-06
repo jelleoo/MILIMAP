@@ -1,0 +1,37 @@
+{
+    "generatedAt":  "2026-09-04T18:53:13.5752862+09:00",
+    "source":  {
+                   "provider":  "병무청 나라사랑가게조회서비스 OpenAPI",
+                   "endpoint":  "https://apis.data.go.kr/1300000/JwctMmaUdhygigwan/getjwctMmaUdhygigwan",
+                   "fetchedAt":  "2026-09-04T18:53:13.5752862+09:00",
+                   "filter":  "주소가 서울특별시·경기도·인천광역시로 시작하는 항목"
+               },
+    "coordinatePolicy":  {
+                             "provider":  "네이버 Geocoding API",
+                             "automaticAcceptance":  "원본 시·도, 도로명, 건물번호가 일치하는 단일 결과 및 대한민국 좌표 범위",
+                             "unresolved":  "좌표 캐시 제외 후 수동 검토",
+                             "secretBundledInApp":  false
+                         },
+    "dryRun":  false,
+    "counts":  {
+                   "apiTotalCount":  2367,
+                   "fetchedRows":  2367,
+                   "uniqueRows":  2367,
+                   "capitalAreaRows":  806,
+                   "uniqueCapitalAreaPlaces":  806,
+                   "reused":  486,
+                   "requested":  320,
+                   "matched":  117,
+                   "noResult":  187,
+                   "ambiguous":  2,
+                   "regionMismatch":  0,
+                   "addressMismatch":  14,
+                   "invalidCoordinate":  0,
+                   "missingAddress":  0,
+                   "apiError":  0,
+                   "pendingDryRun":  0
+               },
+    "cacheEntries":  603,
+    "destinationJson":  ".\\apps\\android\\app\\src\\main\\assets\\mma.coordinates.seed.json",
+    "reportCsv":  ".\\data\\reports\\mma-coordinate-geocoding-report-20260904.csv"
+}

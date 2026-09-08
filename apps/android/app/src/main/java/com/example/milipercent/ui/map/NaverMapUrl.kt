@@ -12,8 +12,19 @@ internal object NaverMapUrl {
     fun search(storeName: String, appName: String): String =
         "nmap://search?query=${storeName.queryEncoded()}&appname=${appName.queryEncoded()}"
 
+    fun search(storeName: String, address: String, appName: String): String =
+        search(locationQuery(storeName, address), appName)
+
     fun webSearch(storeName: String): String =
         "https://map.naver.com/p/search/${storeName.pathEncoded()}"
+
+    fun webSearch(storeName: String, address: String): String =
+        webSearch(locationQuery(storeName, address))
+
+    private fun locationQuery(storeName: String, address: String): String =
+        listOf(storeName, address)
+            .filter(String::isNotBlank)
+            .joinToString(" ")
 
     private fun String.queryEncoded(): String = URLEncoder.encode(this, StandardCharsets.UTF_8.name())
 

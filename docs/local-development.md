@@ -23,6 +23,8 @@ git switch -c feature/issue-summary
 
 Android Studio의 `Open`에서 저장소 루트가 아니라 `apps/android`를 선택합니다.
 
+Windows에서 `testDebugUnitTest`를 실행할 때 저장소 절대 경로에 한글 등 비ASCII 문자가 있으면 AGP test worker가 테스트 클래스를 찾지 못할 수 있습니다. 이 경우 프로젝트를 삭제하거나 소스를 옮기지 말고, 별도의 ASCII 경로(예: `C:\work\MILIMAP`)에 Git worktree 또는 복제본을 만든 뒤 그 경로에서 Android 검증을 실행합니다. GitHub Actions의 Linux 경로에는 이 제약이 없습니다.
+
 Windows에서는 다음처럼 로컬 설정을 만듭니다.
 
 ```powershell
@@ -50,7 +52,19 @@ Copy-Item apps\android\local.properties.example apps\android\local.properties
 저장소 루트에서 실행합니다.
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\tools\data\convert-benefits.ps1 `
-  -SourceCsv ".\data\seed\capital-area-military-benefits-20260815.csv" `
-  -DestinationJson ".\apps\android\app\src\main\assets\benefits.seed.json"
+$canonicalSource = Join-Path ([IO.Path]::GetTempPath()) 'milimap-canonical-source.json'
+
+& .\tools\data\convert-benefits.ps1 `
+  -SourceCsv '.\data\canonical\capital-area-military-benefits.csv' `
+  -DestinationJson $canonicalSource `
+  -DistrictReferenceJson '.\apps\android\app\src\main\assets\benefits.seed.json'
+
+& .\tools\data\build-release-benefit-seed.ps1 `
+  -CanonicalCsv '.\data\canonical\capital-area-military-benefits.csv' `
+  -CandidateCsv '.\data\canonical\reports\official-benefit-release-candidates-20260906.csv' `
+  -CoordinateReviewCsv '.\data\canonical\reports\poi-coordinate-review-candidates-20260906.csv' `
+  -SourceJson $canonicalSource `
+  -DestinationJson '.\apps\android\app\src\main\assets\benefits.seed.json'
+
+& .\tools\data\test-release-artifact-pipeline.ps1
 ```

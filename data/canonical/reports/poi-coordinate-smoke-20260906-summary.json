@@ -1,0 +1,17 @@
+{
+  "generatedAt": "2026-09-06T16:44:35.4175485+09:00",
+  "inputRows": 496,
+  "auditedRows": 5,
+  "onlyExistingCoordinates": true,
+  "maxRows": 5,
+  "endpoints": {
+    "localSearch": "https://openapi.naver.com/v1/search/local.json",
+    "geocoding": "https://maps.apigw.ntruss.com/map-geocode/v2/geocode"
+  },
+  "decisions": [
+    {
+      "decision": "API 오류",
+      "count": 5
+    }
+  ]
+}

@@ -1,0 +1,22 @@
+{
+  "generatedAt": "2026-09-06T21:17:07.0106057+09:00",
+  "sourceUrls": [
+    "https://www.paju.go.kr/user/soldier/BD_discountStoreList.do?q_ctgCd=1001",
+    "https://www.paju.go.kr/user/soldier/BD_discountStoreList.do?q_ctgCd=1002",
+    "https://www.paju.go.kr/user/soldier/BD_discountStoreList.do?q_ctgCd=1004"
+  ],
+  "officialRows": 188,
+  "canonicalRows": 187,
+  "decisions": [
+    {
+      "decision": "공식 참여업소 일치 후보",
+      "count": 175
+    },
+    {
+      "decision": "상세정보 재확인 필요",
+      "count": 12
+    }
+  ],
+  "individualDiscountConditionsInOfficialList": false,
+  "automaticCanonicalMutation": false
+}

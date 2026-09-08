@@ -12,10 +12,10 @@ fun Context.openNaverMap(benefit: Benefit): Boolean {
     val appUrl = if (benefit.latitude != null && benefit.longitude != null) {
         NaverMapUrl.place(benefit.name, benefit.latitude, benefit.longitude, packageName)
     } else {
-        NaverMapUrl.search(benefit.name, packageName)
+        NaverMapUrl.search(benefit.name, benefit.address, packageName)
     }
     val openedInApp = isNaverMapInstalled() && startMapIntent(appUrl, NaverMapUrl.PACKAGE_NAME)
-    return openedInApp || startMapIntent(NaverMapUrl.webSearch(benefit.name))
+    return openedInApp || startMapIntent(NaverMapUrl.webSearch(benefit.name, benefit.address))
 }
 
 @Suppress("DEPRECATION")

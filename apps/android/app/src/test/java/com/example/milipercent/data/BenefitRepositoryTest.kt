@@ -248,6 +248,31 @@ class BenefitRepositoryTest {
     }
 
     @Test
+    fun `MMA Refresh는 현재 공식 시드와 같은 업소를 중복 저장하지 않는다`() = runBlocking {
+        val officialSeed = entity(
+            id = "official_seed",
+            sourceRowNumber = null,
+            name = "공식 업소",
+            sourceType = BenefitSourceType.LOCAL_GOV,
+            status = "ACTIVE",
+        ).copy(address = "서울특별시 마포구 월드컵로 1")
+        val staleMma = entity(
+            id = "stale_mma",
+            sourceRowNumber = 7,
+            name = "공식 업소",
+        ).copy(address = "서울특별시 마포구 월드컵로 1")
+        val local = FakeLocalDataSource(listOf(officialSeed, staleMma))
+
+        val result = BenefitRepository(
+            SinglePageSource(listOf(Benefit(1, "공식 업소", "서울특별시 마포구 월드컵로 1", "02-1111", "할인"))),
+            local,
+        ).refreshBenefits()
+
+        assertEquals(0, result.roomStoredCount)
+        assertEquals(listOf(officialSeed), local.current)
+    }
+
+    @Test
     fun `사용자 Flow는 세 source를 합치고 ENDED를 제외한다`() = runBlocking {
         val local = FakeLocalDataSource(
             listOf(
@@ -342,6 +367,8 @@ class BenefitRepositoryTest {
 
         override suspend fun getBenefits(sourceType: String): List<BenefitEntity> =
             state.value.filter { it.sourceType == sourceType }
+
+        override suspend fun getAllBenefits(): List<BenefitEntity> = state.value
 
         override suspend fun replaceBenefits(
             sourceType: String,

@@ -11,6 +11,8 @@ interface BenefitLocalDataSource {
 
     suspend fun getBenefits(sourceType: String): List<BenefitEntity> = emptyList()
 
+    suspend fun getAllBenefits(): List<BenefitEntity> = emptyList()
+
     suspend fun replaceBenefits(sourceType: String, benefits: List<BenefitEntity>)
 
     suspend fun countBenefits(sourceType: String): Int
@@ -34,6 +36,8 @@ class RoomBenefitLocalDataSource(
 
     override suspend fun getBenefits(sourceType: String): List<BenefitEntity> =
         dao.getBySource(sourceType)
+
+    override suspend fun getAllBenefits(): List<BenefitEntity> = dao.getAllOnce()
 
     override suspend fun replaceBenefits(
         sourceType: String,

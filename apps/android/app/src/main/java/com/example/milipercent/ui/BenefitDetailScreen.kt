@@ -206,6 +206,15 @@ fun BenefitDetailScreen(
                 com.example.milipercent.model.BenefitStatus.NEEDS_VERIFICATION -> Warning
                 com.example.milipercent.model.BenefitStatus.ENDED -> Danger
             })
+            val locationNeedsVerification = benefit.latitude == null || benefit.longitude == null
+            if (locationNeedsVerification) {
+                Text(
+                    "위치 정보는 아직 검증되지 않았습니다. 방문 전 업소명과 주소를 지도에서 직접 확인해 주세요.",
+                    modifier = Modifier.testTag("location_verification_notice"),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Warning,
+                )
+            }
             DetailField("혜택 내용", benefit.benefitDescription)
             DetailField("주소", benefit.address)
             DetailField("적용 대상", benefit.eligibleTarget ?: "정보 없음")
@@ -230,7 +239,9 @@ fun BenefitDetailScreen(
                     ) { Text("전화하기") }
                 }
             }
-            TextButton(onClick = onOpenNaverMap, modifier = Modifier.fillMaxWidth()) { Text("네이버 지도에서 보기") }
+            TextButton(onClick = onOpenNaverMap, modifier = Modifier.fillMaxWidth()) {
+                Text(if (locationNeedsVerification) "지도에서 위치 확인" else "네이버 지도에서 보기")
+            }
             benefit.sourceUrl?.takeIf(String::isNotBlank)?.let { sourceUrl ->
                 TextButton(
                     onClick = {

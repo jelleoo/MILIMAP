@@ -4,17 +4,36 @@ on:
   pull_request:
     paths:
       - "apps/android/**"
+      - "data/**"
+      - "tools/data/**"
       - ".github/workflows/android-ci.yml"
   push:
-    branches: [main]
+    branches: [main, dev]
     paths:
       - "apps/android/**"
+      - "data/**"
+      - "tools/data/**"
       - ".github/workflows/android-ci.yml"
 
 permissions:
   contents: read
 
 jobs:
+  verify-data:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7.0.1
+
+      - name: Verify canonical data pipeline
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          Get-ChildItem -LiteralPath tools/data -Filter 'test-*.ps1' |
+            Sort-Object Name |
+            ForEach-Object { & $_.FullName }
+
   verify:
     runs-on: ubuntu-latest
     defaults:
@@ -44,8 +63,11 @@ jobs:
           printf '%s\n' "$gradle_version"
           grep -Eq '^Daemon JVM:.*Java 17' <<< "$gradle_version"
 
-      - name: Lint, test, and build
-        run: ./gradlew lintDebug testDebugUnitTest assembleDebug --stacktrace
+      - name: Assemble and run unit tests
+        run: ./gradlew assembleDebugUnitTest testDebugUnitTest --stacktrace
+
+      - name: Lint and build debug APK
+        run: ./gradlew lintDebug assembleDebug --stacktrace
 
       - name: Upload debug APK
         if: success()

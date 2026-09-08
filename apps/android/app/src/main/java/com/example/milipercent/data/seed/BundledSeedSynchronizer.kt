@@ -3,12 +3,18 @@ package com.example.milipercent.data.seed
 import androidx.room.withTransaction
 import com.example.milipercent.data.local.BenefitDatabase
 import com.example.milipercent.data.local.BenefitEntity
+import com.example.milipercent.data.local.BenefitSourceType
 import com.example.milipercent.data.local.SeedStateEntity
 import java.util.Locale
 
 const val BUNDLED_SEED_NAME = "benefits"
-const val BUNDLED_SEED_VERSION = 1
-private const val BUNDLED_SEED_EXPECTED_COUNT = 496
+const val BUNDLED_SEED_VERSION = 3
+private const val BUNDLED_SEED_EXPECTED_COUNT = 249
+private val BUNDLED_SEED_SOURCE_TYPES = listOf(
+    BenefitSourceType.LOCAL_GOV.name,
+    BenefitSourceType.MANUAL_SEED.name,
+    BenefitSourceType.PUBLIC_EVIDENCE.name,
+)
 
 data class BundledSeedSyncResult(
     val installed: Boolean,
@@ -42,7 +48,11 @@ class BundledSeedSynchronizer(
             }
 
             validateCombinedEntities(entities)
-            benefitDao.insertAll(entities)
+            benefitDao.deleteRetiredBundledSeedRows(
+                bundledSourceTypes = BUNDLED_SEED_SOURCE_TYPES,
+                retainedIds = entities.map(BenefitEntity::id),
+            )
+            benefitDao.upsertAll(entities)
             seedStateDao.upsert(
                 SeedStateEntity(
                     name = BUNDLED_SEED_NAME,
@@ -50,10 +60,11 @@ class BundledSeedSynchronizer(
                     installedAt = currentTimeMillis(),
                 ),
             )
-            val storedCount = benefitDao.countAll()
-            check(storedCount == BUNDLED_SEED_EXPECTED_COUNT) {
-                "내장 seed 저장 건수가 올바르지 않습니다. (예상: $BUNDLED_SEED_EXPECTED_COUNT, 실제: $storedCount)"
+            val bundledStoredCount = benefitDao.countBundledSeedRows(BUNDLED_SEED_SOURCE_TYPES)
+            check(bundledStoredCount == BUNDLED_SEED_EXPECTED_COUNT) {
+                "내장 seed 저장 건수가 올바르지 않습니다. (예상: $BUNDLED_SEED_EXPECTED_COUNT, 실제: $bundledStoredCount)"
             }
+            val storedCount = benefitDao.countAll()
             BundledSeedSyncResult(installed = true, storedCount = storedCount)
         }
     }

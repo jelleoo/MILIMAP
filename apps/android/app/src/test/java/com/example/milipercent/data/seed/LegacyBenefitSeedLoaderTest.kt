@@ -2,6 +2,7 @@ package com.example.milipercent.data.seed
 
 import com.example.milipercent.data.local.BenefitSourceType
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertThrows
 import org.junit.Test
 
@@ -36,6 +37,23 @@ class LegacyBenefitSeedLoaderTest {
         }
     }
 
+    @Test
+    fun `좌표가 모두 비어 있는 시드는 허용하고 한쪽만 비어 있으면 거부한다`() {
+        val withoutCoordinates = loader(seedJson(item(latitude = null, longitude = null))).loadAndValidate().single()
+
+        assertNull(withoutCoordinates.latitude)
+        assertNull(withoutCoordinates.longitude)
+
+        listOf(
+            seedJson(item(latitude = null)),
+            seedJson(item(longitude = null)),
+        ).forEach { seed ->
+            assertThrows(LegacyBenefitSeedValidationException::class.java) {
+                loader(seed).loadAndValidate()
+            }
+        }
+    }
+
     private fun loader(seed: String) = LegacyBenefitSeedLoader(
         jsonSource = SeedJsonSource { seed },
         currentTimeMillis = { 123L },
@@ -50,15 +68,15 @@ class LegacyBenefitSeedLoaderTest {
         status: String = "ACTIVE",
         date: String = "2026-08-17",
         sourceUrl: String = "https://example.com/source",
-        latitude: Double = 37.5,
-        longitude: Double = 127.0,
+        latitude: Double? = 37.5,
+        longitude: Double? = 127.0,
     ) = """
         {
           "id":"$id",
           "name":"$name",
           "address":"서울특별시 마포구 테스트로 1",
-          "latitude":$latitude,
-          "longitude":$longitude,
+          "latitude":${latitude ?: "null"},
+          "longitude":${longitude ?: "null"},
           "category":"기타",
           "benefitType":"할인",
           "benefitDescription":"테스트 혜택",

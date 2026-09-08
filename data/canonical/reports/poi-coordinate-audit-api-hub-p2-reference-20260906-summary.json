@@ -1,0 +1,17 @@
+{
+  "generatedAt": "2026-09-06T22:02:35.6531721+09:00",
+  "inputRows": 30,
+  "auditedRows": 30,
+  "onlyExistingCoordinates": false,
+  "startRow": 0,
+  "maxRows": 0,
+  "endpoints": {
+    "localSearch": "https://naverapihub.apigw.ntruss.com/search/v1/local"
+  },
+  "decisions": [
+    {
+      "decision": "재확인 필요",
+      "count": 30
+    }
+  ]
+}

@@ -1,0 +1,24 @@
+{
+  "generatedAt": "2026-09-06T20:32:53.0156062+09:00",
+  "inputRows": 484,
+  "auditedRows": 100,
+  "onlyExistingCoordinates": false,
+  "maxRows": 100,
+  "endpoints": {
+    "localSearch": "https://naverapihub.apigw.ntruss.com/search/v1/local"
+  },
+  "decisions": [
+    {
+      "decision": "미확인",
+      "count": 38
+    },
+    {
+      "decision": "재확인 필요",
+      "count": 56
+    },
+    {
+      "decision": "확인 후보",
+      "count": 6
+    }
+  ]
+}

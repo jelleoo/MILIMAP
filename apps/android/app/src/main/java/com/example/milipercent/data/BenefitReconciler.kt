@@ -6,6 +6,10 @@ import com.example.milipercent.data.local.BenefitIdentity
 import com.example.milipercent.data.local.BenefitSourceType
 import com.example.milipercent.model.BenefitStatus
 import com.example.milipercent.model.MmaBenefit
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
+import java.util.TimeZone
 
 data class ReconciliationResult(
     val entities: List<BenefitEntity>,
@@ -41,6 +45,14 @@ class BenefitReconciler {
                         benefitType = current.benefitType.takeIf { it.isNotBlank() }
                             ?: row.benefitType.trimmedOrNull()
                             ?: DEFAULT_BENEFIT_TYPE,
+                        sourceRowNumber = row.sourceRowNumber ?: current.sourceRowNumber,
+                        benefitDescription = MMA_COMMON_BENEFIT_DESCRIPTION,
+                        verificationMethod = MMA_VERIFICATION_METHOD,
+                        sourceLabel = MMA_SOURCE_LABEL,
+                        sourceUrl = MMA_SOURCE_URL,
+                        lastVerifiedAt = verifiedDate(syncedAt),
+                        status = BenefitStatus.ACTIVE.name,
+                        syncedAt = syncedAt,
                     )
                 } else {
                     current
@@ -99,15 +111,15 @@ class BenefitReconciler {
             longitude = null,
             category = DEFAULT_CATEGORY,
             benefitType = benefitType.trimmedOrNull() ?: DEFAULT_BENEFIT_TYPE,
-            benefitDescription = DEFAULT_BENEFIT_DESCRIPTION,
+            benefitDescription = MMA_COMMON_BENEFIT_DESCRIPTION,
             phone = phone.trimmedOrNull(),
             eligibleTarget = null,
             usageCondition = null,
-            verificationMethod = null,
+            verificationMethod = MMA_VERIFICATION_METHOD,
             sourceLabel = MMA_SOURCE_LABEL,
-            sourceUrl = null,
-            lastVerifiedAt = null,
-            status = BenefitStatus.NEEDS_VERIFICATION.name,
+            sourceUrl = MMA_SOURCE_URL,
+            lastVerifiedAt = verifiedDate(syncedAt),
+            status = BenefitStatus.ACTIVE.name,
             district = BenefitAnalyzer.extractSeoulDistrict(address) ?: BenefitAnalyzer.UNKNOWN_DISTRICT,
             syncedAt = syncedAt,
         )
@@ -119,11 +131,17 @@ class BenefitReconciler {
 
     private fun String?.trimmedOrNull(): String? = this?.trim()?.takeIf(String::isNotEmpty)
 
+    private fun verifiedDate(syncedAt: Long): String = SimpleDateFormat("yyyy-MM-dd", Locale.ROOT).apply {
+        timeZone = TimeZone.getTimeZone("Asia/Seoul")
+    }.format(Date(syncedAt))
+
     private companion object {
         const val DEFAULT_CATEGORY = "기타"
         const val DEFAULT_BENEFIT_TYPE = "할인·우대"
-        const val DEFAULT_BENEFIT_DESCRIPTION = "혜택 내용은 업소에 확인"
-        const val MMA_SOURCE_LABEL = "병무청 나라사랑가게 API"
+        const val MMA_COMMON_BENEFIT_DESCRIPTION = "병무청 나라사랑가게 우대 혜택(업소별 적용 내용은 방문 전 확인)"
+        const val MMA_VERIFICATION_METHOD = "병무청 나라사랑가게조회서비스 최신 API 응답"
+        const val MMA_SOURCE_LABEL = "병무청 나라사랑가게조회서비스 · 최신 확인"
+        const val MMA_SOURCE_URL = "https://www.mma.go.kr/about/udgg/list.do?mc=mma0003357"
     }
 }
 

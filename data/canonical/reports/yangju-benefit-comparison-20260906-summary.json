@@ -1,0 +1,26 @@
+{
+  "generatedAt": "2026-09-06T21:39:24.8531524+09:00",
+  "legacySourceUrl": "https://www.yangju.go.kr/www/selectBbsNttView.do?bbsNo=13&key=202&nttNo=198019",
+  "currentSourceUrl": "https://www.yangju.go.kr/health/selectBbsNttView.do?key=2716&bbsNo=81&nttNo=206761",
+  "officialRows": 37,
+  "canonicalRows": 32,
+  "decisions": [
+    {
+      "decision": "공식목록 미발견",
+      "count": 2
+    },
+    {
+      "decision": "상세정보 재확인 필요",
+      "count": 1
+    },
+    {
+      "decision": "상호 변경 가능성",
+      "count": 2
+    },
+    {
+      "decision": "현재 공식 목록 일치 후보",
+      "count": 27
+    }
+  ],
+  "automaticCanonicalMutation": false
+}

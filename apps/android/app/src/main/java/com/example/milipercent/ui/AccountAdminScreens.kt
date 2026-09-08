@@ -65,6 +65,9 @@ fun SavedScreen(
                     Column(Modifier.weight(1f)) {
                         Text(benefit.name, fontWeight = FontWeight.Bold, color = Navy)
                         Text(benefit.benefitDescription, color = Muted)
+                        if (benefit.latitude == null || benefit.longitude == null) {
+                            Text("위치 확인 필요 · 지도 핀 미표시", color = Warning)
+                        }
                     }
                     if (benefit.id in favoriteIds) {
                         TextButton(onClick = { onFavorite(benefit.id) }) { Text("♥") }

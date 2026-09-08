@@ -112,11 +112,13 @@ class LegacyBenefitSeedLoader(
             if (item.sourceUrl.split(" | ").any { url -> !isHttpUrl(url) }) {
                 throw LegacyBenefitSeedValidationException("$record 출처 URL이 올바르지 않습니다.")
             }
+            if ((item.latitude == null) != (item.longitude == null)) {
+                throw LegacyBenefitSeedValidationException("$record 위도와 경도는 함께 입력하거나 함께 비워야 합니다.")
+            }
             if (
-                item.latitude == null ||
-                item.longitude == null ||
-                item.latitude !in -90.0..90.0 ||
-                item.longitude !in -180.0..180.0
+                item.latitude != null &&
+                item.longitude != null &&
+                (item.latitude !in -90.0..90.0 || item.longitude !in -180.0..180.0)
             ) {
                 throw LegacyBenefitSeedValidationException("$record 좌표 범위가 올바르지 않습니다.")
             }

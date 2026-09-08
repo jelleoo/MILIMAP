@@ -1,0 +1,19 @@
+{
+  "generatedAt": "2026-09-06T22:07:39.5069872+09:00",
+  "candidates": 74,
+  "priorities": [
+    {
+      "priority": "P1",
+      "count": 7
+    },
+    {
+      "priority": "P2",
+      "count": 30
+    },
+    {
+      "priority": "P3",
+      "count": 37
+    }
+  ],
+  "automaticCanonicalMutation": false
+}

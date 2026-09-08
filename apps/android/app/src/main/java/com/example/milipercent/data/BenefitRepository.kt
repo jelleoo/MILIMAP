@@ -3,6 +3,7 @@ package com.example.milipercent.data
 import com.example.milipercent.analysis.BenefitAnalysisResult
 import com.example.milipercent.analysis.BenefitAnalyzer
 import com.example.milipercent.data.local.BenefitEntity
+import com.example.milipercent.data.local.BenefitIdentity
 import com.example.milipercent.data.local.BenefitLocalDataSource
 import com.example.milipercent.data.local.MMA_SOURCE_TYPE
 import com.example.milipercent.data.local.toDetail
@@ -59,12 +60,29 @@ class BenefitRepository(
         val analysis = BenefitAnalyzer.analyze(collection)
         val reconciler = BenefitReconciler()
         val scopedRemote = collection.benefits.filter { reconciler.isCurrentProductRegion(it.address) }
+        require(scopedRemote.isNotEmpty()) { "수도권 나라사랑가게 API 응답이 없어 기존 캐시를 교체하지 않습니다." }
+        val allStoredBenefits = localDataSource.getAllBenefits()
+        val publishedOfficialIdentities = allStoredBenefits
+            .asSequence()
+            .filter { entity ->
+                entity.status == "ACTIVE" && entity.sourceType in PUBLISHED_OFFICIAL_SOURCE_TYPES
+            }
+            .map { entity -> BenefitIdentity.normalizedKey(entity.name, entity.address) }
+            .toSet()
+        val remoteMmaCandidates = scopedRemote.filterNot { remote ->
+            !remote.name.isBlank() && !remote.address.isNullOrBlank() &&
+                BenefitIdentity.normalizedKey(remote.name, remote.address) in publishedOfficialIdentities
+        }
         val reconciliation = try {
-            reconciler.reconcile(
-                existing = localDataSource.getBenefits(MMA_SOURCE_TYPE),
-                remote = scopedRemote,
-                syncedAt = currentTimeMillis(),
-            )
+            if (remoteMmaCandidates.isEmpty()) {
+                ReconciliationResult(entities = emptyList(), matchedCount = 0, addedCount = 0)
+            } else {
+                reconciler.reconcile(
+                    existing = allStoredBenefits.filter { entity -> entity.sourceType == MMA_SOURCE_TYPE },
+                    remote = remoteMmaCandidates,
+                    syncedAt = currentTimeMillis(),
+                )
+            }
         } catch (exception: RemoteBenefitConflictException) {
             throw BenefitIdentityCollisionException(cause = exception)
         }
@@ -179,6 +197,10 @@ class BenefitRepository(
         const val ADDITIONAL_RETRY_COUNT = 2
         private const val TOTAL_ATTEMPTS = ADDITIONAL_RETRY_COUNT + 1
         private const val RETRY_DELAY_MILLIS = 500L
+        private val PUBLISHED_OFFICIAL_SOURCE_TYPES = setOf(
+            "LOCAL_GOV",
+            "PUBLIC_EVIDENCE",
+        )
     }
 }
 

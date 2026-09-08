@@ -191,6 +191,10 @@ private fun DiscoverScreen(
                 .height(176.dp)
                 .testTag("map_slot"),
         )
+        LocationVerificationSummary(
+            benefits = state.visibleBenefits,
+            onBenefitSelected = onBenefitSelected,
+        )
         Surface(
             modifier = Modifier.fillMaxWidth(),
             color = androidx.compose.ui.graphics.Color.White,
@@ -336,6 +340,9 @@ private fun BenefitCard(
                 Text(benefit.benefitDescription, color = Muted, fontSize = 12.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
                 Spacer(Modifier.height(7.dp))
                 Text("${benefit.district ?: "서울"} · ${benefit.category}", color = Muted, fontSize = 11.sp)
+                if (benefit.latitude == null || benefit.longitude == null) {
+                    Text("위치 확인 필요 · 지도 핀 미표시", color = Warning, fontSize = 11.sp)
+                }
                 item.distanceKm?.let { distance ->
                     Text(if (distance < 1) "${(distance * 1000).toInt()}m" else "%.1fkm".format(distance), color = PrimaryDark, fontSize = 11.sp)
                 }
@@ -346,6 +353,49 @@ private fun BenefitCard(
                 color = if (favorite) PrimaryDark else Muted,
                 fontSize = 22.sp,
             )
+        }
+    }
+}
+
+@Composable
+private fun LocationVerificationSummary(
+    benefits: List<BenefitListItem>,
+    onBenefitSelected: (String) -> Unit,
+) {
+    val unlocatedBenefits = benefits.filter { item ->
+        item.benefit.latitude == null || item.benefit.longitude == null
+    }
+    if (unlocatedBenefits.isEmpty()) return
+
+    Surface(
+        modifier = Modifier.fillMaxWidth().testTag("location_verification_summary"),
+        color = PrimarySoft,
+    ) {
+        Column(Modifier.padding(horizontal = 14.dp, vertical = 9.dp)) {
+            Text(
+                "위치 확인 필요 ${unlocatedBenefits.size}곳",
+                color = Navy,
+                fontWeight = FontWeight.Bold,
+                fontSize = 12.sp,
+            )
+            Text(
+                "정확한 좌표가 없어 지도 핀에는 표시하지 않습니다. 업소명과 주소를 직접 확인해 주세요.",
+                color = Muted,
+                fontSize = 11.sp,
+            )
+            LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                items(unlocatedBenefits.take(8), key = { it.benefit.id }) { item ->
+                    Text(
+                        item.benefit.name,
+                        modifier = Modifier
+                            .testTag("location_verification_${item.benefit.id}")
+                            .clickable { onBenefitSelected(item.benefit.id) }
+                            .padding(vertical = 4.dp),
+                        color = PrimaryDark,
+                        fontSize = 11.sp,
+                    )
+                }
+            }
         }
     }
 }

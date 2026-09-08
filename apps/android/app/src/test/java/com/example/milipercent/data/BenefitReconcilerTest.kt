@@ -41,7 +41,7 @@ class BenefitReconcilerTest {
     }
 
     @Test
-    fun `matched cached API row fills only blank phone and benefit type`() {
+    fun `matched cached API row upgrades to current official common data`() {
         val existing = mmaEntity(
             id = "mma_cached",
             name = "밀리 가게",
@@ -60,8 +60,12 @@ class BenefitReconcilerTest {
         assertEquals("mma_cached", result.entities.single().id)
         assertEquals("02-9999", result.entities.single().phone)
         assertEquals("우대", result.entities.single().benefitType)
-        assertEquals("기존 설명", result.entities.single().benefitDescription)
-        assertEquals(existing.syncedAt, result.entities.single().syncedAt)
+        assertEquals("병무청 나라사랑가게 우대 혜택(업소별 적용 내용은 방문 전 확인)", result.entities.single().benefitDescription)
+        assertEquals("병무청 나라사랑가게조회서비스 · 최신 확인", result.entities.single().sourceLabel)
+        assertEquals("https://www.mma.go.kr/about/udgg/list.do?mc=mma0003357", result.entities.single().sourceUrl)
+        assertEquals("1970-01-01", result.entities.single().lastVerifiedAt)
+        assertEquals("ACTIVE", result.entities.single().status)
+        assertEquals(200L, result.entities.single().syncedAt)
     }
 
     @Test
@@ -73,6 +77,23 @@ class BenefitReconcilerTest {
 
         assertEquals(first.id, second.id)
         assertTrue(first.id.matches(Regex("mma_[0-9a-f]{64}")))
+    }
+
+    @Test
+    fun `new MMA row has current official evidence and common benefit copy`() {
+        val stored = BenefitReconciler().reconcile(
+            existing = emptyList(),
+            remote = listOf(mma("새 나라사랑가게", "서울특별시 마포구 월드컵로 1", "02-1111", "할인")),
+            syncedAt = 0L,
+        ).entities.single()
+
+        assertEquals("ACTIVE", stored.status)
+        assertEquals("병무청 나라사랑가게 우대 혜택(업소별 적용 내용은 방문 전 확인)", stored.benefitDescription)
+        assertEquals("병무청 나라사랑가게조회서비스 · 최신 확인", stored.sourceLabel)
+        assertEquals("https://www.mma.go.kr/about/udgg/list.do?mc=mma0003357", stored.sourceUrl)
+        assertEquals("1970-01-01", stored.lastVerifiedAt)
+        assertEquals(null, stored.latitude)
+        assertEquals(null, stored.longitude)
     }
 
     @Test

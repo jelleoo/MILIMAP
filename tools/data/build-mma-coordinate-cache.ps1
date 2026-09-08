@@ -1,7 +1,7 @@
 ﻿[CmdletBinding()]
 param(
     [string]$LocalPropertiesPath = ".\apps\android\local.properties",
-    [string]$SeedCsv = ".\data\seed\capital-area-military-benefits-20260815.csv",
+    [string]$SeedCsv = ".\data\canonical\capital-area-military-benefits.csv",
     [string]$ExistingCacheJson = ".\apps\android\app\src\main\assets\mma.coordinates.seed.json",
     [string]$DestinationJson = ".\apps\android\app\src\main\assets\mma.coordinates.seed.json",
     [string]$ReportCsv = ".\data\reports\mma-coordinate-geocoding-report-20260904.csv",

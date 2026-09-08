@@ -1,0 +1,23 @@
+[
+  {
+    "id": "confirmed",
+    "name": "확인 업소",
+    "address": "서울 마포구 테스트로1",
+    "latitude": 37.5,
+    "longitude": 127.0
+  },
+  {
+    "id": "recheck",
+    "name": "재확인 업소",
+    "address": "경기 파주시 테스트로2",
+    "latitude": 37.6,
+    "longitude": 126.8
+  },
+  {
+    "id": "unverified",
+    "name": "미확인 업소",
+    "address": "인천 부평구 테스트로3",
+    "latitude": null,
+    "longitude": null
+  }
+]

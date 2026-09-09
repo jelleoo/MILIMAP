@@ -1,0 +1,25 @@
+{
+  "generatedAt": "2026-09-08T20:16:44.5961604+09:00",
+  "sourceUrl": "https://www.ddc.go.kr/ddc/contents.do?key=1570",
+  "officialRows": 88,
+  "canonicalRows": 74,
+  "decisions": [
+    {
+      "decision": "공식목록 미발견",
+      "count": 2
+    },
+    {
+      "decision": "상세정보 재확인 필요",
+      "count": 15
+    },
+    {
+      "decision": "주소 재확인 필요",
+      "count": 10
+    },
+    {
+      "decision": "현재 공식 목록 일치 후보",
+      "count": 47
+    }
+  ],
+  "automaticCanonicalMutation": false
+}

@@ -111,7 +111,7 @@ function Resolve-Canonical {
     }
     $canonical = $canonicalByRowNumber[$rowNumber]
     if (-not (Test-SameBusiness $canonical $Comparison)) {
-        throw "정본CSV행번호 $rowNumber의 업소명 또는 도로명주소가 비교 결과와 일치하지 않습니다."
+        throw "정본CSV행번호 ${rowNumber}의 업소명 또는 도로명주소가 비교 결과와 일치하지 않습니다."
     }
     return [pscustomobject]@{ RowNumber = $rowNumber; Row = $canonical }
 }

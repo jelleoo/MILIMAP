@@ -21,12 +21,13 @@ $scriptPath = Join-Path $PSScriptRoot 'build-coordinate-verification-priority-qu
     -CoordinateAuditCsv (Join-Path $fixtureRoot 'coordinate-audit.csv') `
     -BenefitReviewCsv @(
         (Join-Path $fixtureRoot 'benefit-review-a.csv'),
-        (Join-Path $fixtureRoot 'benefit-review-b.csv')
+        (Join-Path $fixtureRoot 'benefit-review-b.csv'),
+        (Join-Path $fixtureRoot 'benefit-review-paju.csv')
     ) `
     -OutputCsv $outputPath
 
 $rows = @(Import-Csv -LiteralPath $outputPath -Encoding utf8)
-Assert-Equal -Actual $rows.Count -Expected 3 -Message '최신 공식 목록 일치 후보만 좌표 우선순위 큐에 포함해야 합니다'
+Assert-Equal -Actual $rows.Count -Expected 4 -Message '최신 공식 목록 또는 공식 참여업소 일치 후보만 좌표 우선순위 큐에 포함해야 합니다'
 Assert-Equal -Actual $rows[0].업소명 -Expected '확인 후보 업소' -Message '확인 후보 좌표를 최우선으로 정렬해야 합니다'
 Assert-Equal -Actual $rows[0].우선순위 -Expected 'P1' -Message '확인 후보 좌표는 P1이어야 합니다'
 Assert-Equal -Actual $rows[1].업소명 -Expected '재확인 업소' -Message '재확인 필요 좌표를 두 번째로 정렬해야 합니다'
@@ -36,6 +37,9 @@ Assert-Equal -Actual $rows[1].POI조회어 -Expected '재확인 업소 경기도
 Assert-Equal -Actual $rows[1].POI조회방식 -Expected '도로명·건물번호 보조 검색' -Message 'P2 수동 대조에 사용한 POI 조회 방식을 함께 내보내야 합니다'
 Assert-Equal -Actual $rows[2].업소명 -Expected '미확인 업소' -Message '두 번째 혜택 검토 보고서의 후보도 포함해야 합니다'
 Assert-Equal -Actual $rows[2].우선순위 -Expected 'P3' -Message '미확인 좌표는 P3이어야 합니다'
+$pajuRow = @($rows | Where-Object { $_.업소명 -eq '파주 참여 업소' })
+Assert-Equal -Actual $pajuRow.Count -Expected 1 -Message '파주 공식 참여업소 일치 후보도 좌표 검증 큐에 포함해야 합니다'
+Assert-Equal -Actual $pajuRow[0].우선순위 -Expected 'P3' -Message '감사 미수행 파주 참여업소는 P3이어야 합니다'
 Assert-Equal -Actual $rows[0].검토결정 -Expected '미검토' -Message '큐 생성은 사람 검토 결정을 자동으로 바꾸면 안 됩니다'
 Assert-Equal -Actual $rows[0].정본반영여부 -Expected '아니오' -Message '큐 생성은 정본 반영을 제안하면 안 됩니다'
 

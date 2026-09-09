@@ -43,7 +43,7 @@ powershell -ExecutionPolicy Bypass -File .\tools\data\geocode-benefits.ps1 `
 
 실제 좌표 보강은 `-DryRun`만 제외해 별도 결과 파일로 생성합니다. 결과 CSV와 검토 보고서를 확인한 뒤에만 seed 원본과 Android JSON을 갱신합니다.
 
-Android의 `benefits.seed.json`은 로컬 DB가 처음 만들어질 때만 들어갑니다. 이미 앱을 실행한 개발 기기에서 갱신된 seed를 확인하려면 앱 데이터 삭제 또는 앱 재설치가 필요합니다. 이 작업은 해당 기기의 로컬 계정, 찜과 관리자 수정 데이터도 함께 삭제하므로 필요한 데이터가 없는 개발 기기에서만 진행합니다.
+Android는 내장 seed 버전이 올라갈 때만 `benefits.seed.json`을 Room에 다시 동기화합니다. 번들 행은 갱신·정리하되 사용자 찜과 원격·수동 데이터는 보존합니다. 새 seed를 반영하는 데이터 변경에서는 `BUNDLED_SEED_VERSION`도 함께 올리고, 개발 기기에서 기존 데이터가 유지되는지 동기화 테스트로 확인합니다.
 
 ## 정본 POI 좌표 감사
 
@@ -86,7 +86,8 @@ pwsh -NoProfile -File .\tools\data\export-poi-coordinate-review-candidates.ps1 `
 
 ```powershell
 $benefitReports = @(
-  '.\data\canonical\reports\ddc-benefit-comparison-20260906.csv',
+  '.\data\canonical\reports\ddc-benefit-comparison-20260908.csv',
+  '.\data\canonical\reports\paju-benefit-comparison-20260906.csv',
   '.\data\canonical\reports\yangju-benefit-comparison-20260906.csv'
 )
 
@@ -94,8 +95,8 @@ $benefitReports = @(
   -CanonicalCsv '.\data\canonical\capital-area-military-benefits.csv' `
   -CoordinateAuditCsv .\data\canonical\reports\poi-coordinate-audit-api-hub-20260906.csv `
   -BenefitReviewCsv $benefitReports `
-  -OutputCsv .\data\canonical\reports\coordinate-verification-priority-queue-20260906.csv `
-  -SummaryJson .\data\canonical\reports\coordinate-verification-priority-queue-20260906-summary.json
+  -OutputCsv .\data\canonical\reports\coordinate-verification-priority-queue-20260908.csv `
+  -SummaryJson .\data\canonical\reports\coordinate-verification-priority-queue-20260908-summary.json
 ```
 
 `P2` 행을 다시 감사할 때는 단일 상호 일치 POI의 주소만 참고 정보로 기록합니다. 이때 `제안위도`, `제안경도`, `좌표출처URL`은 빈 값으로 유지해야 하며, 참고 POI가 있다는 이유만으로 좌표를 제안하거나 승인해서는 안 됩니다.
@@ -104,17 +105,17 @@ P2의 수동 대조에는 `export-coordinate-map-screen-review-queue.ps1`을 사
 
 ```powershell
 pwsh -NoProfile -File .\tools\data\export-coordinate-map-screen-review-queue.ps1 `
-  -PriorityQueueCsv .\data\canonical\reports\coordinate-verification-priority-queue-20260906-v3.csv `
-  -OutputCsv .\data\canonical\reports\coordinate-map-screen-review-queue-p2-20260906-v3.csv
+  -PriorityQueueCsv .\data\canonical\reports\coordinate-verification-priority-queue-20260908.csv `
+  -OutputCsv .\data\canonical\reports\coordinate-map-screen-review-queue-p2-20260908.csv
 ```
 
-`poi-coordinate-map-screen-verification-p1-20260906.csv`는 P1 7건을 실제 네이버 지도 POI 화면에서 대조한 기록이다. 출시 준비도는 사람의 별도 승인 필드가 아니라 정본 `확인 완료`와 단일 `감사판정=확인 후보`를 함께 확인해 지도 핀 표시 여부를 정한다.
+`poi-coordinate-map-screen-verification-p1-20260906.csv`는 초기 P1 7건을 실제 네이버 지도 POI 화면에서 대조한 기록이다. 이후 같은 기준의 수동 대조 결과는 날짜별 `poi-coordinate-review-candidates-*.csv`에 추가한다. 출시 준비도는 사람의 별도 승인 필드가 아니라 정본 `확인 완료`와 단일 `감사판정=확인 후보`를 함께 확인해 지도 핀 표시 여부를 정한다.
 
 `export-coordinate-map-screen-review-queue.ps1`의 기본 대상은 `P2`다. API 참고 POI가 없는 `P3` 미확인군을 별도 대기열로 만들 때는 `-QueuePriority P3`를 명시한다. 이 경우에도 참고 POI와 좌표 제안은 공란이며, `지도대조결과=미검토`, `검토결정=미검토`, `정본반영여부=아니오`로 시작한다.
 
 ```powershell
 pwsh -NoProfile -File .\tools\data\export-coordinate-map-screen-review-queue.ps1 `
-  -PriorityQueueCsv .\data\canonical\reports\coordinate-verification-priority-queue-20260906-v3.csv `
+  -PriorityQueueCsv .\data\canonical\reports\coordinate-verification-priority-queue-20260908.csv `
   -OutputCsv .\data\canonical\reports\coordinate-map-screen-review-queue-p3-20260907.csv `
   -QueuePriority P3
 ```
@@ -136,8 +137,8 @@ pwsh -NoProfile -File .\tools\data\export-benefit-verification-queue.ps1 `
 ```powershell
 pwsh -NoProfile -File .\tools\data\compare-ddc-benefits.ps1 `
   -CanonicalCsv '.\data\canonical\capital-area-military-benefits.csv' `
-  -OutputCsv .\data\canonical\reports\ddc-benefit-comparison-20260906.csv `
-  -SummaryJson .\data\canonical\reports\ddc-benefit-comparison-20260906-summary.json
+  -OutputCsv .\data\canonical\reports\ddc-benefit-comparison-20260908.csv `
+  -SummaryJson .\data\canonical\reports\ddc-benefit-comparison-20260908-summary.json
 ```
 
 ### 파주시 공식 목록 대조
@@ -169,16 +170,17 @@ pwsh -NoProfile -File .\tools\data\compare-yangju-benefits.ps1 `
 
 ```powershell
 $benefitReports = @(
-  '.\data\canonical\reports\ddc-benefit-comparison-20260906.csv',
+  '.\data\canonical\reports\ddc-benefit-comparison-20260908.csv',
+  '.\data\canonical\reports\paju-benefit-comparison-20260906.csv',
   '.\data\canonical\reports\yangju-benefit-comparison-20260906.csv'
 )
 
 & .\tools\data\build-release-readiness-report.ps1 `
   -CanonicalCsv '.\data\canonical\capital-area-military-benefits.csv' `
-  -CoordinateReviewCsv .\data\canonical\reports\poi-coordinate-review-candidates-20260906.csv `
+  -CoordinateReviewCsv .\data\canonical\reports\poi-coordinate-review-candidates-20260908.csv `
   -BenefitReviewCsv $benefitReports `
-  -OutputCsv .\data\canonical\reports\release-readiness-20260906.csv `
-  -SummaryJson .\data\canonical\reports\release-readiness-20260906-summary.json
+  -OutputCsv .\data\canonical\reports\release-readiness-20260908.csv `
+  -SummaryJson .\data\canonical\reports\release-readiness-20260908-summary.json
 ```
 
 `build-official-benefit-release-candidates.ps1`은 동두천·파주·양주 비교 결과에서 최신 공식 근거가 충분한 업소를 자동으로 후보화합니다. 동두천·양주는 공식 개별 할인 문구를, 파주는 공식 참여 목록과 공통 정책에 따른 공통 문구를 내보냅니다. 이 후보 목록을 출시 준비도와 출시 시드의 유일한 혜택 근거 입력으로 사용합니다.
@@ -201,15 +203,15 @@ pwsh -NoProfile -File .\tools\data\apply-canonical-coordinate-policy.ps1 `
 ```powershell
 & .\tools\data\build-official-benefit-release-candidates.ps1 `
   -CanonicalCsv '.\data\canonical\capital-area-military-benefits.csv' `
-  -DdcComparisonCsv .\data\canonical\reports\ddc-benefit-comparison-20260906.csv `
+  -DdcComparisonCsv .\data\canonical\reports\ddc-benefit-comparison-20260908.csv `
   -PajuComparisonCsv .\data\canonical\reports\paju-benefit-comparison-20260906.csv `
   -YangjuComparisonCsv .\data\canonical\reports\yangju-benefit-comparison-20260906.csv `
-  -OutputCsv .\data\canonical\reports\official-benefit-release-candidates-20260906.csv
+  -OutputCsv .\data\canonical\reports\official-benefit-release-candidates-20260908.csv
 
 & .\tools\data\build-release-benefit-seed.ps1 `
   -CanonicalCsv '.\data\canonical\capital-area-military-benefits.csv' `
-  -CandidateCsv .\data\canonical\reports\official-benefit-release-candidates-20260906.csv `
-  -CoordinateReviewCsv .\data\canonical\reports\poi-coordinate-review-candidates-20260906.csv `
+  -CandidateCsv .\data\canonical\reports\official-benefit-release-candidates-20260908.csv `
+  -CoordinateReviewCsv .\data\canonical\reports\poi-coordinate-review-candidates-20260908.csv `
   -SourceJson $canonicalSource `
   -DestinationJson .\apps\android\app\src\main\assets\benefits.seed.json
 ```

@@ -82,11 +82,12 @@ $canonicalEntries = @(
         }
 )
 $auditRows = @(Import-Csv -LiteralPath $CoordinateAuditCsv -Encoding utf8)
+$eligibleBenefitDecisions = @('현재 공식 목록 일치 후보', '공식 참여업소 일치 후보')
 $benefitEntries = @(
     foreach ($benefitPath in $BenefitReviewCsv) {
         $sourceFile = Split-Path -Leaf $benefitPath
         Import-Csv -LiteralPath $benefitPath -Encoding utf8 |
-            Where-Object { (Get-PriorityRowValue $_ '판정') -eq '현재 공식 목록 일치 후보' } |
+            Where-Object { $eligibleBenefitDecisions -contains (Get-PriorityRowValue $_ '판정') } |
             ForEach-Object { [pscustomobject]@{ SourceFile = $sourceFile; Row = $_ } }
     }
 )

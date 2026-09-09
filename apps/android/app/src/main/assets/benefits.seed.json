@@ -660,11 +660,11 @@
     "district": "금촌3동"
   },
   {
-    "id": "seed-3a3b3fda81ae",
+    "id": "seed-c3dfde79fc39",
     "name": "개성연출",
-    "address": "경기도 동두천시 정장로31-12, 1층(생연동)",
-    "latitude": null,
-    "longitude": null,
+    "address": "경기도 동두천시 정장로 31-12, 1층",
+    "latitude": 37.9047658,
+    "longitude": 127.054556,
     "category": "미용·뷰티",
     "benefitType": "할인·우대",
     "benefitDescription": "커트 2,000원 할인",
@@ -680,11 +680,11 @@
     "district": "동두천시"
   },
   {
-    "id": "seed-f1f3f45356ac",
+    "id": "seed-8298e8c44835",
     "name": "고미나 헤어모드",
-    "address": "경기도 동두천시 동광로75-1(생연동)",
-    "latitude": null,
-    "longitude": null,
+    "address": "경기도 동두천시 동광로 75-1, 1층",
+    "latitude": 37.9088926,
+    "longitude": 127.0567176,
     "category": "미용·뷰티",
     "benefitType": "할인·우대",
     "benefitDescription": "커트 2,000원 할인",

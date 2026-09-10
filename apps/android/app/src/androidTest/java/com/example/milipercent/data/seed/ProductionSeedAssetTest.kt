@@ -27,8 +27,8 @@ class ProductionSeedAssetTest {
         val benefits = LegacyBenefitSeedLoader(AssetJsonSource(context, "benefits.seed.json")).loadAndValidate()
 
         assertEquals(249, benefits.size)
-        assertEquals(7, benefits.count { it.latitude != null && it.longitude != null })
-        assertEquals(242, benefits.count { it.latitude == null && it.longitude == null })
+        assertEquals(86, benefits.count { it.latitude != null && it.longitude != null })
+        assertEquals(163, benefits.count { it.latitude == null && it.longitude == null })
         assertTrue(benefits.all { it.sourceLabel.endsWith("최신 확인") })
     }
 }

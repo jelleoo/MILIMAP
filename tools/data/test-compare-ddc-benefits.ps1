@@ -33,4 +33,14 @@ Assert-Equal -Actual $comparisonRows[1].판정 -Expected '상세정보 재확인
 Assert-Equal -Actual $comparisonRows[2].판정 -Expected '공식목록 미발견' -Message '공식 표에 없는 상호는 미발견으로 보고해야 합니다'
 Assert-Equal -Actual $comparisonRows[2].정본반영여부 -Expected '아니오' -Message '비교 도구는 정본 자동 반영을 제안하면 안 됩니다'
 
+$floorCompletionRows = @(Compare-DdcBenefits -CanonicalRows @(
+    [pscustomobject]@{ 업소명 = '층 보강 업소'; 소재지도로명주소 = '경기도 동두천시 동광로75-1, 1층(생연동)'; 업소전화번호 = '031-777-8888'; 할인정보 = '커트 2,000원' },
+    [pscustomobject]@{ 업소명 = '층 불일치 업소'; 소재지도로명주소 = '경기도 동두천시 동광로 75-1, 2층'; 업소전화번호 = '031-999-0000'; 할인정보 = '커트 2,000원' }
+) -OfficialRows @(
+    [pscustomobject]@{ Name = '층 보강 업소'; Address = '동광로 75-1(생연동)'; Phone = '031-777-8888'; Discount = '커트 2,000원' },
+    [pscustomobject]@{ Name = '층 불일치 업소'; Address = '동광로 75-1, 1층'; Phone = '031-999-0000'; Discount = '커트 2,000원' }
+))
+Assert-Equal -Actual $floorCompletionRows[0].판정 -Expected '현재 공식 목록 일치 후보' -Message '공식 주소에 층 정보만 빠진 경우 도로명·건물번호 일치를 유지해야 합니다'
+Assert-Equal -Actual $floorCompletionRows[1].판정 -Expected '주소 재확인 필요' -Message '양쪽에 층 정보가 있으면서 서로 다르면 주소 일치로 처리하면 안 됩니다'
+
 Write-Output 'PASS: DDC benefit comparison rules'

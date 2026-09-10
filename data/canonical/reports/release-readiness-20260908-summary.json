@@ -1,0 +1,15 @@
+{
+  "generatedAt": "2026-09-08T20:18:48.1329665+09:00",
+  "canonicalRows": 496,
+  "releaseDecisions": [
+    {
+      "decision": "보류: 최신 공식 혜택 근거 없음",
+      "count": 247
+    },
+    {
+      "decision": "출시 검토 가능",
+      "count": 249
+    }
+  ],
+  "automaticCanonicalMutation": false
+}

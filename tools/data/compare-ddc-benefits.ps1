@@ -45,6 +45,36 @@ function Normalize-DdcAddress {
     return (($normalized -replace '[\s,.-]', '')).ToLowerInvariant()
 }
 
+function Get-DdcRoadBuildingKey {
+    param([string]$Value)
+
+    $address = ConvertFrom-DdcHtmlText $Value
+    $address = $address -replace '경기도', ''
+    $address = $address -replace '동두천시', ''
+    $address = $address -replace '\([^)]*\)', ''
+    $match = [regex]::Match($address, '^(?<road>.+?(?:대로|로|길|거리)(?:\d+번길)?\s*\d+(?:-\d+)?)')
+    if (-not $match.Success) { return '' }
+    return Normalize-DdcAddress $match.Groups['road'].Value
+}
+
+function Test-DdcAddressMatch {
+    param(
+        [string]$OfficialAddress,
+        [string]$CanonicalAddress
+    )
+
+    $officialNormalized = Normalize-DdcAddress $OfficialAddress
+    $canonicalNormalized = Normalize-DdcAddress $CanonicalAddress
+    if (-not $officialNormalized -or -not $canonicalNormalized) { return $false }
+    if ($officialNormalized -eq $canonicalNormalized) { return $true }
+
+    $officialRoadBuilding = Get-DdcRoadBuildingKey $OfficialAddress
+    $canonicalRoadBuilding = Get-DdcRoadBuildingKey $CanonicalAddress
+    if (-not $officialRoadBuilding -or $officialRoadBuilding -ne $canonicalRoadBuilding) { return $false }
+
+    return $officialNormalized -eq $officialRoadBuilding -or $canonicalNormalized -eq $canonicalRoadBuilding
+}
+
 function Normalize-DdcPhone {
     param([string]$Value)
 
@@ -115,7 +145,7 @@ function Compare-DdcBenefits {
         $canonicalPhone = Get-DdcRowValue $canonical '업소전화번호'
         $canonicalDiscount = Get-DdcRowValue $canonical '할인정보'
         $nameMatches = @($OfficialRows | Where-Object { (Normalize-DdcName $_.Name) -eq (Normalize-DdcName $canonicalName) })
-        $addressMatches = @($nameMatches | Where-Object { (Normalize-DdcAddress $_.Address) -eq (Normalize-DdcAddress $canonicalAddress) })
+        $addressMatches = @($nameMatches | Where-Object { Test-DdcAddressMatch -OfficialAddress $_.Address -CanonicalAddress $canonicalAddress })
 
         $official = $null
         $decision = ''

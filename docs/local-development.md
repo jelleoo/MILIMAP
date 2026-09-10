@@ -61,8 +61,8 @@ $canonicalSource = Join-Path ([IO.Path]::GetTempPath()) 'milimap-canonical-sourc
 
 & .\tools\data\build-release-benefit-seed.ps1 `
   -CanonicalCsv '.\data\canonical\capital-area-military-benefits.csv' `
-  -CandidateCsv '.\data\canonical\reports\official-benefit-release-candidates-20260906.csv' `
-  -CoordinateReviewCsv '.\data\canonical\reports\poi-coordinate-review-candidates-20260906.csv' `
+  -CandidateCsv '.\data\canonical\reports\official-benefit-release-candidates-20260908.csv' `
+  -CoordinateReviewCsv '.\data\canonical\reports\poi-coordinate-review-candidates-20260908.csv' `
   -SourceJson $canonicalSource `
   -DestinationJson '.\apps\android\app\src\main\assets\benefits.seed.json'
 

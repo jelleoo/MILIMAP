@@ -5,7 +5,7 @@
 ## 현재 기준선
 
 - 개발 기준 브랜치: `dev`
-- 현재 dev 기준 commit: `761a04294a9bbf42f0767e200cc191f7f998828a`
+- 현재 dev 기준 commit: `6ec84764a09bf49b8855023c2ec626413efc66e1`
 - Contract Foundation merge baseline: `761a04294a9bbf42f0767e200cc191f7f998828a`
 - P3 data merge baseline: `edca54d23981501efa8ce602df98f5456973940c`
 - 기준일: 2026-09-10
@@ -16,6 +16,11 @@
 - Android bundled seed version: 7
 
 현재 코드/설정이 이 문서와 다르면 최신 `dev` 코드와 해당 Issue/PR을 우선합니다.
+
+장기 개발 방향:
+`docs/roadmap.md`
+
+현재는 Phase 1만 실행 단위로 구체화합니다. Phase 2 이후의 담당자·세부 Issue·구현 파일은 지금 확정하지 않으며, Phase 1 완료 후 최신 `dev`와 실제 결과를 기준으로 다시 논의합니다.
 
 ## 현재 개발 목표
 
@@ -195,6 +200,10 @@ Integration Owner의 책임:
 - false GREEN 확인
 - canonical/Android seed가 자동 수정되지 않았는지 확인
 
+Phase 1은 이 Integration과 전체 Shadow Mode Gate까지 통과해야 완료로 봅니다.
+
+Phase 2 이후의 방향은 `docs/roadmap.md`에서 확인하고, 구체 설계와 Issue 생성은 Phase 1 완료 후 다시 논의합니다.
+
 ## 현재 하지 않을 작업
 
 - 남은 115건 대규모 수동 좌표 캠페인
@@ -217,3 +226,5 @@ Integration Owner의 책임:
 3. 프로젝트 오너는 Issue #30을 최신 `dev`에서 독립 시작한다.
 4. 각 Workstream은 공통 Contract와 다른 Workstream 경로를 수정하지 않는다.
 5. 세 PR이 각각 `dev`에 병합된 뒤 별도 Integration Issue를 생성한다.
+6. Integration + Shadow Mode Gate 통과 후 Phase 1 완료를 선언한다.
+7. 그 후 Phase 2 설계와 Issue 분할을 팀에서 다시 논의한다.

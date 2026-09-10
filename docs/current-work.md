@@ -5,7 +5,8 @@
 ## 현재 기준선
 
 - 개발 기준 브랜치: `dev`
-- P3 merge baseline: `edca54d23981501efa8ce602df98f5456973940c`
+- 현재 dev 기준 commit: `dc2bfc42feba20f92341b620876d88c5614d563e`
+- P3 data merge baseline: `edca54d23981501efa8ce602df98f5456973940c`
 - 기준일: 2026-09-10
 - release candidates: 249
 - exact map pins: 111
@@ -44,6 +45,9 @@ Phase 1은 자동으로 canonical이나 Android seed를 수정하지 않습니�
 전체 설계:
 `docs/superpowers/specs/2026-09-10-benefit-business-verification-pipeline-design.md`
 
+공통 Contract 설계:
+`docs/superpowers/specs/2026-09-10-poi-verification-contracts-design.md`
+
 ## 왜 지금 이 Phase를 하는가
 
 P2/P3 수동 검증을 통해 충분한 실제 판단 사례를 확보했습니다. 다음 115건을 같은 수동 방식으로 바로 반복하기보다, 이 결과를 Golden Dataset으로 사용해 자동 후보 탐색·비교 파이프라인을 먼저 검증합니다.
@@ -55,16 +59,17 @@ P2/P3 수동 검증을 통해 충분한 실제 판단 사례를 확보했습니�
 
 ## 예정된 3인 병렬 Workstream
 
-아래 3개 구현 Issue는 아직 생성하지 않았습니다. 팀 분업을 시작할 때 정확한 Contract와 파일 경계를 최종 확정한 뒤 Issue를 각각 생성합니다.
+아래 3개 구현 Issue는 아직 생성하지 않았습니다. 먼저 공통 Contract 설계 승인과 Contract Foundation 구현을 끝낸 뒤 각각 생성합니다.
 
 ### Workstream A — Business Identity / Normalization
 
 책임:
 
+- canonical row → `NormalizedBusiness`
 - 업체명 정규화
 - 주소 정규화와 안전한 구조화
 - 도로명/건물번호/지점/floor-unit identity 신호 추출
-- 공통 `NormalizedBusiness` 출력
+- normalization warning 기록
 
 하지 않을 일:
 
@@ -77,33 +82,32 @@ P2/P3 수동 검증을 통해 충분한 실제 판단 사례를 확보했습니�
 
 책임:
 
-- `NormalizedBusiness` 입력
+- `NormalizedBusiness` → `PoiDiscoveryBatch`
 - adaptive query 생성
 - strict query부터 broader query까지 후보 탐색
 - 첫 non-empty result에서 무조건 중단하지 않기
 - 여러 query 결과 aggregation
 - POI dedup
-- 각 후보가 어떤 query에서 발견됐는지 evidence 보존
-- 공통 `PoiCandidate[]` 출력
+- `PoiCandidate[]`와 query/candidate evidence 보존
+- COMPLETE/PARTIAL/FAILED discovery 상태 보고
 
 하지 않을 일:
 
 - 최종 production 승인
+- 최종 identity 분류
 - canonical/seed 수정
-- hard mismatch를 무시한 자동 선택
 
 ### Workstream C — Matching / Evaluation
 
 책임:
 
-- `NormalizedBusiness + PoiCandidate[]` 입력
+- `NormalizedBusiness + PoiDiscoveryBatch` → `PoiMatchResult`
 - hard constraints 우선 적용
 - surviving candidate ranking
 - GREEN/YELLOW/RED 분류
-- 명시적 reason/conflict/evidence 출력
+- reason/conflict/evidence 출력
 - Golden Dataset regression tests
 - false GREEN, recall, manual review rate 등 실제 측정 가능한 metrics
-- 공통 `PoiMatchResult` 출력
 
 하지 않을 일:
 
@@ -111,50 +115,30 @@ P2/P3 수동 검증을 통해 충분한 실제 판단 사례를 확보했습니�
 - canonical/seed 자동 반영
 - 임의 threshold 생성
 
-## 공통 Contract
+## 확정 대상으로 제안된 공통 Contract
 
-세 Workstream이 병렬 개발하려면 구현 전에 아래 세 개념 계약을 먼저 고정해야 합니다.
+Issue #24에서 아래 Contract를 구현 수준으로 고정합니다.
 
-### `NormalizedBusiness`
+- `NormalizedBusiness`
+- `PoiCandidate`
+- `PoiDiscoveryBatch`
+- `PoiMatchResult`
+- supporting records: query attempt / discovery evidence / match evidence
 
-최소 개념 필드:
+핵심 규칙:
 
-- originalName
-- normalizedName
-- baseName
-- branchName
-- originalAddress
-- province
-- city/district
-- dong when determinable
-- roadName
-- buildingMain
-- buildingSub
-- floor/unit when materially identifying
+- `ContractType` + `ContractVersion=1` 사용
+- 없는 text는 `''`, 빈 배열은 `@()`
+- 좌표는 둘 다 존재하거나 둘 다 `$null`
+- 원본 상호/주소 evidence 보존
+- 애매한 지점·건물번호·층/호는 추측하지 않음
+- discovery 실패와 정상 no-candidate를 반드시 구분
+- `PARTIAL`/`FAILED` discovery를 정상 RED로 오판하지 않음
+- GREEN은 fast-review candidate일 뿐 production 승인 아님
+- Phase 1 `PoiMatchResult.ProductionAction`은 항상 `NONE`
+- Contract 변경은 A/B/C 구현 PR 내부에서 임의로 하지 않음
 
-### `PoiCandidate`
-
-최소 개념 필드:
-
-- original POI name
-- normalized POI name
-- road address
-- lot address
-- coordinate
-- source / source URL or stable identifier when available
-- discoveredByQueries[]
-
-### `PoiMatchResult`
-
-최소 개념 필드:
-
-- classification: GREEN / YELLOW / RED
-- selected candidate when applicable
-- reasons[]
-- conflicts[]
-- supporting evidence
-
-정확한 PowerShell object/property 이름과 파일 위치는 구현 Issue를 만들기 직전에 최신 `dev`를 다시 확인해 확정합니다. 공통 Contract를 한 Workstream이 임의 변경하지 않습니다.
+정확한 필드·타입·허용 상태/코드와 불변조건은 Contract spec을 단일 기준으로 사용합니다.
 
 ## Golden Dataset 기준
 
@@ -183,14 +167,15 @@ Phase 1은 기존 사람 검토 결과를 회귀검증 기준으로 사용합니
 3. AGENTS.md 읽기
 4. docs/current-work.md 읽기
 5. 전체 설계 spec 읽기
-6. 자기 Issue 확인
-7. 수정 허용/금지 경로와 다른 활성 Issue의 예약 파일 확인
-8. 최신 origin/dev에서 자기 branch/worktree 생성
-9. Codex에 Issue 번호와 경계 전달
-10. 독립 구현/테스트/PR
+6. Contract spec 읽기
+7. 자기 Issue 확인
+8. 수정 허용/금지 경로와 다른 활성 Issue의 예약 파일 확인
+9. 최신 origin/dev에서 자기 branch/worktree 생성
+10. Codex에 Issue 번호와 경계 전달
+11. 독립 구현/테스트/PR
 ```
 
-다른 팀원의 실제 구현을 기다리지 않고 Contract에 맞춘 fixture/mock으로 개발할 수 있어야 합니다.
+B와 C는 다른 Workstream 구현을 기다리지 않고 frozen Contract에 맞춘 fixture/mock으로 개발할 수 있어야 합니다.
 
 ## Integration
 
@@ -223,8 +208,9 @@ Integration Owner의 책임:
 
 ## 다음 액션
 
-1. Phase 1 시작 직전에 최신 `dev`를 다시 확인한다.
-2. 3개 공통 Contract를 구현 수준으로 확정한다.
-3. Workstream A/B/C 구현 Issue 3개를 만든다.
-4. 세 팀원이 독립 branch/worktree에서 병렬 개발한다.
-5. 세 PR 병합 후 Integration Issue를 별도로 진행한다.
+1. Issue #24의 Contract spec을 프로젝트 오너가 검토·승인한다.
+2. 승인된 Contract만 구현하는 작은 Contract Foundation Issue/PR을 진행한다.
+3. Foundation을 `dev`에 병합한다.
+4. Workstream A/B/C 구현 Issue 3개를 만든다.
+5. 세 팀원이 독립 branch/worktree에서 병렬 개발한다.
+6. 세 PR 병합 후 Integration Issue를 별도로 진행한다.

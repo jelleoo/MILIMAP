@@ -56,7 +56,7 @@ try {
     $releaseItems = @(Get-Content -Raw -Encoding utf8 -LiteralPath $releaseJson | ConvertFrom-Json)
     Assert-Equal -Actual $releaseItems.Count -Expected 249 -Message '출시 시드는 공식 최신 근거 249건만 포함해야 합니다'
     Assert-Equal -Actual (@($releaseItems | Where-Object { $_.status -eq 'ACTIVE' }).Count) -Expected 249 -Message '출시 시드 항목은 모두 이용 가능 상태여야 합니다'
-    Assert-Equal -Actual (@($releaseItems | Where-Object { $null -ne $_.latitude -and $null -ne $_.longitude }).Count) -Expected 86 -Message '엄격 POI 대조를 통과한 86건만 지도 핀을 가져야 합니다'
+    Assert-Equal -Actual (@($releaseItems | Where-Object { $null -ne $_.latitude -and $null -ne $_.longitude }).Count) -Expected 111 -Message '엄격 POI 대조를 통과한 111건만 지도 핀을 가져야 합니다'
     Assert-Equal -Actual (Get-NormalizedJson -Path $releaseJson) -Expected (Get-NormalizedJson -Path $appSeed) -Message '정본 파이프라인 결과가 Android 내장 출시 시드와 일치해야 합니다'
 } finally {
     if (Test-Path -LiteralPath $temporaryRoot) {

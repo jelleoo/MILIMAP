@@ -1,11 +1,11 @@
 # 현재 상태
 
 - 기준 브랜치: `dev`
-- 기준 commit: `edca54d23981501efa8ce602df98f5456973940c`
+- 데이터 기준 commit: `edca54d23981501efa8ce602df98f5456973940c`
 - 기준일: 2026-09-10
 - 기준 이벤트: P3 POI 좌표 검증 PR #21 병합
 
-이 문서는 현재 저장소 상태를 요약합니다. 구현 상태가 이 문서와 다르면 최신 `dev` 코드와 설정, 해당 Issue/Pull Request, 승인된 ADR 순으로 우선합니다. 현재 진행 중인 작업은 `docs/current-work.md`를 봅니다.
+이 문서는 현재 저장소 상태를 요약합니다. 문서 자체의 후속 merge commit은 위 데이터 기준 commit보다 새로울 수 있습니다. 구현 상태가 이 문서와 다르면 최신 `dev` 코드와 설정, 해당 Issue/Pull Request, 승인된 ADR 순으로 우선합니다. 현재 진행 중인 작업은 `docs/current-work.md`를 봅니다.
 
 ## 브랜치와 협업 상태
 
@@ -82,12 +82,12 @@ Phase 1은 `POI Verification Core / Shadow Mode`입니다. 자동 검색·후보
 
 ## 다음 우선순위
 
-1. Benefit Business Verification Pipeline 공통 설계와 협업 기준을 최신 `dev`에 고정
-2. `docs/current-work.md`를 팀원/Codex 공통 진입점으로 운영
-3. Phase 1 공통 입력·출력 Contract 확정
-4. Phase 1을 독립 Workstream 3개로 분리한 구현 Issue 생성
-5. 세 명이 최신 `dev`에서 독립 브랜치로 병렬 개발
-6. Integration Owner가 Shadow Mode pipeline을 조립하고 P1/P2/P3 ground truth로 검증
-7. 검증 결과에 따라 남은 좌표 미확정군 처리 정책을 후속 Issue에서 결정
+1. Phase 1 공통 입력·출력 Contract를 구현 수준으로 확정
+2. Phase 1을 독립 Workstream 3개로 분리한 구현 Issue 생성
+3. 세 명이 최신 `dev`에서 독립 브랜치로 병렬 개발
+4. 각 모듈 PR을 독립 검증·병합
+5. Integration Owner가 Shadow Mode pipeline을 조립하고 P1/P2/P3 ground truth로 검증
+6. 검증 결과에 따라 남은 좌표 미확정군 처리 정책을 후속 Issue에서 결정
+7. 이후 Benefit Verification Core 및 변화 추적을 별도 Phase로 진행
 
 기술 사항이 확정되지 않은 항목은 `Pending`이며 이 문서만으로 승인된 아키텍처 결정으로 간주하지 않습니다.

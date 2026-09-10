@@ -223,9 +223,8 @@ Integration Owner의 책임:
 
 ## 다음 액션
 
-1. 공통 설계/상태/협업 문서를 `dev`에 고정한다.
-2. Phase 1 시작 직전에 최신 `dev`를 다시 확인한다.
-3. 3개 공통 Contract를 구현 수준으로 확정한다.
-4. Workstream A/B/C 구현 Issue 3개를 만든다.
-5. 세 팀원이 독립 branch/worktree에서 병렬 개발한다.
-6. 세 PR 병합 후 Integration Issue를 별도로 진행한다.
+1. Phase 1 시작 직전에 최신 `dev`를 다시 확인한다.
+2. 3개 공통 Contract를 구현 수준으로 확정한다.
+3. Workstream A/B/C 구현 Issue 3개를 만든다.
+4. 세 팀원이 독립 branch/worktree에서 병렬 개발한다.
+5. 세 PR 병합 후 Integration Issue를 별도로 진행한다.

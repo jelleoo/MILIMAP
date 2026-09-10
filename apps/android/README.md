@@ -1,39 +1,87 @@
 # MILIMAP Android
 
-현재 Android Core 기준선은 MiliPercent의 Room/Repository/ViewModel 구현입니다.
+현재 Android 기준선은 `dev`의 Room / Repository / ViewModel / UiState / Compose 구조입니다.
 
-## Source baseline
+## Current baseline
 
-- MiliPercent source: `5e3d7331d59979e172a67921fb45acedde11da26`
-- Package/applicationId: `com.example.milipercent`
-- Room database: version 2
+- namespace: `com.example.milipercent`
+- applicationId: `com.example.militarybenefits`
+- Room database: version 4
+- migrations: `MIGRATION_1_2`, `MIGRATION_2_3`, `MIGRATION_3_4`
+- compileSdk: 37
+- targetSdk: 37
+- minSdk: 24
+- Gradle runtime: JDK 17
+- Java source/target: 11
+- bundled release seed version: 7
+
+## Implemented MVP
+
+현재 Android MVP에는 다음이 포함됩니다.
+
+- Discover / Saved / Account / Admin / BenefitDetail navigation
+- 이름/주소 검색 및 지역 탐색
+- Naver Map 및 현재 위치
+- Room 기반 혜택 저장 및 seed synchronization
+- MMA API pagination/retry/cache/reconciliation
+- 로그인·세션
+- 사용자별 찜
+- 관리자 수동 혜택 관리
+- 좌표가 확정된 release candidate 지도 표시
+
+2026-09-10 P3 병합 직후 release seed는 249건이며 정확 지도 핀 111건, 좌표 미확정 138건입니다. 좌표 미확정 항목에 좌표를 추정해서 넣지 않습니다.
 
 ## Open in Android Studio
 
-Repository root가 아니라 `apps/android`를 엽니다. JDK 17과 Android SDK 37을 사용합니다.
+Repository root가 아니라 `apps/android`를 엽니다.
 
-Windows에서는 저장소를 ASCII 문자만 포함한 경로(예: `C:\Users\PC\AndroidStudioProjects\MILIMAP`)에 두고 `apps/android`를 여세요. 현재 제어 저장소처럼 한글 경로에서는 AGP 설정을 우회해도 Gradle 단위 테스트 클래스 탐색이 실패할 수 있습니다.
+Windows에서는 가능하면 저장소를 ASCII 문자만 포함한 경로(예: `C:\Users\PC\AndroidStudioProjects\MILIMAP`)에 둡니다. 과거 한글 경로에서 Gradle test worker class loading 문제가 재현된 적이 있습니다.
 
-Gradle launcher와 daemon runtime은 모두 JDK 17 계약을 사용합니다. `gradle/gradle-daemon-jvm.properties`의 `toolchainVersion=17`을 유지하며, 로컬에 JDK 17이 없으면 Gradle이 지원 플랫폼용 JDK를 자동으로 준비할 수 있습니다. `.\gradlew.bat --version`의 `Daemon JVM` 항목에서 Java 17 기준을 확인할 수 있습니다.
+Gradle launcher/daemon runtime은 JDK 17 기준을 사용합니다. Java compile source/target은 11입니다.
 
 ## Local configuration
 
-`local.properties.example`을 `local.properties`로 복사하고 개인 SDK 경로와 MMA 값을 설정합니다. 실제 key는 commit하지 않습니다. Key가 없으면 API 갱신은 실패할 수 있지만 기존 Room/Seed 목록은 유지됩니다.
+`local.properties.example`을 `local.properties`로 복사하고 개인 SDK/API 설정을 입력합니다. 실제 키는 commit하지 않습니다.
+
+주요 항목:
+
+```properties
+sdk.dir=C\:\\Users\\YOUR_NAME\\AppData\\Local\\Android\\Sdk
+MMA_API_URL=YOUR_MMA_API_URL
+MMA_SERVICE_KEY=YOUR_DATA_GO_KR_SERVICE_KEY
+NAVER_MAP_NCP_KEY_ID=YOUR_NCP_KEY_ID
+```
+
+`local.properties`에 넣은 값은 Git에는 포함되지 않지만 BuildConfig로 들어가는 값은 APK에서 추출될 수 있습니다. 공개 배포 전 API-key exposure는 별도 보안 Issue로 해결해야 합니다.
 
 ## Verification
+
+기본 Android gate:
 
 ```powershell
 .\gradlew.bat lintDebug testDebugUnitTest assembleDebug
 ```
 
-Emulator가 준비된 경우:
+androidTest 컴파일/생성까지 확인할 때:
+
+```powershell
+.\gradlew.bat compileDebugAndroidTestKotlin assembleDebugAndroidTest
+```
+
+Emulator 또는 실기기가 준비된 경우 실제 instrumentation:
 
 ```powershell
 .\gradlew.bat connectedDebugAndroidTest
 ```
 
-## Current phase
+androidTest APK가 빌드되었다는 사실과 emulator/device에서 instrumentation이 실제 실행됐다는 사실은 구분해서 보고합니다.
 
-목록, 서울 25개 구 필터, 검색, 상세, MMA 동기화, Room cache, Manual Seed와 Debug 전용 MANUAL_LOCAL 관리가 포함됩니다. Naver Map, 현재 위치, 검증 데이터 통합, 로그인과 즐겨찾기는 후속 Issue에서 진행합니다.
+## Architecture rules
 
-MMA refresh는 값이 완전히 같은 API 행만 입력 순서대로 한 건으로 정리합니다. 정규화한 업체명과 주소가 같지만 내용이 다른 행은 stable ID 충돌로 간주해 Room 교체 전에 실패하며 기존 cache를 유지합니다. 교체 후 실제 source 건수가 예상 entity 수와 다르면 성공을 보고하지 않습니다. Manual Seed ID는 trim한 뒤 중복을 검증합니다.
+- Room은 Android 로컬 Source of Truth입니다.
+- Repository -> ViewModel -> UiState -> Compose 흐름을 유지합니다.
+- 새 직접 SQLite/AppController 경로를 추가하지 않습니다.
+- Room schema/migration, 인증 방식, API 계약, dependency 변경은 별도 승인 없이 진행하지 않습니다.
+- seed version과 Room schema version은 서로 다른 개념입니다.
+
+현재 팀 전체 작업과 Phase는 `../../docs/current-work.md`, 아키텍처 기준은 `../../docs/architecture.md`, 협업 규칙은 `../../docs/team-workflow.md`를 참고합니다.

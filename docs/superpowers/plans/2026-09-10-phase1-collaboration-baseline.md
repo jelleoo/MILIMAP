@@ -66,7 +66,7 @@
 - [x] `AGENTS.md`에서 `docs/current-work.md`를 첫 진입점으로 연결한다.
 - [x] 교차 리뷰를 전역 필수 gate에서 제거한다.
 - [x] Issue file reservation, independent branch/worktree, integration-owner rule을 유지한다.
-- [ ] Phase 1 Workstream과 아직 생성되지 않은 구현 Issue 상태를 `docs/current-work.md`에 명시한다.
+- [x] Phase 1 Workstream과 아직 생성되지 않은 구현 Issue 상태를 `docs/current-work.md`에 명시한다.
 
 ### Task 4: 공통 설계 최신 dev 반영
 
@@ -77,9 +77,9 @@
 - Consumes: draft PR #20 design + P3 ground truth
 - Produces: current `dev`-compatible approved design baseline
 
-- [ ] P3가 완료됐음을 반영한다.
-- [ ] Golden Dataset에 P2/P3 승인/보류/반려 결과를 사용할 수 있음을 명시한다.
-- [ ] Phase 1 Shadow Mode와 non-goals를 유지한다.
+- [x] P3가 완료됐음을 반영한다.
+- [x] Golden Dataset에 P2/P3 승인/보류/반려 결과를 사용할 수 있음을 명시한다.
+- [x] Phase 1 Shadow Mode와 non-goals를 유지한다.
 
 ### Task 5: 최종 검증과 PR
 
@@ -90,7 +90,8 @@
 - Consumes: all documentation updates
 - Produces: one purpose-level docs PR ready for merge
 
-- [ ] branch diff에 제품 코드/데이터 변경이 없는지 확인한다.
-- [ ] current docs에서 Room v2, 미복구 Naver Map/login, 9 pins/240 no-coordinate 같은 폐기된 현재상태 문구가 남지 않았는지 확인한다.
-- [ ] 문서 간 review policy와 Phase 1 설명이 일치하는지 확인한다.
-- [ ] PR을 만들고 최종 diff를 확인한 뒤 `dev`에 병합한다.
+- [x] branch diff에 제품 코드/데이터 변경이 없는지 확인한다.
+- [x] current docs에서 Room v2, 미복구 Naver Map/login, 9 pins/240 no-coordinate 같은 폐기된 현재상태 문구를 제거했다.
+- [x] 문서 간 review policy와 Phase 1 설명을 동일한 기준으로 정리했다.
+- [x] PR #23을 생성하고 기준 `dev` 대비 documentation-only diff를 확인했다.
+- [ ] GitHub Actions가 완료되면 결과를 확인하고 `dev`에 병합한다.

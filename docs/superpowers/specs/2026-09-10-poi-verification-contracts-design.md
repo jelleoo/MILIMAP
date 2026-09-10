@@ -16,14 +16,14 @@ Phase 1 POI Verification Core is intentionally split into three independently de
 2. POI Discovery / Candidate Collection
 3. POI Matching / Evaluation
 
-The purpose of this document is to freeze the shared data contracts and invariants that allow those three workstreams to be developed in parallel without waiting for neighboring implementations.
+This document freezes the shared data contracts and invariants that allow the three workstreams to be developed in parallel without waiting for neighboring implementations.
 
-The contracts are not product database schemas, Android models, server API contracts, or canonical CSV schema changes. Phase 1 remains a PowerShell data-tooling Shadow Mode workflow.
+These contracts are not product database schemas, Android models, server API contracts, or canonical CSV schema changes. Phase 1 remains a PowerShell data-tooling Shadow Mode workflow.
 
 ## 2. Design constraints
 
 - Current GitHub code and configuration override this document if they conflict.
-- Phase 1 uses the repository's current PowerShell object-oriented-by-convention style: `[pscustomobject]`, arrays, and validation/helper functions.
+- Phase 1 follows the repository's current PowerShell style: `[pscustomobject]`, arrays, and validation/helper functions.
 - No new external library is approved by this document.
 - No Room/server DB/schema change is approved.
 - No API/auth contract change is approved.
@@ -51,18 +51,18 @@ For Phase 1 PowerShell contracts:
 - Text fields use `''` when a value is absent or not safely determinable.
 - Arrays are always present and use `@()` when empty.
 - Numeric coordinate values may be `$null` when absent.
-- A latitude and longitude must either both be present or both be absent.
+- Latitude and longitude must either both be present or both be absent.
 - No consumer may convert an absent optional string into a guessed value.
 
 ### 3.3 Stable tracing
 
-Every business-level top contract includes `SourceRowNumber`, referring to the canonical CSV row number including the header offset convention already used by current verification tooling.
+Every business-level top contract includes `SourceRowNumber`, referring to the canonical CSV row number using the header-offset convention already used by current verification tooling.
 
 `SourceRowNumber` is a trace key, not a permanent business identity.
 
 ### 3.4 Codes over free text
 
-Machine decisions use stable codes in addition to human-readable evidence. Workstreams must not invent new status, reason, warning, or conflict codes inside an implementation PR without updating this contract through an explicit contract change.
+Machine decisions use stable codes in addition to human-readable evidence. Workstreams must not invent new status, reason, warning, or conflict codes inside an implementation PR without an explicit contract change.
 
 ## 4. Contract: `NormalizedBusiness`
 
@@ -78,13 +78,13 @@ Machine decisions use stable codes in addition to human-readable evidence. Works
 | `ContractType` | string | yes | exact `NormalizedBusiness` |
 | `ContractVersion` | int | yes | `1` |
 | `SourceRowNumber` | int | yes | canonical row trace, > 1 |
-| `OriginalName` | string | yes | source business name, trimmed only for storage |
+| `OriginalName` | string | yes | source business name, preserving source meaning |
 | `NormalizedName` | string | yes | deterministic comparison representation; may be empty only if original name is unusable |
-| `BaseName` | string | yes | name with safely identified branch suffix removed; otherwise `''` |
+| `BaseName` | string | yes | safely identified base business name; otherwise `''` |
 | `BranchName` | string | yes | explicit/safely parsed branch; otherwise `''` |
 | `OriginalRoadAddress` | string | yes | source road address or `''` |
 | `OriginalLotAddress` | string | yes | source lot address or `''` |
-| `PreferredAddress` | string | yes | road address when available, otherwise lot address, otherwise `''` |
+| `PreferredAddress` | string | yes | trimmed road address when available, otherwise trimmed lot address, otherwise `''` |
 | `Province` | string | yes | safely normalized province-level component or `''` |
 | `City` | string | yes | safely parsed city component or `''` |
 | `District` | string | yes | safely parsed district/county component or `''` |
@@ -94,16 +94,16 @@ Machine decisions use stable codes in addition to human-readable evidence. Works
 | `BuildingSub` | string | yes | sub building number or `''` |
 | `Floor` | string | yes | explicit material floor signal or `''` |
 | `Unit` | string | yes | explicit material unit/ho signal or `''` |
-| `AddressParseStatus` | string | yes | one of `COMPLETE`, `PARTIAL`, `UNPARSED` |
+| `AddressParseStatus` | string | yes | `COMPLETE`, `PARTIAL`, or `UNPARSED` |
 | `NormalizationWarnings` | string[] | yes | warning codes; `@()` when none |
 
 ### 4.3 Required invariants
 
-- `PreferredAddress` must be exactly one of the preserved source addresses after trimming; it is not a rewritten synthetic address.
+- `PreferredAddress` must be exactly one preserved source address after trimming; it is not a rewritten synthetic address.
 - `OriginalName`, `OriginalRoadAddress`, and `OriginalLotAddress` preserve source meaning and are never replaced by normalized forms.
 - `BuildingMain`, `BuildingSub`, `Floor`, `Unit`, and `BranchName` may only be filled from deterministic parsing of source text.
-- If parsing is ambiguous, leave the derived field empty and add an appropriate warning.
-- `AddressParseStatus=COMPLETE` does not mean the address is factually current; it means the available address was structurally parsed without unresolved material components.
+- If parsing is ambiguous, the derived field remains empty and an appropriate warning is added.
+- `AddressParseStatus=COMPLETE` means structural parsing completed without unresolved material components; it does not prove the address is currently valid.
 
 ### 4.4 Initial warning codes
 
@@ -116,22 +116,22 @@ Machine decisions use stable codes in addition to human-readable evidence. Works
 - `BUILDING_NUMBER_UNCERTAIN`
 - `FLOOR_UNIT_UNCERTAIN`
 
-Warnings are descriptive; they do not by themselves decide GREEN/YELLOW/RED.
+Warnings are descriptive and do not by themselves decide GREEN/YELLOW/RED.
 
 ## 5. Supporting record: `PoiQueryAttempt`
 
-Workstream B must preserve every attempted query so the matcher and reviewer can distinguish successful zero-result searches from incomplete discovery.
+Workstream B preserves every configured query outcome so consumers can distinguish successful zero-result discovery from incomplete discovery.
 
 | Field | Type | Required | Rule |
 | --- | --- | --- | --- |
 | `StrategyCode` | string | yes | approved query-strategy code |
-| `Query` | string | yes | exact submitted query |
-| `QueryOrder` | int | yes | 1-based execution order |
+| `Query` | string | yes | submitted query for `SUCCESS`/`FAILED`; deterministically generated would-be query for `SKIPPED` |
+| `QueryOrder` | int | yes | 1-based configured execution order |
 | `Status` | string | yes | `SUCCESS`, `FAILED`, or `SKIPPED` |
 | `ResultCount` | int | yes | >= 0; 0 for failed/skipped attempts |
-| `ErrorCode` | string | yes | stable error code or `''` |
+| `ErrorCode` | string | yes | stable operational error code or `''` |
 
-Initial strategy codes may include:
+Initial strategy codes:
 
 - `NAME_FULL_ADDRESS`
 - `NAME_ROAD_BUILDING`
@@ -139,21 +139,19 @@ Initial strategy codes may include:
 - `BASE_NAME_BUILDING`
 - `BASE_NAME_LOCALITY`
 
-The exact set used by Workstream B may be narrowed by its Issue, but new codes require a contract update.
+The exact subset executed may be narrowed by deterministic preconditions in Workstream B. Adding or changing strategy codes requires an explicit contract change.
 
 ## 6. Supporting record: `PoiDiscoveryEvidence`
 
-Each deduplicated candidate preserves all query paths that found it.
+Each deduplicated candidate preserves every successful query path that found it.
 
-| Field | Type | Required |
-| --- | --- | --- |
-| `StrategyCode` | string | yes |
-| `Query` | string | yes |
-| `QueryOrder` | int | yes |
-| `ResultPosition` | int | yes |
-| `ResultCount` | int | yes |
-
-`ResultPosition` is 1-based within the provider response.
+| Field | Type | Required | Rule |
+| --- | --- | --- | --- |
+| `StrategyCode` | string | yes | approved strategy code |
+| `Query` | string | yes | exact submitted query |
+| `QueryOrder` | int | yes | 1-based configured order |
+| `ResultPosition` | int | yes | 1-based provider result position |
+| `ResultCount` | int | yes | total results returned for that query |
 
 ## 7. Contract: `PoiCandidate`
 
@@ -169,8 +167,9 @@ Each deduplicated candidate preserves all query paths that found it.
 | `ContractType` | string | yes | exact `PoiCandidate` |
 | `ContractVersion` | int | yes | `1` |
 | `CandidateKey` | string | yes | deterministic run-level dedup key |
-| `Provider` | string | yes | Phase 1: `NAVER_API_HUB_LOCAL` |
-| `OriginalName` | string | yes | provider-returned business name with markup removed only where required for safe comparison/reporting |
+| `Provider` | string | yes | Phase 1 exact `NAVER_API_HUB_LOCAL` |
+| `OriginalName` | string | yes | provider-returned display name after provider markup removal only; source meaning retained |
+| `NormalizedName` | string | yes | deterministic comparison representation of `OriginalName` |
 | `RoadAddress` | string | yes | provider road address or `''` |
 | `LotAddress` | string | yes | provider lot address or `''` |
 | `Latitude` | double/null | yes | WGS84 or `$null` |
@@ -178,15 +177,21 @@ Each deduplicated candidate preserves all query paths that found it.
 | `Phone` | string | yes | provider value or `''` |
 | `Category` | string | yes | provider value or `''` |
 | `ProviderLink` | string | yes | provider-returned stable link when actually available, otherwise `''` |
-| `DiscoveredBy` | object[] | yes | one or more `PoiDiscoveryEvidence` records |
+| `DiscoveredBy` | PoiDiscoveryEvidence[] | yes | at least one successful discovery evidence record |
 
-### 7.3 CandidateKey rule
+### 7.3 Candidate normalization boundary
+
+Workstream B is responsible only for provider-side candidate preparation needed by the contract, including `NormalizedName` and provider coordinate conversion/validation. It must not reproduce Workstream A's canonical-address parser or infer canonical identity fields.
+
+Workstream C compares the preserved candidate addresses against `NormalizedBusiness` using deterministic matching helpers owned by C unless a later shared helper is explicitly approved. This avoids making B depend on A's implementation while preserving raw candidate evidence for matching.
+
+### 7.4 CandidateKey rule
 
 `CandidateKey` is only for deterministic deduplication within one discovery run. It must not be treated as a durable business ID or stored as canonical identity without a later dedicated design.
 
-Workstream B must document the deterministic key rule in its implementation Issue and tests. The rule should prefer provider-stable identifiers when actually available; otherwise it may derive a run-level key from normalized provider evidence. No invented durable identity is allowed.
+Workstream B must document its deterministic key rule in its implementation Issue and tests. The rule should prefer provider-stable identifiers when actually available; otherwise it may derive a run-level key from normalized provider evidence. No durable identity may be invented.
 
-### 7.4 Coordinate invariants
+### 7.5 Coordinate invariants
 
 - Both coordinates present or both absent.
 - When present, they must parse numerically and pass the repository's Korea coordinate-range safety check.
@@ -213,36 +218,36 @@ That distinction is safety-critical. A discovery failure must not be interpreted
 | `SourceRowNumber` | int | yes | must match input `NormalizedBusiness` |
 | `Status` | string | yes | `COMPLETE`, `PARTIAL`, or `FAILED` |
 | `Candidates` | PoiCandidate[] | yes | `@()` when none |
-| `QueryAttempts` | PoiQueryAttempt[] | yes | attempted/skipped query trace |
+| `QueryAttempts` | PoiQueryAttempt[] | yes | one record per configured query strategy considered |
 
 ### 8.3 Status semantics
 
 `COMPLETE`
-- all required query strategies for that input were either successfully completed or safely skipped by deterministic preconditions;
-- no unresolved provider error prevents evaluation.
+- all required query strategies for that input were successfully completed or deterministically skipped;
+- no unresolved provider error prevents normal evaluation.
 
 `PARTIAL`
-- at least one usable query completed, but one or more query attempts failed or an operational error prevented full configured discovery;
-- collected candidates are retained, but matching must account for incompleteness.
+- at least one usable query completed, but one or more provider/operational failures prevented full configured discovery;
+- collected candidates are retained, but matching must treat the batch as incomplete.
 
 `FAILED`
-- discovery did not produce enough successful execution to support a normal no-candidate interpretation;
-- `Candidates` may be empty or may contain partial evidence, but C must treat evaluation as incomplete.
+- discovery did not complete enough successful execution to support a normal no-candidate interpretation;
+- candidates may contain partial evidence, but matching must treat the batch as incomplete.
 
 ### 8.4 Stop condition
 
 Workstream B must not stop merely because the first query returned a non-empty result.
 
-It may stop early only when its Issue defines a deterministic `reliable candidate condition` that is compatible with this contract and the parent design. Otherwise configured query strategies are exhausted.
+It may stop early only when its implementation Issue defines a deterministic `reliable candidate condition` compatible with the parent design and this contract. Otherwise configured strategies are exhausted.
 
-Any such early-stop rule must preserve the query attempt/evidence trail and is not itself a production approval.
+A deterministic early stop counts as COMPLETE only when remaining strategies are explicitly recorded as `SKIPPED` because the approved early-stop condition was satisfied. The evidence trail remains intact, and early stop is never production approval.
 
 ## 9. Contract: `PoiMatchResult`
 
-### 9.1 Producer and consumers
+### 9.1 Producer and consumer
 
 - Producer: Workstream C
-- Consumer: later Integration/Review Report layer
+- Consumer: later Integration / Review Report layer
 
 ### 9.2 Fields
 
@@ -253,7 +258,7 @@ Any such early-stop rule must preserve the query attempt/evidence trail and is n
 | `SourceRowNumber` | int | yes | matches input business/batch |
 | `EvaluationStatus` | string | yes | `COMPLETE` or `INCOMPLETE` |
 | `Classification` | string | yes | `GREEN`, `YELLOW`, or `RED` |
-| `SelectedCandidate` | PoiCandidate/null | yes | best review candidate when applicable |
+| `SelectedCandidate` | PoiCandidate/null | yes | constrained by classification invariants below |
 | `RankedCandidateKeys` | string[] | yes | ranking order for evaluated candidates |
 | `ReasonCodes` | string[] | yes | decision-support codes |
 | `ConflictCodes` | string[] | yes | material conflict codes |
@@ -262,12 +267,17 @@ Any such early-stop rule must preserve the query attempt/evidence trail and is n
 | `SurvivingCandidateCount` | int | yes | >= 0 and <= evaluated count |
 | `ProductionAction` | string | yes | Phase 1 exact `NONE` |
 
-### 9.3 Evaluation status rule
+### 9.3 Evaluation and classification invariants
 
-- `COMPLETE`: matcher received a `COMPLETE` discovery batch and completed its configured evaluation.
-- `INCOMPLETE`: discovery was `PARTIAL`/`FAILED` or matcher itself could not complete safely.
+- `COMPLETE` requires a `COMPLETE` discovery batch and a completed matcher evaluation.
+- `INCOMPLETE` is required when discovery is `PARTIAL`/`FAILED` or matching cannot safely finish.
+- `INCOMPLETE` must use `Classification=YELLOW` in Phase 1.
+- `GREEN` requires `EvaluationStatus=COMPLETE` and a non-null `SelectedCandidate`.
+- `RED` requires `EvaluationStatus=COMPLETE` and `SelectedCandidate=$null`.
+- `YELLOW` may have a non-null review candidate or `$null` depending on available evidence.
+- `ProductionAction` is always `NONE` for all classifications.
 
-`INCOMPLETE` must never be silently represented as a normal complete negative result.
+These rules prevent API/search incompleteness from being converted into an apparently complete negative result.
 
 ## 10. GREEN / YELLOW / RED semantics
 
@@ -288,8 +298,6 @@ GREEN does not mean:
 - business closure/move state resolved;
 - production write authorized.
 
-Every GREEN must have `ProductionAction=NONE` in Phase 1.
-
 ### 10.2 YELLOW
 
 YELLOW means detailed human review is required. Typical causes include:
@@ -298,15 +306,15 @@ YELLOW means detailed human review is required. Typical causes include:
 - multiple plausible candidates;
 - evidence is insufficient for GREEN;
 - non-material ambiguity remains;
-- a candidate exists but important identity evidence cannot be safely parsed or compared.
+- important identity evidence cannot be safely parsed or compared.
 
-A `PARTIAL` or `FAILED` discovery batch must produce `EvaluationStatus=INCOMPLETE` and must not produce a normal RED solely because no usable candidate remains.
+All `PARTIAL` and `FAILED` discovery paths resolve to `EvaluationStatus=INCOMPLETE`, `Classification=YELLOW` in Phase 1.
 
 ### 10.3 RED
 
-RED means the completed available POI evaluation cannot safely recommend the candidate as the same business, for example because:
+RED means a complete POI discovery and matching evaluation cannot safely recommend a candidate as the same business because:
 
-- a material identity conflict exists, or
+- material identity conflicts eliminate available candidates, or
 - discovery completed successfully but no acceptable candidate was found.
 
 RED does not mean:
@@ -317,7 +325,7 @@ RED does not mean:
 
 ## 11. Initial conflict codes
 
-The following are hard/material conflict codes for Phase 1:
+Hard/material conflict codes for Phase 1:
 
 - `PROVINCE_CONFLICT`
 - `CITY_DISTRICT_CONFLICT`
@@ -352,7 +360,7 @@ Reason codes are not scores. Workstream C may use deterministic ranking internal
 
 ## 13. Evidence records
 
-`PoiMatchResult.Evidence` is an array of review facts. Phase 1 does not require a persisted evidence schema; however each record must have at least:
+`PoiMatchResult.Evidence` is an array of review facts. Phase 1 does not approve a persisted evidence schema; each in-memory/report record must have at least:
 
 - `EvidenceCode`
 - `CandidateKey` or `''` when business-level
@@ -360,15 +368,15 @@ Reason codes are not scores. Workstream C may use deterministic ranking internal
 - `CandidateValue`
 - `Matched`: boolean or `$null` when not applicable
 
-Evidence values are report/debug context and must not contain secrets.
+Evidence is review/debug context and must not contain secrets.
 
 ## 14. Module ownership boundaries
 
 ### Workstream A — Identity / Normalization
 
 Owns:
-- canonical-row to `NormalizedBusiness`
-- deterministic name/address parsing
+- canonical row → `NormalizedBusiness`
+- deterministic canonical name/address parsing
 - normalization warnings
 
 Must not own:
@@ -380,22 +388,24 @@ Must not own:
 ### Workstream B — POI Discovery
 
 Owns:
-- `NormalizedBusiness` to `PoiDiscoveryBatch`
+- `NormalizedBusiness` → `PoiDiscoveryBatch`
 - adaptive query generation
-- provider calls
-- candidate collection
-- candidate deduplication
+- provider transport/calls
+- provider candidate preparation required by `PoiCandidate`
+- candidate collection and deduplication
 - query/candidate evidence
 
 Must not own:
 - production approval
 - final identity classification
+- canonical-address identity parsing
 - canonical/seed writes
 
 ### Workstream C — Matching / Evaluation
 
 Owns:
-- `NormalizedBusiness + PoiDiscoveryBatch` to `PoiMatchResult`
+- `NormalizedBusiness + PoiDiscoveryBatch` → `PoiMatchResult`
+- deterministic candidate-side comparison parsing needed for matching
 - hard constraints
 - candidate ranking
 - classification
@@ -409,7 +419,7 @@ Must not own:
 
 ## 15. Parallel-development rule
 
-A, B, and C must be implementable against contract fixtures without waiting for the other implementation branches.
+A, B, and C must be implementable against contract fixtures without waiting for other implementation branches.
 
 Examples:
 
@@ -462,7 +472,7 @@ Required safety regressions include at minimum:
 - `이지현미용실`: canonical 26 vs POI 23 must not become GREEN
 - `인헤어`: canonical 902·2동 104호 vs POI 904 must not become GREEN
 
-`거시기닭갈비` remains a cautionary approved example because name/branch/address evidence aligned while a public phone-number suffix differed. Phone mismatch must not silently become a hard universal identity rule without calibration and review.
+`거시기닭갈비` remains a cautionary approved example because name/branch/address evidence aligned while a public phone-number suffix differed. Phone mismatch must not silently become a universal hard identity rule without calibration and review.
 
 ## 18. Shadow Mode safety invariants
 
@@ -473,11 +483,12 @@ The following are contract-level invariants for all Phase 1 workstreams and inte
 3. No contract constructor or validator writes Android seed data.
 4. GREEN never bypasses human review.
 5. Discovery failure is distinguishable from a completed no-candidate search.
-6. Failed search is never closure evidence.
-7. POI evidence is never military-benefit evidence.
-8. Missing branch/address/floor/unit values remain missing rather than inferred.
-9. Hard conflicts are evaluated before similarity/ranking can promote a candidate.
-10. Known ambiguous/rejected Golden Dataset cases must not silently become GREEN.
+6. `INCOMPLETE` evaluation is always YELLOW in Phase 1.
+7. Failed search is never closure evidence.
+8. POI evidence is never military-benefit evidence.
+9. Missing branch/address/floor/unit values remain missing rather than inferred.
+10. Hard conflicts are evaluated before ranking can promote a candidate.
+11. Known ambiguous/rejected Golden Dataset cases must not silently become GREEN.
 
 ## 19. Compatibility with current repository
 
@@ -490,25 +501,41 @@ Current `verify-canonical-benefit-poi.ps1` already:
 - validates Korea coordinate range;
 - currently stops POI querying at the first query returning candidates.
 
-Phase 1 contracts deliberately preserve the compatible parts while enabling the planned change from:
+Phase 1 contracts preserve the compatible parts while enabling the planned change from:
 
-> result exists -> stop
+> result exists → stop
 
 to:
 
-> reliable candidate condition reached, or configured strategies exhausted -> stop
+> reliable candidate condition reached, or configured strategies exhausted → stop
 
 The existing script itself is not modified by this design Issue.
 
-## 20. Acceptance criteria
+## 20. Contract-change rule
+
+Once the Contract Foundation is merged to `dev`, A/B/C implementation Issues consume Contract version 1 as frozen input/output behavior.
+
+Any change to:
+
+- top-level field names/types;
+- required/empty/null semantics;
+- allowed status values;
+- warning/reason/conflict code sets;
+- classification invariants;
+- provider identity semantics;
+
+must be handled as an explicit contract change and reconciled across all affected workstreams. A single implementation PR must not silently redefine the shared contract.
+
+## 21. Acceptance criteria
 
 This contract design is ready for implementation planning when the project owner confirms that:
 
-- the four top-level/supporting contracts and their responsibilities are acceptable;
+- the four core/supporting contracts and their responsibilities are acceptable;
 - strings/arrays/null rules are acceptable;
 - discovery COMPLETE/PARTIAL/FAILED semantics are acceptable;
-- GREEN/YELLOW/RED semantics are acceptable;
+- `INCOMPLETE → YELLOW` is acceptable for Phase 1;
+- GREEN/YELLOW/RED selected-candidate invariants are acceptable;
 - `ProductionAction=NONE` is required for Phase 1;
 - A/B/C may develop only against the frozen contract and fixtures;
-- shared contract code will be implemented before the three parallel workstream Issues begin;
-- any later contract change is explicit rather than silently introduced inside A/B/C.
+- shared Contract Foundation code will be implemented before the three parallel workstream Issues begin;
+- later contract changes are explicit rather than silently introduced inside A/B/C.

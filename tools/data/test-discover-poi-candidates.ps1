@@ -184,7 +184,7 @@ Assert-Throws { Invoke-PoiDiscovery $business -ClientId '' -ClientSecret '' } 'L
 
 # Strict malformed-response validation: no silent HTTP-200 error or [] coercion.
 foreach ($response in @(
-    [pscustomobject]@{}, [pscustomobject]@{items=$null}, [pscustomobject]@{items='bad'},
+    $null, 'not-json', [pscustomobject]@{}, [pscustomobject]@{items=$null}, [pscustomobject]@{items='bad'},
     [pscustomobject]@{items=$strong}, [pscustomobject]@{items=@($null)},
     [pscustomobject]@{items=@('bad')}, [pscustomobject]@{items=@([pscustomobject]@{})},
     [pscustomobject]@{items=@($strong,$strong,$strong,$strong,$strong,$strong)}
@@ -193,6 +193,12 @@ foreach ($response in @(
     Assert-ValidDiscoveryBatch $malformed
     Assert-Equal $malformed.Status 'FAILED' 'Malformed response fails closed'
     Assert-Equal $malformed.QueryAttempts[0].ErrorCode 'INVALID_PROVIDER_RESPONSE' 'Malformed is not successful zero'
+}
+foreach ($fieldValue in @(@(), @('title'), [pscustomobject]@{value='title'})) {
+    $badFieldPoi = New-DiscoveryPoiFixture
+    $badFieldPoi.title = $fieldValue
+    $badFieldBatch = Invoke-PoiDiscovery $lotOnly -RequestInvoker { @{ items=@($badFieldPoi) } }.GetNewClosure()
+    Assert-Equal $badFieldBatch.QueryAttempts[0].ErrorCode 'INVALID_PROVIDER_RESPONSE' 'Provider text arrays must not be coerced to strings/null'
 }
 foreach ($response in @([pscustomobject]@{errorCode='SE99';items=@()}, @{error=@{message='secret'};items=@()})) {
     $providerError = Invoke-PoiDiscovery $lotOnly -RequestInvoker { $response }.GetNewClosure()
@@ -213,6 +219,22 @@ foreach ($pair in @(
     Assert-Equal $badCoordinates.QueryAttempts[0].ErrorCode 'INVALID_PROVIDER_COORDINATES' 'Invalid pair is explicit'
     Assert-Equal $badCoordinates.Candidates.Count 0 'Malformed query is atomic, not a successful truncated list'
 }
+foreach ($fieldValue in @(@(), @('1269012345'), [pscustomobject]@{value='1269012345'})) {
+    $badFieldPoi = New-DiscoveryPoiFixture
+    $badFieldPoi.mapx = $fieldValue
+    $badFieldPoi.mapy = $null
+    $badFieldBatch = Invoke-PoiDiscovery $lotOnly -RequestInvoker { @{ items=@($badFieldPoi) } }.GetNewClosure()
+    Assert-Equal $badFieldBatch.QueryAttempts[0].ErrorCode 'INVALID_PROVIDER_COORDINATES' 'Malformed coordinate arrays must not be treated as absent pairs'
+}
+$malformedCalls = [Collections.Generic.List[int]]::new()
+$malformedPartial = Invoke-PoiDiscovery $business -RequestInvoker {
+    $malformedCalls.Add(1)
+    if ($malformedCalls.Count -eq 1) { return @{items=@($strong,$badPoi)} }
+    @{items=@($strong)}
+}.GetNewClosure()
+Assert-ValidDiscoveryBatch $malformedPartial
+Assert-Equal $malformedPartial.Status 'PARTIAL' 'Malformed first query cannot prevent later successful discovery'
+Assert-Equal $malformedPartial.Candidates[0].DiscoveredBy.Count 4 'Only complete response evidence is emitted'
 $noCoordinatesPoi = New-DiscoveryPoiFixture
 $noCoordinatesPoi.mapx = ''
 $noCoordinatesPoi.mapy = ''
@@ -223,7 +245,6 @@ Assert-Equal $absent.Candidates[0].Latitude $null 'Absent latitude remains null'
 Assert-Equal $absent.Candidates[0].Longitude $null 'Absent longitude remains null'
 
 # Conservative keys: no branch merge via shared homepages, coordinates, or names.
-$variants = @($strong)
 foreach ($field in @('title','roadAddress','address','telephone','category','link','mapx')) {
     $variant = New-DiscoveryPoiFixture -Name $strong.title
     $variant.$field = if ($field -eq 'mapx') { '1269012346' } else { $variant.$field + ' changed' }
@@ -249,6 +270,23 @@ try {
     Assert-Equal $keys[0] $keys[1] 'Key stable across Korean locale'
     Assert-Equal $keys[0] $keys[2] 'Key stable across decimal-comma locale'
 } finally { [Threading.Thread]::CurrentThread.CurrentCulture = $originalCulture }
+
+# Exercise the production transport wiring with a local stub, never the network.
+& {
+    $script:transportCalls = [Collections.Generic.List[object]]::new()
+    function Invoke-RestMethod {
+        param($Method, $Uri, $Headers, $TimeoutSec, $MaximumRedirection, $ErrorAction)
+        $script:transportCalls.Add([pscustomobject]@{ Method=$Method; Uri=$Uri; Headers=$Headers; Timeout=$TimeoutSec; Redirects=$MaximumRedirection })
+        @{ items=@() }
+    }
+    $transportBatch = Invoke-PoiDiscovery $lotOnly -ClientId 'fixture-id' -ClientSecret 'fixture-secret'
+    Assert-Equal $transportBatch.Status 'COMPLETE' 'Default transport consumes the same response contract'
+    Assert-Equal $script:transportCalls.Count 1 'One eligible strategy makes exactly one transport call'
+    Assert-Equal $script:transportCalls[0].Method 'Get' 'Read-only HTTP method'
+    Assert-Equal $script:transportCalls[0].Timeout 20 'HTTP calls have a bounded timeout'
+    Assert-Equal $script:transportCalls[0].Redirects 0 'Credential-bearing requests do not follow redirects'
+    Assert-Equal $script:transportCalls[0].Headers['X-NCP-APIGW-API-KEY'] 'fixture-secret' 'Production path uses API HUB header'
+}
 
 Write-Host "POI discovery tests passed ($script:assertionCount assertions)."
 Write-Host 'Mock API Calls/Row: full=5, duplicate-query=3, no-plan=0. Live API calls=0; no recall/precision claim.'

@@ -46,9 +46,10 @@ function Get-PoiDiscoveryQueryPlan {
 function Get-PoiDiscoveryProviderField {
     param([AllowNull()]$Object, [string]$Name)
     if ($null -eq $Object) { return $null }
-    if ($Object -is [Collections.IDictionary]) { return $Object[$Name] }
+    if ($Object -is [Collections.IDictionary]) { return ,$Object[$Name] }
     $property = $Object.PSObject.Properties[$Name]
-    if ($null -ne $property) { return $property.Value }
+    # Do not collapse empty/singleton provider arrays into null/scalars.
+    if ($null -ne $property) { return ,$property.Value }
     return $null
 }
 
@@ -61,6 +62,9 @@ function ConvertTo-PoiDiscoveryProviderText {
 
 function ConvertTo-PoiDiscoveryCoordinates {
     param([AllowNull()]$MapX, [AllowNull()]$MapY)
+    foreach ($value in @($MapX, $MapY)) {
+        if ($null -ne $value -and $value -isnot [string] -and $value -isnot [ValueType]) { throw 'INVALID_PROVIDER_COORDINATES' }
+    }
     $x = ConvertTo-PoiText $MapX
     $y = ConvertTo-PoiText $MapY
     if (-not $x -and -not $y) { return @{ Latitude=$null; Longitude=$null } }
@@ -189,11 +193,7 @@ function Invoke-PoiDiscovery {
             try {
                 if ($null -eq $response -or ($response -isnot [pscustomobject] -and $response -isnot [Collections.IDictionary])) { throw 'INVALID_PROVIDER_RESPONSE' }
                 if ($null -ne (Get-PoiDiscoveryProviderField $response 'errorCode') -or $null -ne (Get-PoiDiscoveryProviderField $response 'error')) { throw 'PROVIDER_ERROR' }
-                # Preserve arrays, including []: PowerShell functions enumerate return values.
-                if ($response -is [Collections.IDictionary]) { $items = $response['items'] } else {
-                    $property = $response.PSObject.Properties['items']
-                    $items = if ($null -eq $property) { $null } else { ,$property.Value }
-                }
+                $items = Get-PoiDiscoveryProviderField $response 'items'
                 if ($items -isnot [array] -or $items.Count -gt 5) { throw 'INVALID_PROVIDER_RESPONSE' }
                 for ($position = 0; $position -lt $items.Count; $position++) {
                     if ($null -eq $items[$position]) { throw 'INVALID_PROVIDER_RESPONSE' }

@@ -16,8 +16,8 @@ function New-Business {
 }
 function New-Evidence { param([int]$Order=1,[string]$Strategy='NAME_FULL_ADDRESS') New-PoiDiscoveryEvidence -StrategyCode $Strategy -Query "synthetic query $Order" -QueryOrder $Order -ResultPosition 1 -ResultCount 1 }
 function New-Candidate {
-    param([string]$Key='candidate-a',[string]$Name='테스트 식당 본점',[string]$Address='경기도 양주시 고암동 테스트로 22-25',[string]$Phone='031-000-0000',[object[]]$Evidence=@((New-Evidence)))
-    New-PoiCandidate -CandidateKey $Key -OriginalName $Name -NormalizedName ($Name -replace '\s','') -RoadAddress $Address -LotAddress '경기도 양주시 고암동 1-1' -Latitude ([double]37.8302) -Longitude ([double]127.0675) -Phone $Phone -Category '음식점' -ProviderLink 'https://example.invalid/place' -DiscoveredBy $Evidence
+    param([string]$Key='candidate-a',[string]$Name='테스트 식당 본점',[string]$Address='경기도 양주시 고암동 테스트로 22-25',[string]$LotAddress='경기도 양주시 고암동 1-1',[string]$Phone='031-000-0000',[object[]]$Evidence=@((New-Evidence)))
+    New-PoiCandidate -CandidateKey $Key -OriginalName $Name -NormalizedName ($Name -replace '\s','') -RoadAddress $Address -LotAddress $LotAddress -Latitude ([double]37.8302) -Longitude ([double]127.0675) -Phone $Phone -Category '음식점' -ProviderLink 'https://example.invalid/place' -DiscoveredBy $Evidence
 }
 function New-Batch {
     param([int]$Row=101,[string]$Status='COMPLETE',[object[]]$Candidates=@())
@@ -113,7 +113,7 @@ Assert-Equal $tie.EvaluationStatus 'COMPLETE' 'Equal plausible candidates comple
 Assert-Equal $tie.Classification 'YELLOW' 'Equal plausible candidates require review'
 Assert-True (@($tie.ReasonCodes) -contains 'MULTIPLE_PLAUSIBLE_CANDIDATES') 'Equal plausible candidates use multiple-candidate reason'
 
-$insufficient=New-Candidate -Key 'candidate-insufficient' -Address ''
+$insufficient=New-Candidate -Key 'candidate-insufficient' -Address '' -LotAddress ''
 $insufficientBatch=New-Batch -Candidates @($insufficient); $insufficientResult=Evaluate $business $insufficientBatch; Assert-Result $insufficientResult $business $insufficientBatch
 Assert-Equal $insufficientResult.EvaluationStatus 'COMPLETE' 'Insufficient identity evidence still completes discovery evaluation'
 Assert-Equal $insufficientResult.Classification 'YELLOW' 'Insufficient identity evidence requires review'
@@ -136,7 +136,7 @@ Assert-HardConflict $mushroom 'BUILDING_NUMBER_CONFLICT' 'Golden 버섯집 초�
 
 # data/canonical/reports/poi-coordinate-review-candidates-20260910-final.csv: 짜장마을 unresolved; fixture makes no full-POI-address claim.
 $jajangBusiness=New-Business -Row 451 -Name '짜장마을' -Base '짜장마을' -Branch '' -City '파주시' -Dong '파주읍' -Road '술이홀로' -Main '463' -Sub '' -Floor '' -Unit ''
-$jajangBatch=New-Batch -Row 451 -Candidates @((New-Candidate -Key 'golden-jajang-unresolved' -Name '짜장마을' -Address ''))
+$jajangBatch=New-Batch -Row 451 -Candidates @((New-Candidate -Key 'golden-jajang-unresolved' -Name '짜장마을' -Address '' -LotAddress ''))
 $jajang=Evaluate $jajangBusiness $jajangBatch; Assert-Result $jajang $jajangBusiness $jajangBatch
 Assert-Equal $jajang.EvaluationStatus 'COMPLETE' 'Golden unresolved 짜장마을 completes evaluation'
 Assert-Equal $jajang.Classification 'YELLOW' 'Golden unresolved 짜장마을 requires review'
@@ -146,7 +146,7 @@ Assert-EvidenceCode $jajang 'NAME_EXACT' 'Golden unresolved 짜장마을 preserv
 
 # data/canonical/reports/poi-coordinate-review-candidates-20260910-p3.csv has no full POI address: minimal synthetic carrier of report-confirmed POI building number only (이지현미용실 26 vs 23).
 $leeBusiness=New-Business -Row 135 -Name '이지현미용실' -Base '이지현미용실' -Branch '' -City '동두천시' -Dong '생연동' -Road '중앙로295번길' -Main '26' -Sub '' -Floor '' -Unit ''
-$leeBatch=New-Batch -Row 135 -Candidates @((New-Candidate -Key 'golden-lee-23' -Name '이지현미용실' -Address '23'))
+$leeBatch=New-Batch -Row 135 -Candidates @((New-Candidate -Key 'golden-lee-23' -Name '이지현미용실' -Address '23' -LotAddress ''))
 $lee=Evaluate $leeBusiness $leeBatch; Assert-Result $lee $leeBusiness $leeBatch
 Assert-Equal $lee.EvaluationStatus 'COMPLETE' 'Golden 이지현미용실 completes evaluation'
 Assert-Equal $lee.Classification 'YELLOW' 'Golden 이지현미용실 missing full POI address requires review'
@@ -155,7 +155,7 @@ Assert-True (@($lee.ReasonCodes) -contains 'INSUFFICIENT_IDENTITY_EVIDENCE') 'Go
 Assert-EvidenceCode $lee 'NAME_EXACT' 'Golden 이지현미용실 preserves reviewable name evidence'
 # data/canonical/reports/poi-coordinate-review-candidates-20260910-p3.csv has no full POI address: minimal synthetic carrier of POI 904 only (인헤어 902·2동 104호 vs 904).
 $inHairBusiness=New-Business -Row 136 -Name '인헤어' -Base '인헤어' -Branch '' -City '동두천시' -Dong '생연동' -Road '삼육사로' -Main '902' -Sub '' -Floor '' -Unit '104'
-$inHairBatch=New-Batch -Row 136 -Candidates @((New-Candidate -Key 'golden-inhair-904' -Name '인헤어' -Address '904'))
+$inHairBatch=New-Batch -Row 136 -Candidates @((New-Candidate -Key 'golden-inhair-904' -Name '인헤어' -Address '904' -LotAddress ''))
 $inHair=Evaluate $inHairBusiness $inHairBatch; Assert-Result $inHair $inHairBusiness $inHairBatch
 Assert-Equal $inHair.EvaluationStatus 'COMPLETE' 'Golden 인헤어 completes evaluation'
 Assert-Equal $inHair.Classification 'YELLOW' 'Golden 인헤어 missing full POI address requires review'

@@ -10,9 +10,9 @@ function Assert-Equal { param($Actual,$Expected,[string]$Message) $script:assert
 function Assert-True { param([bool]$Condition,[string]$Message) $script:assertionCount++; if (-not $Condition) { throw $Message } }
 function Assert-Throws { param([scriptblock]$Action,[string]$Message) $threw=$false; try { & $Action } catch { $threw=$true }; Assert-True $threw $Message }
 function New-Business {
-    param([int]$Row=101,[string]$Name='테스트 식당 본점',[string]$Base='테스트식당',[string]$Branch='본점',[string]$City='양주시',[string]$Dong='고암동',[string]$Road='테스트로',[string]$Main='22',[string]$Sub='25',[string]$Floor='2',[string]$Unit='201')
-    $address="경기도 $City $Dong $Road $Main"; if ($Sub) { $address += "-$Sub" }
-    New-NormalizedBusiness -SourceRowNumber $Row -OriginalName $Name -NormalizedName ($Name -replace '\s','') -BaseName $Base -BranchName $Branch -OriginalRoadAddress $address -PreferredAddress $address -Province '경기도' -City $City -Dong $Dong -RoadName $Road -BuildingMain $Main -BuildingSub $Sub -Floor $Floor -Unit $Unit -AddressParseStatus 'COMPLETE'
+    param([int]$Row=101,[string]$Name='테스트 식당 본점',[string]$Base='테스트식당',[string]$Branch='본점',[string]$Province='경기도',[string]$City='양주시',[string]$District='',[string]$Dong='고암동',[string]$Road='테스트로',[string]$Main='22',[string]$Sub='25',[string]$Floor='2',[string]$Unit='201')
+    $address="$Province $City $Dong $Road $Main"; if ($Sub) { $address += "-$Sub" }
+    New-NormalizedBusiness -SourceRowNumber $Row -OriginalName $Name -NormalizedName ($Name -replace '\s','') -BaseName $Base -BranchName $Branch -OriginalRoadAddress $address -PreferredAddress $address -Province $Province -City $City -District $District -Dong $Dong -RoadName $Road -BuildingMain $Main -BuildingSub $Sub -Floor $Floor -Unit $Unit -AddressParseStatus 'COMPLETE'
 }
 function New-Evidence { param([int]$Order=1,[string]$Strategy='NAME_FULL_ADDRESS') New-PoiDiscoveryEvidence -StrategyCode $Strategy -Query "synthetic query $Order" -QueryOrder $Order -ResultPosition 1 -ResultCount 1 }
 function New-Candidate {
@@ -34,6 +34,21 @@ function Assert-Result {
     foreach ($evidence in @($Result.Evidence)) { Assert-PoiMatchEvidence $evidence }
 }
 function Evaluate { param($Business,$Batch) Invoke-PoiMatchEvaluation -Business $Business -DiscoveryBatch $Batch }
+function Assert-EvidenceCode {
+    param($Result,[string]$Code,[string]$Message)
+    $hasEvidence = @($Result.Evidence | Where-Object { $_.EvidenceCode -eq $Code }).Count -gt 0
+    Assert-True $hasEvidence $Message
+}
+function Assert-HardConflict {
+    param($Result,[string]$ConflictCode,[string]$Message)
+    Assert-Equal $Result.EvaluationStatus 'COMPLETE' "$Message is conclusive"
+    Assert-Equal $Result.Classification 'RED' "$Message is RED"
+    Assert-Equal $Result.SelectedCandidate $null "$Message selects no candidate"
+    Assert-True ($Result.Classification -ne 'GREEN') "$Message cannot be GREEN"
+    $hasConflict = @($Result.ConflictCodes) -contains $ConflictCode
+    Assert-True $hasConflict "$Message exposes exact conflict code"
+    Assert-EvidenceCode $Result $ConflictCode "$Message keeps reviewable conflict evidence"
+}
 
 # The matcher output must use only contract codes and contract-valid evidence records.
 Assert-PoiAllowedCode 'ProductionAction' 'NONE'
@@ -73,6 +88,20 @@ $mismatchBatch=New-Batch -Candidates @($mismatch); $mismatchResult=Evaluate $bus
 Assert-True ($mismatchResult.Classification -ne 'GREEN') 'Name compatibility cannot reverse building mismatch'
 Assert-True (@($mismatchResult.ConflictCodes) -contains 'BUILDING_NUMBER_CONFLICT') 'Building conflict takes precedence'
 
+# Every material, explicit identity conflict is conclusive even when the name and all remaining address detail are strong.
+$provinceConflict=Evaluate $business (New-Batch -Candidates @((New-Candidate -Key 'province-conflict' -Address '서울특별시 양주시 고암동 테스트로 22-25')))
+Assert-Result $provinceConflict $business (New-Batch -Candidates @((New-Candidate -Key 'province-conflict' -Address '서울특별시 양주시 고암동 테스트로 22-25')))
+Assert-HardConflict $provinceConflict 'PROVINCE_CONFLICT' 'Name-compatible province conflict'
+$cityConflict=Evaluate $business (New-Batch -Candidates @((New-Candidate -Key 'city-conflict' -Address '경기도 파주시 고암동 테스트로 22-25')))
+Assert-Result $cityConflict $business (New-Batch -Candidates @((New-Candidate -Key 'city-conflict' -Address '경기도 파주시 고암동 테스트로 22-25')))
+Assert-HardConflict $cityConflict 'CITY_DISTRICT_CONFLICT' 'Name-compatible city conflict'
+$branchConflict=Evaluate $business (New-Batch -Candidates @((New-Candidate -Key 'branch-conflict' -Name '테스트 식당 지점' -Address '경기도 양주시 고암동 테스트로 22-25')))
+Assert-Result $branchConflict $business (New-Batch -Candidates @((New-Candidate -Key 'branch-conflict' -Name '테스트 식당 지점' -Address '경기도 양주시 고암동 테스트로 22-25')))
+Assert-HardConflict $branchConflict 'BRANCH_CONFLICT' 'Name-compatible explicit branch conflict'
+$floorConflict=Evaluate $business (New-Batch -Candidates @((New-Candidate -Key 'floor-unit-conflict' -Address '경기도 양주시 고암동 테스트로 22-25, 3층 301호')))
+Assert-Result $floorConflict $business (New-Batch -Candidates @((New-Candidate -Key 'floor-unit-conflict' -Address '경기도 양주시 고암동 테스트로 22-25, 3층 301호')))
+Assert-HardConflict $floorConflict 'FLOOR_UNIT_CONFLICT' 'Name-compatible explicit floor/unit conflict'
+
 # CandidateKey ordering is deterministic reporting, not a tie breaker that can invent GREEN.
 $tieA=New-Candidate -Key 'candidate-a' -Name '테스트 식당' -Address '경기도 양주시 고암동 테스트로 22-25'
 $tieB=New-Candidate -Key 'candidate-b' -Name '테스트 식당' -Address '경기도 양주시 고암동 테스트로 22-25'
@@ -80,6 +109,16 @@ $tieBatch=New-Batch -Candidates @($tieB,$tieA); $tie=Evaluate $business $tieBatc
 Assert-True ($tie.Classification -ne 'GREEN') 'Stable CandidateKey ordering cannot make evidence tie GREEN'
 Assert-Equal (@($tie.RankedCandidateKeys) -join ',') 'candidate-a,candidate-b' 'Equal evidence keys sort deterministically'
 Assert-Equal $tie.SelectedCandidate $null 'Tie has no selected candidate'
+Assert-Equal $tie.EvaluationStatus 'COMPLETE' 'Equal plausible candidates complete evaluation'
+Assert-Equal $tie.Classification 'YELLOW' 'Equal plausible candidates require review'
+Assert-True (@($tie.ReasonCodes) -contains 'MULTIPLE_PLAUSIBLE_CANDIDATES') 'Equal plausible candidates use multiple-candidate reason'
+
+$insufficient=New-Candidate -Key 'candidate-insufficient' -Address ''
+$insufficientBatch=New-Batch -Candidates @($insufficient); $insufficientResult=Evaluate $business $insufficientBatch; Assert-Result $insufficientResult $business $insufficientBatch
+Assert-Equal $insufficientResult.EvaluationStatus 'COMPLETE' 'Insufficient identity evidence still completes discovery evaluation'
+Assert-Equal $insufficientResult.Classification 'YELLOW' 'Insufficient identity evidence requires review'
+Assert-Equal $insufficientResult.SelectedCandidate $null 'Insufficient identity evidence selects no candidate'
+Assert-True (@($insufficientResult.ReasonCodes) -contains 'INSUFFICIENT_IDENTITY_EVIDENCE') 'Insufficient identity has exact reason'
 
 # Repeated independent discovery strengthens evidence and keeps candidate selection internally consistent.
 $repeat=New-Candidate -Key 'candidate-repeated' -Evidence @((New-Evidence 1 'NAME_FULL_ADDRESS'),(New-Evidence 5 'BASE_NAME_LOCALITY'))
@@ -88,23 +127,46 @@ Assert-Equal $repeatResult.SelectedCandidate.CandidateKey 'candidate-repeated' '
 Assert-True (@($repeatResult.ReasonCodes) -contains 'REPEATED_DISCOVERY') 'Repeated discovery is explicit evidence'
 
 # Golden cases — repository-confirmed source facts only.
-# canonical/capital-area-military-benefits.csv: 버섯집 초리골 canonical 초리골길 12.
-# reports/poi-coordinate-review-candidates-20260910-final.csv: POI 초리골길 23.
-$mushroom=Evaluate (New-Business -Row 248 -Name '버섯집 초리골' -Base '버섯집초리골' -Branch '' -City '파주시' -Dong '법원읍' -Road '초리골길' -Main '12' -Sub '' -Floor '' -Unit '') (New-Batch -Row 248 -Candidates @((New-Candidate -Key 'golden-mushroom-23' -Name '버섯집 초리골' -Address '경기도 파주시 법원읍 초리골길 23')))
-Assert-True ($mushroom.Classification -ne 'GREEN') 'Golden 버섯집 초리골 12 versus POI 23 is not GREEN'
+# data/canonical/capital-area-military-benefits.csv: 버섯집 초리골 canonical 초리골길 12.
+# data/canonical/reports/poi-coordinate-review-candidates-20260910-final.csv: POI 초리골길 23.
+$mushroomBusiness=New-Business -Row 248 -Name '버섯집 초리골' -Base '버섯집초리골' -Branch '' -City '파주시' -Dong '법원읍' -Road '초리골길' -Main '12' -Sub '' -Floor '' -Unit ''
+$mushroomBatch=New-Batch -Row 248 -Candidates @((New-Candidate -Key 'golden-mushroom-23' -Name '버섯집 초리골' -Address '경기도 파주시 법원읍 초리골길 23'))
+$mushroom=Evaluate $mushroomBusiness $mushroomBatch; Assert-Result $mushroom $mushroomBusiness $mushroomBatch
+Assert-HardConflict $mushroom 'BUILDING_NUMBER_CONFLICT' 'Golden 버섯집 초리골 12 versus POI 23'
 
-# final report: 짜장마을 unresolved; fixture makes no full-POI-address claim.
-$jajang=Evaluate (New-Business -Row 451 -Name '짜장마을' -Base '짜장마을' -Branch '' -City '파주시' -Dong '파주읍' -Road '술이홀로' -Main '463' -Sub '' -Floor '' -Unit '') (New-Batch -Row 451 -Candidates @((New-Candidate -Key 'golden-jajang-unresolved' -Name '짜장마을' -Address '')))
-Assert-True ($jajang.Classification -ne 'GREEN') 'Golden unresolved 짜장마을 is not GREEN'
+# data/canonical/reports/poi-coordinate-review-candidates-20260910-final.csv: 짜장마을 unresolved; fixture makes no full-POI-address claim.
+$jajangBusiness=New-Business -Row 451 -Name '짜장마을' -Base '짜장마을' -Branch '' -City '파주시' -Dong '파주읍' -Road '술이홀로' -Main '463' -Sub '' -Floor '' -Unit ''
+$jajangBatch=New-Batch -Row 451 -Candidates @((New-Candidate -Key 'golden-jajang-unresolved' -Name '짜장마을' -Address ''))
+$jajang=Evaluate $jajangBusiness $jajangBatch; Assert-Result $jajang $jajangBusiness $jajangBatch
+Assert-Equal $jajang.EvaluationStatus 'COMPLETE' 'Golden unresolved 짜장마을 completes evaluation'
+Assert-Equal $jajang.Classification 'YELLOW' 'Golden unresolved 짜장마을 requires review'
+Assert-Equal $jajang.SelectedCandidate $null 'Golden unresolved 짜장마을 selects no candidate'
+Assert-True (@($jajang.ReasonCodes) -contains 'INSUFFICIENT_IDENTITY_EVIDENCE') 'Golden unresolved 짜장마을 has exact reason'
+Assert-EvidenceCode $jajang 'NAME_EXACT' 'Golden unresolved 짜장마을 preserves name evidence'
 
-# P3 has no full POI address: minimal synthetic carrier of report-confirmed POI building number only (이지현미용실 26 vs 23).
-$lee=Evaluate (New-Business -Row 135 -Name '이지현미용실' -Base '이지현미용실' -Branch '' -City '동두천시' -Dong '생연동' -Road '중앙로295번길' -Main '26' -Sub '' -Floor '' -Unit '') (New-Batch -Row 135 -Candidates @((New-Candidate -Key 'golden-lee-23' -Name '이지현미용실' -Address '23')))
-Assert-True ($lee.Classification -ne 'GREEN') 'Golden 이지현미용실 26 versus POI 23 is not GREEN'
-# P3 has no full POI address: minimal synthetic carrier of POI 904 only (인헤어 902·2동 104호 vs 904).
-$inHair=Evaluate (New-Business -Row 136 -Name '인헤어' -Base '인헤어' -Branch '' -City '동두천시' -Dong '생연동' -Road '삼육사로' -Main '902' -Sub '' -Floor '' -Unit '104') (New-Batch -Row 136 -Candidates @((New-Candidate -Key 'golden-inhair-904' -Name '인헤어' -Address '904')))
-Assert-True ($inHair.Classification -ne 'GREEN') 'Golden 인헤어 902, 2동 104호 versus POI 904 is not GREEN'
+# data/canonical/reports/poi-coordinate-review-candidates-20260910-p3.csv has no full POI address: minimal synthetic carrier of report-confirmed POI building number only (이지현미용실 26 vs 23).
+$leeBusiness=New-Business -Row 135 -Name '이지현미용실' -Base '이지현미용실' -Branch '' -City '동두천시' -Dong '생연동' -Road '중앙로295번길' -Main '26' -Sub '' -Floor '' -Unit ''
+$leeBatch=New-Batch -Row 135 -Candidates @((New-Candidate -Key 'golden-lee-23' -Name '이지현미용실' -Address '23'))
+$lee=Evaluate $leeBusiness $leeBatch; Assert-Result $lee $leeBusiness $leeBatch
+Assert-Equal $lee.EvaluationStatus 'COMPLETE' 'Golden 이지현미용실 completes evaluation'
+Assert-Equal $lee.Classification 'YELLOW' 'Golden 이지현미용실 missing full POI address requires review'
+Assert-Equal $lee.SelectedCandidate $null 'Golden 이지현미용실 selects no candidate'
+Assert-True (@($lee.ReasonCodes) -contains 'INSUFFICIENT_IDENTITY_EVIDENCE') 'Golden 이지현미용실 has exact reason'
+Assert-EvidenceCode $lee 'NAME_EXACT' 'Golden 이지현미용실 preserves reviewable name evidence'
+# data/canonical/reports/poi-coordinate-review-candidates-20260910-p3.csv has no full POI address: minimal synthetic carrier of POI 904 only (인헤어 902·2동 104호 vs 904).
+$inHairBusiness=New-Business -Row 136 -Name '인헤어' -Base '인헤어' -Branch '' -City '동두천시' -Dong '생연동' -Road '삼육사로' -Main '902' -Sub '' -Floor '' -Unit '104'
+$inHairBatch=New-Batch -Row 136 -Candidates @((New-Candidate -Key 'golden-inhair-904' -Name '인헤어' -Address '904'))
+$inHair=Evaluate $inHairBusiness $inHairBatch; Assert-Result $inHair $inHairBusiness $inHairBatch
+Assert-Equal $inHair.EvaluationStatus 'COMPLETE' 'Golden 인헤어 completes evaluation'
+Assert-Equal $inHair.Classification 'YELLOW' 'Golden 인헤어 missing full POI address requires review'
+Assert-Equal $inHair.SelectedCandidate $null 'Golden 인헤어 selects no candidate'
+Assert-True (@($inHair.ReasonCodes) -contains 'INSUFFICIENT_IDENTITY_EVIDENCE') 'Golden 인헤어 has exact reason'
+Assert-EvidenceCode $inHair 'NAME_EXACT' 'Golden 인헤어 preserves reviewable name evidence'
+$goldenRejectedOrAmbiguous=@($mushroom,$jajang,$lee,$inHair)
+$goldenFalseGreenCount=@($goldenRejectedOrAmbiguous | Where-Object { $_.Classification -eq 'GREEN' }).Count
+Assert-Equal $goldenFalseGreenCount 0 'Golden false-GREEN count is zero across four rejected/ambiguous cases'
 
-# final/P3: 거시기닭갈비 덕정본점 at 엄상동길 22-25; a phone difference alone is not hard conflict.
+# data/canonical/reports/poi-coordinate-review-candidates-20260910-final.csv and data/canonical/reports/poi-coordinate-review-candidates-20260910-p3.csv: 거시기닭갈비 덕정본점 at 엄상동길 22-25; a phone difference alone is not hard conflict.
 $geosigiBusiness=New-Business -Row 339 -Name '거시기닭갈비' -Base '거시기닭갈비' -Branch '' -City '양주시' -Dong '' -Road '엄상동길' -Main '22' -Sub '25' -Floor '' -Unit ''
 $geosigiBatch=New-Batch -Row 339 -Candidates @((New-Candidate -Key 'golden-geosigi' -Name '거시기닭갈비 덕정본점' -Address '경기도 양주시 엄상동길 22-25' -Phone '031-859-0000'))
 $geosigi=Evaluate $geosigiBusiness $geosigiBatch; Assert-Result $geosigi $geosigiBusiness $geosigiBatch

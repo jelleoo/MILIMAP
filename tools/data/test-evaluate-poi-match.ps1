@@ -226,4 +226,23 @@ $geosigi=Evaluate $geosigiBusiness $geosigiBatch; Assert-Result $geosigi $geosig
 Assert-True (@($geosigi.ConflictCodes).Count -eq 0) 'Synthetic carrier phone is not a hard identity conflict'
 Assert-True ($geosigi.Classification -ne 'RED') 'Location evidence is not reversed by a synthetic carrier phone'
 
+$goldenFixtures=@(
+    [pscustomobject]@{ Expected='negative'; Result=$mushroom },
+    [pscustomobject]@{ Expected='ambiguous'; Result=$jajang },
+    [pscustomobject]@{ Expected='negative'; Result=$lee },
+    [pscustomobject]@{ Expected='negative'; Result=$inHair },
+    [pscustomobject]@{ Expected='positive'; Result=$geosigi }
+)
+$goldenGreen=@($goldenFixtures | Where-Object { $_.Result.Classification -eq 'GREEN' })
+$goldenCorrectGreen=@($goldenGreen | Where-Object { $_.Expected -eq 'positive' })
+$goldenFalseGreen=@($goldenFixtures | Where-Object { $_.Expected -ne 'positive' -and $_.Result.Classification -eq 'GREEN' })
+$goldenYellow=@($goldenFixtures | Where-Object { $_.Result.Classification -eq 'YELLOW' })
+$goldenRed=@($goldenFixtures | Where-Object { $_.Result.Classification -eq 'RED' })
+$goldenNoCandidate=@($goldenFixtures | Where-Object { $_.Result.EvaluatedCandidateCount -eq 0 })
+$greenPrecision = if ($goldenGreen.Count -eq 0) { 'N/A' } else { '{0:P1}' -f ($goldenCorrectGreen.Count / $goldenGreen.Count) }
+$manualReviewRate = '{0:P1}' -f ($goldenYellow.Count / $goldenFixtures.Count)
+$noCandidateRate = '{0:P1}' -f ($goldenNoCandidate.Count / $goldenFixtures.Count)
+Assert-Equal $goldenFalseGreen.Count 0 'Golden fixture metric false-GREEN count is zero'
+Write-Host ("Golden matcher metrics: fixtures={0} (positive={1}, ambiguous={2}, negative={3}); GREEN={4}, YELLOW={5}, RED={6}; GREEN Precision={7}; false GREEN={8}; Manual Review Rate={9}; No-candidate count/rate={10}/{11}; C API calls/row=0." -f $goldenFixtures.Count, @($goldenFixtures | Where-Object Expected -eq 'positive').Count, @($goldenFixtures | Where-Object Expected -eq 'ambiguous').Count, @($goldenFixtures | Where-Object Expected -eq 'negative').Count, $goldenGreen.Count, $goldenYellow.Count, $goldenRed.Count, $greenPrecision, $goldenFalseGreen.Count, $manualReviewRate, $goldenNoCandidate.Count, $noCandidateRate)
+Write-Host 'Candidate Recall: Not measured in Workstream C. Deferred to A/B/C Integration Shadow Mode.'
 Write-Host "POI match evaluation tests passed ($script:assertionCount assertions)."

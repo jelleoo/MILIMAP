@@ -65,10 +65,17 @@ Assert-Equal $green.SelectedCandidate.CandidateKey 'candidate-strong' 'GREEN sel
 Assert-Equal $green.RankedCandidateKeys[0] 'candidate-strong' 'Selected candidate is top ranked'
 Assert-True (@($green.ReasonCodes) -contains 'SINGLE_STRONG_CANDIDATE') 'GREEN includes allowed reason'
 
+$provinceAlias=New-Candidate -Key 'candidate-province-alias' -Address '경기 양주시 고암동 테스트로 22-25' -LotAddress ''
+$provinceAliasBatch=New-Batch -Candidates @($provinceAlias); $provinceAliasResult=Evaluate $business $provinceAliasBatch
+Assert-Result $provinceAliasResult $business $provinceAliasBatch
+Assert-Equal $provinceAliasResult.Classification 'GREEN' 'Province alias 경기 is compatible with 경기도'
+
 # Input contracts and source-row traceability are fail-closed; contract codes and evidence validators are public obligations.
 Assert-Throws { Evaluate $business (New-Batch -Row 102 -Candidates @($strong)) } 'Mismatched source row is rejected'
 $badBusiness=New-Business; $badBusiness.ContractVersion=2; Assert-Throws { Evaluate $badBusiness $strongBatch } 'Invalid business is rejected'
-$badBatch=New-Batch -Candidates @($strong); $badBatch.Candidates[0].DiscoveredBy=@(); Assert-Throws { Evaluate $business $badBatch } 'Invalid candidate evidence is rejected'
+$badCandidate=New-Candidate -Key 'candidate-invalid-evidence'
+$badCandidate.DiscoveredBy=@()
+$badBatch=New-Batch -Candidates @($badCandidate); Assert-Throws { Evaluate $business $badBatch } 'Invalid candidate evidence is rejected'
 
 # Complete zero results proves RED; PARTIAL or FAILED never proves absence and is INCOMPLETE YELLOW.
 $empty=New-Batch; $red=Evaluate $business $empty; Assert-Result $red $business $empty
@@ -92,6 +99,10 @@ Assert-True (@($mismatchResult.ConflictCodes) -contains 'BUILDING_NUMBER_CONFLIC
 $provinceConflict=Evaluate $business (New-Batch -Candidates @((New-Candidate -Key 'province-conflict' -Address '서울특별시 양주시 고암동 테스트로 22-25')))
 Assert-Result $provinceConflict $business (New-Batch -Candidates @((New-Candidate -Key 'province-conflict' -Address '서울특별시 양주시 고암동 테스트로 22-25')))
 Assert-HardConflict $provinceConflict 'PROVINCE_CONFLICT' 'Name-compatible province conflict'
+$splitProvinceCandidate=New-Candidate -Key 'split-province-conflict' -LotAddress '서울특별시 양주시 고암동 1-1'
+$splitProvinceBatch=New-Batch -Candidates @($splitProvinceCandidate); $splitProvince=Evaluate $business $splitProvinceBatch
+Assert-Result $splitProvince $business $splitProvinceBatch
+Assert-HardConflict $splitProvince 'PROVINCE_CONFLICT' 'Conflicting preserved lot-address province'
 $cityConflict=Evaluate $business (New-Batch -Candidates @((New-Candidate -Key 'city-conflict' -Address '경기도 파주시 고암동 테스트로 22-25')))
 Assert-Result $cityConflict $business (New-Batch -Candidates @((New-Candidate -Key 'city-conflict' -Address '경기도 파주시 고암동 테스트로 22-25')))
 Assert-HardConflict $cityConflict 'CITY_DISTRICT_CONFLICT' 'Name-compatible city conflict'
@@ -122,9 +133,15 @@ Assert-True (@($insufficientResult.ReasonCodes) -contains 'INSUFFICIENT_IDENTITY
 
 # Repeated independent discovery strengthens evidence and keeps candidate selection internally consistent.
 $repeat=New-Candidate -Key 'candidate-repeated' -Evidence @((New-Evidence 1 'NAME_FULL_ADDRESS'),(New-Evidence 5 'BASE_NAME_LOCALITY'))
-$repeatBatch=New-Batch -Candidates @($repeat); $repeatResult=Evaluate $business $repeatBatch; Assert-Result $repeatResult $business $repeatBatch
+$repeatBatch=New-Batch -Candidates @($repeat)
+$repeatBatch.QueryAttempts += New-PoiQueryAttempt -StrategyCode 'BASE_NAME_LOCALITY' -Query 'synthetic query 5' -QueryOrder 5 -Status 'SUCCESS' -ResultCount 1
+$repeatResult=Evaluate $business $repeatBatch; Assert-Result $repeatResult $business $repeatBatch
 Assert-Equal $repeatResult.SelectedCandidate.CandidateKey 'candidate-repeated' 'Repeated discovery preserves selected candidate'
 Assert-True (@($repeatResult.ReasonCodes) -contains 'REPEATED_DISCOVERY') 'Repeated discovery is explicit evidence'
+$failedRepeatBatch=New-Batch -Status 'PARTIAL' -Candidates @($repeat)
+$failedRepeatBatch.QueryAttempts += New-PoiQueryAttempt -StrategyCode 'BASE_NAME_LOCALITY' -Query 'synthetic query 5' -QueryOrder 5 -Status 'FAILED'
+$failedRepeatResult=Evaluate $business $failedRepeatBatch
+Assert-True (-not (@($failedRepeatResult.ReasonCodes) -contains 'REPEATED_DISCOVERY')) 'Failed query attempts do not count as repeated discovery'
 
 # Golden cases — repository-confirmed source facts only.
 # data/canonical/capital-area-military-benefits.csv: 버섯집 초리골 canonical 초리골길 12.

@@ -135,6 +135,23 @@ Assert-HardConflict $branchConflict 'BRANCH_CONFLICT' 'Name-compatible explicit 
 $floorConflict=Evaluate $business (New-Batch -Candidates @((New-Candidate -Key 'floor-unit-conflict' -Address '경기도 양주시 고암동 테스트로 22-25, 3층 301호')))
 Assert-Result $floorConflict $business (New-Batch -Candidates @((New-Candidate -Key 'floor-unit-conflict' -Address '경기도 양주시 고암동 테스트로 22-25, 3층 301호')))
 Assert-HardConflict $floorConflict 'FLOOR_UNIT_CONFLICT' 'Name-compatible explicit floor/unit conflict'
+
+# data/canonical/capital-area-military-benefits.csv and
+# data/canonical/reports/poi-coordinate-review-candidates-20260910-final.csv:
+# 스컬스바버샵 preserves 1층 B-112호 on both canonical and POI road addresses.
+$skullsBusiness=New-Business -Row 308 -Name '스컬스바버샵' -Base '스컬스바버샵' -Branch '' -City '시흥시' -Dong '' -Road '서울대학로264번길' -Main '12' -Sub '' -Floor '1' -Unit 'B-112'
+$skullsAddress='경기도 시흥시 서울대학로264번길 12 208동 1층 B-112호'
+$skullsLotAddress='경기도 시흥시 배곧동 221 208동 1층 B-112호'
+$skullsMatchCandidate=New-Candidate -Key 'skulls-b-112' -Name '스컬스바버샵' -Address $skullsAddress -LotAddress $skullsLotAddress
+$skullsMatchBatch=New-Batch -Row 308 -Candidates @($skullsMatchCandidate); $skullsMatch=Evaluate $skullsBusiness $skullsMatchBatch
+Assert-Result $skullsMatch $skullsBusiness $skullsMatchBatch
+Assert-Equal $skullsMatch.Classification 'GREEN' 'Alphanumeric B-112 unit preserves a single strong candidate'
+Assert-True (-not (@($skullsMatch.ConflictCodes) -contains 'FLOOR_UNIT_CONFLICT')) 'Matching B-112 unit is not a floor/unit conflict'
+Assert-EvidenceCode $skullsMatch 'FLOOR_UNIT_MATCH' 'Matching B-112 unit preserves floor/unit evidence'
+$skullsMismatchCandidate=New-Candidate -Key 'skulls-b-113' -Name '스컬스바버샵' -Address ($skullsAddress -replace 'B-112호','B-113호') -LotAddress ($skullsLotAddress -replace 'B-112호','B-113호')
+$skullsMismatchBatch=New-Batch -Row 308 -Candidates @($skullsMismatchCandidate); $skullsMismatch=Evaluate $skullsBusiness $skullsMismatchBatch
+Assert-Result $skullsMismatch $skullsBusiness $skullsMismatchBatch
+Assert-HardConflict $skullsMismatch 'FLOOR_UNIT_CONFLICT' 'Alphanumeric B-113 unit conflicts with canonical B-112'
 $missingBranchCandidate=New-Candidate -Key 'missing-explicit-branch' -Name '테스트 식당' -LotAddress ''
 $missingBranchBatch=New-Batch -Candidates @($missingBranchCandidate); $missingBranchResult=Evaluate $business $missingBranchBatch
 Assert-Result $missingBranchResult $business $missingBranchBatch

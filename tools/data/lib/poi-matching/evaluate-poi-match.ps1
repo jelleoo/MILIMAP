@@ -100,9 +100,9 @@ function Get-PoiMatchFloorUnit {
     $unit = ''
     if ($text) {
         $floorMatch = [regex]::Match($text, '(?<![가-힣a-z0-9])(?<value>(?:지하\s*|b\s*)?\d+)\s*층', [Text.RegularExpressions.RegexOptions]::CultureInvariant)
-        $unitMatch = [regex]::Match($text, '(?<![가-힣a-z0-9])(?<value>\d+)\s*호', [Text.RegularExpressions.RegexOptions]::CultureInvariant)
+        $unitMatch = [regex]::Match($text, '(?<![가-힣a-z0-9])(?<value>[a-z]\s*-\s*\d+|\d+)\s*호', [Text.RegularExpressions.RegexOptions]::CultureInvariant)
         if ($floorMatch.Success) { $floor = ($floorMatch.Groups['value'].Value -replace '\s+', '') }
-        if ($unitMatch.Success) { $unit = $unitMatch.Groups['value'].Value }
+        if ($unitMatch.Success) { $unit = ($unitMatch.Groups['value'].Value -replace '\s+', '') }
     }
     return [pscustomobject]@{ Floor=$floor; Unit=$unit }
 }

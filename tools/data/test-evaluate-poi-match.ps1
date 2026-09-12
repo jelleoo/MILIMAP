@@ -17,6 +17,7 @@ function New-Business {
 function New-Evidence { param([int]$Order=1,[string]$Strategy='NAME_FULL_ADDRESS') New-PoiDiscoveryEvidence -StrategyCode $Strategy -Query "synthetic query $Order" -QueryOrder $Order -ResultPosition 1 -ResultCount 1 }
 function New-Candidate {
     param([string]$Key='candidate-a',[string]$Name='테스트 식당 본점',[string]$Address='경기도 양주시 고암동 테스트로 22-25',[string]$LotAddress='경기도 양주시 고암동 1-1',[string]$Phone='031-000-0000',[object[]]$Evidence=@((New-Evidence)))
+    # Fixed coordinates, phone, category, and link are synthetic contract-carrier fields, not source facts.
     New-PoiCandidate -CandidateKey $Key -OriginalName $Name -NormalizedName ($Name -replace '\s','') -RoadAddress $Address -LotAddress $LotAddress -Latitude ([double]37.8302) -Longitude ([double]127.0675) -Phone $Phone -Category '음식점' -ProviderLink 'https://example.invalid/place' -DiscoveredBy $Evidence
 }
 function New-Batch {
@@ -94,6 +95,11 @@ $mismatch=New-Candidate -Key 'candidate-name-match-building-23' -Address '경기
 $mismatchBatch=New-Batch -Candidates @($mismatch); $mismatchResult=Evaluate $business $mismatchBatch; Assert-Result $mismatchResult $business $mismatchBatch
 Assert-True ($mismatchResult.Classification -ne 'GREEN') 'Name compatibility cannot reverse building mismatch'
 Assert-True (@($mismatchResult.ConflictCodes) -contains 'BUILDING_NUMBER_CONFLICT') 'Building conflict takes precedence'
+$adjacentBuilding=New-Candidate -Key 'adjacent-building-conflict' -Address '경기도 양주시 고암동 테스트로22-26' -LotAddress '경기도 양주시 고암동 테스트로 22-25'
+$adjacentBuildingBatch=New-Batch -Candidates @($adjacentBuilding); $adjacentBuildingResult=Evaluate $business $adjacentBuildingBatch
+Assert-Result $adjacentBuildingResult $business $adjacentBuildingBatch
+Assert-HardConflict $adjacentBuildingResult 'BUILDING_NUMBER_CONFLICT' 'Adjacent road-context building mismatch'
+Assert-Equal $adjacentBuildingResult.SurvivingCandidateCount 0 'Adjacent building conflict removes candidate before ranking'
 
 # Every material, explicit identity conflict is conclusive even when the name and all remaining address detail are strong.
 $provinceConflict=Evaluate $business (New-Batch -Candidates @((New-Candidate -Key 'province-conflict' -Address '서울특별시 양주시 고암동 테스트로 22-25')))
@@ -106,12 +112,32 @@ Assert-HardConflict $splitProvince 'PROVINCE_CONFLICT' 'Conflicting preserved lo
 $cityConflict=Evaluate $business (New-Batch -Candidates @((New-Candidate -Key 'city-conflict' -Address '경기도 파주시 고암동 테스트로 22-25')))
 Assert-Result $cityConflict $business (New-Batch -Candidates @((New-Candidate -Key 'city-conflict' -Address '경기도 파주시 고암동 테스트로 22-25')))
 Assert-HardConflict $cityConflict 'CITY_DISTRICT_CONFLICT' 'Name-compatible city conflict'
+$gwangjuConflictCandidate=New-Candidate -Key 'gwangju-city-conflict' -Address '경기도 광주시 고암동 테스트로 22-25' -LotAddress '경기도 양주시 고암동 테스트로 22-25'
+$gwangjuConflictBatch=New-Batch -Candidates @($gwangjuConflictCandidate); $gwangjuConflict=Evaluate $business $gwangjuConflictBatch
+Assert-Result $gwangjuConflict $business $gwangjuConflictBatch
+Assert-HardConflict $gwangjuConflict 'CITY_DISTRICT_CONFLICT' 'Gyeonggi Gwangju city conflict despite exact canonical lot address'
+$gwangjuBusiness=New-Business -City '광주시'
+$gwangjuCandidate=New-Candidate -Key 'gwangju-city-match' -Address '경기도 광주시 고암동 테스트로 22-25' -LotAddress ''
+$gwangjuBatch=New-Batch -Candidates @($gwangjuCandidate); $gwangjuResult=Evaluate $gwangjuBusiness $gwangjuBatch
+Assert-Result $gwangjuResult $gwangjuBusiness $gwangjuBatch
+Assert-Equal $gwangjuResult.Classification 'GREEN' '경기도 광주시 remains a legitimate city match'
+Assert-EvidenceCode $gwangjuResult 'LOCALITY_MATCH' '경기도 광주시 preserves positive locality evidence'
 $branchConflict=Evaluate $business (New-Batch -Candidates @((New-Candidate -Key 'branch-conflict' -Name '테스트 식당 지점' -Address '경기도 양주시 고암동 테스트로 22-25')))
 Assert-Result $branchConflict $business (New-Batch -Candidates @((New-Candidate -Key 'branch-conflict' -Name '테스트 식당 지점' -Address '경기도 양주시 고암동 테스트로 22-25')))
 Assert-HardConflict $branchConflict 'BRANCH_CONFLICT' 'Name-compatible explicit branch conflict'
 $floorConflict=Evaluate $business (New-Batch -Candidates @((New-Candidate -Key 'floor-unit-conflict' -Address '경기도 양주시 고암동 테스트로 22-25, 3층 301호')))
 Assert-Result $floorConflict $business (New-Batch -Candidates @((New-Candidate -Key 'floor-unit-conflict' -Address '경기도 양주시 고암동 테스트로 22-25, 3층 301호')))
 Assert-HardConflict $floorConflict 'FLOOR_UNIT_CONFLICT' 'Name-compatible explicit floor/unit conflict'
+$missingBranchCandidate=New-Candidate -Key 'missing-explicit-branch' -Name '테스트 식당' -LotAddress ''
+$missingBranchBatch=New-Batch -Candidates @($missingBranchCandidate); $missingBranchResult=Evaluate $business $missingBranchBatch
+Assert-Result $missingBranchResult $business $missingBranchBatch
+$missingBranchEvidence=@($missingBranchResult.Evidence | Where-Object { $_.CandidateKey -eq 'missing-explicit-branch' -and $_.EvidenceCode -eq 'BRANCH_MATCH' })
+Assert-Equal $missingBranchEvidence.Count 1 'Missing explicit candidate branch emits one review fact'
+Assert-Equal $missingBranchEvidence[0].CanonicalValue '본점' 'Missing branch evidence preserves canonical branch'
+Assert-Equal $missingBranchEvidence[0].CandidateValue '' 'Missing branch evidence preserves empty candidate value'
+Assert-Equal $missingBranchEvidence[0].Matched $null 'Missing branch evidence is unavailable, not matched or conflicted'
+Assert-True (-not (@($missingBranchResult.ReasonCodes) -contains 'BRANCH_MATCH')) 'Unavailable branch evidence adds no positive reason'
+Assert-True (-not (@($missingBranchResult.ConflictCodes) -contains 'BRANCH_CONFLICT')) 'Missing candidate branch is not a conflict'
 
 # CandidateKey ordering is deterministic reporting, not a tie breaker that can invent GREEN.
 $tieA=New-Candidate -Key 'candidate-a' -Name '테스트 식당' -Address '경기도 양주시 고암동 테스트로 22-25'
@@ -144,12 +170,14 @@ $failedRepeatResult=Evaluate $business $failedRepeatBatch
 Assert-True (-not (@($failedRepeatResult.ReasonCodes) -contains 'REPEATED_DISCOVERY')) 'Failed query attempts do not count as repeated discovery'
 
 # Golden cases — repository-confirmed source facts only.
+# New-Candidate's fixed coordinates/phone/category/link remain synthetic carriers unless a field is explicitly cited below.
 # data/canonical/capital-area-military-benefits.csv: 버섯집 초리골 canonical 초리골길 12.
 # data/canonical/reports/poi-coordinate-review-candidates-20260910-final.csv: POI 초리골길 23.
 $mushroomBusiness=New-Business -Row 248 -Name '버섯집 초리골' -Base '버섯집초리골' -Branch '' -City '파주시' -Dong '법원읍' -Road '초리골길' -Main '12' -Sub '' -Floor '' -Unit ''
-$mushroomBatch=New-Batch -Row 248 -Candidates @((New-Candidate -Key 'golden-mushroom-23' -Name '버섯집 초리골' -Address '경기도 파주시 법원읍 초리골길 23'))
+$mushroomBatch=New-Batch -Row 248 -Candidates @((New-Candidate -Key 'golden-mushroom-23' -Name '버섯집 초리골' -Address '경기 파주시 법원읍 초리골길 23' -LotAddress ''))
 $mushroom=Evaluate $mushroomBusiness $mushroomBatch; Assert-Result $mushroom $mushroomBusiness $mushroomBatch
 Assert-HardConflict $mushroom 'BUILDING_NUMBER_CONFLICT' 'Golden 버섯집 초리골 12 versus POI 23'
+Assert-Equal (@($mushroom.ConflictCodes) -join ',') 'BUILDING_NUMBER_CONFLICT' 'Golden 버섯집 uses only report-supported conflict facts'
 
 # data/canonical/reports/poi-coordinate-review-candidates-20260910-final.csv: 짜장마을 unresolved; fixture makes no full-POI-address claim.
 $jajangBusiness=New-Business -Row 451 -Name '짜장마을' -Base '짜장마을' -Branch '' -City '파주시' -Dong '파주읍' -Road '술이홀로' -Main '463' -Sub '' -Floor '' -Unit ''
@@ -183,11 +211,12 @@ $goldenRejectedOrAmbiguous=@($mushroom,$jajang,$lee,$inHair)
 $goldenFalseGreenCount=@($goldenRejectedOrAmbiguous | Where-Object { $_.Classification -eq 'GREEN' }).Count
 Assert-Equal $goldenFalseGreenCount 0 'Golden false-GREEN count is zero across four rejected/ambiguous cases'
 
-# data/canonical/reports/poi-coordinate-review-candidates-20260910-final.csv and data/canonical/reports/poi-coordinate-review-candidates-20260910-p3.csv: 거시기닭갈비 덕정본점 at 엄상동길 22-25; a phone difference alone is not hard conflict.
+# The reports preserve 거시기닭갈비 덕정본점 at 엄상동길 22-25 and lot address 고암동 157-6.
+# They mention a phone suffix difference without preserving the candidate phone, so the helper phone remains synthetic and non-decisive.
 $geosigiBusiness=New-Business -Row 339 -Name '거시기닭갈비' -Base '거시기닭갈비' -Branch '' -City '양주시' -Dong '' -Road '엄상동길' -Main '22' -Sub '25' -Floor '' -Unit ''
-$geosigiBatch=New-Batch -Row 339 -Candidates @((New-Candidate -Key 'golden-geosigi' -Name '거시기닭갈비 덕정본점' -Address '경기도 양주시 엄상동길 22-25' -Phone '031-859-0000'))
+$geosigiBatch=New-Batch -Row 339 -Candidates @((New-Candidate -Key 'golden-geosigi' -Name '거시기닭갈비 덕정본점' -Address '경기도 양주시 엄상동길 22-25' -LotAddress '경기도 양주시 고암동 157-6'))
 $geosigi=Evaluate $geosigiBusiness $geosigiBatch; Assert-Result $geosigi $geosigiBusiness $geosigiBatch
-Assert-True (@($geosigi.ConflictCodes).Count -eq 0) 'Phone discrepancy alone is not a hard conflict'
-Assert-True ($geosigi.Classification -ne 'RED') 'Location evidence is not reversed by phone discrepancy'
+Assert-True (@($geosigi.ConflictCodes).Count -eq 0) 'Synthetic carrier phone is not a hard identity conflict'
+Assert-True ($geosigi.Classification -ne 'RED') 'Location evidence is not reversed by a synthetic carrier phone'
 
 Write-Host "POI match evaluation tests passed ($script:assertionCount assertions)."

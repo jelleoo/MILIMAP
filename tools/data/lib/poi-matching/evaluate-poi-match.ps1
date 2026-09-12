@@ -53,8 +53,9 @@ function Test-PoiMatchToken {
 
 function Get-PoiMatchAdministrativeToken {
     param([string[]]$Tokens, [ValidateSet('City','District')][string]$Kind)
-    foreach ($token in $Tokens) {
-        if (Get-PoiMatchProvince $token) { continue }
+    for ($index = 0; $index -lt $Tokens.Count; $index++) {
+        $token = $Tokens[$index]
+        if ($index -eq 0 -and (Get-PoiMatchProvince $token)) { continue }
         if ($Kind -eq 'City' -and $token -match '(?:특별자치시|시|군)$') { return $token }
         if ($Kind -eq 'District' -and $token -match '(?:구|군)$') { return $token }
     }
@@ -75,7 +76,7 @@ function Get-PoiMatchRoadBuilding {
     $addressText = ConvertTo-PoiMatchText $RoadAddress
     $road = ConvertTo-PoiMatchText $RoadName
     if (-not $addressText -or -not $road) { return $null }
-    $pattern = '(?<![가-힣a-z0-9])' + [regex]::Escape($road) + '(?=$|[\s,]|\d)[\s,]+(?<main>\d+)(?:\s*-\s*(?<sub>\d+))?'
+    $pattern = '(?<![가-힣a-z0-9])' + [regex]::Escape($road) + '(?=$|[\s,]|\d)[\s,]*(?<main>\d+)(?:\s*-\s*(?<sub>\d+))?'
     $match = [regex]::Match($addressText, $pattern, [Text.RegularExpressions.RegexOptions]::CultureInvariant)
     if (-not $match.Success) { return $null }
     $main = $match.Groups['main'].Value
@@ -127,10 +128,11 @@ function Add-PoiMatchEvidence {
         [Parameter(Mandatory)][AllowEmptyCollection()][Collections.Generic.HashSet[string]]$ReasonSet,
         [Parameter(Mandatory)][AllowEmptyCollection()][Collections.Generic.HashSet[string]]$ConflictSet,
         [string]$Code, [string]$CandidateKey, [AllowNull()][string]$CanonicalValue,
-        [AllowNull()][string]$CandidateValue, [bool]$Matched
+        [AllowNull()][string]$CandidateValue, [AllowNull()]$Matched=$null
     )
     $Evidence.Add((New-PoiMatchEvidence -EvidenceCode $Code -CandidateKey $CandidateKey -CanonicalValue $CanonicalValue -CandidateValue $CandidateValue -Matched $Matched))
-    if ($Matched) { [void]$ReasonSet.Add($Code) } else { [void]$ConflictSet.Add($Code) }
+    if ($null -eq $Matched) { return }
+    if ([bool]$Matched) { [void]$ReasonSet.Add($Code) } else { [void]$ConflictSet.Add($Code) }
 }
 
 function Get-PoiMatchCandidateEvaluation {
@@ -201,10 +203,15 @@ function Get-PoiMatchCandidateEvaluation {
     $localityMatch = $false
     if ($suppliedLocality.Count -gt 0 -and $candidateAddress) {
         $localityMatch = $true
-        foreach ($locality in $suppliedLocality) {
-            if ((Get-PoiMatchProvince $locality)) {
-                if (-not $candidateProvince -or (Get-PoiMatchProvince $locality) -cne $candidateProvince) { $localityMatch = $false; break }
-            } elseif (-not [bool](Test-PoiMatchToken $tokens $locality)) { $localityMatch = $false; break }
+        if ((ConvertTo-PoiMatchText $Business.Province) -and
+            (-not $candidateProvince -or $canonicalProvince -cne $candidateProvince)) {
+            $localityMatch = $false
+        }
+        foreach ($locality in @($Business.City, $Business.District, $Business.Dong)) {
+            if ((ConvertTo-PoiMatchText $locality) -and -not [bool](Test-PoiMatchToken $tokens $locality)) {
+                $localityMatch = $false
+                break
+            }
         }
         if ($localityMatch) {
             Add-PoiMatchEvidence $Evidence $ReasonSet $ConflictSet 'LOCALITY_MATCH' $key ($suppliedLocality -join ' ') $candidateAddress $true
@@ -245,13 +252,17 @@ function Get-PoiMatchCandidateEvaluation {
     $canonicalBranch = ConvertTo-PoiMatchCompactText $Business.BranchName
     $candidateBranch = Get-PoiMatchBranchSuffix $Candidate.OriginalName $Business.BaseName
     $branchMatch = $false
-    if ($canonicalBranch -and $null -ne $candidateBranch -and $candidateBranch) {
-        $branchMatch = $canonicalBranch -ceq $candidateBranch
-        if ($branchMatch) {
-            Add-PoiMatchEvidence $Evidence $ReasonSet $ConflictSet 'BRANCH_MATCH' $key $canonicalBranch $candidateBranch $true
+    if ($canonicalBranch) {
+        if ($null -ne $candidateBranch -and $candidateBranch) {
+            $branchMatch = $canonicalBranch -ceq $candidateBranch
+            if ($branchMatch) {
+                Add-PoiMatchEvidence $Evidence $ReasonSet $ConflictSet 'BRANCH_MATCH' $key $canonicalBranch $candidateBranch $true
+            } else {
+                Add-PoiMatchEvidence $Evidence $ReasonSet $ConflictSet 'BRANCH_CONFLICT' $key $canonicalBranch $candidateBranch $false
+                $hasConflict = $true
+            }
         } else {
-            Add-PoiMatchEvidence $Evidence $ReasonSet $ConflictSet 'BRANCH_CONFLICT' $key $canonicalBranch $candidateBranch $false
-            $hasConflict = $true
+            Add-PoiMatchEvidence $Evidence $ReasonSet $ConflictSet 'BRANCH_MATCH' $key $canonicalBranch '' $null
         }
     }
 

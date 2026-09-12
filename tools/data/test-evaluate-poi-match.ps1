@@ -100,6 +100,13 @@ $adjacentBuildingBatch=New-Batch -Candidates @($adjacentBuilding); $adjacentBuil
 Assert-Result $adjacentBuildingResult $business $adjacentBuildingBatch
 Assert-HardConflict $adjacentBuildingResult 'BUILDING_NUMBER_CONFLICT' 'Adjacent road-context building mismatch'
 Assert-Equal $adjacentBuildingResult.SurvivingCandidateCount 0 'Adjacent building conflict removes candidate before ranking'
+$numberedRoadBusiness=New-Business -Main '23' -Sub ''
+$numberedRoadCandidate=New-Candidate -Key 'longer-numbered-road' -Address '경기도 양주시 고암동 테스트로23번길 10' -LotAddress ''
+$numberedRoadBatch=New-Batch -Candidates @($numberedRoadCandidate); $numberedRoadResult=Evaluate $numberedRoadBusiness $numberedRoadBatch
+Assert-Result $numberedRoadResult $numberedRoadBusiness $numberedRoadBatch
+Assert-True (-not (@($numberedRoadResult.Evidence | Where-Object { $_.EvidenceCode -eq 'BUILDING_NUMBER_MATCH' }).Count -gt 0)) 'Digits inside a longer numbered road name are not a building match'
+Assert-Equal $numberedRoadResult.Classification 'YELLOW' 'Longer numbered road name has insufficient identity evidence'
+Assert-True (@($numberedRoadResult.ReasonCodes) -contains 'INSUFFICIENT_IDENTITY_EVIDENCE') 'Longer numbered road name records insufficient evidence'
 
 # Every material, explicit identity conflict is conclusive even when the name and all remaining address detail are strong.
 $provinceConflict=Evaluate $business (New-Batch -Candidates @((New-Candidate -Key 'province-conflict' -Address '서울특별시 양주시 고암동 테스트로 22-25')))

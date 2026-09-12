@@ -76,7 +76,7 @@ function Get-PoiMatchRoadBuilding {
     $addressText = ConvertTo-PoiMatchText $RoadAddress
     $road = ConvertTo-PoiMatchText $RoadName
     if (-not $addressText -or -not $road) { return $null }
-    $pattern = '(?<![가-힣a-z0-9])' + [regex]::Escape($road) + '(?=$|[\s,]|\d)[\s,]*(?<main>\d+)(?:\s*-\s*(?<sub>\d+))?'
+    $pattern = '(?<![가-힣a-z0-9])' + [regex]::Escape($road) + '(?=$|[\s,]|\d)[\s,]*(?<main>(?>\d+))(?:\s*-\s*(?<sub>(?>\d+)))?(?=$|[\s,])'
     $match = [regex]::Match($addressText, $pattern, [Text.RegularExpressions.RegexOptions]::CultureInvariant)
     if (-not $match.Success) { return $null }
     $main = $match.Groups['main'].Value

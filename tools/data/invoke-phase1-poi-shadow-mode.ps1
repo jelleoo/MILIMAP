@@ -37,9 +37,12 @@ function Invoke-Phase1PoiShadowMode {
         [scriptblock]$RequestInvoker,
         [string]$ClientId = '',
         [string]$ClientSecret = '',
-        [hashtable]$GoldenExpectations = @{}
+        [hashtable]$GoldenExpectations = @{},
+        [switch]$OperationalLiveRun
     )
 
+    if ($OperationalLiveRun -and $null -ne $RequestInvoker) { throw 'Operational live mode cannot use RequestInvoker' }
+    if (-not $OperationalLiveRun -and $null -eq $RequestInvoker) { throw 'Deterministic mode requires RequestInvoker' }
     $reportRows = [Collections.Generic.List[object]]::new()
     for ($index = 0; $index -lt $Rows.Count; $index++) {
         $sourceRowNumber = $SourceRowNumberOffset + $index + 1
@@ -60,14 +63,15 @@ function Invoke-Phase1PoiShadowMode {
 
     return [pscustomobject][ordered]@{
         Rows = $reportRows.ToArray()
-        Summary = Get-Phase1PoiShadowSummary -Rows $reportRows.ToArray() -GoldenExpectations $GoldenExpectations
+        Summary = Get-Phase1PoiShadowSummary -Rows $reportRows.ToArray() -GoldenExpectations $GoldenExpectations -OperationalLiveRun:$OperationalLiveRun
     }
 }
 
 function Get-Phase1PoiShadowSummary {
     param(
         [Parameter(Mandatory)][object[]]$Rows,
-        [hashtable]$GoldenExpectations = @{}
+        [hashtable]$GoldenExpectations = @{},
+        [switch]$OperationalLiveRun
     )
 
     $allRows = @($Rows)
@@ -107,7 +111,7 @@ function Get-Phase1PoiShadowSummary {
         FullyEvaluableGoldenCases = $fullyEvaluableGoldenRows.Count
         SourceLimitedGoldenCases = $sourceLimitedGoldenRows.Count
         FullyEvaluableAmbiguousNegativeFalseGreenCount = $fullyEvaluableAmbiguousNegativeFalseGreen.Count
-        OperationalLiveShadowRun = 'NOT_RUN'
+        OperationalLiveShadowRun = if ($OperationalLiveRun) { 'RUN' } else { 'NOT_RUN' }
     }
 }
 
@@ -126,6 +130,31 @@ function ConvertTo-Phase1PoiShadowCsvRow {
     return [pscustomobject]$projected
 }
 
+function Test-Phase1PoiShadowPathWithinDirectory {
+    param([Parameter(Mandatory)][string]$Path, [Parameter(Mandatory)][string]$Directory)
+
+    $fullPath = [IO.Path]::GetFullPath($Path)
+    $separators = [char[]]@([IO.Path]::DirectorySeparatorChar, [IO.Path]::AltDirectorySeparatorChar)
+    $fullDirectory = ([IO.Path]::GetFullPath($Directory)).TrimEnd($separators)
+    $comparison = [StringComparison]::OrdinalIgnoreCase
+    return $fullPath.Equals($fullDirectory, $comparison) -or
+        $fullPath.StartsWith($fullDirectory + [IO.Path]::DirectorySeparatorChar, $comparison)
+}
+
+function Resolve-Phase1PoiShadowExportPath {
+    param([Parameter(Mandatory)][string]$Path)
+
+    if ([string]::IsNullOrWhiteSpace($Path)) { throw 'Explicit output paths are required' }
+    $fullPath = [IO.Path]::GetFullPath($Path)
+    $repositoryRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..'))
+    foreach ($protectedPath in @('data/canonical', 'data/seed', 'apps')) {
+        if (Test-Phase1PoiShadowPathWithinDirectory -Path $fullPath -Directory (Join-Path $repositoryRoot $protectedPath)) {
+            throw 'Protected output path is not allowed'
+        }
+    }
+    return $fullPath
+}
+
 function Export-Phase1PoiShadowMode {
     param(
         [Parameter(Mandatory)]$Run,
@@ -133,15 +162,16 @@ function Export-Phase1PoiShadowMode {
         [Parameter(Mandatory)][string]$SummaryJson
     )
 
-    foreach ($path in @($RowReportCsv, $SummaryJson)) {
-        if ([string]::IsNullOrWhiteSpace($path)) { throw 'Explicit output paths are required' }
+    $resolvedRowReportCsv = Resolve-Phase1PoiShadowExportPath $RowReportCsv
+    $resolvedSummaryJson = Resolve-Phase1PoiShadowExportPath $SummaryJson
+    foreach ($path in @($resolvedRowReportCsv, $resolvedSummaryJson)) {
         $parent = Split-Path -Parent $path
         if ($parent -and -not (Test-Path -LiteralPath $parent)) {
             New-Item -ItemType Directory -Force -Path $parent | Out-Null
         }
     }
     @($Run.Rows | ForEach-Object { ConvertTo-Phase1PoiShadowCsvRow $_ }) |
-        Export-Csv -LiteralPath $RowReportCsv -NoTypeInformation -Encoding utf8
+        Export-Csv -LiteralPath $resolvedRowReportCsv -NoTypeInformation -Encoding utf8
     $summaryText = $Run.Summary | ConvertTo-Json -Depth 8
-    [IO.File]::WriteAllText($SummaryJson, $summaryText + [Environment]::NewLine, [Text.UTF8Encoding]::new($false))
+    [IO.File]::WriteAllText($resolvedSummaryJson, $summaryText + [Environment]::NewLine, [Text.UTF8Encoding]::new($false))
 }

@@ -83,7 +83,7 @@ P2/P3 수동 검증을 통해 충분한 실제 판단 사례를 확보했습니�
 - Issue: #28 `[DATA][A] Identity / Normalization Core 구현` — closed
 - PR: #37 `feat(data): add identity normalization core` — merged
 - merge commit: `93c2e4455cb6628dfc1c2ffe0050b48524dedd89`
-- 담당: 현민
+- 담당: 일우
 - 전용 경로: `tools/data/lib/identity/**`, `tools/data/test-normalize-business.ps1`, 필요 시 `tools/data/testdata/identity/**`
 - 출력 Contract: `NormalizedBusiness`
 
@@ -127,7 +127,7 @@ B는 최종 production 승인, identity 분류, hard constraint/ranking, canonic
 
 - 상태: **완료 / dev merge**
 - Issue: #30 `[DATA][C] POI Matching / Evaluation 구현` — closed
-- PR: #36 `feat: implement POI matching evaluation` — merged
+- PR: #36 `data: [C] add POI matching and evaluation` — merged
 - merge commit: `40ac4bffec22ebc1534564201e5e07435f00497f`
 - 담당: 프로젝트 오너 (`ilwoo-maker`)
 - 후속 역할: Integration Owner

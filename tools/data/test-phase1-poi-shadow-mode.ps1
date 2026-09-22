@@ -17,6 +17,13 @@ function Assert-True {
     $script:assertionCount++
     if (-not $Condition) { throw $Message }
 }
+function Assert-Throws {
+    param([scriptblock]$Action, [string]$Message)
+    $script:assertionCount++
+    $threw = $false
+    try { & $Action } catch { $threw = $true }
+    if (-not $threw) { throw $Message }
+}
 
 $singleStrongRow = [pscustomobject]@{
     업소명 = '테스트 식당 본점'
@@ -76,6 +83,16 @@ Assert-Equal $failed.Rows[0].EvaluationStatus 'INCOMPLETE' 'Failure is incomplet
 Assert-Equal $failed.Rows[0].Classification 'YELLOW' 'Failure cannot become RED'
 Assert-True ($failed.Rows[0].ReasonCodes -contains 'DISCOVERY_FAILED') 'Failure reason remains reviewable'
 Assert-True (-not ($failed.Rows[0].ReasonCodes -contains 'NO_CANDIDATE')) 'Failure is not no-candidate'
+
+# Review regression: live execution is an explicit operational opt-in; mock mode
+# is deterministic and cannot silently fall through to B's network path.
+$runnerCommand = Get-Command Invoke-Phase1PoiShadowMode
+Assert-True $runnerCommand.Parameters.ContainsKey('OperationalLiveRun') 'Runner exposes explicit operational live opt-in'
+$noProviderRow = [pscustomobject]@{ 업소명=''; 시도=''; 시군구=''; 소재지도로명주소=''; 소재지지번주소='' }
+Assert-Throws { Invoke-Phase1PoiShadowMode -Rows @($noProviderRow) } 'Deterministic mode requires RequestInvoker before discovery'
+Assert-Throws { Invoke-Phase1PoiShadowMode -Rows @($singleStrongRow) -OperationalLiveRun -RequestInvoker $singleStrongInvoker } 'Operational live mode rejects deterministic RequestInvoker'
+Assert-Equal (Get-Phase1PoiShadowSummary -Rows $run.Rows).OperationalLiveShadowRun 'NOT_RUN' 'Deterministic summary remains NOT_RUN'
+Assert-Equal (Get-Phase1PoiShadowSummary -Rows $run.Rows -OperationalLiveRun).OperationalLiveShadowRun 'RUN' 'Operational mode summary projects RUN without a network call'
 
 $previousClientId = [Environment]::GetEnvironmentVariable('NAVER_API_HUB_CLIENT_ID', 'Process')
 $previousClientSecret = [Environment]::GetEnvironmentVariable('NAVER_API_HUB_CLIENT_SECRET', 'Process')
@@ -183,6 +200,50 @@ try {
     Assert-True (-not (Test-Path -LiteralPath (Join-Path $PSScriptRoot '..\..\data\canonical\capital-area-military-benefits.shadow.csv'))) 'Export has no canonical default path'
 } finally {
     if (Test-Path -LiteralPath $reportDirectory) { Remove-Item -LiteralPath $reportDirectory -Recurse -Force }
+}
+
+# Review regression: only explicit report paths outside repository production roots
+# may be written. The disposable sentinels are new test files; existing data is
+# never selected and every artifact is removed in finally.
+$repositoryRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..'))
+$outputGateId = [Guid]::NewGuid().ToString('N')
+$sentinelText = 'phase1-shadow-output-gate-sentinel'
+$outputGateTemp = Join-Path ([IO.Path]::GetTempPath()) ('milimap-phase1-output-gate-' + $outputGateId)
+$protectedRoots = @('data/canonical', 'data/seed', 'apps')
+foreach ($protectedRoot in $protectedRoots) {
+    $relativeSentinel = Join-Path $protectedRoot ('.phase1-shadow-output-gate-' + $outputGateId + '.csv')
+    $absoluteSentinel = Join-Path $repositoryRoot $relativeSentinel
+    $temporarySummary = Join-Path $outputGateTemp ($protectedRoot.Replace('/', '-') + '-summary.json')
+    $temporaryReport = Join-Path $outputGateTemp ($protectedRoot.Replace('/', '-') + '-report.csv')
+    New-Item -ItemType Directory -Force -Path (Split-Path -Parent $absoluteSentinel) | Out-Null
+    [IO.File]::WriteAllText($absoluteSentinel, $sentinelText, [Text.UTF8Encoding]::new($false))
+    try {
+        $relativeThrew = $false
+        try { Export-Phase1PoiShadowMode -Run $zero -RowReportCsv $relativeSentinel -SummaryJson $temporarySummary } catch { $relativeThrew = $true }
+        Assert-Equal ([IO.File]::ReadAllText($absoluteSentinel)) $sentinelText "$protectedRoot relative sentinel is unchanged"
+        Assert-True $relativeThrew "$protectedRoot relative output is rejected"
+        Assert-True (-not (Test-Path -LiteralPath $temporarySummary)) "$protectedRoot rejection creates no summary output"
+
+        $absoluteThrew = $false
+        try { Export-Phase1PoiShadowMode -Run $zero -RowReportCsv $temporaryReport -SummaryJson $absoluteSentinel } catch { $absoluteThrew = $true }
+        Assert-Equal ([IO.File]::ReadAllText($absoluteSentinel)) $sentinelText "$protectedRoot absolute sentinel is unchanged"
+        Assert-True $absoluteThrew "$protectedRoot absolute output is rejected"
+        Assert-True (-not (Test-Path -LiteralPath $temporaryReport)) "$protectedRoot rejection creates no row report"
+    } finally {
+        Remove-Item -LiteralPath $absoluteSentinel -Force -ErrorAction SilentlyContinue
+        Remove-Item -LiteralPath $temporarySummary, $temporaryReport -Force -ErrorAction SilentlyContinue
+    }
+}
+$unrelatedAppsDirectory = Join-Path $repositoryRoot ('apps-old-phase1-shadow-' + $outputGateId)
+$unrelatedReport = Join-Path $unrelatedAppsDirectory 'row-report.csv'
+$unrelatedSummary = Join-Path $unrelatedAppsDirectory 'summary.json'
+try {
+    Export-Phase1PoiShadowMode -Run $zero -RowReportCsv $unrelatedReport -SummaryJson $unrelatedSummary
+    Assert-True (Test-Path -LiteralPath $unrelatedReport) 'Unrelated apps-old path is not blocked'
+    Assert-True (Test-Path -LiteralPath $unrelatedSummary) 'Unrelated apps-old summary is not blocked'
+} finally {
+    Remove-Item -LiteralPath $unrelatedAppsDirectory -Recurse -Force -ErrorAction SilentlyContinue
+    Remove-Item -LiteralPath $outputGateTemp -Recurse -Force -ErrorAction SilentlyContinue
 }
 
 Write-Host "Phase 1 Shadow Mode tests passed ($script:assertionCount assertions)."

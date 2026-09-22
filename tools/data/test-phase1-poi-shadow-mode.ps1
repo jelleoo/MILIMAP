@@ -1,5 +1,8 @@
 $ErrorActionPreference = 'Stop'
 
+# Current-work acceptance: origin/dev 93c2e445, A PR #37, B PR #34, C PR #36,
+# and open Integration Issue #38 must remain documented as Shadow Mode work.
+
 $runnerPath = Join-Path $PSScriptRoot 'invoke-phase1-poi-shadow-mode.ps1'
 if (Test-Path -LiteralPath $runnerPath) { . $runnerPath }
 

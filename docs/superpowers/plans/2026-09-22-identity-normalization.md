@@ -469,4 +469,3 @@ Expected: no untracked or unstaged implementation artifact remains; do not amend
 ## Execution handoff
 
 Human review and approval are required before implementation. On approval, create an isolated worktree from then-current origin/dev, run git fetch origin, and confirm the baseline before Task 1. Do not begin implementation from this document before approval.
-

@@ -45,7 +45,10 @@ function Invoke-Phase1PoiShadowMode {
         $sourceRowNumber = $SourceRowNumberOffset + $index + 1
         $business = ConvertTo-NormalizedBusiness -Row $Rows[$index] -SourceRowNumber $sourceRowNumber
         Assert-NormalizedBusiness $business
-        $batch = Invoke-PoiDiscovery -Business $business -ClientId $ClientId -ClientSecret $ClientSecret -RequestInvoker $RequestInvoker
+        $discoveryParameters = @{ Business=$business; RequestInvoker=$RequestInvoker }
+        if (-not [string]::IsNullOrWhiteSpace($ClientId)) { $discoveryParameters.ClientId = $ClientId }
+        if (-not [string]::IsNullOrWhiteSpace($ClientSecret)) { $discoveryParameters.ClientSecret = $ClientSecret }
+        $batch = Invoke-PoiDiscovery @discoveryParameters
         Assert-PoiDiscoveryBatch $batch
         $result = Invoke-PoiMatchEvaluation -Business $business -DiscoveryBatch $batch
         Assert-PoiMatchResult $result

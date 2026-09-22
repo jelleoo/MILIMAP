@@ -77,6 +77,24 @@ Assert-Equal $failed.Rows[0].Classification 'YELLOW' 'Failure cannot become RED'
 Assert-True ($failed.Rows[0].ReasonCodes -contains 'DISCOVERY_FAILED') 'Failure reason remains reviewable'
 Assert-True (-not ($failed.Rows[0].ReasonCodes -contains 'NO_CANDIDATE')) 'Failure is not no-candidate'
 
+$previousClientId = [Environment]::GetEnvironmentVariable('NAVER_API_HUB_CLIENT_ID', 'Process')
+$previousClientSecret = [Environment]::GetEnvironmentVariable('NAVER_API_HUB_CLIENT_SECRET', 'Process')
+$environmentHeaders = [Collections.Generic.List[hashtable]]::new()
+try {
+    [Environment]::SetEnvironmentVariable('NAVER_API_HUB_CLIENT_ID', 'fixture-env-id', 'Process')
+    [Environment]::SetEnvironmentVariable('NAVER_API_HUB_CLIENT_SECRET', 'fixture-env-secret', 'Process')
+    Invoke-Phase1PoiShadowMode -Rows @($singleStrongRow) -RequestInvoker {
+        param($Uri, $Headers)
+        $environmentHeaders.Add($Headers)
+        [pscustomobject]@{ items=@() }
+    }.GetNewClosure() | Out-Null
+    Assert-Equal $environmentHeaders[0]['X-NCP-APIGW-API-KEY-ID'] 'fixture-env-id' 'Runner preserves B environment credential fallback'
+    Assert-Equal $environmentHeaders[0]['X-NCP-APIGW-API-KEY'] 'fixture-env-secret' 'Runner preserves B environment secret fallback'
+} finally {
+    [Environment]::SetEnvironmentVariable('NAVER_API_HUB_CLIENT_ID', $previousClientId, 'Process')
+    [Environment]::SetEnvironmentVariable('NAVER_API_HUB_CLIENT_SECRET', $previousClientSecret, 'Process')
+}
+
 $secondStrongItem = [pscustomobject]@{
     title = '테스트 식당 본점'; roadAddress = '서울특별시 마포구 테스트로 12-3, 2층 201호'; address = '서울특별시 마포구 테스트동 123'
     telephone = '02-000-0001'; category = '음식점'; link = 'https://example.invalid/fixture-second'; mapx = '1269012345'; mapy = '375012345'

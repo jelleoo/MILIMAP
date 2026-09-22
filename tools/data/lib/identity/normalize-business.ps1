@@ -12,7 +12,7 @@ function Get-NormalizedNameParts {
  $original=ConvertTo-PoiText $OriginalName; $warnings=@(); $base=$original; $branch=''; $normal=ConvertTo-IdentityComparisonText $original
  if (-not $original) { $warnings+='NAME_EMPTY' } elseif (-not $normal) { $warnings+='NAME_NORMALIZATION_UNCERTAIN' }
  $m=[regex]::Match($original,'^(?<base>.+?)\s*\((?<branch>[^()]+점)\)\s*$')
- if ($m.Success) { $base=$m.Groups['base'].Value.Trim(); $branch=$m.Groups['branch'].Value.Trim() }
+ if ($m.Success) { $candidate=$m.Groups['branch'].Value.Trim(); if ($candidate -notin @('전문점','음식점','상점','매장')) { $base=$m.Groups['base'].Value.Trim(); $branch=$candidate } }
  else {
   $m=[regex]::Match($original,'^(?<base>.+?)\s+(?<branch>본점|직영점|\d+호점)\s*$')
   if ($m.Success) { $base=$m.Groups['base'].Value.Trim(); $branch=$m.Groups['branch'].Value.Trim() }
@@ -50,7 +50,7 @@ function Get-NormalizedAddressParts {
   $floors=[regex]::Matches($road,'(?<![가-힣A-Za-z0-9])((?:지하\s*|B\s*)?\d+)\s*층',[Text.RegularExpressions.RegexOptions]::IgnoreCase);$units=[regex]::Matches($road,'(?<![가-힣A-Za-z0-9-])([A-Za-z]\s*-\s*\d+|\d+)\s*호')
   if($road -match '[~]|\d+호\s*,\s*\d+호|\d+\s*-\s*\d+\s*호|(?<![A-Za-z0-9])B\s*\d+\s*호' -or $floors.Count -gt 1 -or $units.Count -gt 1){$ambiguous=$true;$warnings+='FLOOR_UNIT_UNCERTAIN'}else{if($floors.Count -eq 1){$floor=($floors[0].Groups[1].Value -replace '\s+','')};if($units.Count -eq 1){$unit=($units[0].Groups[1].Value -replace '\s+','').ToUpperInvariant()}}
  }
- if($ambiguous){$floor='';$unit='';$partial=$true};if(-not $roadName -or -not $main){$partial=$true};if($partial){$warnings+='ADDRESS_PARSE_PARTIAL'}
+ if($ambiguous){$floor='';$unit='';$partial=$true};if(-not $roadName -or -not $main){$partial=$true};if(-not (@($parsed.Province,$parsed.City,$parsed.District,$parsed.Dong)|Where-Object{$_})){$partial=$true};if($partial){$warnings+='ADDRESS_PARSE_PARTIAL'}
  $has=@($parsed.Province,$parsed.City,$parsed.District,$parsed.Dong,$roadName)|Where-Object{$_};$status=if(-not $has){$warnings+='ADDRESS_PARSE_FAILED';'UNPARSED'}elseif($partial){'PARTIAL'}else{'COMPLETE'}
  [pscustomobject][ordered]@{PreferredAddress=$preferred;Province=$parsed.Province;City=$parsed.City;District=$parsed.District;Dong=$parsed.Dong;RoadName=$roadName;BuildingMain=$main;BuildingSub=$sub;Floor=$floor;Unit=$unit;AddressParseStatus=$status;Warnings=(Get-OrderedWarnings $warnings)}
 }

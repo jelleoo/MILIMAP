@@ -86,6 +86,38 @@ Assert-Equal $multiple.Rows[0].Classification 'YELLOW' 'Multiple plausible candi
 Assert-True ($multiple.Rows[0].ReasonCodes -contains 'MULTIPLE_PLAUSIBLE_CANDIDATES') 'Multiplicity reason remains reviewable'
 Assert-Equal $multiple.Rows[0].SelectedCandidateKey '' 'Multiple candidates select no production candidate'
 
+# Task 4: metrics are Contract partitions, not scores or automatic approval.
+$metricRows = @($run.Rows[0], $zero.Rows[0], $partial.Rows[0], $failed.Rows[0] | ForEach-Object { $_ | Select-Object * })
+for ($index = 0; $index -lt $metricRows.Count; $index++) { $metricRows[$index].SourceRowNumber = $index + 2 }
+$metricGolden = @{
+    '2' = @{ SourceCoverage='FULL_CANDIDATE'; ExpectedLabel='positive' }
+    '3' = @{ SourceCoverage='FULL_CANDIDATE'; ExpectedLabel='ambiguous' }
+    '4' = @{ SourceCoverage='FULL_CANDIDATE'; ExpectedLabel='negative' }
+    '5' = @{ SourceCoverage='SOURCE_LIMITED'; ExpectedLabel='negative' }
+}
+$summary = Get-Phase1PoiShadowSummary -Rows $metricRows -GoldenExpectations $metricGolden
+Assert-Equal $summary.EvaluatedRows 4 'Input count is evaluated count'
+Assert-Equal ($summary.DiscoveryComplete + $summary.DiscoveryPartial + $summary.DiscoveryFailed) 4 'Discovery partitions reconcile'
+Assert-Equal ($summary.MatcherComplete + $summary.MatcherIncomplete) 4 'Matcher partitions reconcile'
+Assert-Equal ($summary.Green + $summary.Yellow + $summary.Red) 4 'Classification partitions reconcile'
+Assert-Equal $summary.FastReviewCandidates $summary.Green 'GREEN is fast-review evidence only'
+Assert-Equal $summary.DeepManualReviewRequired ($summary.Yellow + $summary.Red) 'YELLOW plus RED require deep manual review'
+Assert-True $summary.AllRowsRequireFinalHumanApproval 'Every Phase 1 row still needs final human approval'
+Assert-Equal $summary.NoCandidateCount 1 'Complete zero-candidate evidence is counted separately'
+Assert-Equal $summary.DiscoveryFailureCount 1 'Provider failure is counted separately'
+Assert-Equal $summary.TotalQueryAttempts 20 'Only non-skipped provider work is counted'
+Assert-Equal $summary.AverageQueryAttempts ([double]5) 'Average provider work is deterministic'
+Assert-Equal $summary.TotalGoldenCases 4 'Golden total is explicit'
+Assert-Equal $summary.FullyEvaluableGoldenCases 3 'Full candidate coverage is explicit'
+Assert-Equal $summary.SourceLimitedGoldenCases 1 'Source-limited coverage is explicit'
+Assert-Equal $summary.FullyEvaluableAmbiguousNegativeFalseGreenCount 0 'Fully-evaluable ambiguous and negative cases have no false GREEN'
+Assert-Equal $summary.OperationalLiveShadowRun 'NOT_RUN' 'Mock execution is not a live Shadow run'
+
+$unsafeMetricRows = @($metricRows | ForEach-Object { $_ | Select-Object * })
+$unsafeMetricRows[1].Classification = 'GREEN'
+$unsafeSummary = Get-Phase1PoiShadowSummary -Rows $unsafeMetricRows -GoldenExpectations $metricGolden
+Assert-Equal $unsafeSummary.FullyEvaluableAmbiguousNegativeFalseGreenCount 1 'False GREEN detects fully-evaluable ambiguous coverage'
+
 # Task 3: reports are an explicit caller-owned output, never a canonical default.
 $reportDirectory = Join-Path ([IO.Path]::GetTempPath()) ('milimap-phase1-shadow-mode-' + [Guid]::NewGuid().ToString('N'))
 $reportPath = Join-Path $reportDirectory 'row-report.csv'

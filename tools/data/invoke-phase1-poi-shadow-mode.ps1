@@ -36,7 +36,8 @@ function Invoke-Phase1PoiShadowMode {
         [int]$SourceRowNumberOffset = 1,
         [scriptblock]$RequestInvoker,
         [string]$ClientId = '',
-        [string]$ClientSecret = ''
+        [string]$ClientSecret = '',
+        [hashtable]$GoldenExpectations = @{}
     )
 
     $reportRows = [Collections.Generic.List[object]]::new()
@@ -56,7 +57,54 @@ function Invoke-Phase1PoiShadowMode {
 
     return [pscustomobject][ordered]@{
         Rows = $reportRows.ToArray()
-        Summary = [pscustomobject][ordered]@{ EvaluatedRows = $reportRows.Count }
+        Summary = Get-Phase1PoiShadowSummary -Rows $reportRows.ToArray() -GoldenExpectations $GoldenExpectations
+    }
+}
+
+function Get-Phase1PoiShadowSummary {
+    param(
+        [Parameter(Mandatory)][object[]]$Rows,
+        [hashtable]$GoldenExpectations = @{}
+    )
+
+    $allRows = @($Rows)
+    $goldenRows = @($allRows | Where-Object { $GoldenExpectations.ContainsKey([string]$_.SourceRowNumber) })
+    $fullyEvaluableGoldenRows = @($goldenRows | Where-Object {
+        [string]$GoldenExpectations[[string]$_.SourceRowNumber].SourceCoverage -eq 'FULL_CANDIDATE'
+    })
+    $sourceLimitedGoldenRows = @($goldenRows | Where-Object {
+        [string]$GoldenExpectations[[string]$_.SourceRowNumber].SourceCoverage -eq 'SOURCE_LIMITED'
+    })
+    $fullyEvaluableAmbiguousNegativeFalseGreen = @($fullyEvaluableGoldenRows | Where-Object {
+        $expectedLabel = [string]$GoldenExpectations[[string]$_.SourceRowNumber].ExpectedLabel
+        $_.Classification -eq 'GREEN' -and $expectedLabel -in @('ambiguous', 'negative')
+    })
+    $totalQueryAttempts = [int](@($allRows | Measure-Object -Property QueryAttemptCount -Sum).Sum)
+
+    return [pscustomobject][ordered]@{
+        EvaluatedRows = $allRows.Count
+        DiscoveryComplete = @($allRows | Where-Object DiscoveryStatus -eq 'COMPLETE').Count
+        DiscoveryPartial = @($allRows | Where-Object DiscoveryStatus -eq 'PARTIAL').Count
+        DiscoveryFailed = @($allRows | Where-Object DiscoveryStatus -eq 'FAILED').Count
+        MatcherComplete = @($allRows | Where-Object EvaluationStatus -eq 'COMPLETE').Count
+        MatcherIncomplete = @($allRows | Where-Object EvaluationStatus -eq 'INCOMPLETE').Count
+        Green = @($allRows | Where-Object Classification -eq 'GREEN').Count
+        Yellow = @($allRows | Where-Object Classification -eq 'YELLOW').Count
+        Red = @($allRows | Where-Object Classification -eq 'RED').Count
+        FastReviewCandidates = @($allRows | Where-Object Classification -eq 'GREEN').Count
+        DeepManualReviewRequired = @($allRows | Where-Object { $_.Classification -in @('YELLOW', 'RED') }).Count
+        AllRowsRequireFinalHumanApproval = $true
+        NoCandidateCount = @($allRows | Where-Object {
+            $_.DiscoveryStatus -eq 'COMPLETE' -and $_.CandidateCount -eq 0 -and $_.ReasonCodes -contains 'NO_CANDIDATE'
+        }).Count
+        DiscoveryFailureCount = @($allRows | Where-Object DiscoveryStatus -eq 'FAILED').Count
+        TotalQueryAttempts = $totalQueryAttempts
+        AverageQueryAttempts = if ($allRows.Count -eq 0) { [double]0 } else { [double]$totalQueryAttempts / [double]$allRows.Count }
+        TotalGoldenCases = $goldenRows.Count
+        FullyEvaluableGoldenCases = $fullyEvaluableGoldenRows.Count
+        SourceLimitedGoldenCases = $sourceLimitedGoldenRows.Count
+        FullyEvaluableAmbiguousNegativeFalseGreenCount = $fullyEvaluableAmbiguousNegativeFalseGreen.Count
+        OperationalLiveShadowRun = 'NOT_RUN'
     }
 }
 

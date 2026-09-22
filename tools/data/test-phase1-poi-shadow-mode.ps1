@@ -86,4 +86,20 @@ Assert-Equal $multiple.Rows[0].Classification 'YELLOW' 'Multiple plausible candi
 Assert-True ($multiple.Rows[0].ReasonCodes -contains 'MULTIPLE_PLAUSIBLE_CANDIDATES') 'Multiplicity reason remains reviewable'
 Assert-Equal $multiple.Rows[0].SelectedCandidateKey '' 'Multiple candidates select no production candidate'
 
+# Task 3: reports are an explicit caller-owned output, never a canonical default.
+$reportDirectory = Join-Path ([IO.Path]::GetTempPath()) ('milimap-phase1-shadow-mode-' + [Guid]::NewGuid().ToString('N'))
+$reportPath = Join-Path $reportDirectory 'row-report.csv'
+$summaryPath = Join-Path $reportDirectory 'summary.json'
+try {
+    Export-Phase1PoiShadowMode -Run $zero -RowReportCsv $reportPath -SummaryJson $summaryPath
+    Assert-True (Test-Path -LiteralPath $reportPath) 'Explicit row report is written'
+    Assert-True (Test-Path -LiteralPath $summaryPath) 'Explicit summary is written'
+    $exportedRow = @(Import-Csv -LiteralPath $reportPath)[0]
+    Assert-Equal $exportedRow.SourceRowNumber '2' 'Export preserves source row number'
+    Assert-Equal $exportedRow.ReasonCodes 'NO_CANDIDATE' 'Export serializes code arrays deterministically'
+    Assert-True (-not (Test-Path -LiteralPath (Join-Path $PSScriptRoot '..\..\data\canonical\capital-area-military-benefits.shadow.csv'))) 'Export has no canonical default path'
+} finally {
+    if (Test-Path -LiteralPath $reportDirectory) { Remove-Item -LiteralPath $reportDirectory -Recurse -Force }
+}
+
 Write-Host "Phase 1 Shadow Mode tests passed ($script:assertionCount assertions)."

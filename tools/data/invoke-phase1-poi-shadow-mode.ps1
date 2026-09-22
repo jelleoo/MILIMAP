@@ -59,3 +59,38 @@ function Invoke-Phase1PoiShadowMode {
         Summary = [pscustomobject][ordered]@{ EvaluatedRows = $reportRows.Count }
     }
 }
+
+function ConvertTo-Phase1PoiShadowCsvRow {
+    param([Parameter(Mandatory)]$Row)
+
+    $projected = [ordered]@{}
+    foreach ($property in $Row.PSObject.Properties) {
+        $value = $property.Value
+        $projected[$property.Name] = if ($value -is [Collections.IEnumerable] -and $value -isnot [string]) {
+            (@($value | ForEach-Object { [string]$_ }) -join '|')
+        } else {
+            $value
+        }
+    }
+    return [pscustomobject]$projected
+}
+
+function Export-Phase1PoiShadowMode {
+    param(
+        [Parameter(Mandatory)]$Run,
+        [Parameter(Mandatory)][string]$RowReportCsv,
+        [Parameter(Mandatory)][string]$SummaryJson
+    )
+
+    foreach ($path in @($RowReportCsv, $SummaryJson)) {
+        if ([string]::IsNullOrWhiteSpace($path)) { throw 'Explicit output paths are required' }
+        $parent = Split-Path -Parent $path
+        if ($parent -and -not (Test-Path -LiteralPath $parent)) {
+            New-Item -ItemType Directory -Force -Path $parent | Out-Null
+        }
+    }
+    @($Run.Rows | ForEach-Object { ConvertTo-Phase1PoiShadowCsvRow $_ }) |
+        Export-Csv -LiteralPath $RowReportCsv -NoTypeInformation -Encoding utf8
+    $summaryText = $Run.Summary | ConvertTo-Json -Depth 8
+    [IO.File]::WriteAllText($SummaryJson, $summaryText + [Environment]::NewLine, [Text.UTF8Encoding]::new($false))
+}

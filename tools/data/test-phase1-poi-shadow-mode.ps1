@@ -118,6 +118,36 @@ $unsafeMetricRows[1].Classification = 'GREEN'
 $unsafeSummary = Get-Phase1PoiShadowSummary -Rows $unsafeMetricRows -GoldenExpectations $metricGolden
 Assert-Equal $unsafeSummary.FullyEvaluableAmbiguousNegativeFalseGreenCount 1 'False GREEN detects fully-evaluable ambiguous coverage'
 
+# Task 5: repository-cited Golden cases never fabricate a provider address.
+$golden = Import-PowerShellDataFile (Join-Path $PSScriptRoot 'testdata/phase1-poi-shadow-golden.psd1')
+Assert-Equal $golden['248'].SourcePath 'data/canonical/reports/poi-coordinate-review-candidates-20260910-final.csv' 'Golden source path is explicit'
+Assert-Equal $golden.Count 5 'Golden fixture has the source-cited cases only'
+foreach ($sourceLimitedRow in @('451', '135', '136')) {
+    Assert-Equal $golden[$sourceLimitedRow].SourceCoverage 'SOURCE_LIMITED' "Source-limited coverage is explicit for $sourceLimitedRow"
+    Assert-True (-not $golden[$sourceLimitedRow].ContainsKey('ProviderItem')) "Source-limited $sourceLimitedRow has no fabricated provider candidate"
+}
+$goldenRows = [Collections.Generic.List[object]]::new()
+foreach ($sourceRowNumber in @('135', '136', '248', '339', '451')) {
+    $case = $golden[$sourceRowNumber]
+    $invoker = if ($case.SourceCoverage -eq 'FULL_CANDIDATE') {
+        $providerItem = $case.ProviderItem
+        { param($Uri, $Headers) [pscustomobject]@{ items=@($providerItem) } }.GetNewClosure()
+    } else {
+        { param($Uri, $Headers) [pscustomobject]@{ items=@() } }.GetNewClosure()
+    }
+    $caseRun = Invoke-Phase1PoiShadowMode -Rows @([pscustomobject]$case.CanonicalRow) -SourceRowNumberOffset ([int]$sourceRowNumber - 1) -RequestInvoker $invoker
+    $goldenRows.Add($caseRun.Rows[0])
+}
+$goldenSummary = Get-Phase1PoiShadowSummary -Rows $goldenRows.ToArray() -GoldenExpectations $golden
+Assert-Equal $goldenSummary.TotalGoldenCases 5 'All source-cited Golden rows are counted'
+Assert-Equal $goldenSummary.FullyEvaluableGoldenCases 2 'Full candidate evidence is counted separately'
+Assert-Equal $goldenSummary.SourceLimitedGoldenCases 3 'Source-limited cases are counted separately'
+Assert-Equal $goldenSummary.FullyEvaluableAmbiguousNegativeFalseGreenCount 0 'Fully-evaluable ambiguous or negative false GREEN is zero'
+Assert-Equal @($goldenRows | Where-Object { $_.SourceRowNumber -eq 248 -and $_.Classification -eq 'GREEN' }).Count 0 '버섯집 초리골 building conflict is never GREEN'
+Assert-True (@($goldenRows | Where-Object { $_.SourceRowNumber -eq 248 })[0].ConflictCodes -contains 'BUILDING_NUMBER_CONFLICT') '버섯집 초리골 exposes building conflict evidence'
+Assert-Equal @($goldenRows | Where-Object { $golden[[string]$_.SourceRowNumber].SourceCoverage -eq 'SOURCE_LIMITED' -and $_.Classification -eq 'GREEN' }).Count 0 'Source-limited safety cases are never GREEN'
+Assert-True (@($goldenRows | Where-Object { $_.SourceRowNumber -eq 339 })[0].Classification -ne 'RED') '거시기닭갈비 is not reversed by absent provider phone evidence'
+
 # Task 3: reports are an explicit caller-owned output, never a canonical default.
 $reportDirectory = Join-Path ([IO.Path]::GetTempPath()) ('milimap-phase1-shadow-mode-' + [Guid]::NewGuid().ToString('N'))
 $reportPath = Join-Path $reportDirectory 'row-report.csv'

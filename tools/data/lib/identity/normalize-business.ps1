@@ -7,6 +7,11 @@ $script:Provinces=@('서울특별시','부산광역시','대구광역시','인�
 
 function ConvertTo-IdentityComparisonText { param([AllowNull()]$Value) if ($null -eq $Value) { return '' }; return (([string]$Value).Normalize([Text.NormalizationForm]::FormKC).Trim().ToLowerInvariant() -replace '[\s,().·&-]', '') }
 function Get-OrderedWarnings { param([string[]]$Warnings) return @($script:WarningOrder | Where-Object { $Warnings -contains $_ }) }
+function Test-AdministrativeDongToken {
+ param([string]$Token)
+ if ($Token -notmatch '^[가-힣]+동$') { return $false }
+ return $Token -notin @('상가동','판매동','관리동','주차동','본관동','별관동','신관동','구관동','복지동','업무동','사무동','기숙사동')
+}
 function Get-NormalizedNameParts {
  param([AllowNull()]$OriginalName,[AllowNull()][string[]]$LocalityHints=@())
  $original=ConvertTo-PoiText $OriginalName; $warnings=@(); $base=$original; $branch=''; $normal=ConvertTo-IdentityComparisonText $original
@@ -32,7 +37,7 @@ function Get-AdministrativeAddressParts {
  param([AllowNull()]$Address)
  $text=ConvertTo-PoiText $Address; $province='';$city='';$district='';$dong=''
  foreach($p in $script:Provinces){if($text -match ('(^|[\s,])'+[regex]::Escape($p)+'(?=$|[\s,])')){$province=$p;break}}
- foreach($t in ($text -split '[\s,()]+'|Where-Object{$_})) { if ($t -in $script:Provinces) { continue }; if(-not $city -and $t -match '시$'){ $city=$t;continue }; if(-not $district -and $t -match '(구|군)$'){ $district=$t;continue };if(-not $dong -and $t -match '(동|읍|면)$'){ $dong=$t } }
+ foreach($t in ($text -split '[\s,()]+'|Where-Object{$_})) { if ($t -in $script:Provinces) { continue }; if(-not $city -and $t -match '시$'){ $city=$t;continue }; if(-not $district -and $t -match '(구|군)$'){ $district=$t;continue };if(-not $dong -and (($t -match '(읍|면)$') -or (Test-AdministrativeDongToken $t))){ $dong=$t } }
  [pscustomobject][ordered]@{Province=$province;City=$city;District=$district;Dong=$dong}
 }
 function Get-NormalizedAddressParts {
@@ -48,7 +53,7 @@ function Get-NormalizedAddressParts {
   else { $roadOnly=[regex]::Match($roadText,'(?<road>[가-힣A-Za-z0-9]+(?:번길|길|로))');if($roadOnly.Success){$roadName=$roadOnly.Groups['road'].Value;$partial=$true} }
   if($road -match '(?:번길|길|로)\d+\s*-\s*\d+층'){$main='';$sub='';$ambiguous=$true;$warnings+='BUILDING_NUMBER_UNCERTAIN';$warnings+='FLOOR_UNIT_UNCERTAIN'}
   $floors=[regex]::Matches($road,'(?<![가-힣A-Za-z0-9])((?:지하\s*|B\s*)?\d+)\s*층',[Text.RegularExpressions.RegexOptions]::IgnoreCase);$units=[regex]::Matches($road,'(?<![가-힣A-Za-z0-9-])([A-Za-z]\s*-\s*\d+|\d+)\s*호')
-  if($road -match '[~]|\d+호\s*,\s*\d+호|\d+\s*-\s*\d+\s*호|(?<![A-Za-z0-9])B\s*\d+\s*호' -or $floors.Count -gt 1 -or $units.Count -gt 1){$ambiguous=$true;$warnings+='FLOOR_UNIT_UNCERTAIN'}else{if($floors.Count -eq 1){$floor=($floors[0].Groups[1].Value -replace '\s+','')};if($units.Count -eq 1){$unit=($units[0].Groups[1].Value -replace '\s+','').ToUpperInvariant()}}
+  if($road -match '[~]|\d+호\s*,\s*\d+호|\d+\s*-\s*\d+\s*호|(?<![A-Za-z0-9])[A-Za-z]\s*\d+\s*호' -or $floors.Count -gt 1 -or $units.Count -gt 1){$ambiguous=$true;$warnings+='FLOOR_UNIT_UNCERTAIN'}else{if($floors.Count -eq 1){$floor=($floors[0].Groups[1].Value -replace '\s+','')};if($units.Count -eq 1){$unit=($units[0].Groups[1].Value -replace '\s+','').ToUpperInvariant()}}
  }
  if($ambiguous){$floor='';$unit='';$partial=$true};if(-not $roadName -or -not $main){$partial=$true};if(-not (@($parsed.Province,$parsed.City,$parsed.District,$parsed.Dong)|Where-Object{$_})){$partial=$true};if($partial){$warnings+='ADDRESS_PARSE_PARTIAL'}
  $has=@($parsed.Province,$parsed.City,$parsed.District,$parsed.Dong,$roadName)|Where-Object{$_};$status=if(-not $has){$warnings+='ADDRESS_PARSE_FAILED';'UNPARSED'}elseif($partial){'PARTIAL'}else{'COMPLETE'}

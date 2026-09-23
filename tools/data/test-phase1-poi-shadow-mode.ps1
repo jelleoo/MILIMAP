@@ -199,7 +199,10 @@ Assert-Equal $golden['451'].OperationalObservation.ObservedAt '2026-09-24' 'Oper
 Assert-Equal $golden['451'].OperationalObservation.Source 'NAVER_API_HUB_LOCAL operational Shadow' 'Operational observation retains its source'
 Assert-Equal $golden['451'].OperationalObservation.Status 'current POI identity observation' 'Operational observation retains its status'
 Assert-Equal $golden['451'].OperationalObservation.ObservedClassification 'GREEN' 'Operational observation retains its classification'
-Assert-True ($golden['451'].OperationalObservation.IdentityEvidence -contains 'NAME_EXACT') 'Operational observation retains identity evidence'
+Assert-Equal (
+    @($golden['451'].OperationalObservation.IdentityEvidence) -join ','
+) 'NAME_EXACT,LOCALITY_MATCH,ROAD_NAME_MATCH,BUILDING_NUMBER_MATCH' `
+  'Operational observation contains only source-supported identity evidence'
 foreach ($sourceLimitedRow in @('451', '135', '136')) {
     Assert-Equal $golden[$sourceLimitedRow].SourceCoverage 'SOURCE_LIMITED' "Source-limited coverage is explicit for $sourceLimitedRow"
     Assert-True (-not $golden[$sourceLimitedRow].ContainsKey('ProviderItem')) "Source-limited $sourceLimitedRow has no fabricated provider candidate"

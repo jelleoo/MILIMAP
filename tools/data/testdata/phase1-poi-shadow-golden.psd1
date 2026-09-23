@@ -93,7 +93,7 @@
             Source = 'NAVER_API_HUB_LOCAL operational Shadow'
             Status = 'current POI identity observation'
             ObservedClassification = 'GREEN'
-            IdentityEvidence = @('NAME_EXACT', 'ADDRESS_EXACT', 'LOCALITY_MATCH', 'ROAD_NAME_MATCH', 'BUILDING_NUMBER_MATCH')
+            IdentityEvidence = @('NAME_EXACT', 'LOCALITY_MATCH', 'ROAD_NAME_MATCH', 'BUILDING_NUMBER_MATCH')
         }
         CanonicalRow = @{
             업소명 = '짜장마을'

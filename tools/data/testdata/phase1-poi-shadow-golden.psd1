@@ -88,6 +88,13 @@
         SourceCoverage = 'SOURCE_LIMITED'
         ExpectedLabel = 'ambiguous'
         SourceNote = 'Final review holds 짜장마을 because the cited source URL resolves to a search for 짜장단가든, so it does not establish a trustworthy provider candidate.'
+        OperationalObservation = @{
+            ObservedAt = '2026-09-24'
+            Source = 'NAVER_API_HUB_LOCAL operational Shadow'
+            Status = 'current POI identity observation'
+            ObservedClassification = 'GREEN'
+            IdentityEvidence = @('NAME_EXACT', 'LOCALITY_MATCH', 'ROAD_NAME_MATCH', 'BUILDING_NUMBER_MATCH')
+        }
         CanonicalRow = @{
             업소명 = '짜장마을'
             시도 = '경기도'

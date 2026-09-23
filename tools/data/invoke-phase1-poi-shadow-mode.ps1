@@ -30,6 +30,62 @@ function ConvertTo-Phase1PoiShadowRow {
     }
 }
 
+function ConvertTo-Phase1PoiShadowCandidateDiagnostics {
+    param([Parameter(Mandatory)]$Business, [Parameter(Mandatory)]$Batch, [Parameter(Mandatory)]$Result)
+
+    $candidateDiagnostics = @($Batch.Candidates | ForEach-Object {
+        $candidate = $_
+        $discovery = @($candidate.DiscoveredBy | Sort-Object QueryOrder, ResultPosition, StrategyCode | ForEach-Object {
+            [pscustomobject][ordered]@{
+                StrategyCode = $_.StrategyCode
+                QueryOrder = $_.QueryOrder
+                ResultPosition = $_.ResultPosition
+                ResultCount = $_.ResultCount
+            }
+        })
+        $matcherEvidence = @($Result.Evidence | Where-Object { $_.CandidateKey -eq $candidate.CandidateKey } |
+            Sort-Object EvidenceCode, CanonicalValue, CandidateValue | ForEach-Object {
+                [pscustomobject][ordered]@{
+                    CandidateKey = $_.CandidateKey
+                    EvidenceCode = $_.EvidenceCode
+                    CanonicalValue = $_.CanonicalValue
+                    CandidateValue = $_.CandidateValue
+                    Matched = $_.Matched
+                }
+            })
+        $conflictCodes = @($matcherEvidence | Where-Object {
+            $_.Matched -eq $false -and $Result.ConflictCodes -contains $_.EvidenceCode
+        } | Select-Object -ExpandProperty EvidenceCode -Unique)
+        $firstDiscovery = $discovery[0]
+        [pscustomobject][ordered]@{
+            SortQueryOrder = if ($null -eq $firstDiscovery) { [int]::MaxValue } else { [int]$firstDiscovery.QueryOrder }
+            SortResultPosition = if ($null -eq $firstDiscovery) { [int]::MaxValue } else { [int]$firstDiscovery.ResultPosition }
+            CandidateKey = $candidate.CandidateKey
+            OriginalName = $candidate.OriginalName
+            RoadAddress = $candidate.RoadAddress
+            LotAddress = $candidate.LotAddress
+            Discovery = $discovery
+            MatcherEvidence = $matcherEvidence
+            ConflictCodes = $conflictCodes
+        }
+    } | Sort-Object SortQueryOrder, SortResultPosition, CandidateKey | ForEach-Object {
+        [pscustomobject][ordered]@{
+            CandidateKey = $_.CandidateKey
+            OriginalName = $_.OriginalName
+            RoadAddress = $_.RoadAddress
+            LotAddress = $_.LotAddress
+            Discovery = $_.Discovery
+            MatcherEvidence = $_.MatcherEvidence
+            ConflictCodes = $_.ConflictCodes
+        }
+    })
+
+    return [pscustomobject][ordered]@{
+        SourceRowNumber = $Business.SourceRowNumber
+        Candidates = $candidateDiagnostics
+    }
+}
+
 function Invoke-Phase1PoiShadowMode {
     param(
         [Parameter(Mandatory)][object[]]$Rows,
@@ -44,6 +100,7 @@ function Invoke-Phase1PoiShadowMode {
     if ($OperationalLiveRun -and $null -ne $RequestInvoker) { throw 'Operational live mode cannot use RequestInvoker' }
     if (-not $OperationalLiveRun -and $null -eq $RequestInvoker) { throw 'Deterministic mode requires RequestInvoker' }
     $reportRows = [Collections.Generic.List[object]]::new()
+    $candidateDiagnostics = [Collections.Generic.List[object]]::new()
     for ($index = 0; $index -lt $Rows.Count; $index++) {
         $sourceRowNumber = $SourceRowNumberOffset + $index + 1
         $business = ConvertTo-NormalizedBusiness -Row $Rows[$index] -SourceRowNumber $sourceRowNumber
@@ -59,10 +116,12 @@ function Invoke-Phase1PoiShadowMode {
             throw 'SourceRowNumber chain mismatch'
         }
         $reportRows.Add((ConvertTo-Phase1PoiShadowRow -Business $business -Batch $batch -Result $result))
+        $candidateDiagnostics.Add((ConvertTo-Phase1PoiShadowCandidateDiagnostics -Business $business -Batch $batch -Result $result))
     }
 
     return [pscustomobject][ordered]@{
         Rows = $reportRows.ToArray()
+        CandidateDiagnostics = $candidateDiagnostics.ToArray()
         Summary = Get-Phase1PoiShadowSummary -Rows $reportRows.ToArray() -GoldenExpectations $GoldenExpectations -OperationalLiveRun:$OperationalLiveRun
     }
 }
@@ -159,12 +218,16 @@ function Export-Phase1PoiShadowMode {
     param(
         [Parameter(Mandatory)]$Run,
         [Parameter(Mandatory)][string]$RowReportCsv,
-        [Parameter(Mandatory)][string]$SummaryJson
+        [Parameter(Mandatory)][string]$SummaryJson,
+        [string]$CandidateDiagnosticJson = ''
     )
 
     $resolvedRowReportCsv = Resolve-Phase1PoiShadowExportPath $RowReportCsv
     $resolvedSummaryJson = Resolve-Phase1PoiShadowExportPath $SummaryJson
-    foreach ($path in @($resolvedRowReportCsv, $resolvedSummaryJson)) {
+    $resolvedCandidateDiagnosticJson = if ([string]::IsNullOrWhiteSpace($CandidateDiagnosticJson)) { '' } else {
+        Resolve-Phase1PoiShadowExportPath $CandidateDiagnosticJson
+    }
+    foreach ($path in @($resolvedRowReportCsv, $resolvedSummaryJson, $resolvedCandidateDiagnosticJson | Where-Object { $_ })) {
         $parent = Split-Path -Parent $path
         if ($parent -and -not (Test-Path -LiteralPath $parent)) {
             New-Item -ItemType Directory -Force -Path $parent | Out-Null
@@ -174,4 +237,8 @@ function Export-Phase1PoiShadowMode {
         Export-Csv -LiteralPath $resolvedRowReportCsv -NoTypeInformation -Encoding utf8
     $summaryText = $Run.Summary | ConvertTo-Json -Depth 8
     [IO.File]::WriteAllText($resolvedSummaryJson, $summaryText + [Environment]::NewLine, [Text.UTF8Encoding]::new($false))
+    if ($resolvedCandidateDiagnosticJson) {
+        $diagnosticText = @($Run.CandidateDiagnostics) | ConvertTo-Json -Depth 12
+        [IO.File]::WriteAllText($resolvedCandidateDiagnosticJson, $diagnosticText + [Environment]::NewLine, [Text.UTF8Encoding]::new($false))
+    }
 }

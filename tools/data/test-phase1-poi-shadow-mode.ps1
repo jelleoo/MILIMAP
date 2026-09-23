@@ -124,6 +124,37 @@ Assert-Equal $multiple.Rows[0].Classification 'YELLOW' 'Multiple plausible candi
 Assert-True ($multiple.Rows[0].ReasonCodes -contains 'MULTIPLE_PLAUSIBLE_CANDIDATES') 'Multiplicity reason remains reviewable'
 Assert-Equal $multiple.Rows[0].SelectedCandidateKey '' 'Multiple candidates select no production candidate'
 
+# Candidate diagnostics are a projection of preserved B candidates and C evidence.
+# The second candidate has a city conflict; row-level outcome reasons are not candidate conflicts.
+$cityConflictItem = [pscustomobject]@{
+    title = '테스트 식당 본점'; roadAddress = '서울특별시 강남구 테스트로 12-3'; address = ''
+    telephone = '02-000-0002'; category = '음식점'; link = 'https://example.invalid/fixture-city-conflict'; mapx = '1270012345'; mapy = '375012345'
+}
+$diagnosticRun = Invoke-Phase1PoiShadowMode -Rows @($singleStrongRow) -RequestInvoker { param($Uri, $Headers) [pscustomobject]@{ items=@($singleStrongItem, $cityConflictItem) } }
+Assert-True ($diagnosticRun.PSObject.Properties.Name -contains 'CandidateDiagnostics') 'Run exposes additive candidate diagnostics'
+$rowDiagnostics = @($diagnosticRun.CandidateDiagnostics)[0]
+Assert-Equal $rowDiagnostics.SourceRowNumber 2 'Diagnostics preserve source row number'
+Assert-Equal @($rowDiagnostics.Candidates).Count 2 'Every discovered candidate has diagnostics'
+Assert-Equal (@($rowDiagnostics.Candidates | Select-Object -ExpandProperty CandidateKey | Select-Object -Unique).Count) 2 'Candidate keys are preserved and distinct'
+Assert-Equal $rowDiagnostics.Candidates[0].RoadAddress '서울특별시 마포구 테스트로 12-3, 2층 201호' 'Diagnostics use deterministic first discovery order'
+Assert-Equal $rowDiagnostics.Candidates[1].RoadAddress '서울특별시 강남구 테스트로 12-3' 'Diagnostics retain the second candidate address'
+foreach ($candidateDiagnostic in @($rowDiagnostics.Candidates)) {
+    Assert-True (-not [string]::IsNullOrWhiteSpace($candidateDiagnostic.CandidateKey)) 'Diagnostic candidate key is non-empty'
+    Assert-True (-not [string]::IsNullOrWhiteSpace($candidateDiagnostic.OriginalName)) 'Diagnostic candidate name is preserved'
+    Assert-True (@($candidateDiagnostic.Discovery | Where-Object { $_.StrategyCode -eq 'NAME_FULL_ADDRESS' -and $_.QueryOrder -eq 1 }).Count -eq 1) 'Discovery strategy and query order are preserved'
+    Assert-True (@($candidateDiagnostic.MatcherEvidence | Where-Object { $_.CandidateKey -ne $candidateDiagnostic.CandidateKey }).Count -eq 0) 'Matcher evidence is filtered by candidate key'
+}
+$conflictingDiagnostic = @($rowDiagnostics.Candidates | Where-Object { $_.RoadAddress -eq '서울특별시 강남구 테스트로 12-3' })[0]
+$strongDiagnostic = @($rowDiagnostics.Candidates | Where-Object { $_.RoadAddress -eq '서울특별시 마포구 테스트로 12-3, 2층 201호' })[0]
+Assert-True ($conflictingDiagnostic.ConflictCodes -contains 'CITY_DISTRICT_CONFLICT') 'Conflict is derived only from the conflicting candidate evidence'
+Assert-Equal @($strongDiagnostic.ConflictCodes).Count 0 'Global conflict codes are not copied to the strong candidate'
+Assert-True (@($conflictingDiagnostic.MatcherEvidence | Where-Object { $_.EvidenceCode -eq 'CITY_DISTRICT_CONFLICT' -and $_.Matched -eq $false }).Count -eq 1) 'Candidate conflict retains its source matcher evidence'
+Assert-Equal $diagnosticRun.Rows[0].Classification 'GREEN' 'Diagnostics do not alter row classification'
+Assert-Equal $diagnosticRun.Rows[0].EvaluationStatus 'COMPLETE' 'Diagnostics do not alter row evaluation status'
+Assert-True ($diagnosticRun.Rows[0].ReasonCodes -contains 'SINGLE_STRONG_CANDIDATE') 'Row outcome reason remains row-level only'
+Assert-True (-not ($conflictingDiagnostic.ConflictCodes -contains 'SINGLE_STRONG_CANDIDATE')) 'Row outcome reason is not a candidate conflict'
+Assert-Equal $diagnosticRun.Rows[0].ProductionAction 'NONE' 'Diagnostics do not alter production action'
+
 # Task 4: metrics are Contract partitions, not scores or automatic approval.
 $metricRows = @($run.Rows[0], $zero.Rows[0], $partial.Rows[0], $failed.Rows[0] | ForEach-Object { $_ | Select-Object * })
 for ($index = 0; $index -lt $metricRows.Count; $index++) { $metricRows[$index].SourceRowNumber = $index + 2 }
@@ -160,6 +191,18 @@ Assert-Equal $unsafeSummary.FullyEvaluableAmbiguousNegativeFalseGreenCount 1 'Fa
 $golden = Import-PowerShellDataFile (Join-Path $PSScriptRoot 'testdata/phase1-poi-shadow-golden.psd1')
 Assert-Equal $golden['248'].SourcePath 'data/canonical/reports/poi-coordinate-review-candidates-20260910-final.csv' 'Golden source path is explicit'
 Assert-Equal $golden.Count 5 'Golden fixture has the source-cited cases only'
+Assert-Equal $golden['451'].SourceCoverage 'SOURCE_LIMITED' 'Historical row 451 coverage remains source-limited'
+Assert-Equal $golden['451'].ExpectedLabel 'ambiguous' 'Historical row 451 label remains ambiguous'
+Assert-Equal $golden['451'].SourceNote 'Final review holds 짜장마을 because the cited source URL resolves to a search for 짜장단가든, so it does not establish a trustworthy provider candidate.' 'Historical row 451 source note is preserved'
+Assert-True $golden['451'].ContainsKey('OperationalObservation') 'Row 451 has separate additive operational provenance'
+Assert-Equal $golden['451'].OperationalObservation.ObservedAt '2026-09-24' 'Operational observation retains its date'
+Assert-Equal $golden['451'].OperationalObservation.Source 'NAVER_API_HUB_LOCAL operational Shadow' 'Operational observation retains its source'
+Assert-Equal $golden['451'].OperationalObservation.Status 'current POI identity observation' 'Operational observation retains its status'
+Assert-Equal $golden['451'].OperationalObservation.ObservedClassification 'GREEN' 'Operational observation retains its classification'
+Assert-Equal (
+    @($golden['451'].OperationalObservation.IdentityEvidence) -join ','
+) 'NAME_EXACT,LOCALITY_MATCH,ROAD_NAME_MATCH,BUILDING_NUMBER_MATCH' `
+  'Operational observation contains only source-supported identity evidence'
 foreach ($sourceLimitedRow in @('451', '135', '136')) {
     Assert-Equal $golden[$sourceLimitedRow].SourceCoverage 'SOURCE_LIMITED' "Source-limited coverage is explicit for $sourceLimitedRow"
     Assert-True (-not $golden[$sourceLimitedRow].ContainsKey('ProviderItem')) "Source-limited $sourceLimitedRow has no fabricated provider candidate"
@@ -190,14 +233,23 @@ Assert-True (@($goldenRows | Where-Object { $_.SourceRowNumber -eq 339 })[0].Cla
 $reportDirectory = Join-Path ([IO.Path]::GetTempPath()) ('milimap-phase1-shadow-mode-' + [Guid]::NewGuid().ToString('N'))
 $reportPath = Join-Path $reportDirectory 'row-report.csv'
 $summaryPath = Join-Path $reportDirectory 'summary.json'
+$diagnosticPath = Join-Path $reportDirectory 'candidate-diagnostics.json'
 try {
     Export-Phase1PoiShadowMode -Run $zero -RowReportCsv $reportPath -SummaryJson $summaryPath
     Assert-True (Test-Path -LiteralPath $reportPath) 'Explicit row report is written'
     Assert-True (Test-Path -LiteralPath $summaryPath) 'Explicit summary is written'
+    Assert-True (-not (Test-Path -LiteralPath $diagnosticPath)) 'Optional diagnostics do not change existing export artifacts'
     $exportedRow = @(Import-Csv -LiteralPath $reportPath)[0]
     Assert-Equal $exportedRow.SourceRowNumber '2' 'Export preserves source row number'
     Assert-Equal $exportedRow.ReasonCodes 'NO_CANDIDATE' 'Export serializes code arrays deterministically'
     Assert-True (-not (Test-Path -LiteralPath (Join-Path $PSScriptRoot '..\..\data\canonical\capital-area-military-benefits.shadow.csv'))) 'Export has no canonical default path'
+
+    Export-Phase1PoiShadowMode -Run $diagnosticRun -RowReportCsv $reportPath -SummaryJson $summaryPath -CandidateDiagnosticJson $diagnosticPath
+    Assert-True (Test-Path -LiteralPath $diagnosticPath) 'Explicit candidate diagnostics are written'
+    $exportedDiagnostics = @(Get-Content -Raw -Encoding UTF8 -LiteralPath $diagnosticPath | ConvertFrom-Json)
+    Assert-Equal $exportedDiagnostics.Count 1 'Candidate diagnostics export one row artifact'
+    Assert-Equal @($exportedDiagnostics[0].Candidates).Count 2 'Candidate diagnostics export every candidate'
+    Assert-Equal $exportedDiagnostics[0].Candidates[0].RoadAddress '서울특별시 마포구 테스트로 12-3, 2층 201호' 'Candidate diagnostics export deterministic ordering'
 } finally {
     if (Test-Path -LiteralPath $reportDirectory) { Remove-Item -LiteralPath $reportDirectory -Recurse -Force }
 }
@@ -228,7 +280,13 @@ foreach ($protectedRoot in $protectedRoots) {
         try { Export-Phase1PoiShadowMode -Run $zero -RowReportCsv $temporaryReport -SummaryJson $absoluteSentinel } catch { $absoluteThrew = $true }
         Assert-Equal ([IO.File]::ReadAllText($absoluteSentinel)) $sentinelText "$protectedRoot absolute sentinel is unchanged"
         Assert-True $absoluteThrew "$protectedRoot absolute output is rejected"
-        Assert-True (-not (Test-Path -LiteralPath $temporaryReport)) "$protectedRoot rejection creates no row report"
+    Assert-True (-not (Test-Path -LiteralPath $temporaryReport)) "$protectedRoot rejection creates no row report"
+
+        $diagnosticThrew = $false
+        try { Export-Phase1PoiShadowMode -Run $diagnosticRun -RowReportCsv $temporaryReport -SummaryJson $temporarySummary -CandidateDiagnosticJson $absoluteSentinel } catch { $diagnosticThrew = $true }
+        Assert-Equal ([IO.File]::ReadAllText($absoluteSentinel)) $sentinelText "$protectedRoot diagnostic sentinel is unchanged"
+        Assert-True $diagnosticThrew "$protectedRoot diagnostic output is rejected"
+        Assert-True (-not (Test-Path -LiteralPath $temporarySummary)) "$protectedRoot diagnostic rejection creates no summary output"
     } finally {
         Remove-Item -LiteralPath $absoluteSentinel -Force -ErrorAction SilentlyContinue
         Remove-Item -LiteralPath $temporarySummary, $temporaryReport -Force -ErrorAction SilentlyContinue

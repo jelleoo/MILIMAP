@@ -5,11 +5,14 @@
 ## 현재 기준선
 
 - 개발 기준 브랜치: `dev`
-- 최신 확인 dev commit: `40de886c7f87a8ff75439438349be4d4487f077b`
+- 최신 확인 dev commit: `93c2e4455cb6628dfc1c2ffe0050b48524dedd89`
+- Phase 1 Workstream A merge: PR #37 / Issue #28 완료
 - Phase 1 Workstream B merge: PR #34 / Issue #29 완료
+- Phase 1 Workstream C merge: PR #36 / Issue #30 완료
+- Integration: Issue #38 OPEN — 별도 Shadow Mode runner 구현 진행 중
 - Contract Foundation merge baseline: `761a04294a9bbf42f0767e200cc191f7f998828a`
 - P3 data merge baseline: `edca54d23981501efa8ce602df98f5456973940c`
-- 기준일: 2026-09-12
+- 기준일: 2026-09-23
 - release candidates: 249
 - exact map pins: 111
 - coordinate-unconfirmed: 138
@@ -76,9 +79,11 @@ P2/P3 수동 검증을 통해 충분한 실제 판단 사례를 확보했습니�
 
 ### Workstream A — Business Identity / Normalization
 
-- 상태: **진행 전 / Issue OPEN**
-- Issue: #28 `[DATA][A] Identity / Normalization Core 구현`
-- 담당: 현민
+- 상태: **완료 / dev merge**
+- Issue: #28 `[DATA][A] Identity / Normalization Core 구현` — closed
+- PR: #37 `feat(data): add identity normalization core` — merged
+- merge commit: `93c2e4455cb6628dfc1c2ffe0050b48524dedd89`
+- 담당: 일우
 - 전용 경로: `tools/data/lib/identity/**`, `tools/data/test-normalize-business.ps1`, 필요 시 `tools/data/testdata/identity/**`
 - 출력 Contract: `NormalizedBusiness`
 
@@ -120,8 +125,10 @@ B는 최종 production 승인, identity 분류, hard constraint/ranking, canonic
 
 ### Workstream C — Matching / Evaluation
 
-- 상태: **개발 시작 가능 / Issue OPEN**
-- Issue: #30 `[DATA][C] POI Matching / Evaluation 구현`
+- 상태: **완료 / dev merge**
+- Issue: #30 `[DATA][C] POI Matching / Evaluation 구현` — closed
+- PR: #36 `data: [C] add POI matching and evaluation` — merged
+- merge commit: `40ac4bffec22ebc1534564201e5e07435f00497f`
 - 담당: 프로젝트 오너 (`ilwoo-maker`)
 - 후속 역할: Integration Owner
 - 전용 경로: `tools/data/lib/poi-matching/**`, `tools/data/test-evaluate-poi-match.ps1`, 필요 시 `tools/data/testdata/poi-matching/**`
@@ -142,7 +149,7 @@ B는 최종 production 승인, identity 분류, hard constraint/ranking, canonic
 - Integration orchestration 동시 수정
 - 임의 threshold 생성
 
-C는 A가 완료되기 전에도 Contract fixture와 B의 frozen output shape를 사용해 독립 개발할 수 있습니다. 실제 A+B+C 연결은 세 Workstream이 모두 `dev`에 병합된 뒤 별도 Integration Issue에서 진행합니다.
+C는 Contract fixture와 B의 frozen output shape로 독립 개발되었으며, 실제 A+B+C 연결은 세 Workstream이 모두 `dev`에 병합된 뒤 Issue #38에서 진행합니다.
 
 ## 공통 Contract 규칙
 
@@ -175,38 +182,20 @@ Phase 1은 기존 사람 검토 결과를 회귀검증 기준으로 사용합니
 
 `거시기닭갈비`는 상호·지점·주소가 일치했지만 전화번호 차이가 있었던 cautionary positive로 보존합니다.
 
-## 병렬 개발 시작 절차
-
-현재 남은 A/C 작업은 다음 순서로 시작합니다.
-
-```text
-1. git fetch origin
-2. 최신 origin/dev 확인
-3. AGENTS.md 읽기
-4. docs/current-work.md 읽기
-5. 전체 pipeline design 읽기
-6. Contract spec 읽기
-7. 자기 Issue(#28 또는 #30) 확인
-8. 자기 Issue의 수정 허용/금지 경로 확인
-9. 최신 origin/dev에서 자기 branch/worktree 생성
-10. Codex에 Issue 번호와 경계 전달
-11. fixture/mock 기반 독립 구현/테스트/PR
-```
-
 ## Integration
 
-A/B/C가 각각 독립 PR로 `dev`에 병합된 뒤 별도의 Integration Issue를 생성합니다. Integration Owner는 프로젝트 오너입니다.
+A/B/C는 모두 `dev`에 병합되었고, 별도 Integration Issue #38에서 Shadow Mode runner를 구현 중입니다. Integration Owner는 프로젝트 오너입니다.
 
 Integration Owner의 책임:
 - 최신 `dev`에서 세 모듈 연결
-- `verify-canonical-benefit-poi.ps1` 등 공용 orchestration 파일 단독 수정
-- 전체 Shadow Mode 실행
+- 별도 `tools/data/invoke-phase1-poi-shadow-mode.ps1` runner 유지; legacy `verify-canonical-benefit-poi.ps1`는 유지
+- deterministic mock Shadow Mode 회귀검증
 - P1/P2/P3 Golden Dataset 회귀검증
 - metric reconciliation
 - false GREEN 확인
 - canonical/Android seed가 자동 수정되지 않았는지 확인
 
-Phase 1은 이 Integration과 전체 Shadow Mode Gate까지 통과해야 완료로 봅니다.
+GREEN은 fast-review candidate일 뿐 모든 row는 최종 human approval 대상입니다. operational live Shadow run은 credentials와 명시적 report path가 있을 때만 별도로 read-only 수행하며, 현재는 **NOT RUN**입니다. Issue #38과 Phase 1 완료 선언은 deterministic implementation verification만으로 자동 완료하지 않습니다.
 
 Phase 2 이후의 방향은 `docs/roadmap.md`에서 확인하고, 구체 설계와 Issue 생성은 Phase 1 완료 후 다시 논의합니다.
 
@@ -227,11 +216,7 @@ Phase 2 이후의 방향은 `docs/roadmap.md`에서 확인하고, 구체 설계�
 
 ## 다음 액션
 
-1. 현민은 Issue #28을 최신 `dev`에서 독립 진행한다.
-2. 프로젝트 오너는 Issue #30을 최신 `dev`에서 독립 시작한다.
-3. C는 B의 merge 결과를 참조할 수 있지만 B 파일을 수정하지 않는다.
-4. A/C Workstream은 공통 Contract와 다른 Workstream 경로를 수정하지 않는다.
-5. A와 C PR이 각각 `dev`에 병합되면 A/B/C 세 Workstream 완료 상태를 확인한다.
-6. 별도 Integration Issue를 생성해 A+B+C 연결과 Shadow Mode Gate를 수행한다.
-7. Integration + Shadow Mode Gate 통과 후 Phase 1 완료를 선언한다.
-8. 그 후 Phase 2 설계와 Issue 분할을 팀에서 다시 논의한다.
+1. Integration #38의 deterministic runner/test/Golden/report 검증을 완료한다.
+2. deterministic 검증과 별도로 credentials가 이용 가능할 때만 operational live Shadow run을 read-only로 수행한다.
+3. 사람 검토와 Issue #38 완료조건 확인 전에는 Phase 1 완료나 production apply를 선언하지 않는다.
+4. Phase 2 설계와 Issue 분할은 Integration/Shadow Mode Gate 이후 최신 결과를 기준으로 다시 논의한다.

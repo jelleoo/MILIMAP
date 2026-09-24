@@ -112,13 +112,20 @@ function ConvertTo-Phase2BenefitEvidenceDiagnostic {
 function Get-Phase2BenefitEvaluation {
     param([Parameter(Mandatory)]$Benefit, [AllowNull()][object[]]$SourceRecords=@(), [Parameter(Mandatory)][string]$DiscoveryStatus)
     $records = @($SourceRecords)
-    $validatedClaims = @($records | ForEach-Object { $_.Validation.Claims })
+    $verifiedRecords = @($records | Where-Object { $_.Qualified.OfficialityStatus -eq 'VERIFIED_OFFICIAL' })
+    $evaluationSourceRecords = @($records | Where-Object {
+        $_.Qualified.OfficialityStatus -eq 'VERIFIED_OFFICIAL' -or
+        $_.Bound.BusinessBindingStatus -eq 'CONFLICT' -or
+        $_.Qualified.ReasonCodes -contains 'SOURCE_CONFLICT' -or
+        $_.Bound.ReasonCodes -contains 'BUSINESS_BINDING_CONFLICT'
+    })
+    $validatedClaims = @($verifiedRecords | ForEach-Object { $_.Validation.Claims })
     $claimResults = @(Compare-BenefitClaims -Benefit $Benefit -ValidatedEvidence $validatedClaims)
     $operationalStatus = [pscustomobject][ordered]@{
         DiscoveryStatus=$DiscoveryStatus
         ExtractionStatus=(Get-Phase2ExtractionStatus -SourceRecords $records)
     }
-    $evaluation = Invoke-BenefitStateEvaluation -Benefit $Benefit -Sources @($records | ForEach-Object { $_.Bound }) -ClaimResults $claimResults -OperationalStatus $operationalStatus
+    $evaluation = Invoke-BenefitStateEvaluation -Benefit $Benefit -Sources @($evaluationSourceRecords | ForEach-Object { $_.Bound }) -ClaimResults $claimResults -OperationalStatus $operationalStatus
     return [pscustomobject][ordered]@{ClaimResults=$claimResults;OperationalStatus=$operationalStatus;Evaluation=$evaluation}
 }
 

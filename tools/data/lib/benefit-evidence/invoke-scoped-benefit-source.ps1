@@ -53,7 +53,12 @@ function New-ScopedBenefitEmptyValidation {
 function Test-ScopedBenefitLocationHardConflict {
     param([AllowNull()]$LocationResult)
     if ($null -eq $LocationResult) { return $false }
-    return @($LocationResult.Diagnostics | Where-Object { [string]$_.Detail -match '_CONFLICT(?:,|$)' }).Count -gt 0
+    # The locator emits EXPLICIT_NAME_MISMATCH when other observed identity
+    # evidence agrees. Do not downgrade that contradiction to plain absence.
+    return @($LocationResult.Diagnostics | Where-Object {
+        $_.Code -ceq 'LOCATOR_IDENTITY_CONFLICT' -and
+        ($_.Detail -ceq 'EXPLICIT_NAME_MISMATCH' -or [string]$_.Detail -match '_CONFLICT(?:,|$)')
+    }).Count -gt 0
 }
 
 function Invoke-ScopedPhase2BenefitSourceCandidate {
@@ -97,33 +102,58 @@ function Invoke-ScopedPhase2BenefitSourceCandidate {
         if ($failureReasons.Count -eq 0) { $failureReasons = @('SOURCE_OFFICIALITY_UNRESOLVED') }
         $extraction = New-ScopedBenefitEmptyExtraction -BoundSource $bound -ReasonCodes $failureReasons
         $validation = New-ScopedBenefitEmptyValidation -Extraction $extraction
+    } elseif ($document.SourceFormat -cne 'HTML') {
+        # A successfully fetched PDF/XLSX is still unsupported by this path.
+        # Never manufacture a text snapshot or invoke an extraction provider.
+        $preparationDiagnostics += [pscustomobject][ordered]@{
+            Code='HTML_FORMAT_UNSUPPORTED'; Stage='SCOPED_PREPARATION'; EvidenceReference=''; Detail='A1 scoped preparation accepts HTML documents only'
+        }
+        $bound = New-ScopedBenefitPlaceholderBoundSource -QualifiedSource $qualified
+        $extraction = New-ScopedBenefitEmptyExtraction -BoundSource $bound -ReasonCodes @('SOURCE_UNSUPPORTED')
+        $validation = New-ScopedBenefitEmptyValidation -Extraction $extraction
     } else {
-        $observation = Get-BenefitRunHtmlObservation -Context $RunContext -Document $document
-        $location = Find-BenefitBusinessEvidence -Observation $observation -Business $Business -CanonicalPhone $CanonicalPhone
-        $preparationDiagnostics += @($observation.Diagnostics)
-        $preparationDiagnostics += @($location.Diagnostics)
+        # Isolate source parsing/span-construction failures, not invalid caller
+        # contracts, request-profile changes, or unsafe URL rejection above.
+        try {
+            $observation = Get-BenefitRunHtmlObservation -Context $RunContext -Document $document
+        } catch {
+            $preparationDiagnostics += [pscustomobject][ordered]@{
+                Code='HTML_PREPARATION_FAILED'; Stage='SCOPED_PREPARATION'; EvidenceReference=''
+                Detail=('Unable to construct a safe HTML observation: ' + $_.Exception.GetType().FullName)
+            }
+            $bound = New-ScopedBenefitPlaceholderBoundSource -QualifiedSource $qualified
+            $extraction = New-ScopedBenefitEmptyExtraction -BoundSource $bound -ReasonCodes @('EXTRACTION_FAILED')
+            $validation = New-ScopedBenefitEmptyValidation -Extraction $extraction
+        }
 
-        if ($location.OperationalStatus -ceq 'COMPLETE' -and $location.Status -ceq 'LOCATED') {
-            $slices = @($location.Slices)
-            $slice = $slices[0]
-            $bound = Get-BenefitBusinessBinding -Source $qualified -Business $Business -CanonicalPhone $CanonicalPhone -EvidenceSlice $slice
-            if ($bound.BusinessBindingStatus -ceq 'STRONG') {
-                $extraction = Invoke-BenefitEvidenceExtraction -Source $bound -Document $document -EvidenceSlice $slice
-                $validation = ConvertTo-ValidatedBenefitEvidence -Extraction $extraction -Document $document -EvidenceSlice $slice
+        if ($null -ne $observation) {
+            $location = Find-BenefitBusinessEvidence -Observation $observation -Business $Business -CanonicalPhone $CanonicalPhone
+            $preparationDiagnostics += @($observation.Diagnostics)
+            $preparationDiagnostics += @($location.Diagnostics)
+
+            if ($location.OperationalStatus -ceq 'COMPLETE' -and $location.Status -ceq 'LOCATED') {
+                $slices = @($location.Slices)
+                $slice = $slices[0]
+                $bound = Get-BenefitBusinessBinding -Source $qualified -Business $Business -CanonicalPhone $CanonicalPhone -EvidenceSlice $slice
+                if ($bound.BusinessBindingStatus -ceq 'STRONG') {
+                    $extraction = Invoke-BenefitEvidenceExtraction -Source $bound -Document $document -EvidenceSlice $slice
+                    $validation = ConvertTo-ValidatedBenefitEvidence -Extraction $extraction -Document $document -EvidenceSlice $slice
+                } else {
+                    $extraction = New-ScopedBenefitEmptyExtraction -BoundSource $bound
+                    $validation = New-ScopedBenefitEmptyValidation -Extraction $extraction
+                }
             } else {
-                $extraction = New-ScopedBenefitEmptyExtraction -BoundSource $bound
+                $hardConflict = Test-ScopedBenefitLocationHardConflict -LocationResult $location
+                $bindingEvidence = @($location.Diagnostics | ForEach-Object { [string]$_.Detail } | Where-Object { $_ })
+                $bound = New-ScopedBenefitPlaceholderBoundSource -QualifiedSource $qualified -Conflict:$hardConflict -BindingEvidence $bindingEvidence
+                $reason = if ($hardConflict) { 'BUSINESS_BINDING_CONFLICT' }
+                    elseif ($location.OperationalStatus -ceq 'UNSUPPORTED') { 'SOURCE_UNSUPPORTED' }
+                    elseif ($location.OperationalStatus -cne 'COMPLETE') { 'EXTRACTION_FAILED' }
+                    elseif ($location.Status -ceq 'NOT_FOUND') { 'SOURCE_NOT_FOUND' }
+                    else { 'BUSINESS_BINDING_AMBIGUOUS' }
+                $extraction = New-ScopedBenefitEmptyExtraction -BoundSource $bound -ReasonCodes @($reason)
                 $validation = New-ScopedBenefitEmptyValidation -Extraction $extraction
             }
-        } else {
-            $hardConflict = Test-ScopedBenefitLocationHardConflict -LocationResult $location
-            $bindingEvidence = @()
-            if ($null -ne $location) {
-                $bindingEvidence = @($location.Diagnostics | ForEach-Object { [string]$_.Detail } | Where-Object { $_ })
-            }
-            $bound = New-ScopedBenefitPlaceholderBoundSource -QualifiedSource $qualified -Conflict:$hardConflict -BindingEvidence $bindingEvidence
-            $reason = if ($observation.AdapterStatus -ceq 'UNSUPPORTED') { 'SOURCE_UNSUPPORTED' } else { 'EXTRACTION_FAILED' }
-            $extraction = New-ScopedBenefitEmptyExtraction -BoundSource $bound -ReasonCodes @($reason)
-            $validation = New-ScopedBenefitEmptyValidation -Extraction $extraction
         }
     }
 

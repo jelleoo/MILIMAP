@@ -138,7 +138,15 @@ function Get-Phase2BenefitEvaluation {
 }
 
 function ConvertTo-Phase2BenefitReviewRow {
-    param([Parameter(Mandatory)]$Result)
+    param(
+        [Parameter(Mandatory)]$Result,
+        [Parameter(Mandatory)][string]$DiscoveryStatus,
+        [AllowNull()][object[]]$SourceRecords=@(),
+        [bool]$ExistingSourceUsed=$false,
+        [bool]$FallbackUsed=$false,
+        [int]$TotalExternalRequests=0
+    )
+    $records = @($SourceRecords)
     return [pscustomobject][ordered]@{
         SourceRowNumber=$Result.SourceRowNumber
         BusinessName=$Result.BusinessIdentity.OriginalName
@@ -148,6 +156,19 @@ function ConvertTo-Phase2BenefitReviewRow {
         ClaimResultCount=@($Result.ClaimResults).Count
         EvidenceCount=@($Result.Evidence).Count
         ProductionAction=$Result.ProductionAction
+        DiscoveryStatus=$DiscoveryStatus
+        QualifiedOfficialSource=$(@($records | Where-Object { $_.Qualified.OfficialityStatus -eq 'VERIFIED_OFFICIAL' }).Count -gt 0)
+        BindingStrongCount=@($records | Where-Object { $_.Bound.BusinessBindingStatus -eq 'STRONG' }).Count
+        BindingPlausibleCount=@($records | Where-Object { $_.Bound.BusinessBindingStatus -eq 'PLAUSIBLE' }).Count
+        BindingAmbiguousCount=@($records | Where-Object { $_.Bound.BusinessBindingStatus -eq 'AMBIGUOUS' }).Count
+        BindingConflictCount=@($records | Where-Object { $_.Bound.BusinessBindingStatus -eq 'CONFLICT' }).Count
+        ExtractionCompleteCount=@($records | Where-Object { $_.Extraction.Status -eq 'COMPLETE' }).Count
+        ExtractionPartialCount=@($records | Where-Object { $_.Extraction.Status -eq 'PARTIAL' }).Count
+        ExtractionFailedCount=@($records | Where-Object { $_.Extraction.Status -eq 'FAILED' }).Count
+        EvidenceValidationRejectedCount=@($records | ForEach-Object { $_.Validation.Claims } | Where-Object { $_.ValidationStatus -in @('INVALID','CONFLICT') }).Count
+        ExistingSourceUsed=$ExistingSourceUsed
+        FallbackUsed=$FallbackUsed
+        TotalExternalRequests=$TotalExternalRequests
     }
 }
 
@@ -167,7 +188,6 @@ function Invoke-Phase2BenefitShadowMode {
     $results = [Collections.Generic.List[object]]::new()
     $reportRows = [Collections.Generic.List[object]]::new()
     $diagnostics = [Collections.Generic.List[object]]::new()
-    $rowMetadata = [Collections.Generic.List[object]]::new()
 
     for ($index=0; $index -lt $Rows.Count; $index++) {
         $row = $Rows[$index]
@@ -241,16 +261,9 @@ function Invoke-Phase2BenefitShadowMode {
         Assert-BenefitVerificationResult $result
 
         $results.Add($result)
-        $reportRows.Add((ConvertTo-Phase2BenefitReviewRow -Result $result))
+        $totalExternalRequests = [int]$externalCounter.Requests + [int]$externalCounter.Discoveries
+        $reportRows.Add((ConvertTo-Phase2BenefitReviewRow -Result $result -DiscoveryStatus $discoveryStatus -SourceRecords $sourceRecords.ToArray() -ExistingSourceUsed $existingSourceUsed -FallbackUsed $fallbackUsed -TotalExternalRequests $totalExternalRequests))
         foreach ($sourceRecord in $sourceRecords) { $diagnostics.Add((ConvertTo-Phase2BenefitEvidenceDiagnostic -SourceRecord $sourceRecord)) }
-        $rowMetadata.Add([pscustomobject][ordered]@{
-            SourceRowNumber=$sourceRowNumber
-            DiscoveryStatus=$discoveryStatus
-            ExistingSourceUsed=$existingSourceUsed
-            FallbackUsed=$fallbackUsed
-            TotalExternalRequests=([int]$externalCounter.Requests + [int]$externalCounter.Discoveries)
-            SourceRecords=$sourceRecords.ToArray()
-        })
     }
 
     $rowsArray = $reportRows.ToArray()
@@ -258,39 +271,38 @@ function Invoke-Phase2BenefitShadowMode {
         Results=$results.ToArray()
         Rows=$rowsArray
         EvidenceDiagnostics=$diagnostics.ToArray()
-        Summary=(Get-Phase2BenefitShadowSummary -Rows $rowsArray -RowMetadata $rowMetadata.ToArray() -GoldenExpectations $GoldenExpectations -OperationalLiveRun:$OperationalLiveRun)
+        Summary=(Get-Phase2BenefitShadowSummary -Rows $rowsArray -GoldenExpectations $GoldenExpectations -OperationalLiveRun:$OperationalLiveRun)
     }
 }
 
 function Get-Phase2BenefitShadowSummary {
     param(
         [Parameter(Mandatory)][object[]]$Rows,
-        [Parameter(Mandatory)][object[]]$RowMetadata,
         [hashtable]$GoldenExpectations=@{},
         [switch]$OperationalLiveRun
     )
     $allRows = @($Rows)
-    $meta = @($RowMetadata)
-    $sourceRecords = @($meta | ForEach-Object { $_.SourceRecords })
-    $totalExternalRequests = [int](@($meta | Measure-Object -Property TotalExternalRequests -Sum).Sum)
+    $totalExternalRequests = [int](@($allRows | Measure-Object -Property TotalExternalRequests -Sum).Sum)
     $falseGreen = @($allRows | Where-Object {
-        $GoldenExpectations.ContainsKey([string]$_.SourceRowNumber) -and $_.ReviewClass -eq 'GREEN' -and [string]$GoldenExpectations[[string]$_.SourceRowNumber].ExpectedReviewClass -ne 'GREEN'
+        $GoldenExpectations.ContainsKey([string]$_.SourceRowNumber) -and
+        $_.ReviewClass -eq 'GREEN' -and
+        [string]$GoldenExpectations[[string]$_.SourceRowNumber].ExpectedReviewClass -ne 'GREEN'
     }).Count
 
     return [pscustomobject][ordered]@{
         EvaluatedRows=$allRows.Count
-        DiscoveryComplete=@($meta | Where-Object DiscoveryStatus -eq 'COMPLETE').Count
-        DiscoveryPartial=@($meta | Where-Object DiscoveryStatus -eq 'PARTIAL').Count
-        DiscoveryFailed=@($meta | Where-Object DiscoveryStatus -eq 'FAILED').Count
-        QualifiedOfficialSourceRows=@($meta | Where-Object { @($_.SourceRecords | Where-Object { $_.Qualified.OfficialityStatus -eq 'VERIFIED_OFFICIAL' }).Count -gt 0 }).Count
-        BindingStrong=@($sourceRecords | Where-Object { $_.Bound.BusinessBindingStatus -eq 'STRONG' }).Count
-        BindingPlausible=@($sourceRecords | Where-Object { $_.Bound.BusinessBindingStatus -eq 'PLAUSIBLE' }).Count
-        BindingAmbiguous=@($sourceRecords | Where-Object { $_.Bound.BusinessBindingStatus -eq 'AMBIGUOUS' }).Count
-        BindingConflict=@($sourceRecords | Where-Object { $_.Bound.BusinessBindingStatus -eq 'CONFLICT' }).Count
-        ExtractionComplete=@($sourceRecords | Where-Object { $_.Extraction.Status -eq 'COMPLETE' }).Count
-        ExtractionPartial=@($sourceRecords | Where-Object { $_.Extraction.Status -eq 'PARTIAL' }).Count
-        ExtractionFailed=@($sourceRecords | Where-Object { $_.Extraction.Status -eq 'FAILED' }).Count
-        EvidenceValidationRejected=@($sourceRecords | ForEach-Object { $_.Validation.Claims } | Where-Object { $_.ValidationStatus -in @('INVALID','CONFLICT') }).Count
+        DiscoveryComplete=@($allRows | Where-Object DiscoveryStatus -eq 'COMPLETE').Count
+        DiscoveryPartial=@($allRows | Where-Object DiscoveryStatus -eq 'PARTIAL').Count
+        DiscoveryFailed=@($allRows | Where-Object DiscoveryStatus -eq 'FAILED').Count
+        QualifiedOfficialSourceRows=@($allRows | Where-Object QualifiedOfficialSource -eq $true).Count
+        BindingStrong=[int](@($allRows | Measure-Object -Property BindingStrongCount -Sum).Sum)
+        BindingPlausible=[int](@($allRows | Measure-Object -Property BindingPlausibleCount -Sum).Sum)
+        BindingAmbiguous=[int](@($allRows | Measure-Object -Property BindingAmbiguousCount -Sum).Sum)
+        BindingConflict=[int](@($allRows | Measure-Object -Property BindingConflictCount -Sum).Sum)
+        ExtractionComplete=[int](@($allRows | Measure-Object -Property ExtractionCompleteCount -Sum).Sum)
+        ExtractionPartial=[int](@($allRows | Measure-Object -Property ExtractionPartialCount -Sum).Sum)
+        ExtractionFailed=[int](@($allRows | Measure-Object -Property ExtractionFailedCount -Sum).Sum)
+        EvidenceValidationRejected=[int](@($allRows | Measure-Object -Property EvidenceValidationRejectedCount -Sum).Sum)
         Active=@($allRows | Where-Object BenefitState -eq 'ACTIVE').Count
         Changed=@($allRows | Where-Object BenefitState -eq 'CHANGED').Count
         Ended=@($allRows | Where-Object BenefitState -eq 'ENDED').Count
@@ -302,8 +314,8 @@ function Get-Phase2BenefitShadowSummary {
         FastReviewCandidates=@($allRows | Where-Object ReviewClass -eq 'GREEN').Count
         DeepManualReviewRequired=@($allRows | Where-Object { $_.ReviewClass -in @('YELLOW','RED') }).Count
         AllRowsRequireFinalHumanApproval=$true
-        ExistingSourceReuseCount=@($meta | Where-Object ExistingSourceUsed -eq $true).Count
-        DiscoveryFallbackCount=@($meta | Where-Object FallbackUsed -eq $true).Count
+        ExistingSourceReuseCount=@($allRows | Where-Object ExistingSourceUsed -eq $true).Count
+        DiscoveryFallbackCount=@($allRows | Where-Object FallbackUsed -eq $true).Count
         TotalExternalRequests=$totalExternalRequests
         AverageExternalRequests=$(if ($allRows.Count -eq 0) { [double]0 } else { [double]$totalExternalRequests / [double]$allRows.Count })
         OperationalLiveShadowRun=$(if ($OperationalLiveRun) { 'RUN' } else { 'NOT_RUN' })

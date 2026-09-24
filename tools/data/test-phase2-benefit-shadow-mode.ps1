@@ -114,6 +114,19 @@ Assert-Equal $script:discoveryCount 1 'Fallback discovery must run exactly once 
 Assert-Equal $fallbackRun.Rows[0].BenefitState 'ACTIVE' 'Discovered strong current evidence may become ACTIVE'
 Assert-Equal $fallbackRun.Summary.DiscoveryFallbackCount 1 'Fallback usage must be counted'
 
+# A failed stale existing source must not poison a successful replacement official source.
+$recoveredRun = Invoke-Phase2BenefitShadowMode -Rows @(New-Phase2TestRow -SourceUrl 'https://city.example.go.kr/stale') -SourceRowNumberOffset 1 -RequestInvoker {
+    param($Uri)
+    if ($Uri.AbsoluteUri -like '*stale*') { throw 'stale source unavailable' }
+    New-Phase2TestResponse -Url $Uri.AbsoluteUri
+} -DiscoveryInvoker {
+    param($Benefit, $Business)
+    [pscustomobject]@{ Url='https://city.example.go.kr/replacement'; SourceKind='PUBLIC_OFFICIAL'; SourceLabel='지자체 공식 자료' }
+} -UnstructuredExtractor $extractor
+Assert-Equal $recoveredRun.Rows[0].BenefitState 'ACTIVE' 'Successful replacement official evidence must recover from stale existing-source fetch failure'
+Assert-Equal $recoveredRun.Rows[0].ReviewClass 'GREEN' 'Complete replacement official evidence may be GREEN'
+Assert-Equal $recoveredRun.Summary.DiscoveryFallbackCount 1 'Replacement recovery must record fallback usage'
+
 $noProviderRun = Invoke-Phase2BenefitShadowMode -Rows @(New-Phase2TestRow -SourceUrl '' -SourceType '') -SourceRowNumberOffset 1 -RequestInvoker {
     param($Uri)
     throw 'No fetch is expected without a candidate'

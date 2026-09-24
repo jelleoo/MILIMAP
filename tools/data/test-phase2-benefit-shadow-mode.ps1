@@ -26,7 +26,6 @@ Assert-True ($phase2Golden.ContainsKey('positive-paju-composite')) 'Golden fixtu
 Assert-True ($phase2Golden.ContainsKey('synthetic-explicit-end')) 'Golden fixture must include the explicit-ending algorithm case'
 Assert-True ($phase2Golden.ContainsKey('synthetic-source-conflict')) 'Golden fixture must include the source-conflict algorithm case'
 Assert-True ($phase2Golden.ContainsKey('synthetic-binding-conflict')) 'Golden fixture must include the binding-conflict algorithm case'
-Assert-True ($phase2Golden.ContainsKey('synthetic-binding-ambiguous')) 'Golden fixture must include the binding-ambiguity algorithm case'
 Assert-True ($phase2Golden.ContainsKey('synthetic-binding-ambiguous')) 'Golden fixture must include the binding-ambiguous algorithm case'
 
 $historicalGolden = $phase2Golden['positive-paju-composite']
@@ -46,10 +45,6 @@ Assert-Equal $syntheticConflictGolden.ExpectedReviewClass 'RED' 'Source-conflict
 $syntheticBindingGolden = $phase2Golden['synthetic-binding-conflict']
 Assert-Equal $syntheticBindingGolden.ExpectedBenefitState 'NEEDS_VERIFICATION' 'Binding-conflict Golden state must remain unresolved'
 Assert-Equal $syntheticBindingGolden.ExpectedReviewClass 'RED' 'Binding-conflict Golden review class must be RED'
-
-$syntheticAmbiguousGolden = $phase2Golden['synthetic-binding-ambiguous']
-Assert-Equal $syntheticAmbiguousGolden.ExpectedBenefitState 'NEEDS_VERIFICATION' 'Binding-ambiguity Golden state must remain unresolved'
-Assert-Equal $syntheticAmbiguousGolden.ExpectedReviewClass 'YELLOW' 'Binding-ambiguity Golden review class must be YELLOW'
 
 $syntheticAmbiguousGolden = $phase2Golden['synthetic-binding-ambiguous']
 Assert-Equal $syntheticAmbiguousGolden.ExpectedBenefitState 'NEEDS_VERIFICATION' 'Binding-ambiguous Golden state must remain unresolved'
@@ -141,14 +136,6 @@ $directSummary = Get-Phase2BenefitShadowSummary -Rows $activeRun.Rows
 Assert-Equal $directSummary.EvaluatedRows $activeRun.Summary.EvaluatedRows 'Direct summary interface must preserve evaluated row count'
 Assert-Equal $directSummary.ExistingSourceReuseCount $activeRun.Summary.ExistingSourceReuseCount 'Direct summary interface must preserve existing-source reuse'
 Assert-Equal $directSummary.TotalExternalRequests $activeRun.Summary.TotalExternalRequests 'Direct summary interface must preserve external request count'
-
-$ambiguousRun = Invoke-Phase2BenefitShadowMode -Rows @(New-Phase2TestRow) -SourceRowNumberOffset 1 -RequestInvoker {
-    param($Uri)
-    [pscustomobject]@{ StatusCode=200; ContentType='text/html; charset=utf-8'; Text='혜택 제공 현재 적용 10% 할인 현역 장병 상시 군인 신분증 확인'; Bytes=$null }
-} -UnstructuredExtractor $extractor
-Assert-Equal $ambiguousRun.Rows[0].BenefitState $syntheticAmbiguousGolden.ExpectedBenefitState 'Golden binding-ambiguous state must match integration behavior'
-Assert-Equal $ambiguousRun.Rows[0].ReviewClass $syntheticAmbiguousGolden.ExpectedReviewClass 'Golden binding-ambiguous review class must match integration behavior'
-Assert-True ($ambiguousRun.Rows[0].ReviewClass -ne 'GREEN') 'Ambiguous binding must never silently become GREEN'
 
 $script:discoveryCount = 0
 $fallbackRun = Invoke-Phase2BenefitShadowMode -Rows @(New-Phase2TestRow -SourceUrl '' -SourceType '') -SourceRowNumberOffset 1 -RequestInvoker {

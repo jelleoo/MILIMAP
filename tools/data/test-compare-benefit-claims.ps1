@@ -79,5 +79,17 @@ $currentEquivalentResults = @(Compare-BenefitClaims -Benefit $benefit -Validated
 Assert-Equal @($currentEquivalentResults | Where-Object { $_.Result -eq 'CONFLICT' }).Count 0 'Equivalent current-applicability wording must not become a source conflict'
 Assert-Equal @($currentEquivalentResults | Where-Object { $_.Result -eq 'CONFIRMED' }).Count 2 'Equivalent current-applicability wording must remain confirmed'
 
+Assert-Equal (Compare-BenefitClaim -ClaimType 'VALID_UNTIL' -CanonicalValue '2026-12-31' -EvidenceValue '2026.12.31').Result 'CONFIRMED' 'Equivalent validity dates with separator-only formatting differences must confirm'
+
+$sameDateA = New-TestValidated -ClaimType 'VALID_UNTIL' -Value '2026-12-31'
+$sameDateB = New-TestValidated -ClaimType 'VALID_UNTIL' -Value '2026.12.31'
+$sameDateResults = @(Compare-BenefitClaims -Benefit $benefit -ValidatedEvidence @($sameDateA, $sameDateB))
+Assert-Equal @($sameDateResults | Where-Object { $_.Result -eq 'CONFLICT' }).Count 0 'Equivalent validity-date formatting must not become source conflict'
+
+$differentDate = New-TestValidated -ClaimType 'VALID_UNTIL' -Value '2027-01-01'
+$differentDateResults = @(Compare-BenefitClaims -Benefit $benefit -ValidatedEvidence @($sameDateA, $differentDate))
+Assert-Equal @($differentDateResults | Where-Object { $_.Result -eq 'CONFLICT' }).Count 2 'Different validated validity dates must remain unresolved source conflicts'
+
 Write-Host 'Benefit claim comparison tests passed.'
+
 

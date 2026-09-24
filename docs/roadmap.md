@@ -1,13 +1,14 @@
 # MILIMAP Development Roadmap
 
 - Status: Directional roadmap
-- Date: 2026-09-10
+- Date: 2026-09-24
 - Current development branch: `dev`
-- Current active phase: Phase 1 — POI Verification Core / Shadow Mode
+- Current state: Phase 1 COMPLETE
+- Next phase: Phase 2 — NOT STARTED (design discussion next)
 
 이 문서는 MILIMAP의 장기 개발 방향을 팀원이 한눈에 확인하기 위한 로드맵입니다.
 
-현재 실행 단위는 **Phase 1만 구체화**되어 있습니다. Phase 2 이후는 방향과 목적만 공유하며, 미래 담당자·세부 Issue·구현 파일·Contract는 지금 고정하지 않습니다.
+Phase 1 POI Verification Core / Shadow Mode의 구현과 validation closeout evidence는 완료되었습니다. Phase 2 이후는 방향과 목적만 공유하며, 미래 담당자·세부 Issue·구현 파일·Contract는 지금 고정하지 않습니다.
 
 항상 최신 `dev`, 해당 시점의 Issue/PR, 승인된 ADR/docs가 이 문서보다 우선합니다.
 
@@ -50,15 +51,17 @@ Phase 7 — Near-event-driven Monitoring
 
 ### 상태
 
-현재 진행 중입니다.
+완료 상태입니다. implementation baseline은 `97d6070113196e922fb76af7508314b6eda8e7b7`이며, A/B/C, Integration, candidate diagnostics/provenance가 모두 `dev`에 병합되었습니다.
 
-현재 병렬 구현 Issue:
+- A — Business Identity / Normalization: PR #37
+- B — POI Discovery: PR #34
+- C — POI Matching / Evaluation: PR #36
+- Integration: PR #39
+- Candidate diagnostics / provenance: PR #41
 
-- #28 — Business Identity / Normalization Core
-- #29 — POI Discovery Engine
-- #30 — POI Matching / Evaluation
+2026-09-24 operational validation은 initial smoke 6 rows / 23 provider queries와 representative sample 24 rows / 100 provider queries를 포함한다. representative sample은 discovery/evaluation `COMPLETE` 24 / 24, `ProductionAction=NONE` 24 / 24, `PARTIAL` / `FAILED` 0, canonical / seed / apps diff 0을 확인했다.
 
-공통 Contract Foundation은 `dev`에 병합되어 있습니다.
+세부 evidence와 remaining risks는 [`docs/handover/2026-09-24-phase1-poi-shadow-validation.md`](handover/2026-09-24-phase1-poi-shadow-validation.md)를 참조한다.
 
 ### 목표
 
@@ -93,25 +96,20 @@ Review Queue + Metrics
 - POI 근거를 군인 혜택 근거로 사용하지 않음
 - Phase 1 `ProductionAction`은 항상 `NONE`
 
-### Phase 1 완료 조건
+### Phase 1 closeout Gate
 
-Issue #28/#29/#30의 구현 PR이 각각 `dev`에 병합된 것만으로 Phase 1이 완료되지는 않습니다.
+Phase 1 closeout Gate는 A/B/C 연결, deterministic Shadow regression, Golden safety 확인, operational smoke와 representative sample, candidate diagnostics/provenance, canonical·seed·apps non-write 확인으로 통과했다.
 
-세 모듈 병합 후 별도의 Integration Issue를 열어 다음을 완료해야 합니다.
+- Sample A unresolved workload: GREEN / YELLOW / RED = 5 / 7 / 6
+- Sample A small stratified weighted estimate: GREEN 약 24.4%, deep manual review 약 75.6%
+- Sample B positive controls: candidate discovery 6 / 6, GREEN / YELLOW / RED = 3 / 3 / 0
+- Sample A GREEN human audit: SUPPORTED 5, AMBIGUOUS 0, CONFLICT 0
 
-1. 최신 `dev`에서 A/B/C 모듈 연결
-2. 전체 Shadow Mode 실행
-3. P1/P2/P3 Golden Dataset 회귀검증
-4. 알려진 ambiguous/rejected 사례의 false GREEN 확인
-5. 실제 Candidate Recall / GREEN Precision / Manual Review Rate / No-match / API Calls per Row 등 측정 가능한 metric 정리
-6. canonical 및 Android seed가 자동 수정되지 않았는지 확인
-7. 실행 결과와 남은 위험을 보고
-
-이 Gate를 통과한 시점을 Phase 1 완료로 봅니다.
+이 metric은 2026-09-24 observation이며, GREEN은 production approval이 아니고 POI identity/location evidence는 혜택 유효성 evidence가 아니다.
 
 ### Phase 1 이후
 
-Phase 1 결과를 바탕으로 Phase 2를 바로 구현하지 않습니다.
+Phase 1 결과를 바탕으로 Phase 2를 바로 구현하지 않습니다. Phase 2는 **NOT STARTED**이며 다음 작업은 design discussion입니다.
 
 먼저 팀에서 다음을 다시 논의합니다.
 

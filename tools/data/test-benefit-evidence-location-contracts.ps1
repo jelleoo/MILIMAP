@@ -146,5 +146,47 @@ Assert-ScopeThrows { New-BenefitEvidenceLocationResult -SourceRowNumber 3 -Opera
 Assert-ScopeThrows { New-BenefitEvidenceLocationResult -SourceRowNumber 2 -OperationalStatus COMPLETE -Status AMBIGUOUS -Slices @($x.Slice) } 'Ambiguity cannot expose usable slices'
 Assert-ScopeThrows { New-BenefitEvidenceLocationResult -SourceRowNumber 2 -OperationalStatus COMPLETE -Status ENDED -Slices @() } 'Benefit state is not a location status'
 Assert-ScopeThrows { New-BenefitEvidenceLocationResult -SourceRowNumber 2 -OperationalStatus COMPLETE -Status NOT_FOUND -Diagnostics @([pscustomobject]@{Code='incomplete'}) } 'Diagnostic shape must remain auditable'
+
+# Regression: internally consistent names must still match actual source positions.
+foreach ($wrongReference in @('HTML_TABLE_1_ROW_99','HTML_TABLE_99_ROW_2','HTML_TABLE_1_ROW_3')) {
+    $x = New-ScopeContractFixture
+    $x.Slice.EvidenceReference = $wrongReference
+    foreach ($key in $x.Slice.FieldReferences.Keys) {
+        $x.Slice.FieldReferences[$key].FieldReference = "$wrongReference/$key"
+    }
+    Assert-ScopeThrows { Assert-RelevantBenefitEvidenceSlice -Slice $x.Slice -Document $x.Document -SourceRowNumber 2 } "Physical reference must match original table and row: $wrongReference"
+}
+
+# Position checks operate on real elements, not HTML-looking text in opaque content.
+foreach ($case in @(
+    @{Prefix='<table><tr><td>earlier table</td></tr></table>'; Index=2},
+    @{Prefix='<!-- <table><tr><td>ignored comment</td></tr></table> -->'; Index=1},
+    @{Prefix='<script>const sample = "<table><tr><td>ignored script</td></tr></table>";</script>'; Index=1},
+    @{Prefix='<div data-sample="<table><tr>not elements</tr></table>"></div>'; Index=1}
+)) {
+    $x = New-ScopeContractFixture
+    $text = $case.Prefix + $x.Document.Text
+    $document = New-ScopeTestDocument -Html $text
+    $snapshot = New-BenefitSourceSnapshot -SourceUrl $document.Url -SourceFormat HTML -Text $text -ObservedAt $document.ObservedAt
+    $sourceUnit = $x.Units[0]
+    $offset = $case.Prefix.Length
+    $reference = "HTML_TABLE_$($case.Index)_ROW_2"
+    $fieldRefs = Copy-ScopeContractData $sourceUnit.FieldReferences
+    foreach ($key in $fieldRefs.Keys) {
+        $fieldRefs[$key].HeaderStart += $offset
+        $fieldRefs[$key].CellStart += $offset
+        $fieldRefs[$key].FieldReference = "$reference/$key"
+    }
+    $shifted = New-BenefitSourceContentUnit -Snapshot $snapshot -UnitReference $reference -TableStart $offset -TableLength $sourceUnit.TableLength -RawStart ($sourceUnit.RawStart+$offset) -RawLength $sourceUnit.RawLength -RawEvidenceText $sourceUnit.RawEvidenceText -StructuredFields $sourceUnit.StructuredFields -FieldReferences $fieldRefs
+    $observation = New-BenefitSourceObservation -SourceRowNumber 2 -Snapshot $snapshot -AdapterId HTML_GENERIC -AdapterVersion 1 -AdapterStatus COMPLETE -ContentUnits @($shifted)
+    $scoped = New-RelevantBenefitEvidenceSlice -Observation $observation -Unit $shifted
+    Assert-RelevantBenefitEvidenceSlice -Slice $scoped -Document $document -SourceRowNumber 2
+}
+# A row written inside an HTML comment is not a real selected source element.
+$fake = '<!-- <table><tr><td>comment only</td></tr></table> -->'
+$fakeSnapshot = New-BenefitSourceSnapshot -SourceUrl $d.Url -SourceFormat HTML -Text $fake -ObservedAt $d.ObservedAt
+$fakeTable = '<table><tr><td>comment only</td></tr></table>'
+$fakeRow = '<tr><td>comment only</td></tr>'
+Assert-ScopeThrows { New-BenefitSourceContentUnit -Snapshot $fakeSnapshot -UnitReference HTML_TABLE_1_ROW_1 -TableStart ($fake.IndexOf('<table>')) -TableLength $fakeTable.Length -RawStart ($fake.IndexOf('<tr>')) -RawLength $fakeRow.Length -RawEvidenceText 'comment only' -StructuredFields @{} -FieldReferences @{} } 'Comment text must not become a physical evidence row'
 Assert-ScopeEqual (Get-BenefitVerificationContractDefinition | ConvertTo-Json -Depth 8 -Compress) $before 'Global contracts remain unchanged after use'
 Write-Host 'Benefit evidence location contract tests passed.'

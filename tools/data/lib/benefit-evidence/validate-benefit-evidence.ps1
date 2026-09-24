@@ -41,7 +41,11 @@ function ConvertTo-ValidatedBenefitEvidence {
     foreach($property in @('SourceRowNumber','Status','Claims','ReasonCodes')){if($Extraction.PSObject.Properties.Name -notcontains $property){throw "Missing extraction property: $property"}}
     Assert-BenefitSourceDocument $Document;Assert-BenefitSourceRowNumber ([int]$Extraction.SourceRowNumber);Assert-BenefitAllowedCode 'ExtractionStatus' ([string]$Extraction.Status);Assert-BenefitReasonCodes $Extraction.ReasonCodes
     if([int]$Extraction.SourceRowNumber -ne [int]$Document.SourceRowNumber){throw 'Validation inputs must preserve one SourceRowNumber'}
-    $claims=@($Extraction.Claims|ForEach-Object{Test-BenefitExtractedClaim -Claim $_ -Document $Document})
+    $validationDocument=$Document
+    if($Extraction.PSObject.Properties.Name -contains 'SourceRepresentation' -and -not [string]::IsNullOrWhiteSpace([string]$Extraction.SourceRepresentation)){
+        $validationDocument=New-BenefitSourceDocument -SourceRowNumber $Document.SourceRowNumber -Url $Document.Url -SourceFormat $Document.SourceFormat -FetchStatus $Document.FetchStatus -ContentType $Document.ContentType -Text ([string]$Extraction.SourceRepresentation) -Bytes $Document.Bytes -ObservedAt $Document.ObservedAt -ReasonCodes $Document.ReasonCodes
+    }
+    $claims=@($Extraction.Claims|ForEach-Object{Test-BenefitExtractedClaim -Claim $_ -Document $validationDocument})
     $status=if([string]$Extraction.Status -eq 'FAILED'){'FAILED'}elseif(@($claims|Where-Object{$_.ValidationStatus -eq 'INVALID'}).Count -gt 0){'PARTIAL'}else{'COMPLETE'}
     [pscustomobject][ordered]@{SourceRowNumber=[int]$Extraction.SourceRowNumber;Status=$status;Claims=$claims;ReasonCodes=@($Extraction.ReasonCodes)}
 }

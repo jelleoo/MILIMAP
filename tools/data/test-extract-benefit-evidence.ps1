@@ -2,8 +2,10 @@ $ErrorActionPreference = 'Stop'
 
 $contractPath = Join-Path $PSScriptRoot 'lib/benefit-verification-contracts.ps1'
 $extractionPath = Join-Path $PSScriptRoot 'lib/benefit-evidence/extract-benefit-evidence.ps1'
+$validationPath = Join-Path $PSScriptRoot 'lib/benefit-evidence/validate-benefit-evidence.ps1'
 . $contractPath
 if (Test-Path -LiteralPath $extractionPath) { . $extractionPath }
+if (Test-Path -LiteralPath $validationPath) { . $validationPath }
 
 function Assert-Equal {
     param([AllowNull()]$Actual, [AllowNull()]$Expected, [Parameter(Mandatory)][string]$Message)
@@ -43,17 +45,34 @@ $htmlClaim = @($htmlExtraction.Claims | Where-Object { $_.ClaimType -eq 'BENEFIT
 Assert-Equal $htmlClaim.Count 1 'Recognized HTML benefit cell must produce exactly one benefit-description claim'
 Assert-ExtractedBenefitClaim $htmlClaim[0]
 Assert-Equal $htmlClaim[0].SourceUrl $htmlDocument.Url 'Structured HTML claim must preserve document URL'
-Assert-True ($htmlClaim[0].EvidenceText -like '*10% 할인*') 'Structured HTML claim evidence must preserve source-supported benefit text'
+Assert-True ($htmlClaim[0].EvidenceReference -like '*ROW_1*') 'Structured HTML claim evidence reference must remain row-specific'
+Assert-Equal $htmlClaim[0].EvidenceText '업소명: 테스트 식당 | 주소: 서울 마포구 테스트로 12 | 할인: 10% 할인' 'Structured HTML claim evidence must preserve recognized row business context'
+$htmlValidation = ConvertTo-ValidatedBenefitEvidence -Extraction $htmlExtraction -Document $htmlDocument
+Assert-Equal $htmlValidation.Status 'COMPLETE' 'Structured HTML extraction must remain validatable against parsed row evidence'
+Assert-Equal $htmlValidation.Claims[0].ValidationStatus 'VALIDATED' 'Structured HTML claim must validate against parsed row evidence'
 
-$unknownHtml = '<table><tr><th>업소명</th><th>비고</th></tr><tr><td>테스트 식당</td><td>10% 할인</td></tr></table>'
+$unknownHtml = '<table><tr><th>업소명</th><th>비고</th></tr><tr><td>테스트 식당</td><td>10% 할인</td></tr></table><p>현역 장병 20% 할인</p>'
 $unknownDocument = New-TestDocument -Url 'https://city.example.go.kr/unknown' -Text $unknownHtml
 $unknownExtraction = Invoke-BenefitEvidenceExtraction -Source (New-TestBoundSource -Document $unknownDocument) -Document $unknownDocument
-Assert-Equal @($unknownExtraction.Claims).Count 0 'Unknown structured columns must not create claims'
+Assert-Equal $unknownExtraction.Status 'FAILED' 'A non-benefit HTML table must not suppress free-form extraction fallback'
+Assert-True ($unknownExtraction.ReasonCodes -contains 'EXTRACTION_PROVIDER_NOT_CONFIGURED') 'Non-benefit HTML table without extractor must retain free-form provider failure'
+$unknownInjected = Invoke-BenefitEvidenceExtraction -Source (New-TestBoundSource -Document $unknownDocument) -Document $unknownDocument -UnstructuredExtractor {
+    param($Text, $ExtractorDocument, $ExtractorSource)
+    [pscustomobject]@{ ClaimType='BENEFIT_DESCRIPTION'; Value='20% 할인'; EvidenceText='현역 장병 20% 할인'; EvidenceReference='extractor:unknown-table' }
+}
+Assert-Equal $unknownInjected.Status 'COMPLETE' 'A non-benefit HTML table must route to an injected free-form extractor'
+Assert-Equal @($unknownInjected.Claims | Where-Object { $_.Value -eq '20% 할인' }).Count 1 'Free-form fallback must retain the source-supported prose claim'
+Assert-Equal @($unknownInjected.Claims | Where-Object { $_.Value -eq '10% 할인' }).Count 0 'Unknown table remarks must not create a benefit claim'
 
 $csvDocument = New-TestDocument -Url 'https://city.example.go.kr/list.csv' -SourceFormat 'CSV' -Text "업소명,할인`n테스트 식당,10% 할인"
 $csvExtraction = Invoke-BenefitEvidenceExtraction -Source (New-TestBoundSource -Document $csvDocument) -Document $csvDocument
 Assert-Equal $csvExtraction.Status 'COMPLETE' 'Recognized CSV extraction must complete deterministically'
-Assert-Equal @($csvExtraction.Claims | Where-Object { $_.ClaimType -eq 'BENEFIT_DESCRIPTION' -and $_.Value -eq '10% 할인' }).Count 1 'Recognized CSV benefit field must produce a benefit-description claim'
+$csvClaim = @($csvExtraction.Claims | Where-Object { $_.ClaimType -eq 'BENEFIT_DESCRIPTION' -and $_.Value -eq '10% 할인' })
+Assert-Equal $csvClaim.Count 1 'Recognized CSV benefit field must produce a benefit-description claim'
+Assert-Equal $csvClaim[0].EvidenceText '업소명: 테스트 식당 | 할인: 10% 할인' 'Structured CSV claim evidence must preserve recognized row business context'
+Assert-Equal $csvClaim[0].SourceUrl $csvDocument.Url 'Structured CSV claim must preserve document URL'
+Assert-True ($csvClaim[0].EvidenceReference -like '*ROW_1*') 'Structured CSV claim evidence reference must remain row-specific'
+Assert-Equal (ConvertTo-ValidatedBenefitEvidence -Extraction $csvExtraction -Document $csvDocument).Claims[0].ValidationStatus 'VALIDATED' 'Structured CSV claim must validate against parsed row evidence'
 
 $freeDocument = New-TestDocument -Url 'https://city.example.go.kr/notice' -Text '<p>현역 장병 혜택 안내</p>'
 $noExtractor = Invoke-BenefitEvidenceExtraction -Source (New-TestBoundSource -Document $freeDocument) -Document $freeDocument
@@ -89,6 +108,30 @@ $pdfWithoutUnstructured = Invoke-BenefitEvidenceExtraction -Source (New-TestBoun
 Assert-Equal $pdfWithoutUnstructured.Status 'FAILED' 'PDF free text without unstructured extractor must fail closed'
 Assert-True ($pdfWithoutUnstructured.ReasonCodes -contains 'EXTRACTION_PROVIDER_NOT_CONFIGURED') 'PDF free text preserves missing unstructured extractor reason'
 
+$pdfExtraction = Invoke-BenefitEvidenceExtraction -Source (New-TestBoundSource -Document $pdfDocument) -Document $pdfDocument -PdfTextExtractor {
+    param($Bytes, $ExtractorDocument, $ExtractorSource)
+    '현역 장병 20% 할인'
+} -UnstructuredExtractor {
+    param($Text, $ExtractorDocument, $ExtractorSource)
+    [pscustomobject]@{ ClaimType='BENEFIT_DESCRIPTION'; Value='20% 할인'; EvidenceText='현역 장병 20% 할인'; EvidenceReference='pdf:1' }
+}
+Assert-Equal $pdfExtraction.Status 'COMPLETE' 'PDF text extraction with grounded unstructured output must complete'
+$pdfValidation = ConvertTo-ValidatedBenefitEvidence -Extraction $pdfExtraction -Document $pdfDocument
+Assert-Equal $pdfValidation.Status 'COMPLETE' 'PDF claims must validate against the injected PDF text representation'
+Assert-Equal $pdfValidation.Claims[0].ValidationStatus 'VALIDATED' 'PDF grounded claim must validate even when document text is empty'
+
+$pdfHallucinatedExtraction = Invoke-BenefitEvidenceExtraction -Source (New-TestBoundSource -Document $pdfDocument) -Document $pdfDocument -PdfTextExtractor {
+    param($Bytes, $ExtractorDocument, $ExtractorSource)
+    '현역 장병 20% 할인'
+} -UnstructuredExtractor {
+    param($Text, $ExtractorDocument, $ExtractorSource)
+    [pscustomobject]@{ ClaimType='BENEFIT_DESCRIPTION'; Value='30% 할인'; EvidenceText='현역 장병 30% 할인'; EvidenceReference='pdf:hallucinated' }
+}
+$pdfHallucinatedValidation = ConvertTo-ValidatedBenefitEvidence -Extraction $pdfHallucinatedExtraction -Document $pdfDocument
+Assert-Equal $pdfHallucinatedValidation.Status 'PARTIAL' 'A hallucinated PDF claim must fail validation without discarding extraction provenance'
+Assert-Equal $pdfHallucinatedValidation.Claims[0].ValidationStatus 'INVALID' 'A PDF claim unsupported by parser text must be invalid'
+Assert-True ($pdfHallucinatedValidation.Claims[0].ReasonCodes -contains 'EXTRACTION_SOURCE_MISMATCH') 'A hallucinated PDF claim must preserve the source mismatch reason'
+
 $xlsxDocument = New-TestDocument -Url 'https://city.example.go.kr/list.xlsx' -SourceFormat 'XLSX' -Bytes ([byte[]](1,2,3))
 $noSpreadsheetExtractor = Invoke-BenefitEvidenceExtraction -Source (New-TestBoundSource -Document $xlsxDocument) -Document $xlsxDocument
 Assert-Equal $noSpreadsheetExtractor.Status 'FAILED' 'XLSX without injected spreadsheet extractor must fail operationally'
@@ -99,7 +142,14 @@ $xlsxExtraction = Invoke-BenefitEvidenceExtraction -Source (New-TestBoundSource 
     @([pscustomobject]@{ 업소명='테스트 식당'; 할인='15% 할인' })
 }
 Assert-Equal $xlsxExtraction.Status 'COMPLETE' 'Injected XLSX structured representation must complete'
-Assert-Equal @($xlsxExtraction.Claims | Where-Object { $_.ClaimType -eq 'BENEFIT_DESCRIPTION' -and $_.Value -eq '15% 할인' }).Count 1 'Injected XLSX recognized benefit field must produce a claim'
+$xlsxClaim = @($xlsxExtraction.Claims | Where-Object { $_.ClaimType -eq 'BENEFIT_DESCRIPTION' -and $_.Value -eq '15% 할인' })
+Assert-Equal $xlsxClaim.Count 1 'Injected XLSX recognized benefit field must produce a claim'
+Assert-Equal $xlsxClaim[0].EvidenceText '업소명: 테스트 식당 | 할인: 15% 할인' 'Structured XLSX claim evidence must preserve recognized row business context'
+Assert-Equal $xlsxClaim[0].SourceUrl $xlsxDocument.Url 'Structured XLSX claim must preserve document URL'
+Assert-True ($xlsxClaim[0].EvidenceReference -like '*ROW_1*') 'Structured XLSX claim evidence reference must remain row-specific'
+$xlsxValidation = ConvertTo-ValidatedBenefitEvidence -Extraction $xlsxExtraction -Document $xlsxDocument
+Assert-Equal $xlsxValidation.Status 'COMPLETE' 'XLSX claims must validate against the injected structured row representation'
+Assert-Equal $xlsxValidation.Claims[0].ValidationStatus 'VALIDATED' 'XLSX structured claim must validate when document text is empty'
 
 $unsupportedDocument = New-TestDocument -Url 'https://city.example.go.kr/archive.bin' -SourceFormat 'UNSUPPORTED'
 $unsupported = Invoke-BenefitEvidenceExtraction -Source (New-TestBoundSource -Document $unsupportedDocument) -Document $unsupportedDocument

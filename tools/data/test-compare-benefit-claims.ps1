@@ -42,4 +42,17 @@ $conflicts = @(Compare-BenefitClaims -Benefit $benefit -ValidatedEvidence @($con
 Assert-Equal @($conflicts | Where-Object { $_.Result -eq 'CONFLICT' }).Count 2 'Contradictory validated material values must remain unresolved conflicts'
 Assert-True (@($conflicts | Where-Object { $_.ReasonCodes -contains 'SOURCE_CONFLICT' }).Count -eq 2) 'Conflicting evidence must preserve source-conflict reasons'
 
+$validationConflict = New-TestValidated -ClaimType 'BENEFIT_DESCRIPTION' -Value '10% 할인' -ValidationStatus 'CONFLICT'
+$validationConflict.ReasonCodes = @('SOURCE_CONFLICT')
+$validationConflictResult = @(Compare-BenefitClaims -Benefit $benefit -ValidatedEvidence @($validationConflict))[0]
+Assert-Equal $validationConflictResult.Result 'CONFLICT' 'A conflict-status validated claim must remain a claim-level conflict'
+Assert-True ($validationConflictResult.ReasonCodes -contains 'SOURCE_CONFLICT') 'A conflict-status validated claim must preserve its conflict reason'
+
+$negatedEnd = New-TestValidated -ClaimType 'CURRENT_APPLICABILITY' -Value '혜택 종료 예정 없음'
+$negatedEndResult = @(Compare-BenefitClaims -Benefit $benefit -ValidatedEvidence @($negatedEnd))[0]
+Assert-Equal $negatedEndResult.Result 'UNKNOWN' 'Negated ending language must not become explicit ending evidence'
+$negatedCurrent = New-TestValidated -ClaimType 'CURRENT_APPLICABILITY' -Value '현재 적용되지 않습니다'
+$negatedCurrentResult = @(Compare-BenefitClaims -Benefit $benefit -ValidatedEvidence @($negatedCurrent))[0]
+Assert-Equal $negatedCurrentResult.Result 'UNKNOWN' 'Negated currentness language must not become confirmed applicability'
+
 Write-Host 'Benefit claim comparison tests passed.'

@@ -59,9 +59,9 @@ function Get-BenefitCanonicalClaimValue {
 function Get-BenefitLifecycleComparisonResult {
     param([Parameter(Mandatory)]$Claim)
     $value = ConvertTo-BenefitComparisonText $Claim.Value
-    if ($Claim.ClaimType -eq 'CURRENT_APPLICABILITY' -and $value -match '(종료|중단|폐지)') { return [pscustomobject]@{ Result='ENDED'; ReasonCodes=@('EXPLICIT_DISCONTINUATION') } }
-    if ($Claim.ClaimType -eq 'CURRENT_APPLICABILITY' -and $value -match '(현재|적용\s*중|상시|이용\s*가능)') { return [pscustomobject]@{ Result='CONFIRMED'; ReasonCodes=@() } }
-    if ($Claim.ClaimType -eq 'BENEFIT_EXISTENCE' -and $value -match '(혜택|할인|제공)') { return [pscustomobject]@{ Result='CONFIRMED'; ReasonCodes=@() } }
+    if ($Claim.ClaimType -eq 'CURRENT_APPLICABILITY' -and $value -match '^(혜택\s*)?(종료|중단|폐지)(됨|되었습니다|입니다)?$') { return [pscustomobject]@{ Result='ENDED'; ReasonCodes=@('EXPLICIT_DISCONTINUATION') } }
+    if ($Claim.ClaimType -eq 'CURRENT_APPLICABILITY' -and $value -match '^(현재\s*)?(적용|적용\s*중|이용\s*가능|상시)$') { return [pscustomobject]@{ Result='CONFIRMED'; ReasonCodes=@() } }
+    if ($Claim.ClaimType -eq 'BENEFIT_EXISTENCE' -and $value -match '^(혜택|할인)\s*(제공|적용)$') { return [pscustomobject]@{ Result='CONFIRMED'; ReasonCodes=@() } }
     return [pscustomobject]@{ Result='UNKNOWN'; ReasonCodes=@('CLAIM_UNKNOWN') }
 }
 
@@ -74,7 +74,8 @@ function Compare-BenefitClaims {
     $results = @()
     foreach ($claim in $claims) {
         $canonicalValue = Get-BenefitCanonicalClaimValue -Benefit $Benefit -ClaimType $claim.ClaimType; $result = 'UNKNOWN'; $reasons = @('CLAIM_UNKNOWN')
-        if ($claim.ValidationStatus -eq 'VALIDATED') {
+        if ($claim.ValidationStatus -eq 'CONFLICT') { $result = 'CONFLICT'; $reasons = @('SOURCE_CONFLICT') }
+        elseif ($claim.ValidationStatus -eq 'VALIDATED') {
             if ($conflictTypes -contains $claim.ClaimType) { $result = 'CONFLICT'; $reasons = @('SOURCE_CONFLICT') }
             elseif ($canonicalValue) { $comparison = Compare-BenefitClaim -ClaimType $claim.ClaimType -CanonicalValue $canonicalValue -EvidenceValue $claim.Value; $result = $comparison.Result; $reasons = @($comparison.ReasonCodes) }
             else { $comparison = Get-BenefitLifecycleComparisonResult -Claim $claim; $result = $comparison.Result; $reasons = @($comparison.ReasonCodes) }

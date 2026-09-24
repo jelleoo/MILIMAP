@@ -8,10 +8,10 @@ function Assert-Equal { param([AllowNull()]$Actual, [AllowNull()]$Expected, [Par
 function Assert-True { param([bool]$Condition, [Parameter(Mandatory)][string]$Message); if (-not $Condition) { throw $Message } }
 function New-TestBenefit { New-CanonicalBenefitRecord -SourceRowNumber 2 -BusinessName '테스트 식당' -BenefitDescription '10% 할인' -EligibleTarget '현역 장병' -UsageCondition '상시' -VerificationMethod '군인 신분증 확인' }
 function New-TestSource {
-    param([string]$Binding='STRONG', [string[]]$ReasonCodes=@())
+    param([string]$Binding='STRONG', [string[]]$ReasonCodes=@(), [string]$Officiality='VERIFIED_OFFICIAL')
     $candidate = New-BenefitSourceCandidate -SourceRowNumber 2 -Url 'https://city.example.go.kr/benefit' -SourceKind 'PUBLIC_OFFICIAL' -SourceLabel 'fixture' -DiscoveryMethod 'TEST' -ObservedAt '2026-09-24T00:00:00Z'
     $document = New-BenefitSourceDocument -SourceRowNumber 2 -Url $candidate.Url -SourceFormat 'HTML' -FetchStatus 'COMPLETE' -ContentType 'text/html' -Text 'fixture' -ObservedAt '2026-09-24T00:00:00Z'
-    $qualified = New-QualifiedBenefitSource -Candidate $candidate -Document $document -OfficialityStatus 'VERIFIED_OFFICIAL' -CurrentnessStatus 'UNKNOWN'
+    $qualified = New-QualifiedBenefitSource -Candidate $candidate -Document $document -OfficialityStatus $Officiality -CurrentnessStatus 'UNKNOWN'
     New-BoundBenefitSource -QualifiedSource $qualified -BusinessBindingStatus $Binding -ReasonCodes $ReasonCodes
 }
 function New-TestClaim {
@@ -66,6 +66,17 @@ Assert-True ($activeIncomplete.ReasonCodes -contains 'DETAIL_INCOMPLETE') 'Incom
 $activeComplete = Invoke-BenefitStateEvaluation -Benefit $benefit -Sources @($strong) -ClaimResults @($existence, $current, $description, $target, $usage, $method, (New-BenefitClaimVerification -ClaimType 'VALID_UNTIL' -Result 'UNKNOWN' -ReasonCodes @('CLAIM_UNKNOWN'))) -OperationalStatus $complete
 Assert-Equal $activeComplete.BenefitState 'ACTIVE' 'Unknown lifecycle dates alone must not downgrade a complete active result'
 Assert-Equal $activeComplete.ReviewClass 'GREEN' 'Complete current detail must be green'
+
+$unverified = Invoke-BenefitStateEvaluation -Benefit $benefit -Sources @(New-TestSource -Officiality 'UNVERIFIED') -ClaimResults @($existence, $current, $description, $target, $usage, $method) -OperationalStatus $complete
+Assert-Equal $unverified.BenefitState 'NEEDS_VERIFICATION' 'Unverified source must not produce an active result'
+Assert-True ($unverified.ReasonCodes -contains 'SOURCE_OFFICIALITY_UNRESOLVED') 'Unverified source must preserve officiality insufficiency'
+
+$unsupportedNotApplicable = New-BenefitClaimVerification -ClaimType 'USAGE_CONDITION' -Result 'NOT_APPLICABLE'
+$unsupportedMethodNotApplicable = New-BenefitClaimVerification -ClaimType 'VERIFICATION_METHOD' -Result 'NOT_APPLICABLE'
+$unsupportedNotApplicableEvaluation = Invoke-BenefitStateEvaluation -Benefit $benefit -Sources @($strong) -ClaimResults @($existence, $current, $description, $target, $unsupportedNotApplicable, $unsupportedMethodNotApplicable) -OperationalStatus $complete
+Assert-Equal $unsupportedNotApplicableEvaluation.BenefitState 'ACTIVE' 'Unsupported not-applicable detail must not alter lifecycle state'
+Assert-Equal $unsupportedNotApplicableEvaluation.ReviewClass 'YELLOW' 'Unsupported not-applicable detail must not qualify for green'
+Assert-True ($unsupportedNotApplicableEvaluation.ReasonCodes -contains 'DETAIL_INCOMPLETE') 'Unsupported not-applicable detail must retain incomplete-detail reason'
 
 $changedDescription = New-TestClaim -ClaimType 'BENEFIT_DESCRIPTION' -Result 'CHANGED' -Value '20% 할인' -ReasonCodes @('MATERIAL_CHANGE')
 $changedGreen = Invoke-BenefitStateEvaluation -Benefit $benefit -Sources @($strong) -ClaimResults @($existence, $current, $changedDescription, $target, $usage, $method) -OperationalStatus $complete

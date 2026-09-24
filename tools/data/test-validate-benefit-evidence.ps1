@@ -14,6 +14,12 @@ function Assert-True {
     param([bool]$Condition, [Parameter(Mandatory)][string]$Message)
     if (-not $Condition) { throw $Message }
 }
+function Assert-Throws {
+    param([Parameter(Mandatory)][scriptblock]$Action, [Parameter(Mandatory)][string]$Message)
+    $threw=$false
+    try { & $Action } catch { $threw=$true }
+    if (-not $threw) { throw $Message }
+}
 
 function New-TestDocument {
     param([string]$Url='https://city.example.go.kr/benefit', [string]$Text='현역 장병 20% 할인', [int]$SourceRowNumber=2)
@@ -75,5 +81,39 @@ $mixed = ConvertTo-ValidatedBenefitEvidence -Extraction $mixedExtraction -Docume
 Assert-Equal $mixed.Status 'PARTIAL' 'Mixed valid and invalid claims must remain operationally partial'
 Assert-Equal @($mixed.Claims | Where-Object { $_.ValidationStatus -eq 'VALIDATED' }).Count 1 'One valid claim must survive independently'
 Assert-Equal @($mixed.Claims | Where-Object { $_.ValidationStatus -eq 'INVALID' }).Count 1 'One invalid claim must remain preserved independently'
+
+# A1.3 scoped validation independently checks selected original cell provenance.
+. (Join-Path $PSScriptRoot 'testdata/benefit-evidence-location/test-support.ps1')
+. (Join-Path $PSScriptRoot 'lib/benefit-evidence/convert-html-source-observation.ps1')
+. (Join-Path $PSScriptRoot 'lib/benefit-evidence/find-business-evidence-slice.ps1')
+. (Join-Path $PSScriptRoot 'lib/benefit-evidence/extract-benefit-evidence.ps1')
+$scopedDocument = New-ScopeTestDocument
+$scopedObservation = ConvertTo-BenefitHtmlObservation -Document $scopedDocument
+$scopedBusiness = New-ScopeTestBusiness
+$scopedSlice = (Find-BenefitBusinessEvidence -Observation $scopedObservation -Business $scopedBusiness -CanonicalPhone '02-0000-0012').Slices[0]
+$scopedClaim = New-ExtractedBenefitClaim -ClaimType BENEFIT_DESCRIPTION -Value '10% 할인' -EvidenceText '10% 할인' -EvidenceReference $scopedSlice.FieldReferences.BenefitDescription.FieldReference -SourceUrl $scopedDocument.Url -ExtractionMethod SCOPED_HTML_CELL
+$scopedValidated = Test-ScopedBenefitExtractedClaim -Claim $scopedClaim -Document $scopedDocument -EvidenceSlice $scopedSlice
+Assert-Equal $scopedValidated.ValidationStatus 'VALIDATED' 'Selected original detail cell validates independently'
+$foreignClaim = New-ExtractedBenefitClaim -ClaimType BENEFIT_DESCRIPTION -Value '30% 할인' -EvidenceText '30% 할인' -EvidenceReference $scopedObservation.ContentUnits[1].FieldReferences.BenefitDescription.FieldReference -SourceUrl $scopedDocument.Url -ExtractionMethod SCOPED_HTML_CELL
+$foreignExtraction = [pscustomobject]@{SourceRowNumber=2;Status='COMPLETE';Claims=@($foreignClaim);ReasonCodes=@();SourceRepresentation='30% 할인'}
+$foreignValidated = ConvertTo-ValidatedBenefitEvidence -Extraction $foreignExtraction -Document $scopedDocument -EvidenceSlice $scopedSlice
+Assert-Equal $foreignValidated.Claims[0].ValidationStatus 'INVALID' 'Extractor-authored representation cannot certify a foreign-row claim'
+Assert-True ($foreignValidated.Claims[0].ReasonCodes -contains 'EXTRACTION_SOURCE_MISMATCH') 'Foreign-row claim preserves mismatch reason'
+$wrongType = New-ExtractedBenefitClaim -ClaimType ELIGIBLE_TARGET -Value '10% 할인' -EvidenceText '10% 할인' -EvidenceReference $scopedSlice.FieldReferences.BenefitDescription.FieldReference -SourceUrl $scopedDocument.Url -ExtractionMethod SCOPED_HTML_CELL
+Assert-Equal (Test-ScopedBenefitExtractedClaim -Claim $wrongType -Document $scopedDocument -EvidenceSlice $scopedSlice).ValidationStatus 'INVALID' 'Correct value under another claim type fails'
+$wrongReference = New-ExtractedBenefitClaim -ClaimType BENEFIT_DESCRIPTION -Value '10% 할인' -EvidenceText '10% 할인' -EvidenceReference 'HTML_TABLE_9_ROW_9/BenefitDescription' -SourceUrl $scopedDocument.Url -ExtractionMethod SCOPED_HTML_CELL
+Assert-Equal (Test-ScopedBenefitExtractedClaim -Claim $wrongReference -Document $scopedDocument -EvidenceSlice $scopedSlice).ValidationStatus 'INVALID' 'Matching text without selected field reference fails'
+$wrongUrlScoped = New-ExtractedBenefitClaim -ClaimType BENEFIT_DESCRIPTION -Value '10% 할인' -EvidenceText '10% 할인' -EvidenceReference $scopedSlice.FieldReferences.BenefitDescription.FieldReference -SourceUrl 'https://other.example.com/list' -ExtractionMethod SCOPED_HTML_CELL
+Assert-Equal (Test-ScopedBenefitExtractedClaim -Claim $wrongUrlScoped -Document $scopedDocument -EvidenceSlice $scopedSlice).ValidationStatus 'INVALID' 'Different source URL fails scoped validation'
+Assert-Throws { ConvertTo-ValidatedBenefitEvidence -Extraction $foreignExtraction -Document $scopedDocument -EvidenceSlice $null } 'An explicitly supplied null slice must not enable legacy validation'
+$mutatedSlice = $scopedSlice
+$mutatedSlice.StructuredFields['BenefitDescription'] = '99% 할인'
+Assert-Throws { Assert-RelevantBenefitEvidenceSlice -Slice $mutatedSlice -Document $scopedDocument -SourceRowNumber 2 } 'A mutated slice field must fail original-source provenance validation'
+$qualifiedHtml = (Get-ScopeTestHtml).Replace('10% 할인','&lt;회원만&gt; 10% 할인')
+$qualifiedDocument = New-ScopeTestDocument -Html $qualifiedHtml
+$qualifiedObservation = ConvertTo-BenefitHtmlObservation -Document $qualifiedDocument
+$qualifiedSlice = (Find-BenefitBusinessEvidence -Observation $qualifiedObservation -Business $scopedBusiness -CanonicalPhone '02-0000-0012').Slices[0]
+$truncatedQualifiedClaim = New-ExtractedBenefitClaim -ClaimType BENEFIT_DESCRIPTION -Value '10% 할인' -EvidenceText '10% 할인' -EvidenceReference $qualifiedSlice.FieldReferences.BenefitDescription.FieldReference -SourceUrl $qualifiedDocument.Url -ExtractionMethod SCOPED_HTML_CELL
+Assert-Equal (Test-ScopedBenefitExtractedClaim -Claim $truncatedQualifiedClaim -Document $qualifiedDocument -EvidenceSlice $qualifiedSlice).ValidationStatus 'INVALID' 'Decoded literal qualifiers cannot be stripped to certify a truncated scoped claim'
 
 Write-Host 'Benefit evidence validation tests passed.'

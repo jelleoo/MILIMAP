@@ -2,6 +2,7 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
 . (Join-Path (Split-Path -Parent $PSScriptRoot) 'benefit-verification-contracts.ps1')
+. (Join-Path (Split-Path -Parent $PSScriptRoot) 'benefit-evidence-location-contracts.ps1')
 
 function ConvertTo-BenefitValidationText {
     param([AllowNull()]$Value)
@@ -36,11 +37,47 @@ function Test-BenefitExtractedClaim {
     return New-BenefitValidationResult -Claim $Claim -Status 'VALIDATED'
 }
 
+function ConvertTo-BenefitScopedValidationText {
+    param([AllowNull()]$Value)
+    return (([string]$Value -replace '\s+',' ').Trim())
+}
+
+function Test-ScopedBenefitExtractedClaim {
+    param([Parameter(Mandatory)]$Claim,[Parameter(Mandatory)]$Document,[Parameter(Mandatory)]$EvidenceSlice)
+    Assert-ExtractedBenefitClaim $Claim
+    Assert-BenefitSourceDocument $Document
+    Assert-RelevantBenefitEvidenceSlice -Slice $EvidenceSlice -Document $Document -SourceRowNumber $Document.SourceRowNumber
+    $fieldMap = @{ BENEFIT_DESCRIPTION='BenefitDescription'; ELIGIBLE_TARGET='EligibleTarget'; USAGE_CONDITION='UsageCondition'; VERIFICATION_METHOD='VerificationMethod' }
+    $mismatch = $false
+    $claimType = [string]$Claim.ClaimType
+    if (-not $fieldMap.ContainsKey($claimType)) { $mismatch=$true }
+    else {
+        $field = $fieldMap[$claimType]
+        if (-not $EvidenceSlice.StructuredFields.Contains($field) -or -not $EvidenceSlice.FieldReferences.Contains($field)) { $mismatch=$true }
+        else {
+            $reference = $EvidenceSlice.FieldReferences[$field]
+            $sourceValue = [string]$EvidenceSlice.StructuredFields[$field]
+            if ([string]$Claim.SourceUrl -cne [string]$Document.Url -or [string]$Claim.EvidenceReference -cne [string]$reference.FieldReference -or
+                (ConvertTo-BenefitScopedValidationText $Claim.Value) -cne (ConvertTo-BenefitScopedValidationText $sourceValue) -or
+                (ConvertTo-BenefitScopedValidationText $Claim.EvidenceText) -cne (ConvertTo-BenefitScopedValidationText $sourceValue)) { $mismatch=$true }
+        }
+    }
+    if ($mismatch) { return New-BenefitValidationResult -Claim $Claim -Status 'INVALID' -ReasonCodes @('EXTRACTION_SOURCE_MISMATCH') }
+    return New-BenefitValidationResult -Claim $Claim -Status 'VALIDATED'
+}
+
 function ConvertTo-ValidatedBenefitEvidence {
-    param([Parameter(Mandatory)]$Extraction,[Parameter(Mandatory)]$Document)
+    param([Parameter(Mandatory)]$Extraction,[Parameter(Mandatory)]$Document,[AllowNull()]$EvidenceSlice=$null)
     foreach($property in @('SourceRowNumber','Status','Claims','ReasonCodes')){if($Extraction.PSObject.Properties.Name -notcontains $property){throw "Missing extraction property: $property"}}
     Assert-BenefitSourceDocument $Document;Assert-BenefitSourceRowNumber ([int]$Extraction.SourceRowNumber);Assert-BenefitAllowedCode 'ExtractionStatus' ([string]$Extraction.Status);Assert-BenefitReasonCodes $Extraction.ReasonCodes
     if([int]$Extraction.SourceRowNumber -ne [int]$Document.SourceRowNumber){throw 'Validation inputs must preserve one SourceRowNumber'}
+    if ($PSBoundParameters.ContainsKey('EvidenceSlice')) {
+        if ($null -eq $EvidenceSlice) { throw 'Explicit scoped evidence cannot be null' }
+        Assert-RelevantBenefitEvidenceSlice -Slice $EvidenceSlice -Document $Document -SourceRowNumber $Document.SourceRowNumber
+        $claims=@($Extraction.Claims|ForEach-Object{Test-ScopedBenefitExtractedClaim -Claim $_ -Document $Document -EvidenceSlice $EvidenceSlice})
+        $status=if([string]$Extraction.Status -eq 'FAILED'){'FAILED'}elseif(@($claims|Where-Object{$_.ValidationStatus -eq 'INVALID'}).Count -gt 0){'PARTIAL'}else{'COMPLETE'}
+        return [pscustomobject][ordered]@{SourceRowNumber=[int]$Extraction.SourceRowNumber;Status=$status;Claims=$claims;ReasonCodes=@($Extraction.ReasonCodes)}
+    }
     $validationDocument=$Document
     if($Extraction.PSObject.Properties.Name -contains 'SourceRepresentation' -and -not [string]::IsNullOrWhiteSpace([string]$Extraction.SourceRepresentation)){
         $validationDocument=New-BenefitSourceDocument -SourceRowNumber $Document.SourceRowNumber -Url $Document.Url -SourceFormat $Document.SourceFormat -FetchStatus $Document.FetchStatus -ContentType $Document.ContentType -Text ([string]$Extraction.SourceRepresentation) -Bytes $Document.Bytes -ObservedAt $Document.ObservedAt -ReasonCodes $Document.ReasonCodes

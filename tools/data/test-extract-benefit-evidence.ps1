@@ -168,4 +168,30 @@ Assert-Throws { Invoke-BenefitEvidenceExtraction -Source (New-TestBoundSource -D
 $unrelatedDocument = New-TestDocument -Url 'https://unrelated.example.com/provenance' -Text $html
 Assert-Throws { Invoke-BenefitEvidenceExtraction -Source (New-TestBoundSource -Document $sourceDocument) -Document $unrelatedDocument } 'Extraction must fail closed on document provenance mismatch'
 
+# A1.3 scoped extraction must use only the A1.2 selected physical row.
+. (Join-Path $PSScriptRoot 'testdata/benefit-evidence-location/test-support.ps1')
+. (Join-Path $PSScriptRoot 'lib/benefit-evidence/convert-html-source-observation.ps1')
+. (Join-Path $PSScriptRoot 'lib/benefit-evidence/find-business-evidence-slice.ps1')
+$scopedDocument = New-ScopeTestDocument
+$scopedObservation = ConvertTo-BenefitHtmlObservation -Document $scopedDocument
+$scopedBusiness = New-ScopeTestBusiness
+$scopedSlice = (Find-BenefitBusinessEvidence -Observation $scopedObservation -Business $scopedBusiness -CanonicalPhone '02-0000-0012').Slices[0]
+$scopedSource = New-TestBoundSource -Document $scopedDocument
+$scopedExtraction = Invoke-BenefitEvidenceExtraction -Source $scopedSource -Document $scopedDocument -EvidenceSlice $scopedSlice -UnstructuredExtractor { throw 'Scoped extraction must not call an unstructured extractor' }
+Assert-Equal $scopedExtraction.Status 'COMPLETE' 'A selected supported detail field extracts completely'
+Assert-Equal @($scopedExtraction.Claims | Where-Object { $_.Value -eq '10% 할인' }).Count 1 'Selected business benefit detail is retained'
+Assert-Equal @($scopedExtraction.Claims | Where-Object { $_.Value -eq '30% 할인' }).Count 0 'Another business row cannot leak into scoped extraction'
+Assert-Equal $scopedExtraction.Claims[0].EvidenceReference $scopedSlice.FieldReferences.BenefitDescription.FieldReference 'Scoped claim preserves its selected cell reference'
+Assert-Equal $scopedExtraction.Claims[0].ExtractionMethod 'SCOPED_HTML_CELL' 'Scoped claim records deterministic cell extraction'
+Assert-Equal @($scopedExtraction.Claims | Where-Object { $_.ClaimType -in @('BENEFIT_EXISTENCE','CURRENT_APPLICABILITY','VALID_FROM','VALID_UNTIL') }).Count 0 'Scoped detail extraction never infers lifecycle claims'
+Assert-Throws { Invoke-BenefitEvidenceExtraction -Source $scopedSource -Document $scopedDocument -EvidenceSlice $null } 'An explicitly supplied null slice must not enable legacy extraction'
+$targetOnlyDocument = New-ScopeTestDocument -Html '<table><tr><th>업소명</th><th>적용대상</th></tr><tr><td>테스트가게 A</td><td>현역 장병</td></tr></table>'
+$targetOnlyObservation = ConvertTo-BenefitHtmlObservation -Document $targetOnlyDocument
+$targetOnlySlice = New-RelevantBenefitEvidenceSlice -Observation $targetOnlyObservation -Unit $targetOnlyObservation.ContentUnits[0]
+$targetOnlySource = New-TestBoundSource -Document $targetOnlyDocument
+$targetOnlyExtraction = Invoke-BenefitEvidenceExtraction -Source $targetOnlySource -Document $targetOnlyDocument -EvidenceSlice $targetOnlySlice
+Assert-Equal @($targetOnlyExtraction.Claims).Count 1 'Absent benefit detail remains absent in scoped extraction'
+Assert-Equal $targetOnlyExtraction.Claims[0].ClaimType 'ELIGIBLE_TARGET' 'A present supported non-benefit detail maps deterministically'
+Assert-Equal $targetOnlyExtraction.Claims[0].Value '현역 장병' 'Scoped extraction preserves the selected source value'
+
 Write-Host 'Benefit evidence extraction tests passed.'

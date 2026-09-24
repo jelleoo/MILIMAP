@@ -2,6 +2,7 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
 . (Join-Path (Split-Path -Parent $PSScriptRoot) 'benefit-verification-contracts.ps1')
+. (Join-Path (Split-Path -Parent $PSScriptRoot) 'benefit-evidence-location-contracts.ps1')
 
 $script:BenefitStructuredHeaders = @('할인','할인정보','할인내용','혜택','서비스')
 $script:BenefitStructuredContextHeaders = @('업소명','업체명','상호','주소','소재지','소재지도로명주소','전화번호','연락처')
@@ -111,8 +112,25 @@ function ConvertTo-BenefitExtractorClaims {
 }
 
 function Invoke-BenefitEvidenceExtraction {
-    param([Parameter(Mandatory)]$Source,[Parameter(Mandatory)]$Document,[AllowNull()][scriptblock]$UnstructuredExtractor=$null,[AllowNull()][scriptblock]$SpreadsheetExtractor=$null,[AllowNull()][scriptblock]$PdfTextExtractor=$null)
+    param([Parameter(Mandatory)]$Source,[Parameter(Mandatory)]$Document,[AllowNull()][scriptblock]$UnstructuredExtractor=$null,[AllowNull()][scriptblock]$SpreadsheetExtractor=$null,[AllowNull()][scriptblock]$PdfTextExtractor=$null,[AllowNull()]$EvidenceSlice=$null)
     Assert-BenefitEvidenceSourceDocument -Source $Source -Document $Document
+    if ($PSBoundParameters.ContainsKey('EvidenceSlice')) {
+        if ($null -eq $EvidenceSlice) { throw 'Explicit scoped evidence cannot be null' }
+        Assert-RelevantBenefitEvidenceSlice -Slice $EvidenceSlice -Document $Document -SourceRowNumber $Document.SourceRowNumber
+        $detailMap = [ordered]@{ BenefitDescription='BENEFIT_DESCRIPTION'; EligibleTarget='ELIGIBLE_TARGET'; UsageCondition='USAGE_CONDITION'; VerificationMethod='VERIFICATION_METHOD' }
+        $claims = @()
+        foreach ($field in $detailMap.Keys) {
+            if (-not $EvidenceSlice.StructuredFields.Contains($field) -or -not $EvidenceSlice.FieldReferences.Contains($field)) { continue }
+            $value = [string]$EvidenceSlice.StructuredFields[$field]
+            if ([string]::IsNullOrWhiteSpace($value)) { continue }
+            $reference = $EvidenceSlice.FieldReferences[$field]
+            if ($null -eq $reference -or [string]::IsNullOrWhiteSpace([string]$reference.FieldReference)) { continue }
+            $claim = New-ExtractedBenefitClaim -ClaimType $detailMap[$field] -Value $value -EvidenceText $value -EvidenceReference $reference.FieldReference -SourceUrl $Document.Url -ExtractionMethod 'SCOPED_HTML_CELL'
+            Assert-ExtractedBenefitClaim $claim
+            $claims += $claim
+        }
+        return New-BenefitEvidenceExtractionResult -Source $Source -Status 'COMPLETE' -Claims $claims
+    }
     if([string]$Document.FetchStatus -ne 'COMPLETE'){return New-BenefitEvidenceExtractionResult -Source $Source -Status 'FAILED' -ReasonCodes @($Document.ReasonCodes)}
     if([string]$Document.SourceFormat -eq 'UNSUPPORTED'){return New-BenefitEvidenceExtractionResult -Source $Source -Status 'FAILED' -ReasonCodes @('SOURCE_UNSUPPORTED')}
     try{

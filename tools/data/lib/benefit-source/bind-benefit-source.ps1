@@ -3,6 +3,7 @@ $ErrorActionPreference = 'Stop'
 
 . (Join-Path (Split-Path -Parent $PSScriptRoot) 'benefit-verification-contracts.ps1')
 . (Join-Path (Split-Path -Parent $PSScriptRoot) 'identity/normalize-business.ps1')
+. (Join-Path (Split-Path -Parent $PSScriptRoot) 'benefit-evidence-location-contracts.ps1')
 
 function ConvertTo-BenefitBindingPhone {
     param([AllowNull()]$Value)
@@ -45,11 +46,45 @@ function Get-BenefitBindingAddressConflicts {
 }
 
 function Get-BenefitBusinessBinding {
-    param([Parameter(Mandatory)]$Source, [Parameter(Mandatory)]$Business, [AllowNull()][string]$CanonicalPhone='')
+    param([Parameter(Mandatory)]$Source, [Parameter(Mandatory)]$Business, [AllowNull()][string]$CanonicalPhone='', [AllowNull()]$EvidenceSlice=$null)
 
     Assert-QualifiedBenefitSource $Source
     Assert-NormalizedBusiness $Business
     if ([int]$Source.SourceRowNumber -ne [int]$Business.SourceRowNumber) { throw 'Binding inputs must preserve one SourceRowNumber' }
+
+    if ($PSBoundParameters.ContainsKey('EvidenceSlice')) {
+        if ($null -eq $EvidenceSlice) { throw 'Explicit scoped evidence cannot be null' }
+        Assert-RelevantBenefitEvidenceSlice -Slice $EvidenceSlice -Document $Source.Document -SourceRowNumber $Business.SourceRowNumber
+        $fields = $EvidenceSlice.StructuredFields
+        $explicitName = if ($fields.Contains('BusinessName')) { [string]$fields['BusinessName'] } else { '' }
+        $address = if ($fields.Contains('Address')) { [string]$fields['Address'] } else { '' }
+        $branch = if ($fields.Contains('Branch')) { [string]$fields['Branch'] } else { '' }
+        $phone = if ($fields.Contains('Phone')) { [string]$fields['Phone'] } else { '' }
+        $nameCompatible = (ConvertTo-IdentityComparisonText $explicitName) -and ((ConvertTo-IdentityComparisonText $explicitName) -ceq (ConvertTo-IdentityComparisonText $Business.NormalizedName))
+        $addressParts = Get-NormalizedAddressParts -RoadAddress $address -LotAddress '' -MetadataProvince '' -MetadataArea ''
+        $branchCompatible = $Business.BranchName -and $branch -and ((ConvertTo-IdentityComparisonText $branch) -ceq (ConvertTo-IdentityComparisonText $Business.BranchName))
+        $sourcePhoneDigits = ConvertTo-BenefitBindingPhone $phone
+        $canonicalPhoneDigits = ConvertTo-BenefitBindingPhone $CanonicalPhone
+        $phoneCompatible = $canonicalPhoneDigits -and $sourcePhoneDigits -and ($canonicalPhoneDigits -ceq $sourcePhoneDigits)
+        $fullAddressCompatible = $Business.PreferredAddress -and $address -and ((ConvertTo-IdentityComparisonText $address) -ceq (ConvertTo-IdentityComparisonText $Business.PreferredAddress))
+        $conflict = $false; $evidence = @(); $addressConflicts = @(Get-BenefitBindingAddressConflicts -Business $Business -AddressParts $addressParts)
+        if ($explicitName -and -not $nameCompatible) { $conflict=$true; $evidence+='BUSINESS_NAME_CONFLICT' }
+        if ($branch -and $Business.BranchName -and -not $branchCompatible) { $conflict=$true; $evidence+='BRANCH_CONFLICT' }
+        if ($addressConflicts.Count -gt 0) { $conflict=$true; $evidence += $addressConflicts }
+        if ($Business.Floor -and $addressParts.Floor -and ((ConvertTo-IdentityComparisonText $Business.Floor) -cne (ConvertTo-IdentityComparisonText $addressParts.Floor))) { $conflict=$true; $evidence+='FLOOR_CONFLICT' }
+        if ($Business.Unit -and $addressParts.Unit -and ((ConvertTo-IdentityComparisonText $Business.Unit) -cne (ConvertTo-IdentityComparisonText $addressParts.Unit))) { $conflict=$true; $evidence+='UNIT_CONFLICT' }
+        if ($CanonicalPhone -and $phone -and -not $phoneCompatible) { $conflict=$true; $evidence+='PHONE_CONFLICT' }
+        if ($conflict) { $status='CONFLICT'; $reasons=@('BUSINESS_BINDING_CONFLICT') }
+        elseif ($nameCompatible -and ($fullAddressCompatible -or $branchCompatible -or $phoneCompatible)) {
+            $status='STRONG'; $reasons=@()
+            if ($fullAddressCompatible) { $evidence+='FULL_ADDRESS_MATCH' }
+            if ($branchCompatible) { $evidence+='BRANCH_MATCH' }
+            if ($phoneCompatible) { $evidence+='PHONE_MATCH' }
+        } else { $status='AMBIGUOUS'; $reasons=@('BUSINESS_BINDING_AMBIGUOUS') }
+        $result = New-BoundBenefitSource -QualifiedSource $Source -BusinessBindingStatus $status -BindingEvidence $evidence -ReasonCodes $reasons
+        Assert-BoundBenefitSource $result
+        return $result
+    }
 
     $text = [string]$Source.Document.Text
     $explicitName = Get-BenefitBindingLabeledValue -Text $text -Labels @('사업장명','업체명','상호')

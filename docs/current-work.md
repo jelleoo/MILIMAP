@@ -74,7 +74,7 @@ Sample A GREEN human audit은 5 SUPPORTED, 0 AMBIGUOUS, 0 CONFLICT였다. 이 �
 
 ## Phase 2 Benefit Verification Core Foundation 상태
 
-Phase 2 provider-neutral Core Foundation은 Contract, existing-source fetch/qualification/binding, evidence extraction/validation, claim comparison/evaluation, Shadow integration까지 구현됐고 Task 7에서 Golden safety와 existing-source operational smoke를 검증 중이다.
+Phase 2 provider-neutral Core Foundation은 Contract, existing-source fetch/qualification/binding, evidence extraction/validation, claim comparison/evaluation, Shadow integration까지 구현됐고 Task 7 Golden safety와 existing-source operational smoke 검증을 완료했다.
 
 현재 흐름:
 
@@ -131,9 +131,9 @@ Task 7 Golden fixture는 real source-cited historical provenance와 synthetic al
 
 ## 다음 액션
 
-1. Task 7 PR #50에서 Golden regression, live existing-source smoke evidence, deterministic data-tool suite, Android CI, protected-path diff를 최종 확인한다.
-2. Issue #43의 provider-neutral Core Foundation 완료 조건을 closeout한다. 이 closeout은 roadmap Phase 2 COMPLETE를 의미하지 않는다.
-3. full Phase 2로 넘어가기 전에 discovery provider, LLM/free-text extraction, PDF/XLSX adapter 중 필요한 항목을 별도 Issue/ADR 수준으로 승인받는다.
-4. 승인된 adapter 이후 247 hold 중심 representative validation + positive controls + human GREEN audit를 수행한다.
+1. Issue #43에서 Task 7 Golden regression, live existing-source smoke, deterministic CI, protected-path non-write evidence를 Core Foundation closeout 근거로 유지한다.
+2. full Phase 2로 넘어가기 전에 discovery provider, LLM/free-text extraction, PDF/XLSX adapter 중 필요한 항목을 별도 Issue/ADR 수준으로 승인받는다.
+3. 승인된 adapter 이후 247 hold 중심 representative validation + positive controls + human GREEN audit를 수행한다.
+4. 이 후속 validation 전에는 roadmap Phase 2를 COMPLETE로 표시하지 않는다.
 
 장기 개발 방향은 [`docs/roadmap.md`](roadmap.md)를 확인한다.

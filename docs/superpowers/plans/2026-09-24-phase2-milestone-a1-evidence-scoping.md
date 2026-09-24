@@ -8,9 +8,11 @@
 
 **Tech Stack:** Existing PowerShell 7 / .NET runtime and repository assertion-style tests. No parser package, SDK, provider, database, or Android dependency is added.
 
-**Spec:** `docs/superpowers/specs/2026-09-24-phase2-adapter-architecture-design.md`, revision `d792fec2e29596e4a78339a86aba0d0732064db9`. The user approved moving from this written spec into planning in the conversation. This plan awaits review and execution-method selection.
+**Spec:** `docs/superpowers/specs/2026-09-24-phase2-adapter-architecture-design.md`, originally written at revision `d792fec2e29596e4a78339a86aba0d0732064db9`. The user reviewed and approved the written spec and this plan. Native execution was selected. A1.1 merged via PR #52; A1.2 is the next delivery.
 
-**Code baseline:** `dev@1244df177888748173d352e735ab4882736e185c`.
+**Plan-time code baseline:** `dev@1244df177888748173d352e735ab4882736e185c`.
+
+**Current execution checkpoint:** A1.1 is merged via PR #52; `dev@650b3f96ccd89c9b2c26ed13ce99915ad4e69275` at documentation integration time. A1.2 must re-read latest `dev` before implementation.
 
 **Plan scope:** Milestone A's first executable sub-project, A1. Completing A1 does not complete Milestone A or Phase 2. A2 source-family adapters and A3 live validation receive separate plans after A1 provides a working boundary.
 

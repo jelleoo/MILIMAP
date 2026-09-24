@@ -37,7 +37,7 @@ function ConvertTo-Phase2CanonicalBenefitRecord {
 }
 
 function Add-Phase2UniqueReasonCodes {
-    param([Parameter(Mandatory)][System.Collections.Generic.List[string]]$Target, [AllowNull()][object[]]$ReasonCodes=@())
+    param([Parameter(Mandatory)][AllowEmptyCollection()][System.Collections.Generic.List[string]]$Target, [AllowNull()][object[]]$ReasonCodes=@())
     foreach ($reason in @($ReasonCodes | Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_) })) {
         Assert-BenefitAllowedCode 'ReasonCode' ([string]$reason)
         if ($Target -notcontains [string]$reason) { $Target.Add([string]$reason) }

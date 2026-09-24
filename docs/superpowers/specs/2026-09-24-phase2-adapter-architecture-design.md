@@ -1,9 +1,10 @@
 # Phase 2 Adapter Architecture Design
 
-- Status: Conversational design approved — written spec awaiting user review
+- Status: Approved — written spec reviewed by user; A1.1 merged; A1.2 is the next delivery
 - Date: 2026-09-24
 - Repository baseline: `dev@1244df177888748173d352e735ab4882736e185c`
 - Scope type: Architectural / source-adapter and evidence-location extension
+- Implementation checkpoint: A1.1 merged via PR #52; `dev@650b3f96ccd89c9b2c26ed13ce99915ad4e69275` at documentation integration time
 - Parent design: `docs/superpowers/specs/2026-09-24-benefit-verification-core-design.md`
 - Related direction: `docs/superpowers/specs/2026-09-10-benefit-business-verification-pipeline-design.md`
 - Related policy: `docs/data-policy.md`

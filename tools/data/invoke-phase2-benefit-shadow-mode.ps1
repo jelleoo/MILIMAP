@@ -48,8 +48,12 @@ function Get-Phase2ExtractionStatus {
     param([AllowNull()][object[]]$SourceRecords=@())
     $statuses = @($SourceRecords | ForEach-Object { [string]$_.Extraction.Status })
     if ($statuses.Count -eq 0) { return 'FAILED' }
-    if (@($statuses | Where-Object { $_ -eq 'COMPLETE' }).Count -gt 0) { return 'COMPLETE' }
-    if (@($statuses | Where-Object { $_ -eq 'PARTIAL' }).Count -gt 0) { return 'PARTIAL' }
+    $completeCount = @($statuses | Where-Object { $_ -eq 'COMPLETE' }).Count
+    $partialCount = @($statuses | Where-Object { $_ -eq 'PARTIAL' }).Count
+    $failedCount = @($statuses | Where-Object { $_ -eq 'FAILED' }).Count
+    if ($failedCount -eq $statuses.Count) { return 'FAILED' }
+    if ($completeCount -eq $statuses.Count) { return 'COMPLETE' }
+    if ($partialCount -gt 0 -or $failedCount -gt 0) { return 'PARTIAL' }
     return 'FAILED'
 }
 

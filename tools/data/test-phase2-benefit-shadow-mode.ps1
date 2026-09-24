@@ -188,6 +188,45 @@ $dedupeRun = Invoke-Phase2BenefitShadowMode -Rows @(New-Phase2TestRow -SourceUrl
     )
 } -UnstructuredExtractor $extractor
 Assert-Equal $script:requestCount 1 'Duplicate source URLs must be fetched once'
+
+# A mixed complete/failed source set must be operationally PARTIAL and fail closed.
+$mixedRun = Invoke-Phase2BenefitShadowMode -Rows @(New-Phase2TestRow -SourceUrl '' -SourceType '') -SourceRowNumberOffset 1 -RequestInvoker {
+    param($Uri)
+    if ($Uri.AbsoluteUri -like '*mixed-failed*') { throw 'timeout' }
+    New-Phase2TestResponse -Url $Uri.AbsoluteUri
+} -DiscoveryInvoker {
+    param($Benefit, $Business)
+    @(
+        [pscustomobject]@{ Url='https://city.example.go.kr/mixed-complete'; SourceKind='PUBLIC_OFFICIAL'; SourceLabel='지자체 공식 자료' },
+        [pscustomobject]@{ Url='https://city.example.go.kr/mixed-failed'; SourceKind='PUBLIC_OFFICIAL'; SourceLabel='지자체 공식 자료' }
+    )
+} -UnstructuredExtractor $extractor
+Assert-Equal $mixedRun.Rows[0].BenefitState 'NEEDS_VERIFICATION' 'Mixed complete/failed extraction must fail closed as PARTIAL'
+Assert-Equal $mixedRun.Summary.ExtractionComplete 1 'Mixed source run must count the complete source'
+Assert-Equal $mixedRun.Summary.ExtractionFailed 1 'Mixed source run must count the failed source'
+
+# HTTP 404 must remain operational failure, never semantic ending.
+$notFoundRun = Invoke-Phase2BenefitShadowMode -Rows @(New-Phase2TestRow) -SourceRowNumberOffset 1 -RequestInvoker {
+    param($Uri)
+    [pscustomobject]@{ StatusCode=404; ContentType='text/html'; Text='not found'; Bytes=$null }
+} -UnstructuredExtractor $extractor
+Assert-Equal $notFoundRun.Rows[0].BenefitState 'NEEDS_VERIFICATION' 'HTTP 404 must remain unresolved'
+Assert-True ($notFoundRun.Rows[0].BenefitState -ne 'ENDED') 'HTTP 404 must never imply ENDED'
+
+# PDF without an injected text adapter must fail closed.
+$pdfRun = Invoke-Phase2BenefitShadowMode -Rows @(New-Phase2TestRow -SourceUrl 'https://city.example.go.kr/benefit.pdf') -SourceRowNumberOffset 1 -RequestInvoker {
+    param($Uri)
+    [pscustomobject]@{ StatusCode=200; ContentType='application/pdf'; Text=''; Bytes=[byte[]](1,2,3) }
+} -UnstructuredExtractor $extractor
+Assert-Equal $pdfRun.Rows[0].BenefitState 'NEEDS_VERIFICATION' 'PDF without adapter must remain unresolved'
+Assert-True ($pdfRun.Rows[0].ReasonCodes -contains 'EXTRACTION_PROVIDER_NOT_CONFIGURED') 'Missing PDF adapter reason must be preserved'
+
+# Diagnostics must retain source provenance and validated evidence detail.
+$activeDiagnostic = @($activeRun.EvidenceDiagnostics)[0]
+Assert-Equal $activeDiagnostic.Url 'https://city.example.go.kr/benefit' 'Diagnostic must preserve source URL'
+Assert-Equal $activeDiagnostic.FetchStatus 'COMPLETE' 'Diagnostic must preserve fetch status'
+Assert-Equal $activeDiagnostic.BusinessBindingStatus 'STRONG' 'Diagnostic must preserve binding status'
+Assert-True (@($activeDiagnostic.ValidatedClaims | Where-Object { $_.EvidenceText -eq '10% 할인' -and $_.ValidationStatus -eq 'VALIDATED' }).Count -gt 0) 'Diagnostic must preserve validated evidence text and status'
 Assert-Equal $dedupeRun.Rows[0].BenefitState 'ACTIVE' 'Deduplicated evidence must still evaluate normally'
 
 Assert-Equal ($activeRun.Summary.Green + $activeRun.Summary.Yellow + $activeRun.Summary.Red) $activeRun.Summary.EvaluatedRows 'Review-class metrics must reconcile'

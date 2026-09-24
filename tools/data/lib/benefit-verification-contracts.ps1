@@ -1,3 +1,6 @@
+Set-StrictMode -Version Latest
+$ErrorActionPreference = 'Stop'
+
 $script:BenefitVerificationContractDefinition = [pscustomobject][ordered]@{
     ContractVersion = 1
     ContractTypes = @(
@@ -271,19 +274,36 @@ function Assert-BenefitClaimVerification {
     Assert-BenefitContractTypeAndVersion $Object 'BenefitClaimVerification'
     Assert-BenefitAllowedCode 'ClaimType' ([string]$Object.ClaimType)
     Assert-BenefitAllowedCode 'ClaimResult' ([string]$Object.Result)
-    if ($null -ne $Object.ValidatedClaim) { Assert-ValidatedBenefitClaim $Object.ValidatedClaim }
+    $decisiveResults = @('CONFIRMED', 'CHANGED', 'ENDED')
+    if ([string]$Object.Result -in $decisiveResults) {
+        if ($null -eq $Object.ValidatedClaim) { throw "$($Object.Result) claim requires a validated claim" }
+        Assert-ValidatedBenefitClaim $Object.ValidatedClaim
+        if ([string]$Object.ValidatedClaim.ValidationStatus -ne 'VALIDATED') { throw "$($Object.Result) claim requires VALIDATED source evidence" }
+        if ([string]$Object.ClaimType -cne [string]$Object.ValidatedClaim.ClaimType) { throw 'Decisive claim type must match validated claim type' }
+        if ([string]$Object.EvidenceValue -cne [string]$Object.ValidatedClaim.Value) { throw 'Decisive evidence value must match validated claim value' }
+    } elseif ($null -ne $Object.ValidatedClaim) {
+        Assert-ValidatedBenefitClaim $Object.ValidatedClaim
+    }
     Assert-BenefitReasonCodes $Object.ReasonCodes
+}
+
+function Assert-BenefitBusinessIdentity {
+    param([Parameter(Mandatory)]$Object)
+    Assert-BenefitRequiredProperties $Object @('ContractType', 'ContractVersion', 'SourceRowNumber')
+    if ([string]$Object.ContractType -ne 'NormalizedBusiness') { throw 'BusinessIdentity must use the NormalizedBusiness contract' }
+    if ([int]$Object.ContractVersion -ne 1) { throw "Unsupported BusinessIdentity contract version: $($Object.ContractVersion)" }
+    Assert-BenefitSourceRowNumber ([int]$Object.SourceRowNumber)
 }
 
 function New-BenefitVerificationResult {
     param(
-        [int]$SourceRowNumber, [string]$BenefitState='NEEDS_VERIFICATION', [string]$ReviewClass='YELLOW',
+        [int]$SourceRowNumber, [AllowNull()]$BusinessIdentity=$null, [string]$BenefitState='NEEDS_VERIFICATION', [string]$ReviewClass='YELLOW',
         [AllowNull()][object[]]$ReasonCodes=@(), [AllowNull()][object[]]$ClaimResults=@(), [AllowNull()][object[]]$Evidence=@(),
         [AllowNull()][object[]]$Warnings=@(), [string]$ProductionAction='NONE'
     )
     return [pscustomobject][ordered]@{
         ContractType='BenefitVerificationResult'; ContractVersion=1; SourceRowNumber=$SourceRowNumber
-        BenefitState=ConvertTo-BenefitText $BenefitState; ReviewClass=ConvertTo-BenefitText $ReviewClass
+        BusinessIdentity=$BusinessIdentity; BenefitState=ConvertTo-BenefitText $BenefitState; ReviewClass=ConvertTo-BenefitText $ReviewClass
         ReasonCodes=@(ConvertTo-BenefitArray $ReasonCodes); ClaimResults=@(ConvertTo-BenefitArray $ClaimResults)
         Evidence=@(ConvertTo-BenefitArray $Evidence); Warnings=@(ConvertTo-BenefitArray $Warnings)
         ProductionAction=ConvertTo-BenefitText $ProductionAction
@@ -292,9 +312,12 @@ function New-BenefitVerificationResult {
 
 function Assert-BenefitVerificationResult {
     param([Parameter(Mandatory)]$Object)
-    Assert-BenefitRequiredProperties $Object @('ContractType', 'ContractVersion', 'SourceRowNumber', 'BenefitState', 'ReviewClass', 'ReasonCodes', 'ClaimResults', 'Evidence', 'Warnings', 'ProductionAction')
+    Assert-BenefitRequiredProperties $Object @('ContractType', 'ContractVersion', 'SourceRowNumber', 'BusinessIdentity', 'BenefitState', 'ReviewClass', 'ReasonCodes', 'ClaimResults', 'Evidence', 'Warnings', 'ProductionAction')
     Assert-BenefitContractTypeAndVersion $Object 'BenefitVerificationResult'
     Assert-BenefitSourceRowNumber ([int]$Object.SourceRowNumber)
+    if ($null -eq $Object.BusinessIdentity) { throw 'BenefitVerificationResult requires BusinessIdentity' }
+    Assert-BenefitBusinessIdentity $Object.BusinessIdentity
+    if ([int]$Object.BusinessIdentity.SourceRowNumber -ne [int]$Object.SourceRowNumber) { throw 'BusinessIdentity must preserve SourceRowNumber' }
     Assert-BenefitAllowedCode 'BenefitState' ([string]$Object.BenefitState)
     Assert-BenefitAllowedCode 'ReviewClass' ([string]$Object.ReviewClass)
     Assert-BenefitReasonCodes $Object.ReasonCodes

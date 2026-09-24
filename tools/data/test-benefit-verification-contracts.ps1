@@ -1,6 +1,8 @@
 $ErrorActionPreference = 'Stop'
 
+$poiContractPath = Join-Path $PSScriptRoot 'lib/poi-verification-contracts.ps1'
 $contractPath = Join-Path $PSScriptRoot 'lib/benefit-verification-contracts.ps1'
+if (Test-Path -LiteralPath $poiContractPath) { . $poiContractPath }
 if (Test-Path -LiteralPath $contractPath) { . $contractPath }
 
 function Assert-Equal {
@@ -70,10 +72,26 @@ Assert-Throws { $x = New-ValidatedBenefitClaim -ClaimType 'VALID_UNTIL' -Value '
 
 $claimVerification = New-BenefitClaimVerification -ClaimType 'BENEFIT_DESCRIPTION' -CanonicalValue '10% 할인' -EvidenceValue '10% 할인' -Result 'CONFIRMED' -ValidatedClaim $validated
 Assert-NoThrow { Assert-BenefitClaimVerification $claimVerification } 'Benefit claim verification must be valid'
+Assert-Throws { $x = New-BenefitClaimVerification -ClaimType 'BENEFIT_DESCRIPTION' -CanonicalValue '10% 할인' -EvidenceValue '10% 할인' -Result 'CONFIRMED'; Assert-BenefitClaimVerification $x } 'CONFIRMED claim requires validated source evidence'
 
-$result = New-BenefitVerificationResult -SourceRowNumber 2 -BenefitState 'ACTIVE' -ReviewClass 'YELLOW' -ReasonCodes @('DETAIL_INCOMPLETE') -ClaimResults @($claimVerification) -Evidence @($bound)
+$invalidValidated = New-ValidatedBenefitClaim -ClaimType 'BENEFIT_DESCRIPTION' -Value '10% 할인' -ValidationStatus 'INVALID' -EvidenceText '현역 장병 10% 할인' -SourceUrl 'https://example.go.kr/benefit'
+Assert-Throws { $x = New-BenefitClaimVerification -ClaimType 'BENEFIT_DESCRIPTION' -CanonicalValue '10% 할인' -EvidenceValue '10% 할인' -Result 'CHANGED' -ValidatedClaim $invalidValidated; Assert-BenefitClaimVerification $x } 'CHANGED claim rejects invalid evidence'
+
+$unknownValidated = New-ValidatedBenefitClaim -ClaimType 'BENEFIT_DESCRIPTION' -Value '10% 할인' -ValidationStatus 'UNKNOWN' -EvidenceText '현역 장병 10% 할인' -SourceUrl 'https://example.go.kr/benefit'
+Assert-Throws { $x = New-BenefitClaimVerification -ClaimType 'BENEFIT_DESCRIPTION' -CanonicalValue '10% 할인' -EvidenceValue '10% 할인' -Result 'ENDED' -ValidatedClaim $unknownValidated; Assert-BenefitClaimVerification $x } 'ENDED claim rejects unknown evidence'
+
+$differentClaimType = New-ValidatedBenefitClaim -ClaimType 'ELIGIBLE_TARGET' -Value '현역 장병' -ValidationStatus 'VALIDATED' -EvidenceText '현역 장병 할인' -SourceUrl 'https://example.go.kr/benefit'
+Assert-Throws { $x = New-BenefitClaimVerification -ClaimType 'BENEFIT_DESCRIPTION' -CanonicalValue '10% 할인' -EvidenceValue '현역 장병' -Result 'CONFIRMED' -ValidatedClaim $differentClaimType; Assert-BenefitClaimVerification $x } 'Decisive claim type must match validated claim type'
+Assert-Throws { $x = New-BenefitClaimVerification -ClaimType 'BENEFIT_DESCRIPTION' -CanonicalValue '10% 할인' -EvidenceValue '20% 할인' -Result 'CONFIRMED' -ValidatedClaim $validated; Assert-BenefitClaimVerification $x } 'Decisive evidence value must match validated claim value'
+Assert-NoThrow { $x = New-BenefitClaimVerification -ClaimType 'BENEFIT_DESCRIPTION' -CanonicalValue '10% 할인' -EvidenceValue '' -Result 'UNKNOWN'; Assert-BenefitClaimVerification $x } 'UNKNOWN claim may remain unresolved'
+Assert-NoThrow { $x = New-BenefitClaimVerification -ClaimType 'VERIFICATION_METHOD' -CanonicalValue '' -EvidenceValue '' -Result 'NOT_APPLICABLE'; Assert-BenefitClaimVerification $x } 'NOT_APPLICABLE claim may omit validated evidence'
+
+$businessIdentity = New-NormalizedBusiness -SourceRowNumber 2 -OriginalName '테스트 식당' -NormalizedName '테스트식당' -AddressParseStatus 'UNPARSED'
+$result = New-BenefitVerificationResult -SourceRowNumber 2 -BusinessIdentity $businessIdentity -BenefitState 'ACTIVE' -ReviewClass 'YELLOW' -ReasonCodes @('DETAIL_INCOMPLETE') -ClaimResults @($claimVerification) -Evidence @($bound)
 Assert-NoThrow { Assert-BenefitVerificationResult $result } 'Benefit verification result must be valid'
+Assert-Equal $result.BusinessIdentity.ContractType 'NormalizedBusiness' 'Business identity must preserve the Phase 1 normalized business contract'
 Assert-Equal $result.ProductionAction 'NONE' 'Shadow action must be NONE'
+Assert-Throws { $x = New-BenefitVerificationResult -SourceRowNumber 2 -BusinessIdentity $null; Assert-BenefitVerificationResult $x } 'Benefit verification result requires business identity'
 Assert-Throws { $x = New-BenefitVerificationResult -SourceRowNumber 2 -ProductionAction 'APPLY'; Assert-BenefitVerificationResult $x } 'Non-NONE production action must fail'
 
 Write-Host 'Benefit verification contract tests passed.'

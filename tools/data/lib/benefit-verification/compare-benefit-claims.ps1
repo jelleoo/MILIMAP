@@ -15,6 +15,17 @@ function Get-BenefitComparisonAmountTokens {
     return @([regex]::Matches((ConvertTo-BenefitComparisonText $Value), '\d+(?:\.\d+)?\s*%|\d{1,3}(?:,\d{3})+\s*원|\d+\s*원') | ForEach-Object { ($_.Value -replace '\s+', '').ToLowerInvariant() })
 }
 
+function Get-BenefitComparisonDateToken {
+    param([AllowNull()]$Value)
+    $match = [regex]::Match((ConvertTo-BenefitComparisonText $Value), '\b(?<year>\d{4})[-./](?<month>\d{1,2})[-./](?<day>\d{1,2})\b')
+    if (-not $match.Success) { return '' }
+    $year = [int]$match.Groups['year'].Value
+    $month = [int]$match.Groups['month'].Value
+    $day = [int]$match.Groups['day'].Value
+    if ($month -lt 1 -or $month -gt 12 -or $day -lt 1 -or $day -gt 31) { return '' }
+    return ('{0:D4}-{1:D2}-{2:D2}' -f $year, $month, $day)
+}
+
 function New-BenefitComparisonResult {
     param([string]$ClaimType, [string]$CanonicalValue, [string]$EvidenceValue, [string]$Result, [AllowNull()][object[]]$ReasonCodes=@())
     [pscustomobject][ordered]@{ ClaimType=$ClaimType; CanonicalValue=$CanonicalValue; EvidenceValue=$EvidenceValue; Result=$Result; ReasonCodes=@($ReasonCodes) }
@@ -45,8 +56,12 @@ function Compare-BenefitClaim {
         if ($canonicalMethod -and $evidenceMethod -and $canonicalMethod -cne $evidenceMethod) { return New-BenefitComparisonResult $ClaimType $CanonicalValue $EvidenceValue 'CHANGED' @('MATERIAL_CHANGE') }
     }
     if ($ClaimType -in @('VALID_FROM', 'VALID_UNTIL')) {
-        $canonicalDate = [regex]::Match($canonical, '\b\d{4}[-./]\d{1,2}[-./]\d{1,2}\b').Value; $evidenceDate = [regex]::Match($evidence, '\b\d{4}[-./]\d{1,2}[-./]\d{1,2}\b').Value
-        if ($canonicalDate -and $evidenceDate -and $canonicalDate -cne $evidenceDate) { return New-BenefitComparisonResult $ClaimType $CanonicalValue $EvidenceValue 'CHANGED' @('MATERIAL_CHANGE') }
+        $canonicalDate = Get-BenefitComparisonDateToken $canonical
+        $evidenceDate = Get-BenefitComparisonDateToken $evidence
+        if ($canonicalDate -and $evidenceDate) {
+            if ($canonicalDate -ceq $evidenceDate) { return New-BenefitComparisonResult $ClaimType $CanonicalValue $EvidenceValue 'CONFIRMED' }
+            return New-BenefitComparisonResult $ClaimType $CanonicalValue $EvidenceValue 'CHANGED' @('MATERIAL_CHANGE')
+        }
     }
     return New-BenefitComparisonResult $ClaimType $CanonicalValue $EvidenceValue 'UNKNOWN' @('CLAIM_UNKNOWN')
 }
@@ -71,7 +86,7 @@ function Test-BenefitValidatedClaimSetConflict {
     if ($validated.Count -le 1) { return $false }
 
     $canonicalValue = Get-BenefitCanonicalClaimValue -Benefit $Benefit -ClaimType $ClaimType
-    if ($canonicalValue) {
+    if ($canonicalValue -or $ClaimType -in @('VALID_FROM','VALID_UNTIL')) {
         $baseline = $validated[0]
         foreach ($candidate in @($validated | Select-Object -Skip 1)) {
             $pair = Compare-BenefitClaim -ClaimType $ClaimType -CanonicalValue $baseline.Value -EvidenceValue $candidate.Value

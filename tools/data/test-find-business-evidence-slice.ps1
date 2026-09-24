@@ -19,6 +19,18 @@ Assert-ScopeEqual @($located.Slices).Count 1 'Located result yields one narrow s
 Assert-ScopeEqual $located.Slices[0].EvidenceReference 'HTML_TABLE_1_ROW_2' 'Selection preserves the original physical reference'
 Assert-ScopeTrue ($located.Slices[0].RawEvidenceText -notmatch '테스트가게 B|30%') 'A selected slice excludes another business row'
 
+$strongAndNameOnly = '<table><tr><th>업소명</th><th>주소</th><th>전화번호</th></tr><tr><td>테스트가게 A</td><td>서울특별시 마포구 테스트로 12</td><td>02-0000-0012</td></tr><tr><td>테스트가게 A</td><td></td><td></td></tr></table>'
+$strongAndNameOnlyResult = Find-BenefitBusinessEvidence -Observation (New-LocatorObservation -Html $strongAndNameOnly) -Business $business -CanonicalPhone '02-0000-0012'
+Assert-ScopeEqual $strongAndNameOnlyResult.Status 'AMBIGUOUS' 'A same-name candidate without corroboration remains an unresolved alternative'
+Assert-ScopeEqual @($strongAndNameOnlyResult.Slices).Count 0 'An unexcluded name-only alternative prevents a usable slice'
+
+foreach ($numbers in @(@('12','23'),@('26','23'),@('902','904'))) {
+    $syntheticSource = New-LocatorObservation -Html ((Get-ScopeTestHtml).Replace('테스트로 12', "테스트로 $($numbers[0])"))
+    $syntheticTarget = New-ScopeTestBusiness -Building $numbers[1]
+    $syntheticResult = Find-BenefitBusinessEvidence -Observation $syntheticSource -Business $syntheticTarget -CanonicalPhone '02-0000-0012'
+    Assert-ScopeTrue ($syntheticResult.Status -ne 'LOCATED') "Synthetic source $($numbers[0]) / target $($numbers[1]) building conflict must override name and phone agreement"
+}
+
 $wrongBuilding = '<table><tr><th>업소명</th><th>주소</th><th>전화번호</th></tr><tr><td>테스트가게 A</td><td>서울특별시 마포구 테스트로 99</td><td>02-0000-0012</td></tr></table>'
 $wrongBuildingResult = Find-BenefitBusinessEvidence -Observation (New-LocatorObservation -Html $wrongBuilding) -Business $business -CanonicalPhone '02-0000-0012'
 Assert-ScopeEqual $wrongBuildingResult.Status 'AMBIGUOUS' 'A matching phone cannot override an explicit building conflict'
@@ -61,6 +73,8 @@ $partialObservation = New-LocatorObservation -Html ((Get-ScopeTestHtml) -replace
 $partial = Find-BenefitBusinessEvidence -Observation $partialObservation -Business $business
 Assert-ScopeEqual $partial.OperationalStatus 'PARTIAL' 'Partial parsing must propagate operational state'
 Assert-ScopeTrue ($null -eq $partial.Status) 'Partial parsing must not claim NOT_FOUND'
+Assert-ScopeEqual @($partial.Slices).Count 0 'Partial parsing cannot expose a usable slice'
+Assert-ScopeTrue (@($partial.Diagnostics | Where-Object { $_.Code -eq $partialObservation.Diagnostics[0].Code -and $_.EvidenceReference -eq $partialObservation.Diagnostics[0].EvidenceReference }).Count -eq 1) 'Location result must preserve the parser diagnostic and physical reference'
 
 $reverse = '<table><tr><th>업소명</th><th>주소</th><th>할인</th></tr><tr><td>테스트가게 B</td><td>서울특별시 마포구 테스트로 99</td><td>10% 할인</td></tr><tr><td>테스트가게 A</td><td>서울특별시 마포구 테스트로 12</td><td>10% 할인</td></tr></table>'
 $reverseResult = Find-BenefitBusinessEvidence -Observation (New-LocatorObservation -Html $reverse) -Business $business

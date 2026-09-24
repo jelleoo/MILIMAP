@@ -64,7 +64,7 @@ function Find-BenefitBusinessEvidence {
     Assert-NormalizedBusiness $Business
     if ([int]$Observation.SourceRowNumber -ne [int]$Business.SourceRowNumber) { throw 'Locator inputs must preserve one SourceRowNumber' }
     if ($Observation.AdapterStatus -cne 'COMPLETE') {
-        return New-BenefitEvidenceLocationResult -SourceRowNumber $Observation.SourceRowNumber -OperationalStatus $Observation.AdapterStatus -Status $null -Slices @() -CandidateReferences @() -Diagnostics @()
+        return New-BenefitEvidenceLocationResult -SourceRowNumber $Observation.SourceRowNumber -OperationalStatus $Observation.AdapterStatus -Status $null -Slices @() -CandidateReferences @() -Diagnostics $Observation.Diagnostics
     }
 
     $candidates = @(foreach ($unit in $Observation.ContentUnits) { Get-BenefitEvidenceCandidate -Unit $unit -Business $Business -CanonicalPhone $CanonicalPhone })

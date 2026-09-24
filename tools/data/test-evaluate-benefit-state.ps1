@@ -94,4 +94,59 @@ Assert-Equal $sourceConflict.BenefitState 'NEEDS_VERIFICATION' 'Unresolved contr
 Assert-Equal $sourceConflict.ReviewClass 'RED' 'Unresolved contradictory claims must be red'
 Assert-True ($sourceConflict.ReasonCodes -contains 'SOURCE_CONFLICT') 'Unresolved contradictory claims must preserve source conflict'
 
+# Review regression helpers: explicit source URL provenance.
+function New-TestSourceAtUrl {
+    param([Parameter(Mandatory)][string]$Url, [string]$Binding='STRONG', [string]$Officiality='VERIFIED_OFFICIAL')
+    $candidate = New-BenefitSourceCandidate -SourceRowNumber 2 -Url $Url -SourceKind 'PUBLIC_OFFICIAL' -SourceLabel 'fixture' -DiscoveryMethod 'TEST' -ObservedAt '2026-09-24T00:00:00Z'
+    $document = New-BenefitSourceDocument -SourceRowNumber 2 -Url $Url -SourceFormat 'HTML' -FetchStatus 'COMPLETE' -ContentType 'text/html' -Text 'fixture' -ObservedAt '2026-09-24T00:00:00Z'
+    $qualified = New-QualifiedBenefitSource -Candidate $candidate -Document $document -OfficialityStatus $Officiality -CurrentnessStatus 'UNKNOWN'
+    New-BoundBenefitSource -QualifiedSource $qualified -BusinessBindingStatus $Binding
+}
+function New-TestClaimAtUrl {
+    param([Parameter(Mandatory)][string]$Url, [string]$ClaimType, [string]$Result, [string]$Value='fixture', [string[]]$ReasonCodes=@())
+    $validated = New-ValidatedBenefitClaim -ClaimType $ClaimType -Value $Value -ValidationStatus 'VALIDATED' -EvidenceText "근거: $Value" -EvidenceReference 'fixture:provenance' -SourceUrl $Url
+    New-BenefitClaimVerification -ClaimType $ClaimType -EvidenceValue $Value -Result $Result -ValidatedClaim $validated -ReasonCodes $ReasonCodes
+}
+
+$urlA = 'https://city.example.go.kr/benefit-a'
+$urlB = 'https://city.example.go.kr/benefit-b'
+$sourceA = New-TestSourceAtUrl -Url $urlA
+$sourceB = New-TestSourceAtUrl -Url $urlB
+
+$existenceA = New-TestClaimAtUrl -Url $urlA -ClaimType 'BENEFIT_EXISTENCE' -Result 'CONFIRMED' -Value '혜택 제공'
+$currentB = New-TestClaimAtUrl -Url $urlB -ClaimType 'CURRENT_APPLICABILITY' -Result 'CONFIRMED' -Value '현재 적용'
+$descriptionA = New-TestClaimAtUrl -Url $urlA -ClaimType 'BENEFIT_DESCRIPTION' -Result 'CONFIRMED' -Value '10% 할인'
+$targetA = New-TestClaimAtUrl -Url $urlA -ClaimType 'ELIGIBLE_TARGET' -Result 'CONFIRMED' -Value '현역 장병'
+$usageA = New-TestClaimAtUrl -Url $urlA -ClaimType 'USAGE_CONDITION' -Result 'CONFIRMED' -Value '상시'
+$methodA = New-TestClaimAtUrl -Url $urlA -ClaimType 'VERIFICATION_METHOD' -Result 'CONFIRMED' -Value '군인 신분증 확인'
+
+$activeProvenanceMismatch = Invoke-BenefitStateEvaluation -Benefit $benefit -Sources @($sourceA) -ClaimResults @($existenceA, $currentB, $descriptionA, $targetA, $usageA, $methodA) -OperationalStatus $complete
+Assert-Equal $activeProvenanceMismatch.BenefitState 'NEEDS_VERIFICATION' 'Lifecycle claims from an unmatched source must not produce ACTIVE'
+Assert-True ($activeProvenanceMismatch.ReviewClass -ne 'GREEN') 'Lifecycle provenance mismatch must not be green'
+
+$endedFromB = New-TestClaimAtUrl -Url $urlB -ClaimType 'CURRENT_APPLICABILITY' -Result 'ENDED' -Value '혜택 종료' -ReasonCodes @('EXPLICIT_DISCONTINUATION')
+$endedProvenanceMismatch = Invoke-BenefitStateEvaluation -Benefit $benefit -Sources @($sourceA) -ClaimResults @($endedFromB) -OperationalStatus $complete
+Assert-True ($endedProvenanceMismatch.BenefitState -ne 'ENDED') 'Explicit ending from an unmatched source must not produce ENDED'
+
+$currentA = New-TestClaimAtUrl -Url $urlA -ClaimType 'CURRENT_APPLICABILITY' -Result 'CONFIRMED' -Value '현재 적용'
+$changedFromB = New-TestClaimAtUrl -Url $urlB -ClaimType 'BENEFIT_DESCRIPTION' -Result 'CHANGED' -Value '20% 할인' -ReasonCodes @('MATERIAL_CHANGE')
+$changedProvenanceMismatch = Invoke-BenefitStateEvaluation -Benefit $benefit -Sources @($sourceA) -ClaimResults @($existenceA, $currentA, $changedFromB, $targetA, $usageA, $methodA) -OperationalStatus $complete
+Assert-True ($changedProvenanceMismatch.BenefitState -ne 'CHANGED') 'Material change from an unmatched source must not produce CHANGED'
+
+$descriptionB = New-TestClaimAtUrl -Url $urlB -ClaimType 'BENEFIT_DESCRIPTION' -Result 'CONFIRMED' -Value '10% 할인'
+$targetB = New-TestClaimAtUrl -Url $urlB -ClaimType 'ELIGIBLE_TARGET' -Result 'CONFIRMED' -Value '현역 장병'
+$usageB = New-TestClaimAtUrl -Url $urlB -ClaimType 'USAGE_CONDITION' -Result 'CONFIRMED' -Value '상시'
+$methodB = New-TestClaimAtUrl -Url $urlB -ClaimType 'VERIFICATION_METHOD' -Result 'CONFIRMED' -Value '군인 신분증 확인'
+$validComposite = Invoke-BenefitStateEvaluation -Benefit $benefit -Sources @($sourceA, $sourceB) -ClaimResults @($existenceA, $currentA, $descriptionB, $targetB, $usageB, $methodB) -OperationalStatus $complete
+Assert-Equal $validComposite.BenefitState 'ACTIVE' 'Claims from multiple matching safe sources may participate together'
+Assert-Equal $validComposite.ReviewClass 'GREEN' 'Complete multi-source safe evidence may remain green'
+
+$validityEnd = New-TestClaimAtUrl -Url $urlA -ClaimType 'VALID_UNTIL' -Result 'ENDED' -Value '2026-09-01' -ReasonCodes @('EXPLICIT_VALIDITY_END')
+$validityEnded = Invoke-BenefitStateEvaluation -Benefit $benefit -Sources @($sourceA) -ClaimResults @($validityEnd) -OperationalStatus $complete
+Assert-Equal $validityEnded.BenefitState 'ENDED' 'Explicit validity end from a matching safe source must end'
+Assert-True ($validityEnded.ReasonCodes -contains 'EXPLICIT_VALIDITY_END') 'Explicit validity end reason must be preserved'
+Assert-True ($validityEnded.ReasonCodes -notcontains 'EXPLICIT_DISCONTINUATION') 'Validity end must not be rewritten as discontinuation'
+Assert-True ($ended.ReasonCodes -contains 'EXPLICIT_DISCONTINUATION') 'Explicit discontinuation reason must remain preserved'
+
 Write-Host 'Benefit state evaluation tests passed.'
+

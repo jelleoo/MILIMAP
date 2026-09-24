@@ -55,4 +55,29 @@ $negatedCurrent = New-TestValidated -ClaimType 'CURRENT_APPLICABILITY' -Value '�
 $negatedCurrentResult = @(Compare-BenefitClaims -Benefit $benefit -ValidatedEvidence @($negatedCurrent))[0]
 Assert-Equal $negatedCurrentResult.Result 'UNKNOWN' 'Negated currentness language must not become confirmed applicability'
 
+# Review regression: semantically equivalent multi-source evidence is not a conflict.
+$equivalentConfirmedA = New-TestValidated -ClaimType 'BENEFIT_DESCRIPTION' -Value '10% 할인'
+$equivalentConfirmedB = New-TestValidated -ClaimType 'BENEFIT_DESCRIPTION' -Value '이용금액 10% 할인'
+$equivalentConfirmedResults = @(Compare-BenefitClaims -Benefit $benefit -ValidatedEvidence @($equivalentConfirmedA, $equivalentConfirmedB))
+Assert-Equal @($equivalentConfirmedResults | Where-Object { $_.Result -eq 'CONFLICT' }).Count 0 'Equivalent confirmed benefit wording must not become a source conflict'
+Assert-Equal @($equivalentConfirmedResults | Where-Object { $_.Result -eq 'CONFIRMED' }).Count 2 'Equivalent confirmed benefit wording must remain confirmed'
+
+$equivalentChangedA = New-TestValidated -ClaimType 'BENEFIT_DESCRIPTION' -Value '20% 할인'
+$equivalentChangedB = New-TestValidated -ClaimType 'BENEFIT_DESCRIPTION' -Value '이용금액 20% 할인'
+$equivalentChangedResults = @(Compare-BenefitClaims -Benefit $benefit -ValidatedEvidence @($equivalentChangedA, $equivalentChangedB))
+Assert-Equal @($equivalentChangedResults | Where-Object { $_.Result -eq 'CONFLICT' }).Count 0 'Equivalent changed benefit wording must not become a source conflict'
+Assert-Equal @($equivalentChangedResults | Where-Object { $_.Result -eq 'CHANGED' }).Count 2 'Equivalent changed benefit wording must remain changed'
+
+$trueChangedA = New-TestValidated -ClaimType 'BENEFIT_DESCRIPTION' -Value '20% 할인'
+$trueChangedB = New-TestValidated -ClaimType 'BENEFIT_DESCRIPTION' -Value '30% 할인'
+$trueChangedResults = @(Compare-BenefitClaims -Benefit $benefit -ValidatedEvidence @($trueChangedA, $trueChangedB))
+Assert-Equal @($trueChangedResults | Where-Object { $_.Result -eq 'CONFLICT' }).Count 2 'Materially different validated benefit values must remain conflicts'
+
+$currentEquivalentA = New-TestValidated -ClaimType 'CURRENT_APPLICABILITY' -Value '현재 적용'
+$currentEquivalentB = New-TestValidated -ClaimType 'CURRENT_APPLICABILITY' -Value '적용 중'
+$currentEquivalentResults = @(Compare-BenefitClaims -Benefit $benefit -ValidatedEvidence @($currentEquivalentA, $currentEquivalentB))
+Assert-Equal @($currentEquivalentResults | Where-Object { $_.Result -eq 'CONFLICT' }).Count 0 'Equivalent current-applicability wording must not become a source conflict'
+Assert-Equal @($currentEquivalentResults | Where-Object { $_.Result -eq 'CONFIRMED' }).Count 2 'Equivalent current-applicability wording must remain confirmed'
+
 Write-Host 'Benefit claim comparison tests passed.'
+

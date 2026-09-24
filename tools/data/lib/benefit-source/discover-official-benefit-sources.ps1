@@ -12,12 +12,13 @@ function Test-BenefitSafeHttpUri {
     if (-not [Uri]::TryCreate($Url, [UriKind]::Absolute, [ref]$uri)) { return $false }
     if ($uri.Scheme -notin @('http', 'https') -or -not [string]::IsNullOrEmpty($uri.UserInfo) -or [string]::IsNullOrWhiteSpace($uri.Host)) { return $false }
     $targetHost = $uri.Host.TrimEnd('.').ToLowerInvariant()
-    if ($targetHost -eq 'localhost' -or $targetHost.EndsWith('.localhost')) { return $false }
+    if ($targetHost -eq 'localhost' -or $targetHost.EndsWith('.localhost') -or $targetHost.EndsWith('.local') -or -not $targetHost.Contains('.')) { return $false }
     $address = $null
     if ([Net.IPAddress]::TryParse($targetHost, [ref]$address)) {
-        if ([Net.IPAddress]::IsLoopback($address) -or $address.IsIPv6LinkLocal) { return $false }
+        if ([Net.IPAddress]::IsLoopback($address) -or $address.IsIPv6LinkLocal -or $address.Equals([Net.IPAddress]::IPv6Any)) { return $false }
         $bytes = $address.GetAddressBytes()
-        if ($address.AddressFamily -eq [Net.Sockets.AddressFamily]::InterNetwork -and ($bytes[0] -eq 10 -or $bytes[0] -eq 127 -or ($bytes[0] -eq 169 -and $bytes[1] -eq 254) -or ($bytes[0] -eq 192 -and $bytes[1] -eq 168) -or ($bytes[0] -eq 172 -and $bytes[1] -ge 16 -and $bytes[1] -le 31))) { return $false }
+        if ($address.AddressFamily -eq [Net.Sockets.AddressFamily]::InterNetwork -and ($bytes[0] -eq 0 -or $bytes[0] -eq 10 -or $bytes[0] -eq 127 -or ($bytes[0] -eq 169 -and $bytes[1] -eq 254) -or ($bytes[0] -eq 192 -and $bytes[1] -eq 168) -or ($bytes[0] -eq 172 -and $bytes[1] -ge 16 -and $bytes[1] -le 31))) { return $false }
+        if ($address.AddressFamily -eq [Net.Sockets.AddressFamily]::InterNetworkV6 -and (($bytes[0] -band 0xfe) -eq 0xfc)) { return $false }
     }
     return $true
 }
@@ -38,7 +39,10 @@ function Get-ExistingBenefitSourceCandidate {
     param([Parameter(Mandatory)]$Benefit)
     Assert-CanonicalBenefitRecord $Benefit
     if ([string]::IsNullOrWhiteSpace([string]$Benefit.ExistingSourceUrl)) { return $null }
-    return New-BenefitSourceCandidate -SourceRowNumber $Benefit.SourceRowNumber -Url $Benefit.ExistingSourceUrl -SourceKind 'PUBLIC_OFFICIAL' -SourceLabel $Benefit.ExistingSourceType -DiscoveryMethod 'EXISTING_CANONICAL_URL' -ObservedAt (Get-BenefitObservationTime)
+    $sourceType = ([string]$Benefit.ExistingSourceType).Trim()
+    if ($sourceType -match '공식\s*(SNS|블로그)|후기|리뷰') { return $null }
+    $sourceKind = if ($sourceType -match '업체\s*공식\s*(홈페이지|웹사이트)|official\s*business\s*website') { 'BUSINESS_WEBSITE' } elseif ($sourceType -match '지자체|정부|공공기관|공공데이터|공식\s*자료') { 'PUBLIC_OFFICIAL' } else { return $null }
+    return New-BenefitSourceCandidate -SourceRowNumber $Benefit.SourceRowNumber -Url $Benefit.ExistingSourceUrl -SourceKind $sourceKind -SourceLabel $sourceType -DiscoveryMethod 'EXISTING_CANONICAL_URL' -ObservedAt (Get-BenefitObservationTime)
 }
 
 function Invoke-OfficialBenefitSourceDiscovery {
@@ -52,7 +56,9 @@ function Invoke-OfficialBenefitSourceDiscovery {
         foreach ($record in @(& $DiscoveryInvoker $Benefit $Business)) {
             if ($null -eq $record -or [string]::IsNullOrWhiteSpace([string]$record.Url)) { continue }
             $sourceKind = if ([string]::IsNullOrWhiteSpace([string]$record.SourceKind)) { 'PUBLIC_OFFICIAL' } else { [string]$record.SourceKind }
-            $candidates += New-BenefitSourceCandidate -SourceRowNumber $Benefit.SourceRowNumber -Url $record.Url -SourceKind $sourceKind -SourceLabel ([string]$record.SourceLabel) -DiscoveryMethod 'DISCOVERY_INVOKER' -ObservedAt (Get-BenefitObservationTime)
+            $candidate = New-BenefitSourceCandidate -SourceRowNumber $Benefit.SourceRowNumber -Url $record.Url -SourceKind $sourceKind -SourceLabel ([string]$record.SourceLabel) -DiscoveryMethod 'DISCOVERY_INVOKER' -ObservedAt (Get-BenefitObservationTime)
+            Assert-BenefitSourceCandidate $candidate
+            $candidates += $candidate
         }
         return [pscustomobject][ordered]@{ SourceRowNumber=$Benefit.SourceRowNumber; Status='COMPLETE'; Candidates=@($candidates); ReasonCodes=@() }
     } catch { return [pscustomobject][ordered]@{ SourceRowNumber=$Benefit.SourceRowNumber; Status='FAILED'; Candidates=@(); ReasonCodes=@('DISCOVERY_FAILED') } }

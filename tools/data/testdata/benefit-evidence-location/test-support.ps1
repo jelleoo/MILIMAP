@@ -33,8 +33,7 @@ function New-ScopeTestRow {
         업소명=$Name; 시도='서울특별시'; 시군구='마포구'
         소재지도로명주소="서울특별시 마포구 테스트로 $Building"; 소재지지번주소=''
         업소전화번호=$Phone; 할인정보=$Benefit; 적용대상=''; 이용조건=''; 인증방법=''
-        出典='SYNTHETIC_ALGORITHM_ONLY'; 출처유형='지자체 공식 자료'
-        출처URL='https://city.example.go.kr/list'; 최근확인일='2026-09-24'
+        출처유형='지자체 공식 자료'; 출처URL='https://city.example.go.kr/list'; 최근확인일='2026-09-24'
     }
 }
 function New-ScopeTestBusiness {

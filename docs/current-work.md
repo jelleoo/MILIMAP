@@ -5,14 +5,14 @@
 ## 현재 기준선
 
 - 개발 기준 브랜치: `dev`
-- 최신 확인 dev commit: `97d6070113196e922fb76af7508314b6eda8e7b7`
+- Phase 1 code baseline: `97d6070113196e922fb76af7508314b6eda8e7b7`
 - 기준일: 2026-09-24
 - Phase 1 A — Business Identity / Normalization: PR #37 merged
 - Phase 1 B — POI Discovery: PR #34 merged
 - Phase 1 C — POI Matching / Evaluation: PR #36 merged
 - Phase 1 Integration: PR #39 merged
 - Candidate diagnostics / provenance: PR #41 merged
-- Integration closeout Issue: #38 OPEN — closeout documentation PR review 대기
+- Phase 1 Integration closeout: Issue #38 / PR #42 (`Closes #38`)
 - release candidates: 249
 - exact map pins: 111
 - coordinate-unconfirmed: 138

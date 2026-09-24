@@ -3,7 +3,8 @@
 - Status: Directional roadmap
 - Date: 2026-09-24
 - Current development branch: `dev`
-- Current active phase: Phase 2 — NOT STARTED (design discussion next)
+- Current state: Phase 1 COMPLETE
+- Next phase: Phase 2 — NOT STARTED (design discussion next)
 
 이 문서는 MILIMAP의 장기 개발 방향을 팀원이 한눈에 확인하기 위한 로드맵입니다.
 

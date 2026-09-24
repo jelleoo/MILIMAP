@@ -16,7 +16,7 @@
 - 한 브랜치 = 한 Issue = 한 목적
 - 병렬 작업: 별도 clone 또는 Git worktree 사용
 - 병합 전: Issue 범위, diff, 필수 테스트/CI, 데이터 검증, 공용 파일 충돌 여부 확인
-- Phase 1 Integration Issue #38: closeout documentation PR의 사람 검토 및 병합 전까지 OPEN
+- Phase 1 Integration closeout: Issue #38 / PR #42 (`Closes #38`)
 
 ## 현재 구현된 Android MVP
 

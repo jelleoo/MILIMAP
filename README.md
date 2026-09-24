@@ -4,7 +4,7 @@
 
 ## 현재 구현 상태
 
-기준: `dev` / 2026-09-10 P3 병합 이후
+기준: `dev` / 2026-09-24 Phase 1 POI Shadow validation closeout
 
 - Android 네이티브 MVP: 구현됨
 - Room 기반 로컬 데이터 계층: 구현됨 (schema v4)
@@ -17,9 +17,15 @@
   - 좌표 미확정: 138건
   - bundled seed version: 7
 - 최신 혜택 근거 부족으로 release에서 보류된 canonical 행: 247건
+- Phase 1 POI Verification Core / Shadow Mode: 구현 및 validation 완료
+  - A/B/C: PR #37 / #34 / #36, Integration: PR #39, candidate diagnostics/provenance: PR #41
+  - representative operational Shadow: 24 rows, 100 provider queries, discovery/evaluation `COMPLETE` 24 / 24
+  - `ProductionAction=NONE` 24 / 24, canonical/seed/apps write 없음
+  - Phase 1은 POI identity/location verification만 다루며 GREEN은 automatic production approval이 아님
 - 서버·iOS: 책임 영역만 정의했으며 구현 전
 
-현재 활성 개발 목표와 팀별 작업 경계는 [`docs/current-work.md`](docs/current-work.md)를 먼저 확인하세요.
+현재 closeout 상태와 다음 설계 논의는 [`docs/current-work.md`](docs/current-work.md)를 먼저 확인하세요.
+Phase 1 validation evidence와 남은 위험은 [`docs/handover/2026-09-24-phase1-poi-shadow-validation.md`](docs/handover/2026-09-24-phase1-poi-shadow-validation.md)를 확인하세요.
 전체 데이터 검증 방향은 [`docs/superpowers/specs/2026-09-10-benefit-business-verification-pipeline-design.md`](docs/superpowers/specs/2026-09-10-benefit-business-verification-pipeline-design.md)를 따릅니다.
 
 ## 저장소 구조

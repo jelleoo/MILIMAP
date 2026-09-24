@@ -326,17 +326,18 @@ function Invoke-Phase2BenefitShadowMode {
         [switch]$OperationalLiveRun
     )
 
+    $hasExplicitRows = $PSBoundParameters.ContainsKey('SourceRowNumbers')
+    $hasExplicitOffset = $PSBoundParameters.ContainsKey('SourceRowNumberOffset')
+    if ($hasExplicitRows) {
+        if ($null -eq $SourceRowNumbers -or $SourceRowNumbers.Count -ne $Rows.Count) { throw 'SourceRowNumbers must match Rows.Count' }
+        if ($hasExplicitOffset) { throw 'SourceRowNumbers cannot coexist with explicit SourceRowNumberOffset' }
+        if (@($SourceRowNumbers | Where-Object { $_ -le 1 }).Count -gt 0) { throw 'SourceRowNumbers must be greater than 1' }
+        if (@($SourceRowNumbers | Select-Object -Unique).Count -ne $SourceRowNumbers.Count) { throw 'SourceRowNumbers must be distinct' }
+    }
+
     if ($UseScopedHtmlEvidence) {
         if ($null -ne $DiscoveryInvoker -or $null -ne $UnstructuredExtractor -or $null -ne $SpreadsheetExtractor -or $null -ne $PdfTextExtractor) {
             throw 'Scoped A1 does not allow discovery or external extraction providers'
-        }
-        $hasExplicitRows = $PSBoundParameters.ContainsKey('SourceRowNumbers')
-        $hasExplicitOffset = $PSBoundParameters.ContainsKey('SourceRowNumberOffset')
-        if ($hasExplicitRows) {
-            if ($null -eq $SourceRowNumbers -or $SourceRowNumbers.Count -ne $Rows.Count) { throw 'SourceRowNumbers must match Rows.Count' }
-            if ($hasExplicitOffset) { throw 'SourceRowNumbers cannot coexist with explicit SourceRowNumberOffset' }
-            if (@($SourceRowNumbers | Where-Object { $_ -le 1 }).Count -gt 0) { throw 'SourceRowNumbers must be greater than 1' }
-            if (@($SourceRowNumbers | Select-Object -Unique).Count -ne $SourceRowNumbers.Count) { throw 'SourceRowNumbers must be distinct' }
         }
         if ($Rows.Count -eq 0) {
             $emptyContext = New-BenefitSourceRunContext
@@ -358,7 +359,7 @@ function Invoke-Phase2BenefitShadowMode {
 
     for ($index=0; $index -lt $Rows.Count; $index++) {
         $row = $Rows[$index]
-        $sourceRowNumber = $SourceRowNumberOffset + $index + 1
+        $sourceRowNumber = if ($hasExplicitRows) { [int]$SourceRowNumbers[$index] } else { $SourceRowNumberOffset + $index + 1 }
         $business = ConvertTo-NormalizedBusiness -Row $row -SourceRowNumber $sourceRowNumber
         Assert-NormalizedBusiness $business
         $benefit = ConvertTo-Phase2CanonicalBenefitRecord -Row $row -SourceRowNumber $sourceRowNumber

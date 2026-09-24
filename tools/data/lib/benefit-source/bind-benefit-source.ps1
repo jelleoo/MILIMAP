@@ -25,6 +25,25 @@ function Test-BenefitBindingNameCompatibility {
     return [bool](($fullName -and $documentText.Contains($fullName)) -or ($baseName -and $documentText.Contains($baseName)))
 }
 
+function Get-BenefitBindingAddressConflicts {
+    param([Parameter(Mandatory)]$Business, [Parameter(Mandatory)]$AddressParts)
+    $conflicts = @()
+    foreach ($component in @(
+        @{ Business='Province'; Source='Province'; Code='PROVINCE_CONFLICT' },
+        @{ Business='City'; Source='City'; Code='CITY_CONFLICT' },
+        @{ Business='District'; Source='District'; Code='DISTRICT_CONFLICT' },
+        @{ Business='Dong'; Source='Dong'; Code='DONG_CONFLICT' },
+        @{ Business='RoadName'; Source='RoadName'; Code='ROAD_NAME_CONFLICT' },
+        @{ Business='BuildingMain'; Source='BuildingMain'; Code='BUILDING_NUMBER_CONFLICT' },
+        @{ Business='BuildingSub'; Source='BuildingSub'; Code='BUILDING_SUB_CONFLICT' }
+    )) {
+        $businessValue = ConvertTo-IdentityComparisonText $Business.($component.Business)
+        $sourceValue = ConvertTo-IdentityComparisonText $AddressParts.($component.Source)
+        if ($businessValue -and $sourceValue -and $businessValue -ne $sourceValue) { $conflicts += $component.Code }
+    }
+    return @($conflicts)
+}
+
 function Get-BenefitBusinessBinding {
     param([Parameter(Mandatory)]$Source, [Parameter(Mandatory)]$Business, [AllowNull()][string]$CanonicalPhone='')
 
@@ -45,11 +64,11 @@ function Get-BenefitBusinessBinding {
     $localityCompatible = $Business.City -and $addressParts.City -and ((ConvertTo-IdentityComparisonText $Business.City) -eq (ConvertTo-IdentityComparisonText $addressParts.City))
     $conflict = $false
     $evidence = @()
+    $addressConflicts = @(Get-BenefitBindingAddressConflicts -Business $Business -AddressParts $addressParts)
 
     if ($explicitName -and -not $nameCompatible) { $conflict = $true; $evidence += 'BUSINESS_NAME_CONFLICT' }
     if ($branch -and $Business.BranchName -and -not $branchCompatible) { $conflict = $true; $evidence += 'BRANCH_CONFLICT' }
-    if ($addressParts.BuildingMain -and $Business.BuildingMain -and [string]$addressParts.BuildingMain -ne [string]$Business.BuildingMain) { $conflict = $true; $evidence += 'BUILDING_NUMBER_CONFLICT' }
-    if ($addressParts.City -and $Business.City -and -not $localityCompatible) { $conflict = $true; $evidence += 'LOCALITY_CONFLICT' }
+    if ($addressConflicts.Count -gt 0) { $conflict = $true; $evidence += $addressConflicts }
     if ($phone -and $CanonicalPhone -and $explicitName -and $nameCompatible -and -not $phoneCompatible) { $conflict = $true; $evidence += 'PHONE_CONFLICT' }
 
     if ($conflict) {

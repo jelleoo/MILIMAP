@@ -74,6 +74,19 @@ foreach ($conflictCase in @(
     Assert-True ($result.ReasonCodes -contains 'BUSINESS_BINDING_CONFLICT') "Conflict reason preserved for $($conflictCase.Name)"
 }
 
+$roadConflict = Get-BenefitBusinessBinding -Source (New-TestQualifiedSource -Text '사업장명: 테스트 식당 양주점; 지점: 양주점; 주소: 경기도 양주시 고암동 다른로 22-25') -Business $business -CanonicalPhone ''
+Assert-Equal $roadConflict.BusinessBindingStatus 'CONFLICT' 'Different explicit road name must conflict despite compatible name and branch'
+Assert-True ($roadConflict.BindingEvidence -contains 'ROAD_NAME_CONFLICT') 'Road-name conflict must remain reviewable evidence'
+
+$buildingSubConflict = Get-BenefitBusinessBinding -Source (New-TestQualifiedSource -Text '사업장명: 테스트 식당 양주점; 지점: 양주점; 주소: 경기도 양주시 고암동 테스트로 22-99') -Business $business -CanonicalPhone ''
+Assert-Equal $buildingSubConflict.BusinessBindingStatus 'CONFLICT' 'Different explicit building sub-number must conflict despite compatible name and branch'
+Assert-True ($buildingSubConflict.BindingEvidence -contains 'BUILDING_SUB_CONFLICT') 'Building-sub conflict must remain reviewable evidence'
+
+$districtBusiness = New-NormalizedBusiness -SourceRowNumber 2 -OriginalName '테스트 식당' -NormalizedName '테스트식당' -BaseName '테스트 식당' -OriginalRoadAddress '서울특별시 강남구 테스트로 22' -PreferredAddress '서울특별시 강남구 테스트로 22' -Province '서울특별시' -District '강남구' -RoadName '테스트로' -BuildingMain '22' -AddressParseStatus 'COMPLETE'
+$districtConflict = Get-BenefitBusinessBinding -Source (New-TestQualifiedSource -Text '사업장명: 테스트 식당; 주소: 서울특별시 마포구 테스트로 22') -Business $districtBusiness -CanonicalPhone ''
+Assert-Equal $districtConflict.BusinessBindingStatus 'CONFLICT' 'Different explicit district must conflict when both addresses provide a district'
+Assert-True ($districtConflict.BindingEvidence -contains 'DISTRICT_CONFLICT') 'District conflict must remain reviewable evidence'
+
 $sourceRowMismatch = New-TestQualifiedSource -Text '사업장명: 테스트 식당 양주점' -SourceRowNumber 3
 Assert-Throws { Get-BenefitBusinessBinding -Source $sourceRowMismatch -Business $business -CanonicalPhone '' } 'Binding must fail closed when qualified source and business source rows differ'
 

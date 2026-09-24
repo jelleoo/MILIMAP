@@ -31,6 +31,26 @@ function Get-BenefitLabeledValue {
     return $match.Groups['value'].Value.Trim()
 }
 
+function Get-BenefitQualificationAddressConflicts {
+    param([Parameter(Mandatory)]$Business, [AllowNull()]$Address)
+    $source = Get-NormalizedAddressParts -RoadAddress ([string]$Address) -LotAddress '' -MetadataProvince '' -MetadataArea ''
+    $conflicts = @()
+    foreach ($component in @(
+        @{ Business='Province'; Source='Province'; Code='PROVINCE_CONFLICT' },
+        @{ Business='City'; Source='City'; Code='CITY_CONFLICT' },
+        @{ Business='District'; Source='District'; Code='DISTRICT_CONFLICT' },
+        @{ Business='Dong'; Source='Dong'; Code='DONG_CONFLICT' },
+        @{ Business='RoadName'; Source='RoadName'; Code='ROAD_NAME_CONFLICT' },
+        @{ Business='BuildingMain'; Source='BuildingMain'; Code='BUILDING_NUMBER_CONFLICT' },
+        @{ Business='BuildingSub'; Source='BuildingSub'; Code='BUILDING_SUB_CONFLICT' }
+    )) {
+        $businessValue = ConvertTo-IdentityComparisonText $Business.($component.Business)
+        $sourceValue = ConvertTo-IdentityComparisonText $source.($component.Source)
+        if ($businessValue -and $sourceValue -and $businessValue -ne $sourceValue) { $conflicts += $component.Code }
+    }
+    return @($conflicts)
+}
+
 function Get-QualifiedBenefitSource {
     param([Parameter(Mandatory)]$Candidate, [Parameter(Mandatory)]$Document, [Parameter(Mandatory)]$Business)
 
@@ -40,6 +60,7 @@ function Get-QualifiedBenefitSource {
     if ([int]$Candidate.SourceRowNumber -ne [int]$Document.SourceRowNumber -or [int]$Candidate.SourceRowNumber -ne [int]$Business.SourceRowNumber) {
         throw 'Qualification inputs must preserve one SourceRowNumber'
     }
+    if ([string]$Candidate.Url -cne [string]$Document.Url) { throw 'Qualification candidate and document URLs must match' }
 
     $officiality = 'UNVERIFIED'
     $evidence = @()
@@ -57,20 +78,23 @@ function Get-QualifiedBenefitSource {
     } else {
         $nameCompatible = Test-BenefitBusinessNameCompatibility -Business $Business -Text $Document.Text
         $addressCompatible = Test-BenefitFullAddressCompatibility -Business $Business -Text $Document.Text
+        $address = Get-BenefitLabeledValue -Text $Document.Text -Labels @('주소','소재지')
         $branch = Get-BenefitLabeledValue -Text $Document.Text -Labels @('지점','지점명','branch')
-        $phone = Get-BenefitLabeledValue -Text $Document.Text -Labels @('전화','전화번호','연락처','phone')
         $branchCompatible = $Business.BranchName -and $branch -and ((ConvertTo-IdentityComparisonText $branch).Contains((ConvertTo-IdentityComparisonText $Business.BranchName)))
         $hasExplicitName = [bool]([regex]::IsMatch([string]$Document.Text, '(사업장명|업체명|상호)\s*[:：]'))
+        $identityConflicts = @(Get-BenefitQualificationAddressConflicts -Business $Business -Address $address)
+        if ($hasExplicitName -and -not $nameCompatible) { $identityConflicts += 'BUSINESS_NAME_CONFLICT' }
+        if ($branch -and $Business.BranchName -and -not $branchCompatible) { $identityConflicts += 'BRANCH_CONFLICT' }
 
-        if ($documentFetched -and $nameCompatible -and ($addressCompatible -or $branchCompatible -or $phone)) {
+        if ($documentFetched -and $identityConflicts.Count -gt 0) {
+            $officiality = 'REJECTED'
+            $evidence += $identityConflicts
+            $reasons += 'SOURCE_CONFLICT'
+        } elseif ($documentFetched -and $nameCompatible -and ($addressCompatible -or $branchCompatible)) {
             $officiality = 'VERIFIED_OFFICIAL'
             $evidence += 'BUSINESS_NAME_MATCH'
             if ($addressCompatible) { $evidence += 'FULL_ADDRESS_MATCH' }
             if ($branchCompatible) { $evidence += 'BRANCH_MATCH' }
-            if ($phone) { $evidence += 'EXPLICIT_BUSINESS_PHONE' }
-        } elseif ($hasExplicitName -and -not $nameCompatible) {
-            $officiality = 'REJECTED'
-            $reasons += 'SOURCE_CONFLICT'
         } else {
             $reasons += 'SOURCE_OFFICIALITY_UNRESOLVED'
         }

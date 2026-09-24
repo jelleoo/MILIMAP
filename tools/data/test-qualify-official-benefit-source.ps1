@@ -73,13 +73,27 @@ Assert-Equal $addressVerified.OfficialityStatus 'VERIFIED_OFFICIAL' 'Compatible 
 $branchVerified = Get-QualifiedBenefitSource -Candidate $businessCandidate -Document (New-TestDocument -Url $businessCandidate.Url -Text '사업장명: 테스트 식당 양주점; 지점: 양주점') -Business $business
 Assert-Equal $branchVerified.OfficialityStatus 'VERIFIED_OFFICIAL' 'Compatible name plus explicit branch verifies business website'
 
-$phoneVerified = Get-QualifiedBenefitSource -Candidate $businessCandidate -Document (New-TestDocument -Url $businessCandidate.Url -Text '사업장명: 테스트 식당 양주점; 전화: 031-123-4567') -Business $business
-Assert-Equal $phoneVerified.OfficialityStatus 'VERIFIED_OFFICIAL' 'Compatible name plus explicit business phone verifies business website'
+$phoneUnverified = Get-QualifiedBenefitSource -Candidate $businessCandidate -Document (New-TestDocument -Url $businessCandidate.Url -Text '사업장명: 테스트 식당 양주점; 전화: 031-123-4567') -Business $business
+Assert-Equal $phoneUnverified.OfficialityStatus 'UNVERIFIED' 'Unverified phone alone cannot qualify a business website'
+Assert-True ($phoneUnverified.ReasonCodes -contains 'SOURCE_OFFICIALITY_UNRESOLVED') 'Phone-only website preserves unresolved officiality reason'
+
+foreach ($qualificationConflict in @(
+    @{ Text='사업장명: 테스트 식당 양주점; 주소: 경기도 양주시 고암동 테스트로 22-25; 지점: 파주점'; Name='wrong branch despite matching address' },
+    @{ Text='사업장명: 테스트 식당 양주점; 지점: 양주점; 주소: 경기도 양주시 고암동 다른로 99'; Name='incompatible road/building despite matching branch' },
+    @{ Text='사업장명: 테스트 식당 양주점; 지점: 양주점; 주소: 경기도 파주시 금촌동 테스트로 22-25'; Name='incompatible locality despite matching branch' }
+)) {
+    $result = Get-QualifiedBenefitSource -Candidate $businessCandidate -Document (New-TestDocument -Url $businessCandidate.Url -Text $qualificationConflict.Text) -Business $business
+    Assert-Equal $result.OfficialityStatus 'REJECTED' "Clear $($qualificationConflict.Name) must reject business website qualification"
+    Assert-True ($result.ReasonCodes -contains 'SOURCE_CONFLICT') "Clear $($qualificationConflict.Name) preserves source conflict reason"
+}
 
 $identityConflict = Get-QualifiedBenefitSource -Candidate $businessCandidate -Document (New-TestDocument -Url $businessCandidate.Url -Text '사업장명: 다른 식당; 주소: 경기도 양주시 고암동 테스트로 22-25') -Business $business
 Assert-True ($identityConflict.OfficialityStatus -ne 'VERIFIED_OFFICIAL') 'Hard business identity conflict cannot verify a business website'
 
 $mismatchedDocument = New-TestDocument -Url $goKrCandidate.Url -SourceRowNumber 3
 Assert-Throws { Get-QualifiedBenefitSource -Candidate $goKrCandidate -Document $mismatchedDocument -Business $business } 'Qualification must fail closed when candidate/document source rows differ'
+
+$unrelatedDocument = New-TestDocument -Url 'https://unrelated.example.com/benefit'
+Assert-Throws { Get-QualifiedBenefitSource -Candidate $goKrCandidate -Document $unrelatedDocument -Business $business } 'Qualification must fail closed when candidate/document URLs differ'
 
 Write-Host 'Official benefit source qualification tests passed.'

@@ -10,7 +10,7 @@ $ErrorActionPreference = 'Stop'
 
 function Add-ScopedBenefitReasonCode {
     param(
-        [Parameter(Mandatory)][System.Collections.Generic.List[string]]$Target,
+        [Parameter(Mandatory)][AllowEmptyCollection()][System.Collections.Generic.List[string]]$Target,
         [AllowNull()][object[]]$ReasonCodes=@()
     )
     foreach ($reason in @($ReasonCodes | Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_) })) {

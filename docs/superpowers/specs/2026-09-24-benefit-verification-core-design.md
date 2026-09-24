@@ -1,6 +1,6 @@
 # Phase 2 Benefit Verification Core Design
 
-- Status: Design draft — conversational design approved, written spec pending user review
+- Status: Design approved — user approved written Phase 2 design
 - Date: 2026-09-24
 - Repository baseline: `dev@9a435159cb26b793057797cafe37e8f922fe3a81`
 - Scope type: Architectural / new verification subsystem

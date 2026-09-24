@@ -45,6 +45,12 @@ $branchStrong = Get-BenefitBusinessBinding -Source (New-TestQualifiedSource -Tex
 Assert-Equal $branchStrong.BusinessBindingStatus 'STRONG' 'Compatible business name plus explicit branch binds strongly'
 Assert-True ($branchStrong.BindingEvidence -contains 'BRANCH_MATCH') 'Strong branch binding preserves exact signal'
 
+foreach ($wrongBranch in @('신양주점', '양주점2호점', '파주양주점')) {
+    $result = Get-BenefitBusinessBinding -Source (New-TestQualifiedSource -Text "사업장명: 테스트 식당 양주점; 지점: $wrongBranch") -Business $business -CanonicalPhone ''
+    Assert-Equal $result.BusinessBindingStatus 'CONFLICT' "Different explicit branch must conflict in binding: $wrongBranch"
+    Assert-True ($result.ReasonCodes -contains 'BUSINESS_BINDING_CONFLICT') "Different explicit branch preserves binding conflict reason: $wrongBranch"
+}
+
 $phoneStrong = Get-BenefitBusinessBinding -Source (New-TestQualifiedSource -Text '사업장명: 테스트 식당 양주점; 전화: 031-123-4567') -Business $business -CanonicalPhone '031-123-4567'
 Assert-Equal $phoneStrong.BusinessBindingStatus 'STRONG' 'Compatible business name plus canonical phone binds strongly'
 Assert-True ($phoneStrong.BindingEvidence -contains 'PHONE_MATCH') 'Strong phone binding preserves exact signal'
@@ -54,6 +60,10 @@ Assert-Equal $unattributedPhone.BusinessBindingStatus 'AMBIGUOUS' 'Phone mismatc
 
 $phoneAbsent = Get-BenefitBusinessBinding -Source (New-TestQualifiedSource -Text '사업장명: 테스트 식당 양주점; 주소: 경기도 양주시 고암동 테스트로 22-25') -Business $business -CanonicalPhone '031-123-4567'
 Assert-Equal $phoneAbsent.BusinessBindingStatus 'STRONG' 'Absent source phone must not conflict with an otherwise strong binding'
+
+$explicitNameConflict = Get-BenefitBusinessBinding -Source (New-TestQualifiedSource -Text '사업장명: 다른 식당; 주소: 경기도 양주시 고암동 테스트로 22-25; 안내: 테스트 식당 양주점과 공동 이벤트 진행') -Business $business -CanonicalPhone ''
+Assert-Equal $explicitNameConflict.BusinessBindingStatus 'CONFLICT' 'Explicit business name must outrank incidental canonical-name prose'
+Assert-True ($explicitNameConflict.ReasonCodes -contains 'BUSINESS_BINDING_CONFLICT') 'Explicit business-name conflict preserves binding conflict reason'
 
 $nameOnly = Get-BenefitBusinessBinding -Source (New-TestQualifiedSource -Text '사업장명: 테스트 식당 양주점') -Business $business -CanonicalPhone ''
 Assert-Equal $nameOnly.BusinessBindingStatus 'AMBIGUOUS' 'Name-only source remains ambiguous'

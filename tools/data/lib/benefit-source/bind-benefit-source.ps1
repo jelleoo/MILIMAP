@@ -52,13 +52,13 @@ function Get-BenefitBusinessBinding {
     if ([int]$Source.SourceRowNumber -ne [int]$Business.SourceRowNumber) { throw 'Binding inputs must preserve one SourceRowNumber' }
 
     $text = [string]$Source.Document.Text
-    $nameCompatible = Test-BenefitBindingNameCompatibility -Business $Business -Text $text
-    $explicitName = [bool]([regex]::IsMatch($text, '(사업장명|업체명|상호)\s*[:：]'))
+    $explicitName = Get-BenefitBindingLabeledValue -Text $text -Labels @('사업장명','업체명','상호')
+    $nameCompatible = Test-BenefitBindingNameCompatibility -Business $Business -Text $(if ($explicitName) { $explicitName } else { $text })
     $address = Get-BenefitBindingLabeledValue -Text $text -Labels @('주소','소재지')
     $branch = Get-BenefitBindingLabeledValue -Text $text -Labels @('지점','지점명','branch')
     $phone = Get-BenefitBindingLabeledValue -Text $text -Labels @('전화','전화번호','연락처','phone')
     $addressParts = Get-NormalizedAddressParts -RoadAddress $address -LotAddress '' -MetadataProvince '' -MetadataArea ''
-    $branchCompatible = $Business.BranchName -and $branch -and ((ConvertTo-IdentityComparisonText $branch).Contains((ConvertTo-IdentityComparisonText $Business.BranchName)))
+    $branchCompatible = $Business.BranchName -and $branch -and ((ConvertTo-IdentityComparisonText $branch) -ceq (ConvertTo-IdentityComparisonText $Business.BranchName))
     $phoneCompatible = $CanonicalPhone -and $phone -and ((ConvertTo-BenefitBindingPhone $CanonicalPhone) -eq (ConvertTo-BenefitBindingPhone $phone))
     $fullAddressCompatible = $Business.PreferredAddress -and $address -and ((ConvertTo-IdentityComparisonText $address) -eq (ConvertTo-IdentityComparisonText $Business.PreferredAddress))
     $localityCompatible = $Business.City -and $addressParts.City -and ((ConvertTo-IdentityComparisonText $Business.City) -eq (ConvertTo-IdentityComparisonText $addressParts.City))

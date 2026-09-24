@@ -73,6 +73,12 @@ Assert-Equal $addressVerified.OfficialityStatus 'VERIFIED_OFFICIAL' 'Compatible 
 $branchVerified = Get-QualifiedBenefitSource -Candidate $businessCandidate -Document (New-TestDocument -Url $businessCandidate.Url -Text '사업장명: 테스트 식당 양주점; 지점: 양주점') -Business $business
 Assert-Equal $branchVerified.OfficialityStatus 'VERIFIED_OFFICIAL' 'Compatible name plus explicit branch verifies business website'
 
+foreach ($wrongBranch in @('신양주점', '양주점2호점', '파주양주점')) {
+    $result = Get-QualifiedBenefitSource -Candidate $businessCandidate -Document (New-TestDocument -Url $businessCandidate.Url -Text "사업장명: 테스트 식당 양주점; 지점: $wrongBranch") -Business $business
+    Assert-Equal $result.OfficialityStatus 'REJECTED' "Different explicit branch must reject qualification: $wrongBranch"
+    Assert-True ($result.ReasonCodes -contains 'SOURCE_CONFLICT') "Different explicit branch preserves source conflict reason: $wrongBranch"
+}
+
 $phoneUnverified = Get-QualifiedBenefitSource -Candidate $businessCandidate -Document (New-TestDocument -Url $businessCandidate.Url -Text '사업장명: 테스트 식당 양주점; 전화: 031-123-4567') -Business $business
 Assert-Equal $phoneUnverified.OfficialityStatus 'UNVERIFIED' 'Unverified phone alone cannot qualify a business website'
 Assert-True ($phoneUnverified.ReasonCodes -contains 'SOURCE_OFFICIALITY_UNRESOLVED') 'Phone-only website preserves unresolved officiality reason'
@@ -89,6 +95,10 @@ foreach ($qualificationConflict in @(
 
 $identityConflict = Get-QualifiedBenefitSource -Candidate $businessCandidate -Document (New-TestDocument -Url $businessCandidate.Url -Text '사업장명: 다른 식당; 주소: 경기도 양주시 고암동 테스트로 22-25') -Business $business
 Assert-True ($identityConflict.OfficialityStatus -ne 'VERIFIED_OFFICIAL') 'Hard business identity conflict cannot verify a business website'
+
+$explicitNameConflict = Get-QualifiedBenefitSource -Candidate $businessCandidate -Document (New-TestDocument -Url $businessCandidate.Url -Text '사업장명: 다른 식당; 주소: 경기도 양주시 고암동 테스트로 22-25; 안내: 테스트 식당 양주점과 공동 이벤트 진행') -Business $business
+Assert-Equal $explicitNameConflict.OfficialityStatus 'REJECTED' 'Explicit business name must outrank incidental canonical-name prose'
+Assert-True ($explicitNameConflict.ReasonCodes -contains 'SOURCE_CONFLICT') 'Explicit business-name conflict preserves source conflict reason'
 
 $mismatchedDocument = New-TestDocument -Url $goKrCandidate.Url -SourceRowNumber 3
 Assert-Throws { Get-QualifiedBenefitSource -Candidate $goKrCandidate -Document $mismatchedDocument -Business $business } 'Qualification must fail closed when candidate/document source rows differ'

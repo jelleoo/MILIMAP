@@ -76,14 +76,14 @@ function Get-QualifiedBenefitSource {
             $reasons += 'SOURCE_OFFICIALITY_UNRESOLVED'
         }
     } else {
-        $nameCompatible = Test-BenefitBusinessNameCompatibility -Business $Business -Text $Document.Text
+        $explicitName = Get-BenefitLabeledValue -Text $Document.Text -Labels @('사업장명','업체명','상호')
+        $nameCompatible = Test-BenefitBusinessNameCompatibility -Business $Business -Text $(if ($explicitName) { $explicitName } else { $Document.Text })
         $addressCompatible = Test-BenefitFullAddressCompatibility -Business $Business -Text $Document.Text
         $address = Get-BenefitLabeledValue -Text $Document.Text -Labels @('주소','소재지')
         $branch = Get-BenefitLabeledValue -Text $Document.Text -Labels @('지점','지점명','branch')
-        $branchCompatible = $Business.BranchName -and $branch -and ((ConvertTo-IdentityComparisonText $branch).Contains((ConvertTo-IdentityComparisonText $Business.BranchName)))
-        $hasExplicitName = [bool]([regex]::IsMatch([string]$Document.Text, '(사업장명|업체명|상호)\s*[:：]'))
+        $branchCompatible = $Business.BranchName -and $branch -and ((ConvertTo-IdentityComparisonText $branch) -ceq (ConvertTo-IdentityComparisonText $Business.BranchName))
         $identityConflicts = @(Get-BenefitQualificationAddressConflicts -Business $Business -Address $address)
-        if ($hasExplicitName -and -not $nameCompatible) { $identityConflicts += 'BUSINESS_NAME_CONFLICT' }
+        if ($explicitName -and -not $nameCompatible) { $identityConflicts += 'BUSINESS_NAME_CONFLICT' }
         if ($branch -and $Business.BranchName -and -not $branchCompatible) { $identityConflicts += 'BRANCH_CONFLICT' }
 
         if ($documentFetched -and $identityConflicts.Count -gt 0) {

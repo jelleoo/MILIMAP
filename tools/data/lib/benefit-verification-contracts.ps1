@@ -1,6 +1,9 @@
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
+$poiContractPath = Join-Path $PSScriptRoot 'poi-verification-contracts.ps1'
+. $poiContractPath
+
 $script:BenefitVerificationContractDefinition = [pscustomobject][ordered]@{
     ContractVersion = 1
     ContractTypes = @(
@@ -289,10 +292,7 @@ function Assert-BenefitClaimVerification {
 
 function Assert-BenefitBusinessIdentity {
     param([Parameter(Mandatory)]$Object)
-    Assert-BenefitRequiredProperties $Object @('ContractType', 'ContractVersion', 'SourceRowNumber')
-    if ([string]$Object.ContractType -ne 'NormalizedBusiness') { throw 'BusinessIdentity must use the NormalizedBusiness contract' }
-    if ([int]$Object.ContractVersion -ne 1) { throw "Unsupported BusinessIdentity contract version: $($Object.ContractVersion)" }
-    Assert-BenefitSourceRowNumber ([int]$Object.SourceRowNumber)
+    Assert-NormalizedBusiness $Object
 }
 
 function New-BenefitVerificationResult {

@@ -92,6 +92,8 @@ Assert-NoThrow { Assert-BenefitVerificationResult $result } 'Benefit verificatio
 Assert-Equal $result.BusinessIdentity.ContractType 'NormalizedBusiness' 'Business identity must preserve the Phase 1 normalized business contract'
 Assert-Equal $result.ProductionAction 'NONE' 'Shadow action must be NONE'
 Assert-Throws { $x = New-BenefitVerificationResult -SourceRowNumber 2 -BusinessIdentity $null; Assert-BenefitVerificationResult $x } 'Benefit verification result requires business identity'
-Assert-Throws { $x = New-BenefitVerificationResult -SourceRowNumber 2 -ProductionAction 'APPLY'; Assert-BenefitVerificationResult $x } 'Non-NONE production action must fail'
+$spoofedBusinessIdentity = [pscustomobject][ordered]@{ ContractType='NormalizedBusiness'; ContractVersion=1; SourceRowNumber=2 }
+Assert-Throws { $x = New-BenefitVerificationResult -SourceRowNumber 2 -BusinessIdentity $spoofedBusinessIdentity; Assert-BenefitVerificationResult $x } 'Incomplete NormalizedBusiness identity must fail'
+Assert-Throws { $x = New-BenefitVerificationResult -SourceRowNumber 2 -BusinessIdentity $businessIdentity -ProductionAction 'APPLY'; Assert-BenefitVerificationResult $x } 'Non-NONE production action must fail'
 
 Write-Host 'Benefit verification contract tests passed.'

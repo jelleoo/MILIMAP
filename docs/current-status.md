@@ -65,7 +65,7 @@ Phase 1은 POI identity/location verification만 다룬다. GREEN은 automatic p
 
 ## Phase 2 Benefit Verification Core Foundation
 
-Phase 2 provider-neutral Core는 Task 1~6에서 구현됐고 Task 7에서 Golden safety와 existing-source smoke를 검증한다.
+Phase 2 provider-neutral Core는 Task 1~6에서 구현됐고 Task 7 Golden safety와 existing-source smoke 검증을 완료했다.
 
 - Contract v1: 구현/테스트 완료
 - existing-source-first fetch/discovery boundary: 구현/테스트 완료
@@ -131,7 +131,7 @@ Phase 2 provider-neutral Core는 Task 1~6에서 구현됐고 Task 7에서 Golden
 
 ## 다음 우선순위
 
-1. PR #50에서 Task 7 Golden + docs + final deterministic CI를 검토하고 Issue #43 Core Foundation closeout 조건을 확인한다.
+1. Issue #43에 Task 7 Golden + live smoke + deterministic CI + protected-path non-write evidence를 Core Foundation closeout 근거로 유지한다.
 2. discovery/search, LLM/free-text, PDF/XLSX adapter는 새 외부 provider/dependency가 필요한 경우 별도 승인 후 작은 Issue/PR로 진행한다.
 3. adapter가 준비된 뒤 247 hold 중심 representative validation + positive controls + human GREEN audit를 수행한다.
 4. 이 후속 validation 전에는 roadmap Phase 2를 COMPLETE로 표시하지 않는다.

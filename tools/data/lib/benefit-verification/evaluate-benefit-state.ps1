@@ -5,6 +5,22 @@ $ErrorActionPreference = 'Stop'
 
 function Add-BenefitEvaluationReason { param([Parameter(Mandatory)][AllowEmptyCollection()][System.Collections.Generic.List[string]]$Reasons, [Parameter(Mandatory)][string]$Reason); if ($Reasons -notcontains $Reason) { $Reasons.Add($Reason) } }
 function Test-BenefitClaimResult { param([Parameter(Mandatory)][AllowEmptyCollection()][object[]]$ClaimResults, [Parameter(Mandatory)][string]$ClaimType, [Parameter(Mandatory)][string[]]$Results); return @($ClaimResults | Where-Object { $_.ClaimType -eq $ClaimType -and $Results -contains $_.Result }).Count -gt 0 }
+function Get-BenefitSafeSourceUrls {
+    param([Parameter(Mandatory)][AllowEmptyCollection()][object[]]$Sources)
+    $urls = [System.Collections.Generic.List[string]]::new()
+    foreach ($source in @($Sources | Where-Object { $_.BusinessBindingStatus -eq 'STRONG' -and $_.QualifiedSource.OfficialityStatus -eq 'VERIFIED_OFFICIAL' })) {
+        foreach ($url in @([string]$source.QualifiedSource.Document.Url, [string]$source.QualifiedSource.Candidate.Url)) {
+            if (-not [string]::IsNullOrWhiteSpace($url) -and $urls -notcontains $url) { $urls.Add($url) }
+        }
+    }
+    return @($urls)
+}
+function Test-BenefitClaimHasSafeSource {
+    param([Parameter(Mandatory)]$Claim, [Parameter(Mandatory)][AllowEmptyCollection()][string[]]$SafeSourceUrls)
+    if ($null -eq $Claim.ValidatedClaim -or $Claim.ValidatedClaim.ValidationStatus -ne 'VALIDATED') { return $false }
+    $url = [string]$Claim.ValidatedClaim.SourceUrl
+    return -not [string]::IsNullOrWhiteSpace($url) -and $SafeSourceUrls -contains $url
+}
 function New-BenefitStateEvaluationResult {
     param([Parameter(Mandatory)][string]$BenefitState, [Parameter(Mandatory)][string]$ReviewClass, [Parameter(Mandatory)][AllowEmptyCollection()][object[]]$ClaimResults, [Parameter(Mandatory)][AllowEmptyCollection()][System.Collections.Generic.List[string]]$ReasonCodes)
     $evidence = @($ClaimResults | ForEach-Object { $_.ValidatedClaim } | Where-Object { $null -ne $_ })
@@ -21,8 +37,32 @@ function Invoke-BenefitStateEvaluation {
     $operationalFailed = $false
     if ($null -ne $OperationalStatus) { if ($OperationalStatus.PSObject.Properties.Name -contains 'DiscoveryStatus' -and $OperationalStatus.DiscoveryStatus -ne 'COMPLETE') { $operationalFailed = $true; if ($OperationalStatus.DiscoveryStatus -eq 'FAILED') { Add-BenefitEvaluationReason $reasons 'DISCOVERY_FAILED' } elseif ($OperationalStatus.DiscoveryStatus -eq 'PARTIAL') { Add-BenefitEvaluationReason $reasons 'DISCOVERY_PARTIAL_FAILURE' } }; if ($OperationalStatus.PSObject.Properties.Name -contains 'ExtractionStatus' -and $OperationalStatus.ExtractionStatus -ne 'COMPLETE') { $operationalFailed = $true; if ($OperationalStatus.ExtractionStatus -eq 'FAILED') { Add-BenefitEvaluationReason $reasons 'EXTRACTION_FAILED' } } }
     if ($operationalFailed) { return New-BenefitStateEvaluationResult 'NEEDS_VERIFICATION' 'YELLOW' $claims $reasons }
-    $strongBinding = @($sources | Where-Object { $_.BusinessBindingStatus -eq 'STRONG' -and $_.QualifiedSource.OfficialityStatus -eq 'VERIFIED_OFFICIAL' }).Count -gt 0; $explicitEnd = @($claims | Where-Object { $_.Result -eq 'ENDED' -and $_.ValidatedClaim.ValidationStatus -eq 'VALIDATED' -and (@($_.ReasonCodes | Where-Object { $_ -in @('EXPLICIT_VALIDITY_END', 'EXPLICIT_DISCONTINUATION') }).Count -gt 0) }).Count -gt 0
-    if ($strongBinding -and $explicitEnd) { Add-BenefitEvaluationReason $reasons 'EXPLICIT_DISCONTINUATION'; return New-BenefitStateEvaluationResult 'ENDED' 'GREEN' $claims $reasons }
+    $safeSourceUrls = @(Get-BenefitSafeSourceUrls -Sources $sources)
+    $strongBinding = $safeSourceUrls.Count -gt 0
+    $decisiveClaims = @($claims | Where-Object {
+        $_.Result -in @('CONFIRMED','CHANGED','ENDED') -or
+        ($_.Result -eq 'NOT_APPLICABLE' -and $null -ne $_.ValidatedClaim -and $_.ValidatedClaim.ValidationStatus -eq 'VALIDATED')
+    })
+    $unsafeDecisiveClaims = @($decisiveClaims | Where-Object { -not (Test-BenefitClaimHasSafeSource -Claim $_ -SafeSourceUrls $safeSourceUrls) })
+    if ($unsafeDecisiveClaims.Count -gt 0) {
+        Add-BenefitEvaluationReason $reasons 'SOURCE_OFFICIALITY_UNRESOLVED'
+        if (@($unsafeDecisiveClaims | Where-Object { $_.ClaimType -in @('BENEFIT_EXISTENCE','CURRENT_APPLICABILITY') }).Count -gt 0) {
+            Add-BenefitEvaluationReason $reasons 'CURRENTNESS_INSUFFICIENT'
+        }
+        return New-BenefitStateEvaluationResult 'NEEDS_VERIFICATION' 'YELLOW' $claims $reasons
+    }
+
+    $explicitEndClaims = @($claims | Where-Object {
+        $_.Result -eq 'ENDED' -and
+        (Test-BenefitClaimHasSafeSource -Claim $_ -SafeSourceUrls $safeSourceUrls) -and
+        (@($_.ReasonCodes | Where-Object { $_ -in @('EXPLICIT_VALIDITY_END', 'EXPLICIT_DISCONTINUATION') }).Count -gt 0)
+    })
+    if ($strongBinding -and $explicitEndClaims.Count -gt 0) {
+        foreach ($reason in @($explicitEndClaims | ForEach-Object { $_.ReasonCodes } | Where-Object { $_ -in @('EXPLICIT_VALIDITY_END','EXPLICIT_DISCONTINUATION') } | Select-Object -Unique)) {
+            Add-BenefitEvaluationReason $reasons $reason
+        }
+        return New-BenefitStateEvaluationResult 'ENDED' 'GREEN' $claims $reasons
+    }
     $existenceConfirmed = Test-BenefitClaimResult -ClaimResults $claims -ClaimType 'BENEFIT_EXISTENCE' -Results @('CONFIRMED'); $currentConfirmed = Test-BenefitClaimResult -ClaimResults $claims -ClaimType 'CURRENT_APPLICABILITY' -Results @('CONFIRMED')
     if (-not $existenceConfirmed -or -not $currentConfirmed) { Add-BenefitEvaluationReason $reasons 'CURRENTNESS_INSUFFICIENT'; return New-BenefitStateEvaluationResult 'NEEDS_VERIFICATION' 'YELLOW' $claims $reasons }; if (-not $strongBinding) { return New-BenefitStateEvaluationResult 'NEEDS_VERIFICATION' 'YELLOW' $claims $reasons }
     $detailTypes = @('BENEFIT_DESCRIPTION', 'ELIGIBLE_TARGET', 'USAGE_CONDITION', 'VERIFICATION_METHOD'); $detailComplete = $true

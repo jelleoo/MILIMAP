@@ -65,12 +65,33 @@ function Get-BenefitLifecycleComparisonResult {
     return [pscustomobject]@{ Result='UNKNOWN'; ReasonCodes=@('CLAIM_UNKNOWN') }
 }
 
+function Test-BenefitValidatedClaimSetConflict {
+    param([Parameter(Mandatory)]$Benefit, [Parameter(Mandatory)][string]$ClaimType, [Parameter(Mandatory)][AllowEmptyCollection()][object[]]$Claims)
+    $validated = @($Claims | Where-Object { $_.ClaimType -eq $ClaimType -and $_.ValidationStatus -eq 'VALIDATED' })
+    if ($validated.Count -le 1) { return $false }
+
+    $canonicalValue = Get-BenefitCanonicalClaimValue -Benefit $Benefit -ClaimType $ClaimType
+    if ($canonicalValue) {
+        $baseline = $validated[0]
+        foreach ($candidate in @($validated | Select-Object -Skip 1)) {
+            $pair = Compare-BenefitClaim -ClaimType $ClaimType -CanonicalValue $baseline.Value -EvidenceValue $candidate.Value
+            if ($pair.Result -eq 'CHANGED') { return $true }
+        }
+        return $false
+    }
+
+    $decisive = @($validated | ForEach-Object { (Get-BenefitLifecycleComparisonResult -Claim $_).Result } | Where-Object { $_ -in @('CONFIRMED','ENDED') } | Select-Object -Unique)
+    return $decisive.Count -gt 1
+}
+
 function Compare-BenefitClaims {
     param([Parameter(Mandatory)]$Benefit, [AllowNull()][object[]]$ValidatedEvidence=@())
     Assert-CanonicalBenefitRecord $Benefit
     $claims = @($ValidatedEvidence | Where-Object { $null -ne $_ }); foreach ($claim in $claims) { Assert-ValidatedBenefitClaim $claim }
     $conflictTypes = @()
-    foreach ($claimType in @($claims | ForEach-Object { $_.ClaimType } | Select-Object -Unique)) { $values = @($claims | Where-Object { $_.ClaimType -eq $claimType -and $_.ValidationStatus -eq 'VALIDATED' } | ForEach-Object { ConvertTo-BenefitComparisonText $_.Value } | Select-Object -Unique); if ($values.Count -gt 1) { $conflictTypes += $claimType } }
+    foreach ($claimType in @($claims | ForEach-Object { $_.ClaimType } | Select-Object -Unique)) {
+        if (Test-BenefitValidatedClaimSetConflict -Benefit $Benefit -ClaimType $claimType -Claims $claims) { $conflictTypes += $claimType }
+    }
     $results = @()
     foreach ($claim in $claims) {
         $canonicalValue = Get-BenefitCanonicalClaimValue -Benefit $Benefit -ClaimType $claim.ClaimType; $result = 'UNKNOWN'; $reasons = @('CLAIM_UNKNOWN')

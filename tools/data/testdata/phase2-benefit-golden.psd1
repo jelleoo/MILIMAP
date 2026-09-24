@@ -35,4 +35,12 @@
         ExpectedReviewClass = 'RED'
         SourceNote = 'Synthetic business-binding mismatch used only to protect fail-closed identity behavior.'
     }
+
+    'synthetic-binding-ambiguous' = @{
+        FixtureKind = 'SYNTHETIC_ALGORITHM_ONLY'
+        Status = 'TEST_ONLY'
+        ExpectedBenefitState = 'NEEDS_VERIFICATION'
+        ExpectedReviewClass = 'YELLOW'
+        SourceNote = 'Synthetic official-source case without enough row-specific business identity evidence; ambiguity must never silently become GREEN.'
+    }
 }

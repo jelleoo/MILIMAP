@@ -442,6 +442,17 @@ function Invoke-Phase2BenefitShadowMode {
     }
 }
 
+function Get-Phase2BenefitShadowNumericSum {
+    param(
+        [Parameter(Mandatory)][AllowEmptyCollection()][object[]]$Rows,
+        [Parameter(Mandatory)][string]$Property
+    )
+    if ($Rows.Count -eq 0) { return 0 }
+    $measurement = $Rows | Measure-Object -Property $Property -Sum
+    if ($null -eq $measurement -or $measurement.PSObject.Properties.Name -notcontains 'Sum' -or $null -eq $measurement.Sum) { return 0 }
+    return [int]$measurement.Sum
+}
+
 function Get-Phase2BenefitShadowSummary {
     param(
         [Parameter(Mandatory)][AllowEmptyCollection()][object[]]$Rows,
@@ -449,7 +460,7 @@ function Get-Phase2BenefitShadowSummary {
         [switch]$OperationalLiveRun
     )
     $allRows = @($Rows)
-    $totalExternalRequests = [int](@($allRows | Measure-Object -Property TotalExternalRequests -Sum).Sum)
+    $totalExternalRequests = Get-Phase2BenefitShadowNumericSum -Rows $allRows -Property 'TotalExternalRequests'
     $falseGreen = @($allRows | Where-Object {
         $GoldenExpectations.ContainsKey([string]$_.SourceRowNumber) -and
         $_.ReviewClass -eq 'GREEN' -and
@@ -462,14 +473,14 @@ function Get-Phase2BenefitShadowSummary {
         DiscoveryPartial=@($allRows | Where-Object DiscoveryStatus -eq 'PARTIAL').Count
         DiscoveryFailed=@($allRows | Where-Object DiscoveryStatus -eq 'FAILED').Count
         QualifiedOfficialSourceRows=@($allRows | Where-Object QualifiedOfficialSource -eq $true).Count
-        BindingStrong=[int](@($allRows | Measure-Object -Property BindingStrongCount -Sum).Sum)
-        BindingPlausible=[int](@($allRows | Measure-Object -Property BindingPlausibleCount -Sum).Sum)
-        BindingAmbiguous=[int](@($allRows | Measure-Object -Property BindingAmbiguousCount -Sum).Sum)
-        BindingConflict=[int](@($allRows | Measure-Object -Property BindingConflictCount -Sum).Sum)
-        ExtractionComplete=[int](@($allRows | Measure-Object -Property ExtractionCompleteCount -Sum).Sum)
-        ExtractionPartial=[int](@($allRows | Measure-Object -Property ExtractionPartialCount -Sum).Sum)
-        ExtractionFailed=[int](@($allRows | Measure-Object -Property ExtractionFailedCount -Sum).Sum)
-        EvidenceValidationRejected=[int](@($allRows | Measure-Object -Property EvidenceValidationRejectedCount -Sum).Sum)
+        BindingStrong=(Get-Phase2BenefitShadowNumericSum -Rows $allRows -Property 'BindingStrongCount')
+        BindingPlausible=(Get-Phase2BenefitShadowNumericSum -Rows $allRows -Property 'BindingPlausibleCount')
+        BindingAmbiguous=(Get-Phase2BenefitShadowNumericSum -Rows $allRows -Property 'BindingAmbiguousCount')
+        BindingConflict=(Get-Phase2BenefitShadowNumericSum -Rows $allRows -Property 'BindingConflictCount')
+        ExtractionComplete=(Get-Phase2BenefitShadowNumericSum -Rows $allRows -Property 'ExtractionCompleteCount')
+        ExtractionPartial=(Get-Phase2BenefitShadowNumericSum -Rows $allRows -Property 'ExtractionPartialCount')
+        ExtractionFailed=(Get-Phase2BenefitShadowNumericSum -Rows $allRows -Property 'ExtractionFailedCount')
+        EvidenceValidationRejected=(Get-Phase2BenefitShadowNumericSum -Rows $allRows -Property 'EvidenceValidationRejectedCount')
         Active=@($allRows | Where-Object BenefitState -eq 'ACTIVE').Count
         Changed=@($allRows | Where-Object BenefitState -eq 'CHANGED').Count
         Ended=@($allRows | Where-Object BenefitState -eq 'ENDED').Count

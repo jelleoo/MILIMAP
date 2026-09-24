@@ -243,3 +243,106 @@ NAVER_MAP_NCP_SECRET=네이버_지도_Client_Secret
 `NAVER_MAP_NCP_SECRET`은 이 로컬 생성 과정에서만 사용하며 앱과 Git에는 포함하지 않습니다. `mma.coordinates.seed.json`은 주소 지오코딩 검증 결과를 보존하는 감사용 캐시입니다. 새 엄격 기준인 “지도 POI 상호와 주소 모두 일치”를 통과한 값이 아니므로, 현재 Android 지도 핀이나 API 동기화에는 연결하지 않습니다. 이 캐시의 좌표를 사용하려면 별도 POI 감사와 정본 반영이 먼저 필요합니다.
 
 API 호출 없이 수집·필터·기존 좌표 재사용 범위만 확인하려면 `-DryRun`을 사용하고 출력 경로를 임시 파일로 지정합니다.
+
+
+## Phase 2 Benefit Verification Core / Shadow Mode
+
+Phase 2 provider-neutral Core는 기존 canonical 혜택 행을 자동 수정하지 않고, 현재 공식 근거를 다시 관측해 사람이 검토할 Shadow 결과를 만든다.
+
+```text
+Canonical benefit row
+        ↓
+Business Identity / Normalization
+        ↓
+Existing official source first
+        ↓
+Fetch → Officiality Qualification → Business Binding
+        ↓
+Evidence Extraction → Evidence Validation
+        ↓
+Claim Comparison
+        ↓
+BenefitState / ReviewClass
+        ↓
+BenefitVerificationResult + row report + summary + evidence diagnostics
+```
+
+핵심 안전 규칙:
+
+- 기존 canonical 공식 URL을 먼저 시도하고, 증거가 부족할 때만 injectable discovery boundary를 사용한다.
+- fetch/search/parser/extractor 실패는 혜택 종료 근거가 아니다.
+- `ENDED`는 strong official binding과 explicit validated ending evidence가 있을 때만 허용한다.
+- unresolved source conflict는 `NEEDS_VERIFICATION + RED`다.
+- `ProductionAction`은 항상 `NONE`이고 GREEN도 최종 사람 승인이 필요하다.
+- `data/canonical`, `data/seed`, `apps` 아래로 Shadow 결과를 export할 수 없다.
+- general web-search provider, LLM provider, PDF text extractor, XLSX extractor는 현재 Core에 내장하지 않고 injectable boundary로만 둔다.
+
+주요 구현:
+
+- `lib/benefit-verification-contracts.ps1`: Phase 2 in-memory contract
+- `lib/benefit-source/*`: existing-source discovery/fetch, officiality qualification, business binding
+- `lib/benefit-evidence/*`: deterministic HTML/CSV extraction, injectable PDF/XLSX/free-text extraction boundary, evidence validation
+- `lib/benefit-verification/*`: claim comparison, deterministic BenefitState/ReviewClass
+- `invoke-phase2-benefit-shadow-mode.ps1`: orchestration, metrics, diagnostics, protected export
+- `testdata/phase2-benefit-golden.psd1`: source-cited historical provenance와 synthetic safety fixture를 분리한 Golden data
+
+### Deterministic regression
+
+전체 데이터 도구 테스트:
+
+```powershell
+Get-ChildItem .\tools\data\test-*.ps1 |
+  Sort-Object Name |
+  ForEach-Object {
+    & pwsh -NoProfile -File $_.FullName
+    if ($LASTEXITCODE -ne 0) { throw "FAILED: $($_.Name)" }
+  }
+```
+
+Golden fixture는 다음을 고정한다.
+
+- historical official-release evidence는 현재 `ACTIVE` truth로 재사용하지 않는다.
+- explicit validated ending synthetic case는 `ENDED` 규칙을 따른다.
+- source conflict / binding conflict synthetic case는 silent GREEN이 될 수 없다.
+- historical/source-cited fixture와 synthetic algorithm fixture를 명시적으로 구분한다.
+
+### Existing-source live smoke — 2026-09-24
+
+Task 7에서는 GitHub Actions runner에서 canonical에 이미 저장된 공식 URL만 직접 fetch했다. general web search, discovery provider, LLM, PDF/XLSX 신규 dependency는 사용하지 않았다. 5개 source-stratified sample에서 외부 요청은 각 1회였고 모두 `ProductionAction=NONE`이었다.
+
+| CSV row | source | fetch | officiality | binding | extraction | BenefitState | ReviewClass |
+| ---: | --- | --- | --- | --- | --- | --- | --- |
+| 5 | MMA public data / 투오프커피 | COMPLETE | VERIFIED_OFFICIAL | AMBIGUOUS | FAILED | NEEDS_VERIFICATION | YELLOW |
+| 75 | Paju municipal HTML / 두둑한한판 | COMPLETE | VERIFIED_OFFICIAL | AMBIGUOUS | FAILED | NEEDS_VERIFICATION | YELLOW |
+| 118 | DDC municipal HTML / 개성연출 | COMPLETE | VERIFIED_OFFICIAL | AMBIGUOUS | COMPLETE | NEEDS_VERIFICATION | RED |
+| 339 | Yangju municipal HTML / 거시기닭갈비 | COMPLETE | VERIFIED_OFFICIAL | AMBIGUOUS | FAILED | NEEDS_VERIFICATION | YELLOW |
+| 280 | Suwon municipal PDF / 고려이발관 | COMPLETE | VERIFIED_OFFICIAL | AMBIGUOUS | FAILED | NEEDS_VERIFICATION | YELLOW |
+
+관측 결과:
+
+- fetch COMPLETE: 5 / 5
+- VERIFIED_OFFICIAL: 5 / 5
+- `ENDED`: 0
+- GREEN: 0
+- YELLOW: 4
+- RED: 1
+- external requests: 5 total
+- `ProductionAction=NONE`: 5 / 5
+
+이 표본은 정확도나 population 성능 추정치가 아니다. 현재 Core가 실제 source에서도 실패를 종료/승인으로 오인하지 않는지 확인하는 operational smoke다.
+
+DDC sample은 structured extraction 자체는 COMPLETE였지만, 한 공식 페이지의 복수 업소 혜택 claim이 한 canonical row 비교에 함께 들어가 `SOURCE_CONFLICT + RED`가 발생했다. 안전성 관점에서는 fail-closed지만, 향후 adapter 작업에서는 **business-bound row-scoped extraction**이 필요하다는 효율성 위험으로 남긴다.
+
+Paju/Yangju HTML과 Suwon PDF는 현재 adapter 경계에서 충분한 row-specific evidence를 만들지 못해 `EXTRACTION_PROVIDER_NOT_CONFIGURED` 또는 binding ambiguity로 검토 대기 상태를 유지했다.
+
+### Live smoke 실행 원칙
+
+운영 smoke는 CI의 상시 deterministic test로 두지 않는다. 필요할 때 source-stratified canonical row를 소수 선택하고, `Invoke-Phase2BenefitShadowMode`에 실제 HTTP `RequestInvoker`를 주입해 실행한 뒤 로그/보고서만 보존한다.
+
+- existing canonical official URL만 fetch한다.
+- discovery provider는 승인 전 사용하지 않는다.
+- unsupported PDF/XLSX/free-text는 missing-adapter reason으로 fail closed한다.
+- smoke 후 `git diff -- data/canonical data/seed apps`가 비어 있는지 확인한다.
+- smoke 결과를 release 승인이나 canonical 자동 수정 근거로 사용하지 않는다.
+
+Full Phase 2 완료에는 별도 승인된 discovery/extraction adapter, 247 hold 중심 representative validation, positive controls, human GREEN audit가 추가로 필요하다.

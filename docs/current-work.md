@@ -6,6 +6,8 @@
 
 - 개발 기준 브랜치: `dev`
 - Phase 1 code baseline: `97d6070113196e922fb76af7508314b6eda8e7b7`
+- Phase 2 Task 6 merge baseline: `d43c00ee07b471a55ed7ece4abecc1dc242ed8ce`
+- Phase 2 Core Foundation: Issue #43 / Task 7 validation PR #50
 - 기준일: 2026-09-24
 - Phase 1 A — Business Identity / Normalization: PR #37 merged
 - Phase 1 B — POI Discovery: PR #34 merged
@@ -70,6 +72,55 @@ Review artifact + Metrics
 
 Sample A GREEN human audit은 5 SUPPORTED, 0 AMBIGUOUS, 0 CONFLICT였다. 이 표본 관측치는 전체 population precision이나 혜택 유효성 판단이 아니다.
 
+## Phase 2 Benefit Verification Core Foundation 상태
+
+Phase 2 provider-neutral Core Foundation은 Contract, existing-source fetch/qualification/binding, evidence extraction/validation, claim comparison/evaluation, Shadow integration까지 구현됐고 Task 7 Golden safety와 existing-source operational smoke 검증을 완료했다.
+
+현재 흐름:
+
+```text
+Canonical benefit row
+        ↓
+Existing official source first
+        ↓
+Officiality + Business Binding
+        ↓
+Evidence Extraction / Validation
+        ↓
+Claim Comparison
+        ↓
+BenefitState / ReviewClass
+        ↓
+Shadow review artifact
+```
+
+Task 7 Golden fixture는 real source-cited historical provenance와 synthetic algorithm fixture를 분리한다. historical release evidence는 현재 `ACTIVE` truth로 자동 승격하지 않으며, source/binding conflict fixture는 silent GREEN을 허용하지 않는다.
+
+2026-09-24 existing-source live smoke는 canonical에 이미 저장된 공식 URL 5건을 source-stratified로 직접 fetch했다.
+
+- fetch COMPLETE: 5 / 5
+- VERIFIED_OFFICIAL: 5 / 5
+- NEEDS_VERIFICATION: 5 / 5
+- GREEN / YELLOW / RED: 0 / 4 / 1
+- `ENDED`: 0
+- external requests: 5
+- `ProductionAction=NONE`: 5 / 5
+
+이 smoke는 population 정확도 측정이 아니라 fail-closed operational validation이다. DDC sample은 structured extraction은 COMPLETE였지만 복수 업소 claim이 한 row 비교에 함께 들어가 `SOURCE_CONFLICT + RED`가 발생했다. 안전성은 유지됐지만 향후 adapter에서 business-bound row-scoped extraction이 필요하다.
+
+### 아직 승인/구현하지 않은 범위
+
+- general official-source discovery/search provider
+- LLM provider/model/SDK
+- PDF text extraction dependency
+- XLSX parsing dependency
+- OCR/HWP pipeline
+- representative 247 hold workload validation
+- positive control validation
+- human GREEN audit
+
+따라서 **Phase 2 Core Foundation 완료와 roadmap Phase 2 COMPLETE는 동일하지 않다.**
+
 ## 안전 경계
 
 - Contract v1은 A/B/C가 읽기 전용으로 사용한다.
@@ -80,8 +131,9 @@ Sample A GREEN human audit은 5 SUPPORTED, 0 AMBIGUOUS, 0 CONFLICT였다. 이 �
 
 ## 다음 액션
 
-1. Phase 1 closeout documentation PR을 사람 검토 후 병합하고 Issue #38 close 조건을 확인한다.
-2. 최신 Phase 1 evidence와 남은 위험을 바탕으로 Phase 2 **design discussion**을 진행한다.
-3. Phase 2 담당, Contract, 구현 파일, Issue는 design discussion 전까지 확정하거나 구현하지 않는다.
+1. Issue #43에서 Task 7 Golden regression, live existing-source smoke, deterministic CI, protected-path non-write evidence를 Core Foundation closeout 근거로 유지한다.
+2. full Phase 2로 넘어가기 전에 discovery provider, LLM/free-text extraction, PDF/XLSX adapter 중 필요한 항목을 별도 Issue/ADR 수준으로 승인받는다.
+3. 승인된 adapter 이후 247 hold 중심 representative validation + positive controls + human GREEN audit를 수행한다.
+4. 이 후속 validation 전에는 roadmap Phase 2를 COMPLETE로 표시하지 않는다.
 
 장기 개발 방향은 [`docs/roadmap.md`](roadmap.md)를 확인한다.

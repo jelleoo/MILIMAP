@@ -19,6 +19,37 @@ function Assert-Throws {
     if (-not $threw) { throw $Message }
 }
 
+$goldenPath = Join-Path $PSScriptRoot 'testdata/phase2-benefit-golden.psd1'
+Assert-True (Test-Path -LiteralPath $goldenPath) 'Phase 2 Golden fixture must exist'
+$phase2Golden = Import-PowerShellDataFile -LiteralPath $goldenPath
+Assert-True ($phase2Golden.ContainsKey('positive-paju-composite')) 'Golden fixture must include the real-source-cited Paju reference'
+Assert-True ($phase2Golden.ContainsKey('synthetic-explicit-end')) 'Golden fixture must include the explicit-ending algorithm case'
+Assert-True ($phase2Golden.ContainsKey('synthetic-source-conflict')) 'Golden fixture must include the source-conflict algorithm case'
+Assert-True ($phase2Golden.ContainsKey('synthetic-binding-conflict')) 'Golden fixture must include the binding-conflict algorithm case'
+Assert-True ($phase2Golden.ContainsKey('synthetic-binding-ambiguous')) 'Golden fixture must include the binding-ambiguous algorithm case'
+
+$historicalGolden = $phase2Golden['positive-paju-composite']
+Assert-Equal $historicalGolden.FixtureKind 'REAL_SOURCE_CITED' 'Historical Golden reference must be distinguished from algorithm fixtures'
+Assert-Equal $historicalGolden.Status 'HISTORICAL_REFERENCE_ONLY' 'Historical Golden reference must not claim current truth'
+Assert-True (-not $historicalGolden.ContainsKey('ExpectedBenefitState')) 'Historical evidence must not encode a current BenefitState expectation'
+
+$syntheticEndGolden = $phase2Golden['synthetic-explicit-end']
+Assert-Equal $syntheticEndGolden.FixtureKind 'SYNTHETIC_ALGORITHM_ONLY' 'Explicit-ending Golden case must be synthetic'
+Assert-Equal $syntheticEndGolden.ExpectedBenefitState 'ENDED' 'Explicit-ending Golden state must be ENDED'
+Assert-Equal $syntheticEndGolden.ExpectedReviewClass 'GREEN' 'Explicit-ending Golden review class must be GREEN'
+
+$syntheticConflictGolden = $phase2Golden['synthetic-source-conflict']
+Assert-Equal $syntheticConflictGolden.ExpectedBenefitState 'NEEDS_VERIFICATION' 'Source-conflict Golden state must remain unresolved'
+Assert-Equal $syntheticConflictGolden.ExpectedReviewClass 'RED' 'Source-conflict Golden review class must be RED'
+
+$syntheticBindingGolden = $phase2Golden['synthetic-binding-conflict']
+Assert-Equal $syntheticBindingGolden.ExpectedBenefitState 'NEEDS_VERIFICATION' 'Binding-conflict Golden state must remain unresolved'
+Assert-Equal $syntheticBindingGolden.ExpectedReviewClass 'RED' 'Binding-conflict Golden review class must be RED'
+
+$syntheticAmbiguousGolden = $phase2Golden['synthetic-binding-ambiguous']
+Assert-Equal $syntheticAmbiguousGolden.ExpectedBenefitState 'NEEDS_VERIFICATION' 'Binding-ambiguous Golden state must remain unresolved'
+Assert-Equal $syntheticAmbiguousGolden.ExpectedReviewClass 'YELLOW' 'Binding-ambiguous Golden review class must not be GREEN'
+
 function New-Phase2TestRow {
     param(
         [string]$SourceUrl='https://city.example.go.kr/benefit',
@@ -148,6 +179,14 @@ $fetchFailure = Invoke-Phase2BenefitShadowMode -Rows @(New-Phase2TestRow) -Sourc
 Assert-Equal $fetchFailure.Rows[0].BenefitState 'NEEDS_VERIFICATION' 'Fetch failure must remain unresolved'
 Assert-True ($fetchFailure.Rows[0].BenefitState -ne 'ENDED') 'Fetch failure must never imply ENDED'
 
+# Historical official-release evidence is provenance only. A current re-fetch failure must remain unresolved.
+$historicalReferenceRun = Invoke-Phase2BenefitShadowMode -Rows @(New-Phase2TestRow -SourceUrl $historicalGolden.SourceUrl -SourceType '지자체 공식 자료') -SourceRowNumberOffset 1 -RequestInvoker {
+    param($Uri)
+    throw 'historical source must be re-observed'
+} -UnstructuredExtractor $extractor
+Assert-Equal $historicalReferenceRun.Rows[0].BenefitState 'NEEDS_VERIFICATION' 'Historical release evidence must not automatically become current ACTIVE truth'
+Assert-True ($historicalReferenceRun.Rows[0].ReviewClass -ne 'GREEN') 'Unrevalidated historical evidence must not silently become GREEN'
+
 # Official PDF without an approved text adapter must fail closed.
 $pdfRun = Invoke-Phase2BenefitShadowMode -Rows @(New-Phase2TestRow -SourceUrl 'https://city.example.go.kr/benefit.pdf') -SourceRowNumberOffset 1 -RequestInvoker {
     param($Uri)
@@ -183,7 +222,20 @@ $bindingConflict = Invoke-Phase2BenefitShadowMode -Rows @(New-Phase2TestRow) -So
 } -UnstructuredExtractor $extractor
 Assert-Equal $bindingConflict.Rows[0].BenefitState 'NEEDS_VERIFICATION' 'Binding conflict must fail closed'
 Assert-Equal $bindingConflict.Rows[0].ReviewClass 'RED' 'Binding conflict must require RED review'
+Assert-Equal $bindingConflict.Rows[0].BenefitState $syntheticBindingGolden.ExpectedBenefitState 'Golden binding-conflict state must match integration behavior'
+Assert-Equal $bindingConflict.Rows[0].ReviewClass $syntheticBindingGolden.ExpectedReviewClass 'Golden binding-conflict review class must match integration behavior'
 Assert-True ($bindingConflict.Rows[0].ReasonCodes -contains 'BUSINESS_BINDING_CONFLICT') 'Binding conflict reason must survive orchestration'
+
+$bindingAmbiguous = Invoke-Phase2BenefitShadowMode -Rows @(New-Phase2TestRow) -SourceRowNumberOffset 1 -RequestInvoker {
+    param($Uri)
+    $response = New-Phase2TestResponse -Url $Uri.AbsoluteUri
+    $response.Text = $response.Text -replace '주소: 서울특별시 마포구 테스트로 12', ''
+    $response.Text = $response.Text -replace '전화번호: 02-1234-5678', ''
+    $response
+} -UnstructuredExtractor $extractor
+Assert-Equal $bindingAmbiguous.Rows[0].BenefitState $syntheticAmbiguousGolden.ExpectedBenefitState 'Golden binding-ambiguity state must match integration behavior'
+Assert-Equal $bindingAmbiguous.Rows[0].ReviewClass $syntheticAmbiguousGolden.ExpectedReviewClass 'Golden binding-ambiguity review class must match integration behavior'
+Assert-True ($bindingAmbiguous.Rows[0].ReasonCodes -contains 'BUSINESS_BINDING_AMBIGUOUS') 'Binding ambiguity reason must survive orchestration'
 
 $endedRun = Invoke-Phase2BenefitShadowMode -Rows @(New-Phase2TestRow -SourceUrl 'https://city.example.go.kr/ended') -SourceRowNumberOffset 1 -RequestInvoker {
     param($Uri)
@@ -191,6 +243,8 @@ $endedRun = Invoke-Phase2BenefitShadowMode -Rows @(New-Phase2TestRow -SourceUrl 
 } -UnstructuredExtractor $extractor
 Assert-Equal $endedRun.Rows[0].BenefitState 'ENDED' 'Explicit validated ending must become ENDED'
 Assert-Equal $endedRun.Rows[0].ReviewClass 'GREEN' 'Strong explicit ending may be GREEN fast review'
+Assert-Equal $endedRun.Rows[0].BenefitState $syntheticEndGolden.ExpectedBenefitState 'Golden explicit-ending state must match integration behavior'
+Assert-Equal $endedRun.Rows[0].ReviewClass $syntheticEndGolden.ExpectedReviewClass 'Golden explicit-ending review class must match integration behavior'
 Assert-True ($endedRun.Rows[0].ReasonCodes -contains 'EXPLICIT_DISCONTINUATION') 'Ending reason must be preserved'
 Assert-Equal $endedRun.Rows[0].ProductionAction 'NONE' 'ENDED remains shadow-only'
 
@@ -206,6 +260,8 @@ $conflictRun = Invoke-Phase2BenefitShadowMode -Rows @(New-Phase2TestRow -SourceU
 } -UnstructuredExtractor $extractor
 Assert-Equal $conflictRun.Rows[0].BenefitState 'NEEDS_VERIFICATION' 'Material multi-source conflict must remain unresolved'
 Assert-Equal $conflictRun.Rows[0].ReviewClass 'RED' 'Material source conflict must be RED'
+Assert-Equal $conflictRun.Rows[0].BenefitState $syntheticConflictGolden.ExpectedBenefitState 'Golden source-conflict state must match integration behavior'
+Assert-Equal $conflictRun.Rows[0].ReviewClass $syntheticConflictGolden.ExpectedReviewClass 'Golden source-conflict review class must match integration behavior'
 Assert-True ($conflictRun.Rows[0].ReasonCodes -contains 'SOURCE_CONFLICT') 'Multi-source conflict reason must survive orchestration'
 
 $script:requestCount = 0
@@ -276,5 +332,6 @@ Assert-Throws {
 Assert-Throws {
     Export-Phase2BenefitShadowMode -Run $activeRun -RowReportCsv (Join-Path $env:TEMP 'task6.csv') -SummaryJson (Join-Path $env:TEMP 'task6-summary.json') -EvidenceDiagnosticJson (Join-Path $repoRoot 'apps/task6.json')
 } 'App export path must be protected'
+
 
 Write-Host 'Phase 2 benefit shadow mode tests passed.'

@@ -26,6 +26,7 @@ Assert-True ($phase2Golden.ContainsKey('positive-paju-composite')) 'Golden fixtu
 Assert-True ($phase2Golden.ContainsKey('synthetic-explicit-end')) 'Golden fixture must include the explicit-ending algorithm case'
 Assert-True ($phase2Golden.ContainsKey('synthetic-source-conflict')) 'Golden fixture must include the source-conflict algorithm case'
 Assert-True ($phase2Golden.ContainsKey('synthetic-binding-conflict')) 'Golden fixture must include the binding-conflict algorithm case'
+Assert-True ($phase2Golden.ContainsKey('synthetic-binding-ambiguous')) 'Golden fixture must include the binding-ambiguity algorithm case'
 Assert-True ($phase2Golden.ContainsKey('synthetic-binding-ambiguous')) 'Golden fixture must include the binding-ambiguous algorithm case'
 
 $historicalGolden = $phase2Golden['positive-paju-composite']
@@ -45,6 +46,10 @@ Assert-Equal $syntheticConflictGolden.ExpectedReviewClass 'RED' 'Source-conflict
 $syntheticBindingGolden = $phase2Golden['synthetic-binding-conflict']
 Assert-Equal $syntheticBindingGolden.ExpectedBenefitState 'NEEDS_VERIFICATION' 'Binding-conflict Golden state must remain unresolved'
 Assert-Equal $syntheticBindingGolden.ExpectedReviewClass 'RED' 'Binding-conflict Golden review class must be RED'
+
+$syntheticAmbiguousGolden = $phase2Golden['synthetic-binding-ambiguous']
+Assert-Equal $syntheticAmbiguousGolden.ExpectedBenefitState 'NEEDS_VERIFICATION' 'Binding-ambiguity Golden state must remain unresolved'
+Assert-Equal $syntheticAmbiguousGolden.ExpectedReviewClass 'YELLOW' 'Binding-ambiguity Golden review class must be YELLOW'
 
 $syntheticAmbiguousGolden = $phase2Golden['synthetic-binding-ambiguous']
 Assert-Equal $syntheticAmbiguousGolden.ExpectedBenefitState 'NEEDS_VERIFICATION' 'Binding-ambiguous Golden state must remain unresolved'
@@ -233,6 +238,17 @@ Assert-Equal $bindingConflict.Rows[0].ReviewClass 'RED' 'Binding conflict must r
 Assert-Equal $bindingConflict.Rows[0].BenefitState $syntheticBindingGolden.ExpectedBenefitState 'Golden binding-conflict state must match integration behavior'
 Assert-Equal $bindingConflict.Rows[0].ReviewClass $syntheticBindingGolden.ExpectedReviewClass 'Golden binding-conflict review class must match integration behavior'
 Assert-True ($bindingConflict.Rows[0].ReasonCodes -contains 'BUSINESS_BINDING_CONFLICT') 'Binding conflict reason must survive orchestration'
+
+$bindingAmbiguous = Invoke-Phase2BenefitShadowMode -Rows @(New-Phase2TestRow) -SourceRowNumberOffset 1 -RequestInvoker {
+    param($Uri)
+    $response = New-Phase2TestResponse -Url $Uri.AbsoluteUri
+    $response.Text = $response.Text -replace '주소: 서울특별시 마포구 테스트로 12', ''
+    $response.Text = $response.Text -replace '전화번호: 02-1234-5678', ''
+    $response
+} -UnstructuredExtractor $extractor
+Assert-Equal $bindingAmbiguous.Rows[0].BenefitState $syntheticAmbiguousGolden.ExpectedBenefitState 'Golden binding-ambiguity state must match integration behavior'
+Assert-Equal $bindingAmbiguous.Rows[0].ReviewClass $syntheticAmbiguousGolden.ExpectedReviewClass 'Golden binding-ambiguity review class must match integration behavior'
+Assert-True ($bindingAmbiguous.Rows[0].ReasonCodes -contains 'BUSINESS_BINDING_AMBIGUOUS') 'Binding ambiguity reason must survive orchestration'
 
 $endedRun = Invoke-Phase2BenefitShadowMode -Rows @(New-Phase2TestRow -SourceUrl 'https://city.example.go.kr/ended') -SourceRowNumberOffset 1 -RequestInvoker {
     param($Uri)

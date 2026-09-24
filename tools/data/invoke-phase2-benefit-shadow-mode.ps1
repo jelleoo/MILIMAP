@@ -338,6 +338,17 @@ function Invoke-Phase2BenefitShadowMode {
             if (@($SourceRowNumbers | Where-Object { $_ -le 1 }).Count -gt 0) { throw 'SourceRowNumbers must be greater than 1' }
             if (@($SourceRowNumbers | Select-Object -Unique).Count -ne $SourceRowNumbers.Count) { throw 'SourceRowNumbers must be distinct' }
         }
+        if ($Rows.Count -eq 0) {
+            $emptyContext = New-BenefitSourceRunContext
+            $emptyRows = @()
+            return [pscustomobject][ordered]@{
+                Results=@()
+                Rows=@()
+                EvidenceDiagnostics=@()
+                Summary=(Get-Phase2BenefitShadowSummary -Rows $emptyRows -GoldenExpectations $GoldenExpectations -OperationalLiveRun:$OperationalLiveRun)
+                PreparationSummary=(Get-Phase2ScopedPreparationSummary -RunContext $emptyContext -SourceEvaluations 0 -LocatorLocated 0 -LocatorAmbiguous 0 -LocatorNotFound 0 -LocationNotAttempted 0)
+            }
+        }
         return Invoke-Phase2ScopedBenefitShadowMode -Rows $Rows -SourceRowNumberOffset $SourceRowNumberOffset -SourceRowNumbers $(if ($hasExplicitRows) { $SourceRowNumbers } else { $null }) -RequestInvoker $RequestInvoker -GoldenExpectations $GoldenExpectations -OperationalLiveRun:$OperationalLiveRun
     }
 
@@ -433,7 +444,7 @@ function Invoke-Phase2BenefitShadowMode {
 
 function Get-Phase2BenefitShadowSummary {
     param(
-        [Parameter(Mandatory)][object[]]$Rows,
+        [Parameter(Mandatory)][AllowEmptyCollection()][object[]]$Rows,
         [hashtable]$GoldenExpectations=@{},
         [switch]$OperationalLiveRun
     )

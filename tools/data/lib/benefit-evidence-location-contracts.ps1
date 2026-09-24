@@ -107,6 +107,34 @@ function Assert-ScopeSpan {
     if ($Start -lt $ContainerStart -or $Length -le 0 -or $Length -gt $ContainerLength -or
         ($Start - $ContainerStart) -gt ($ContainerLength - $Length)) { throw 'Source span is outside its container' }
 }
+function Get-ScopeHtmlTagTokens {
+    param([Parameter(Mandatory)][string]$Text)
+    # Position-only tokenizer: comments/raw-text and quoted attribute values are
+    # opaque. It neither constructs business rows nor repairs malformed HTML.
+    $tail = '(?:[^''"<>]|"[^"]*"|''[^'']*'')*>'
+    $pattern = '<!--.*?(?:-->|\z)|<(?<Raw>script|style|textarea|title|xmp)\b' + $tail + '.*?(?:</\k<Raw>\s*>|\z)|<![^>]*>|<(?<Close>/)?(?<Tag>[a-z][a-z0-9:-]*)\b' + $tail
+    $options = [Text.RegularExpressions.RegexOptions]::IgnoreCase -bor [Text.RegularExpressions.RegexOptions]::Singleline
+    foreach ($match in [regex]::Matches($Text, $pattern, $options, [TimeSpan]::FromSeconds(1))) {
+        if (-not $match.Groups['Tag'].Success) { continue }
+        [pscustomobject]@{ Tag=$match.Groups['Tag'].Value.ToLowerInvariant(); IsClosing=$match.Groups['Close'].Success; Index=$match.Index; Length=$match.Length }
+    }
+}
+function Assert-ScopePhysicalUnitReference {
+    param([Parameter(Mandatory)]$Unit, [Parameter(Mandatory)][string]$Text)
+    $tokens = @(Get-ScopeHtmlTagTokens -Text $Text)
+    $tables = @($tokens | Where-Object { $_.Tag -ceq 'table' -and -not $_.IsClosing })
+    $tableIndex = -1
+    for ($i=0; $i -lt $tables.Count; $i++) { if ($tables[$i].Index -eq $Unit.TableStart) { $tableIndex=$i+1; break } }
+    $rows = @($tokens | Where-Object { $_.Tag -ceq 'tr' -and -not $_.IsClosing -and $_.Index -gt $Unit.TableStart -and $_.Index -lt ($Unit.TableStart+$Unit.TableLength) })
+    $rowIndex = -1
+    for ($i=0; $i -lt $rows.Count; $i++) { if ($rows[$i].Index -eq $Unit.RawStart) { $rowIndex=$i+1; break } }
+    $tableEnd = @($tokens | Where-Object { $_.Tag -ceq 'table' -and $_.IsClosing -and ($_.Index+$_.Length) -eq ($Unit.TableStart+$Unit.TableLength) })
+    $rowEnd = @($tokens | Where-Object { $_.Tag -ceq 'tr' -and $_.IsClosing -and ($_.Index+$_.Length) -eq ($Unit.RawStart+$Unit.RawLength) })
+    if ($tableIndex -lt 1 -or $rowIndex -lt 1 -or $tableEnd.Count -ne 1 -or $rowEnd.Count -ne 1 -or
+        $Unit.UnitReference -cne "HTML_TABLE_${tableIndex}_ROW_${rowIndex}") {
+        throw 'Physical reference does not match original table and row positions'
+    }
+}
 function Get-ScopeElementFragment {
     param([string]$Text, [long]$Start, [long]$Length, [ValidateSet('table','tr','th','td')][string]$Tag)
     Assert-ScopeSpan $Start $Length 0 $Text.Length
@@ -130,6 +158,7 @@ function Assert-ScopeUnit {
     Assert-ScopeSpan $Unit.RawStart $Unit.RawLength $Unit.TableStart $Unit.TableLength
     $table = Get-ScopeElementFragment $Snapshot.Text $Unit.TableStart $Unit.TableLength 'table'
     $row = Get-ScopeElementFragment $Snapshot.Text $Unit.RawStart $Unit.RawLength 'tr'
+    Assert-ScopePhysicalUnitReference -Unit $Unit -Text $Snapshot.Text
     if ($row -cne $Unit.RawFragment -or (ConvertFrom-ScopeHtmlText $row) -cne $Unit.RawEvidenceText) { throw 'Unit raw/decoded text mismatch' }
     Assert-ScopeText $Unit.RawEvidenceText 'RawEvidenceText'
     if ($Unit.StructuredFields -isnot [Collections.IDictionary] -or $Unit.FieldReferences -isnot [Collections.IDictionary] -or

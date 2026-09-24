@@ -37,7 +37,7 @@ Assert-ScopeEqual $a.SnapshotId $b.SnapshotId 'Shared retrieval preserves one sn
 Assert-ScopeEqual $a.AdapterId 'HTML_GENERIC' 'Diagnostic preserves adapter identity'
 Assert-ScopeEqual $a.AdapterVersion '1' 'Diagnostic preserves adapter version'
 Assert-ScopeTrue (@($a.Slices).Count -eq 1) 'Located source exposes exactly one diagnostic slice'
-Assert-ScopeTrue (-not [string]::IsNullOrWhiteSpace([string]$a.Slices[0].UnitReference)) 'Diagnostic preserves physical unit reference'
+Assert-ScopeTrue (-not [string]::IsNullOrWhiteSpace([string]$a.Slices[0].EvidenceReference)) 'Diagnostic preserves physical unit reference'
 Assert-ScopeTrue (-not [string]::IsNullOrWhiteSpace([string]$a.Slices[0].RawEvidenceText)) 'Diagnostic preserves selected source text'
 
 $p = $run.PreparationSummary

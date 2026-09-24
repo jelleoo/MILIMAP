@@ -315,15 +315,15 @@ function Invoke-Phase2BenefitShadowMode {
     param(
         [Parameter(Mandatory)][AllowEmptyCollection()][object[]]$Rows,
         [int]$SourceRowNumberOffset=1,
-        [AllowNull()][int[]]$SourceRowNumbers=$null,
-        [switch]$UseScopedHtmlEvidence,
         [AllowNull()][scriptblock]$RequestInvoker=$null,
         [AllowNull()][scriptblock]$DiscoveryInvoker=$null,
         [AllowNull()][scriptblock]$UnstructuredExtractor=$null,
         [AllowNull()][scriptblock]$SpreadsheetExtractor=$null,
         [AllowNull()][scriptblock]$PdfTextExtractor=$null,
         [hashtable]$GoldenExpectations=@{},
-        [switch]$OperationalLiveRun
+        [switch]$OperationalLiveRun,
+        [AllowNull()][int[]]$SourceRowNumbers=$null,
+        [switch]$UseScopedHtmlEvidence
     )
 
     $hasExplicitRows = $PSBoundParameters.ContainsKey('SourceRowNumbers')

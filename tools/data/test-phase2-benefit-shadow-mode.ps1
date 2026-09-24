@@ -100,6 +100,12 @@ Assert-Equal $activeRun.Summary.ExistingSourceReuseCount 1 'Existing source reus
 Assert-Equal $activeRun.Summary.DiscoveryFallbackCount 0 'Unused fallback must be counted as zero'
 Assert-True (@($activeRun.EvidenceDiagnostics).Count -ge 1) 'Evidence diagnostics must remain auditable'
 
+# The approved Task 6 summary interface must work from review rows alone.
+$directSummary = Get-Phase2BenefitShadowSummary -Rows $activeRun.Rows
+Assert-Equal $directSummary.EvaluatedRows $activeRun.Summary.EvaluatedRows 'Direct summary interface must preserve evaluated row count'
+Assert-Equal $directSummary.ExistingSourceReuseCount $activeRun.Summary.ExistingSourceReuseCount 'Direct summary interface must preserve existing-source reuse'
+Assert-Equal $directSummary.TotalExternalRequests $activeRun.Summary.TotalExternalRequests 'Direct summary interface must preserve external request count'
+
 $script:discoveryCount = 0
 $fallbackRun = Invoke-Phase2BenefitShadowMode -Rows @(New-Phase2TestRow -SourceUrl '' -SourceType '') -SourceRowNumberOffset 1 -RequestInvoker {
     param($Uri)

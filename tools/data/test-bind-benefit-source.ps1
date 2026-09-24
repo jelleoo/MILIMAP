@@ -100,4 +100,46 @@ Assert-True ($districtConflict.BindingEvidence -contains 'DISTRICT_CONFLICT') 'D
 $sourceRowMismatch = New-TestQualifiedSource -Text '사업장명: 테스트 식당 양주점' -SourceRowNumber 3
 Assert-Throws { Get-BenefitBusinessBinding -Source $sourceRowMismatch -Business $business -CanonicalPhone '' } 'Binding must fail closed when qualified source and business source rows differ'
 
+# A1.3 scoped binding: the original document remains authoritative, while
+# identity is consumed only from the A1.2-selected physical row.
+. (Join-Path $PSScriptRoot 'testdata/benefit-evidence-location/test-support.ps1')
+. (Join-Path $PSScriptRoot 'lib/benefit-evidence/convert-html-source-observation.ps1')
+. (Join-Path $PSScriptRoot 'lib/benefit-evidence/find-business-evidence-slice.ps1')
+$scopedDocument = New-ScopeTestDocument
+$scopedObservation = ConvertTo-BenefitHtmlObservation -Document $scopedDocument
+$scopedBusiness = New-ScopeTestBusiness
+$scopedLocation = Find-BenefitBusinessEvidence -Observation $scopedObservation -Business $scopedBusiness -CanonicalPhone '02-0000-0012'
+$scopedSlice = $scopedLocation.Slices[0]
+$scopedCandidate = New-BenefitSourceCandidate -SourceRowNumber 2 -Url $scopedDocument.Url -SourceKind PUBLIC_OFFICIAL -SourceLabel 'fixture' -DiscoveryMethod TEST -ObservedAt '2026-09-24T00:00:00Z'
+$scopedQualified = New-QualifiedBenefitSource -Candidate $scopedCandidate -Document $scopedDocument -OfficialityStatus VERIFIED_OFFICIAL -CurrentnessStatus UNKNOWN
+$scopedBound = Get-BenefitBusinessBinding -Source $scopedQualified -Business $scopedBusiness -CanonicalPhone '02-0000-0012' -EvidenceSlice $scopedSlice
+Assert-Equal $scopedBound.BusinessBindingStatus 'STRONG' 'A located row binds strongly from its observed name and address'
+Assert-Throws { Get-BenefitBusinessBinding -Source $scopedQualified -Business $scopedBusiness -EvidenceSlice $null } 'An explicitly supplied null slice must not enable legacy binding'
+$forgedSlice = $scopedSlice
+$forgedSlice.StructuredFields['Address'] = '서울특별시 마포구 테스트로 99'
+Assert-Throws { Get-BenefitBusinessBinding -Source $scopedQualified -Business $scopedBusiness -CanonicalPhone '02-0000-0012' -EvidenceSlice $forgedSlice } 'A forged scoped slice must fail original-document provenance validation'
+$buildingDocument = New-ScopeTestDocument -Html '<table><tr><th>업소명</th><th>주소</th><th>전화번호</th></tr><tr><td>테스트가게 A</td><td>서울특별시 마포구 테스트로 99</td><td>02-0000-0012</td></tr></table>'
+$buildingObservation = ConvertTo-BenefitHtmlObservation -Document $buildingDocument
+$buildingSlice = New-RelevantBenefitEvidenceSlice -Observation $buildingObservation -Unit $buildingObservation.ContentUnits[0]
+$buildingCandidate = New-BenefitSourceCandidate -SourceRowNumber 2 -Url $buildingDocument.Url -SourceKind PUBLIC_OFFICIAL -SourceLabel fixture -DiscoveryMethod TEST -ObservedAt '2026-09-24T00:00:00Z'
+$buildingQualified = New-QualifiedBenefitSource -Candidate $buildingCandidate -Document $buildingDocument -OfficialityStatus VERIFIED_OFFICIAL -CurrentnessStatus UNKNOWN
+Assert-Equal (Get-BenefitBusinessBinding -Source $buildingQualified -Business $scopedBusiness -CanonicalPhone '02-0000-0012' -EvidenceSlice $buildingSlice).BusinessBindingStatus 'CONFLICT' 'Scoped phone agreement cannot override a building conflict'
+$branchBusiness = ConvertTo-NormalizedBusiness -Row (New-ScopeTestRow -Name '테스트 식당 (양주점)' -Building '12') -SourceRowNumber 2
+$branchDocument = New-ScopeTestDocument -Html '<table><tr><th>사업장명</th><th>주소</th><th>지점명</th></tr><tr><td>테스트 식당 양주점</td><td>서울특별시 마포구 테스트로 12</td><td>신양주점</td></tr></table>'
+$branchObservation = ConvertTo-BenefitHtmlObservation -Document $branchDocument
+$branchSlice = New-RelevantBenefitEvidenceSlice -Observation $branchObservation -Unit $branchObservation.ContentUnits[0]
+$branchCandidate = New-BenefitSourceCandidate -SourceRowNumber 2 -Url $branchDocument.Url -SourceKind PUBLIC_OFFICIAL -SourceLabel fixture -DiscoveryMethod TEST -ObservedAt '2026-09-24T00:00:00Z'
+$branchQualified = New-QualifiedBenefitSource -Candidate $branchCandidate -Document $branchDocument -OfficialityStatus VERIFIED_OFFICIAL -CurrentnessStatus UNKNOWN
+Assert-Equal (Get-BenefitBusinessBinding -Source $branchQualified -Business $branchBusiness -EvidenceSlice $branchSlice).BusinessBindingStatus 'CONFLICT' 'Scoped explicit branch conflict cannot bind strongly'
+$floorBusiness = ConvertTo-NormalizedBusiness -Row (New-ScopeTestRow -Name '층수 가게' -Building '12 2층 201호') -SourceRowNumber 2
+$floorDocument = New-ScopeTestDocument -Html '<table><tr><th>업소명</th><th>주소</th></tr><tr><td>층수 가게</td><td>서울특별시 마포구 테스트로 12 3층 301호</td></tr></table>'
+$floorObservation = ConvertTo-BenefitHtmlObservation -Document $floorDocument
+$floorSlice = New-RelevantBenefitEvidenceSlice -Observation $floorObservation -Unit $floorObservation.ContentUnits[0]
+$floorCandidate = New-BenefitSourceCandidate -SourceRowNumber 2 -Url $floorDocument.Url -SourceKind PUBLIC_OFFICIAL -SourceLabel fixture -DiscoveryMethod TEST -ObservedAt '2026-09-24T00:00:00Z'
+$floorQualified = New-QualifiedBenefitSource -Candidate $floorCandidate -Document $floorDocument -OfficialityStatus VERIFIED_OFFICIAL -CurrentnessStatus UNKNOWN
+Assert-Equal (Get-BenefitBusinessBinding -Source $floorQualified -Business $floorBusiness -EvidenceSlice $floorSlice).BusinessBindingStatus 'CONFLICT' 'Scoped explicit floor and unit conflict cannot bind strongly'
+$unknownPhoneSlice = (Find-BenefitBusinessEvidence -Observation $scopedObservation -Business $scopedBusiness -CanonicalPhone '02-0000-0012').Slices[0]
+$unknownPhoneResult = Get-BenefitBusinessBinding -Source $scopedQualified -Business $scopedBusiness -CanonicalPhone '전화번호미상' -EvidenceSlice $unknownPhoneSlice
+Assert-Equal $unknownPhoneResult.BusinessBindingStatus 'CONFLICT' 'A supplied nonempty canonical phone that cannot match must not silently disable scoped phone conflict'
+
 Write-Host 'Benefit business binding tests passed.'

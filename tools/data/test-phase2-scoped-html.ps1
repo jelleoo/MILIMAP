@@ -124,4 +124,8 @@ $legacyResponse = {
 $legacy = Invoke-Phase2BenefitShadowMode -Rows @($rows[0]) -RequestInvoker $legacyResponse
 Assert-ScopeTrue ($legacy.PSObject.Properties.Name -notcontains 'PreparationSummary') 'Legacy path shape remains unchanged when scoped opt-in is omitted'
 
+$legacyMapped = Invoke-Phase2BenefitShadowMode -Rows @($rows[0]) -SourceRowNumbers @(75) -RequestInvoker $legacyResponse
+Assert-ScopeEqual $legacyMapped.Results[0].SourceRowNumber 75 'Explicit SourceRowNumbers preserves original row identity even without scoped opt-in'
+Assert-ScopeThrows { Invoke-Phase2BenefitShadowMode -Rows @($rows[0]) -SourceRowNumbers @(75) -SourceRowNumberOffset 1 -RequestInvoker $legacyResponse } 'Explicit row map and explicit offset are mutually exclusive for the runner interface'
+
 Write-Host 'Phase 2 scoped HTML shadow mode tests passed.'

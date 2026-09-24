@@ -142,6 +142,33 @@ $fetchFailure = Invoke-Phase2BenefitShadowMode -Rows @(New-Phase2TestRow) -Sourc
 Assert-Equal $fetchFailure.Rows[0].BenefitState 'NEEDS_VERIFICATION' 'Fetch failure must remain unresolved'
 Assert-True ($fetchFailure.Rows[0].BenefitState -ne 'ENDED') 'Fetch failure must never imply ENDED'
 
+# Official PDF without an approved text adapter must fail closed.
+$pdfRun = Invoke-Phase2BenefitShadowMode -Rows @(New-Phase2TestRow -SourceUrl 'https://city.example.go.kr/benefit.pdf') -SourceRowNumberOffset 1 -RequestInvoker {
+    param($Uri)
+    [pscustomobject]@{ StatusCode=200; ContentType='application/pdf'; Text=''; Bytes=([byte[]](1,2,3)) }
+} -UnstructuredExtractor $extractor
+Assert-Equal $pdfRun.Rows[0].BenefitState 'NEEDS_VERIFICATION' 'PDF without text adapter must remain unresolved'
+Assert-True ($pdfRun.Rows[0].ReasonCodes -contains 'EXTRACTION_PROVIDER_NOT_CONFIGURED') 'Missing PDF adapter reason must be preserved'
+Assert-True ($pdfRun.Rows[0].BenefitState -ne 'ENDED') 'Unsupported extraction path must never imply ENDED'
+
+# Confirmed lifecycle with incomplete detail remains ACTIVE but requires human review.
+$incompleteExtractor = {
+    param($Text, $Document, $Source)
+    @(
+        [pscustomobject]@{ ClaimType='BENEFIT_EXISTENCE'; Value='혜택 제공'; EvidenceText='혜택 제공'; EvidenceReference='fixture:existence' },
+        [pscustomobject]@{ ClaimType='CURRENT_APPLICABILITY'; Value='현재 적용'; EvidenceText='현재 적용'; EvidenceReference='fixture:current' },
+        [pscustomobject]@{ ClaimType='BENEFIT_DESCRIPTION'; Value='10% 할인'; EvidenceText='10% 할인'; EvidenceReference='fixture:description' },
+        [pscustomobject]@{ ClaimType='ELIGIBLE_TARGET'; Value='현역 장병'; EvidenceText='현역 장병'; EvidenceReference='fixture:target' }
+    )
+}
+$incompleteRun = Invoke-Phase2BenefitShadowMode -Rows @(New-Phase2TestRow) -SourceRowNumberOffset 1 -RequestInvoker {
+    param($Uri)
+    New-Phase2TestResponse -Url $Uri.AbsoluteUri
+} -UnstructuredExtractor $incompleteExtractor
+Assert-Equal $incompleteRun.Rows[0].BenefitState 'ACTIVE' 'Confirmed lifecycle with missing detail may remain ACTIVE'
+Assert-Equal $incompleteRun.Rows[0].ReviewClass 'YELLOW' 'Incomplete detail must require YELLOW review'
+Assert-True ($incompleteRun.Rows[0].ReasonCodes -contains 'DETAIL_INCOMPLETE') 'Incomplete detail reason must survive orchestration'
+
 $bindingConflict = Invoke-Phase2BenefitShadowMode -Rows @(New-Phase2TestRow) -SourceRowNumberOffset 1 -RequestInvoker {
     param($Uri)
     $response = New-Phase2TestResponse -Url $Uri.AbsoluteUri

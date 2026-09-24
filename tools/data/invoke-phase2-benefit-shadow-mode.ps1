@@ -125,9 +125,11 @@ function Get-Phase2BenefitEvaluation {
     })
     $validatedClaims = @($verifiedRecords | ForEach-Object { $_.Validation.Claims })
     $claimResults = @(Compare-BenefitClaims -Benefit $Benefit -ValidatedEvidence $validatedClaims)
+    $discoveredRecords = @($records | Where-Object { $_.Candidate.DiscoveryMethod -eq 'DISCOVERY_INVOKER' })
+    $operationalRecords = if ($discoveredRecords.Count -gt 0) { $discoveredRecords } else { $records }
     $operationalStatus = [pscustomobject][ordered]@{
         DiscoveryStatus=$DiscoveryStatus
-        ExtractionStatus=(Get-Phase2ExtractionStatus -SourceRecords $records)
+        ExtractionStatus=(Get-Phase2ExtractionStatus -SourceRecords $operationalRecords)
     }
     $evaluation = Invoke-BenefitStateEvaluation -Benefit $Benefit -Sources @($evaluationSourceRecords | ForEach-Object { $_.Bound }) -ClaimResults $claimResults -OperationalStatus $operationalStatus
     return [pscustomobject][ordered]@{ClaimResults=$claimResults;OperationalStatus=$operationalStatus;Evaluation=$evaluation}

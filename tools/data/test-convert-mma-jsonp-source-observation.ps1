@@ -70,4 +70,18 @@ $forgedValueOffset.FieldReferences.BenefitDescription.ValueStart = $detailObserv
 $forgedValueOffset.FieldReferences.BenefitDescription.ValueLength = $detailObservation.ContentUnits[0].FieldReferences.EligibleTarget.ValueLength
 Assert-ScopeThrows { Assert-ScopeUnit $forgedValueOffset $detailObservation.Snapshot } 'Cross-property JSONP value offsets cannot back another semantic field'
 
+$equalValueText = 'MmaTestDetail({"success":true,"udgigwanVO":{"benefit_a":"동일 값","benefit_b":"동일 값"}});'
+$equalValueSnapshot = New-BenefitSourceSnapshot -SourceUrl 'https://open.mma.go.kr/caisGGGS/mmanrsrSangSeAjaxJsonCall.json?udgigwan_cd=equal&callback=MmaTestDetail' -SourceFormat JSONP -Text $equalValueText -ObservedAt '2026-09-25T00:00:00Z'
+$equalValueObject = '{"benefit_a":"동일 값","benefit_b":"동일 값"}'
+$equalValueStart = $equalValueText.IndexOf('"동일 값"')
+$equalValueSecondStart = $equalValueText.IndexOf('"동일 값"', $equalValueStart + 1)
+$equalValueUnit = New-BenefitJsonpSourceContentUnit -Snapshot $equalValueSnapshot -UnitReference 'JSONP_DETAIL_OBJECT' -RawStart $equalValueText.IndexOf($equalValueObject) -RawLength $equalValueObject.Length -RawEvidenceText '동일 값' -StructuredFields ([ordered]@{ BenefitDescription='동일 값'; EligibleTarget='동일 값' }) -FieldReferences ([ordered]@{
+    BenefitDescription=[pscustomobject][ordered]@{ PropertyName='benefit_a'; FieldReference='JSONP_DETAIL_OBJECT/benefit_a'; ValueStart=$equalValueStart; ValueLength='"동일 값"'.Length }
+    EligibleTarget=[pscustomobject][ordered]@{ PropertyName='benefit_b'; FieldReference='JSONP_DETAIL_OBJECT/benefit_b'; ValueStart=$equalValueSecondStart; ValueLength='"동일 값"'.Length }
+})
+$sameValueCrossPropertyForgery = Copy-ScopeContractData $equalValueUnit
+$sameValueCrossPropertyForgery.FieldReferences.BenefitDescription.ValueStart = $equalValueUnit.FieldReferences.EligibleTarget.ValueStart
+$sameValueCrossPropertyForgery.FieldReferences.BenefitDescription.ValueLength = $equalValueUnit.FieldReferences.EligibleTarget.ValueLength
+Assert-ScopeThrows { Assert-ScopeUnit $sameValueCrossPropertyForgery $equalValueSnapshot } 'Equal JSON values from another property cannot satisfy the claimed property provenance'
+
 Write-Host 'MMA JSONP source observation parser tests passed.'

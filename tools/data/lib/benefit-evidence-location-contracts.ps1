@@ -56,6 +56,83 @@ function Copy-ScopeContractData {
     }
     return $Value
 }
+function Get-BenefitJsonStringEnd {
+    param([Parameter(Mandatory)][string]$JsonText, [int]$Start)
+    if ($Start -lt 0 -or $Start -ge $JsonText.Length -or $JsonText[$Start] -cne '"') { throw 'JSON string must start with a quote' }
+    $escaped = $false
+    for ($i=$Start+1; $i -lt $JsonText.Length; $i++) {
+        $character = $JsonText[$i]
+        if ($escaped) { $escaped=$false; continue }
+        if ($character -ceq '\') { $escaped=$true; continue }
+        if ($character -ceq '"') { return $i+1 }
+    }
+    throw 'Unterminated JSON string'
+}
+function Skip-BenefitJsonWhitespace {
+    param([Parameter(Mandatory)][string]$JsonText, [int]$Start)
+    $index=$Start
+    while ($index -lt $JsonText.Length -and [char]::IsWhiteSpace($JsonText[$index])) { $index++ }
+    return $index
+}
+function Get-BenefitJsonValueEnd {
+    param([Parameter(Mandatory)][string]$JsonText, [int]$Start)
+    $index = Skip-BenefitJsonWhitespace $JsonText $Start
+    if ($index -ge $JsonText.Length) { throw 'Missing JSON value' }
+    if ($JsonText[$index] -ceq '"') { return Get-BenefitJsonStringEnd $JsonText $index }
+    if ($JsonText[$index] -notin @('{','[')) {
+        $end=$index
+        while ($end -lt $JsonText.Length -and $JsonText[$end] -notin @(',','}',']') -and -not [char]::IsWhiteSpace($JsonText[$end])) { $end++ }
+        if ($end -eq $index) { throw 'Invalid JSON scalar value' }
+        return $end
+    }
+    $open=$JsonText[$index]; $close=if ($open -ceq '{') { '}' } else { ']' }
+    $depth=0; $inString=$false; $escaped=$false
+    for ($i=$index; $i -lt $JsonText.Length; $i++) {
+        $character=$JsonText[$i]
+        if ($inString) {
+            if ($escaped) { $escaped=$false; continue }
+            if ($character -ceq '\') { $escaped=$true; continue }
+            if ($character -ceq '"') { $inString=$false }
+            continue
+        }
+        if ($character -ceq '"') { $inString=$true; continue }
+        if ($character -ceq $open) { $depth++; continue }
+        if ($character -ceq $close) {
+            $depth--
+            if ($depth -eq 0) { return $i+1 }
+            if ($depth -lt 0) { break }
+        }
+    }
+    throw 'Unterminated JSON container'
+}
+function Get-BenefitJsonTopLevelPropertySpan {
+    param([Parameter(Mandatory)][string]$JsonText, [Parameter(Mandatory)][string]$PropertyName)
+    $rootStart=Skip-BenefitJsonWhitespace $JsonText 0
+    if ($rootStart -ge $JsonText.Length -or $JsonText[$rootStart] -cne '{') { throw 'MMA JSONP root must start with an object' }
+    $rootEnd=Get-BenefitJsonValueEnd $JsonText $rootStart
+    if ((Skip-BenefitJsonWhitespace $JsonText $rootEnd) -ne $JsonText.Length) { throw 'JSONP root has trailing data' }
+    $position=$rootStart+1; $found=@()
+    while ($true) {
+        $position=Skip-BenefitJsonWhitespace $JsonText $position
+        if ($position -ge $rootEnd) { throw 'Unterminated JSON root object' }
+        if ($JsonText[$position] -ceq '}') { break }
+        $keyStart=$position; $keyEnd=Get-BenefitJsonStringEnd $JsonText $keyStart
+        try { $key=('{"value":' + $JsonText.Substring($keyStart,$keyEnd-$keyStart) + '}') | ConvertFrom-Json -ErrorAction Stop | Select-Object -ExpandProperty value }
+        catch { throw 'JSONP property name cannot be decoded' }
+        $position=Skip-BenefitJsonWhitespace $JsonText $keyEnd
+        if ($position -ge $rootEnd -or $JsonText[$position] -cne ':') { throw 'JSONP property is missing a colon' }
+        $valueStart=Skip-BenefitJsonWhitespace $JsonText ($position+1)
+        $valueEnd=Get-BenefitJsonValueEnd $JsonText $valueStart
+        if ($key -ceq $PropertyName) { $found += [pscustomobject][ordered]@{ Start=[long]$valueStart; Length=[long]($valueEnd-$valueStart); Fragment=$JsonText.Substring($valueStart,$valueEnd-$valueStart) } }
+        $position=Skip-BenefitJsonWhitespace $JsonText $valueEnd
+        if ($position -ge $rootEnd) { throw 'Unterminated JSON root object' }
+        if ($JsonText[$position] -ceq '}') { break }
+        if ($JsonText[$position] -cne ',') { throw 'JSONP root has invalid property separator' }
+        $position++
+    }
+    if ($found.Count -ne 1) { throw "MMA JSONP must contain exactly one $PropertyName property" }
+    return $found[0]
+}
 function Assert-ScopeTimestamp {
     param([AllowNull()]$Value)
     Assert-ScopeText $Value 'ObservedAt'
@@ -224,6 +301,8 @@ function Assert-ScopeJsonpUnit {
         if ($reference.FieldReference -cne ($Unit.UnitReference + '/' + $reference.PropertyName)) { throw 'JSONP field reference must belong to selected object' }
         if ($rawObject.PSObject.Properties.Name -notcontains $reference.PropertyName) { throw 'JSONP field reference property is absent from selected raw object' }
         Assert-ScopeSpan $reference.ValueStart $reference.ValueLength $Unit.RawStart $Unit.RawLength
+        $propertySpan = Get-BenefitJsonTopLevelPropertySpan -JsonText $Unit.RawFragment -PropertyName $reference.PropertyName
+        if ($reference.ValueStart -ne ($Unit.RawStart + $propertySpan.Start) -or $reference.ValueLength -ne $propertySpan.Length) { throw 'JSONP field value span does not match the selected raw property span' }
         try { $rawValue=('{"value":' + $Snapshot.Text.Substring([int]$reference.ValueStart,[int]$reference.ValueLength) + '}') | ConvertFrom-Json -ErrorAction Stop | Select-Object -ExpandProperty value }
         catch { throw 'JSONP field value span is not valid source JSON' }
         if ((ConvertTo-BenefitText $rawValue) -cne (ConvertTo-BenefitText $Unit.StructuredFields[$key])) { throw 'JSONP field value span does not match semantic field' }

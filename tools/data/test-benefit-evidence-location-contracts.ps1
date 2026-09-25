@@ -43,6 +43,8 @@ $o2 = New-BenefitSourceObservation -SourceRowNumber 2 -Snapshot $s -AdapterId HT
 $o3 = New-BenefitSourceObservation -SourceRowNumber 3 -Snapshot $s -AdapterId HTML_GENERIC -AdapterVersion '1' -AdapterStatus COMPLETE -ContentUnits @($u) -Diagnostics @()
 $slice = New-RelevantBenefitEvidenceSlice -Observation $o2 -Unit $u -IdentityEvidence @()
 Assert-RelevantBenefitEvidenceSlice -Slice $slice -Document $d -SourceRowNumber 2
+Assert-ScopeEqual $slice.ScopeType 'TABLE_ROW' 'HTML slice scope stays TABLE_ROW'
+Assert-ScopeEqual $slice.LocatorMethod 'STRUCTURED_HTML_ROW' 'HTML locator identity stays unchanged'
 Assert-ScopeEqual $o3.SourceRowNumber 3 'Independent row wrapper'
 Assert-ScopeTrue (-not ($s.PSObject.Properties.Name -contains 'SourceRowNumber')) 'Shared payload is rowless'
 Assert-ScopeTrue ($o2.ContentUnits -is [array]) 'One unit remains an array'
@@ -68,6 +70,23 @@ Assert-ScopeEqual @($empty.ContentUnits).Count 0 'Empty complete observation is 
 Assert-ScopeThrows { New-RelevantBenefitEvidenceSlice -Observation $empty -Unit $u } 'Slice requires exact observation membership'
 $partial = New-BenefitSourceObservation -SourceRowNumber 2 -Snapshot $s -AdapterId HTML_GENERIC -AdapterVersion 1 -AdapterStatus PARTIAL -ContentUnits @($u) -Diagnostics @([pscustomobject]@{Code='HTML_TABLE_PARTIAL';Stage='ADAPTER';EvidenceReference='HTML_TABLE_1';Detail='test'})
 Assert-ScopeThrows { New-RelevantBenefitEvidenceSlice -Observation $partial -Unit $u } 'Incomplete preparation must not produce a usable slice'
+
+$jsonp = 'Cb({"success":true,"udgigwanVO":{"udgigwan_cd":"2789","udsangse_cn":"서비스 이용료 3% 할인"}})'
+$jsonpSnapshot = New-BenefitSourceSnapshot -SourceUrl 'https://open.mma.go.kr/detail?callback=Cb' -SourceFormat JSONP -Text $jsonp -ObservedAt '2026-09-25T00:00:00Z'
+$jsonpFields = [ordered]@{
+    InstitutionCode='2789'
+    BenefitDescription='서비스 이용료 3% 할인'
+}
+$jsonpReferences = [ordered]@{
+    InstitutionCode=[pscustomobject][ordered]@{PropertyName='udgigwan_cd';FieldReference='JSONP_DETAIL_OBJECT/udgigwan_cd'}
+    BenefitDescription=[pscustomobject][ordered]@{PropertyName='udsangse_cn';FieldReference='JSONP_DETAIL_OBJECT/udsangse_cn'}
+}
+$jsonpUnit = New-BenefitJsonpSourceContentUnit -Snapshot $jsonpSnapshot -UnitReference 'JSONP_DETAIL_OBJECT' -RawStart $jsonp.IndexOf('{"udgigwan_cd"') -RawLength '{"udgigwan_cd":"2789","udsangse_cn":"서비스 이용료 3% 할인"}'.Length -RawEvidenceText '서비스 이용료 3% 할인' -StructuredFields $jsonpFields -FieldReferences $jsonpReferences
+Assert-ScopeUnit $jsonpUnit $jsonpSnapshot
+$jsonpObservation = New-BenefitSourceObservation -SourceRowNumber 2 -Snapshot $jsonpSnapshot -AdapterId 'MMA_JSONP_DETAIL' -AdapterVersion '1' -AdapterStatus COMPLETE -ContentUnits @($jsonpUnit)
+$jsonpSlice = New-RelevantBenefitEvidenceSlice -Observation $jsonpObservation -Unit $jsonpUnit -IdentityEvidence @('FULL_NAME_MATCH')
+Assert-ScopeEqual $jsonpSlice.ScopeType 'JSON_OBJECT' 'JSONP slice keeps source-native scope'
+Assert-ScopeEqual $jsonpSlice.LocatorMethod 'STRUCTURED_JSONP_OBJECT' 'JSONP slice keeps source-native locator method'
 
 # Positive, source-backed fields exercise the same validation that rejects mutations.
 $f = New-ScopeContractFixture

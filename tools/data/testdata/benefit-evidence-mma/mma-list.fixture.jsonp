@@ -1,0 +1,5 @@
+MmaTestList({"success":true,"list":[
+  {"udgigwan_cd":"2789","udgigwan_yhnm":"(유)투투여행사","addr":"서울특별시 테스트구 여행로 2789","udgigwan_telno":"02-2789-0000","udggeopjong_gbnm":"여행사"},
+  {"udgigwan_cd":"2740","udgigwan_yhnm":"(주) 예쁜떡 오늘","addr":"서울특별시 테스트구 떡로 2740","udgigwan_telno":"02-2740-0000","udggeopjong_gbnm":"카페"},
+  {"udgigwan_cd":"9991","udgigwan_yhnm":"투투여행사","addr":"서울특별시 다른구 혼동로 1","udgigwan_telno":"02-9991-0000","udggeopjong_gbnm":"여행사"}
+]});

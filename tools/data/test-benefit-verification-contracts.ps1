@@ -27,7 +27,7 @@ Assert-Equal $definition.ContractVersion 1 'Contract version must be 1'
 
 $requiredCodes = @{
     SourceDiscoveryStatus = @('COMPLETE', 'PARTIAL', 'FAILED')
-    SourceFormat = @('HTML', 'CSV', 'XLSX', 'PDF', 'UNSUPPORTED')
+    SourceFormat = @('HTML', 'CSV', 'XLSX', 'PDF', 'JSONP', 'UNSUPPORTED')
     SourceKind = @('PUBLIC_OFFICIAL', 'BUSINESS_WEBSITE')
     OfficialityStatus = @('VERIFIED_OFFICIAL', 'UNVERIFIED', 'REJECTED')
     BusinessBindingStatus = @('STRONG', 'PLAUSIBLE', 'AMBIGUOUS', 'CONFLICT')

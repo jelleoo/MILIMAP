@@ -12,7 +12,7 @@ $script:BenefitVerificationContractDefinition = [pscustomobject][ordered]@{
         'BenefitVerificationResult'
     )
     SourceDiscoveryStatus = @('COMPLETE', 'PARTIAL', 'FAILED')
-    SourceFormat = @('HTML', 'CSV', 'XLSX', 'PDF', 'UNSUPPORTED')
+    SourceFormat = @('HTML', 'CSV', 'XLSX', 'PDF', 'JSONP', 'UNSUPPORTED')
     SourceKind = @('PUBLIC_OFFICIAL', 'BUSINESS_WEBSITE')
     OfficialityStatus = @('VERIFIED_OFFICIAL', 'UNVERIFIED', 'REJECTED')
     BusinessBindingStatus = @('STRONG', 'PLAUSIBLE', 'AMBIGUOUS', 'CONFLICT')
@@ -145,7 +145,7 @@ function New-BenefitSourceDocument {
     return [pscustomobject][ordered]@{
         ContractType='BenefitSourceDocument'; ContractVersion=1; SourceRowNumber=$SourceRowNumber; Url=ConvertTo-BenefitText $Url
         SourceFormat=ConvertTo-BenefitText $SourceFormat; FetchStatus=ConvertTo-BenefitText $FetchStatus
-        ContentType=ConvertTo-BenefitText $ContentType; Text=ConvertTo-BenefitText $Text; Bytes=$Bytes
+        ContentType=ConvertTo-BenefitText $ContentType; Text=$(if ($null -eq $Text) { '' } else { [string]$Text }); Bytes=$Bytes
         ObservedAt=ConvertTo-BenefitText $ObservedAt; ReasonCodes=@(ConvertTo-BenefitArray $ReasonCodes)
     }
 }

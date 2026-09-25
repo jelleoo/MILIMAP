@@ -1,6 +1,7 @@
 $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'testdata/benefit-evidence-location/test-support.ps1')
 . (Join-Path $PSScriptRoot 'lib/benefit-evidence/convert-html-source-observation.ps1')
+. (Join-Path $PSScriptRoot 'lib/benefit-evidence/convert-mma-jsonp-source-observation.ps1')
 $locatorPath = Join-Path $PSScriptRoot 'lib/benefit-evidence/find-business-evidence-slice.ps1'
 if (-not (Test-Path -LiteralPath $locatorPath)) { throw 'Business evidence locator is missing' }
 . $locatorPath
@@ -80,5 +81,35 @@ $reverse = '<table><tr><th>업소명</th><th>주소</th><th>할인</th></tr><tr>
 $reverseResult = Find-BenefitBusinessEvidence -Observation (New-LocatorObservation -Html $reverse) -Business $business
 Assert-ScopeEqual $reverseResult.Status 'LOCATED' 'Same discount for another business has no selection role'
 Assert-ScopeEqual $reverseResult.Slices[0].EvidenceReference 'HTML_TABLE_1_ROW_3' 'Selection follows business identity rather than row order'
+
+$mmaFixtureRoot = Join-Path $PSScriptRoot 'testdata/benefit-evidence-mma'
+$mmaListText = Get-Content -Raw -LiteralPath (Join-Path $mmaFixtureRoot 'mma-list.fixture.jsonp')
+$tourBusinessRow = [pscustomobject]@{
+    업소명='(유)투투여행사'; 시도='서울특별시'; 시군구='테스트구'; 소재지도로명주소='서울특별시 테스트구 여행로 2789'; 소재지지번주소=''
+    업소전화번호='02-2789-0000'; 할인정보=''; 적용대상=''; 이용조건=''; 인증방법=''; 출처유형='병무청 공식 자료'; 출처URL='https://www.mma.go.kr/about/udgg/list.do?mc=mma0003357'; 최근확인일='2026-09-25'
+}
+$tourBusiness = ConvertTo-NormalizedBusiness -Row $tourBusinessRow -SourceRowNumber 2
+$mmaListDocument = New-BenefitSourceDocument -SourceRowNumber 2 -Url 'https://open.mma.go.kr/caisGGGS/mmanrsrListAjaxJsonCallNew.json?callback=MmaTestList' -SourceFormat JSONP -FetchStatus COMPLETE -Text $mmaListText -ObservedAt '2026-09-25T00:00:00Z'
+$mmaObservation = ConvertTo-MmaJsonpListObservation -Document $mmaListDocument -ExpectedCallback MmaTestList
+$mmaLocated = Find-BenefitBusinessEvidence -Observation $mmaObservation -Business $tourBusiness -CanonicalPhone '02-2789-0000'
+Assert-ScopeEqual $mmaLocated.Status LOCATED 'MMA list identity can locate one record'
+Assert-ScopeEqual $mmaLocated.Slices[0].StructuredFields.InstitutionCode 2789 'Located MMA record carries institution code'
+Assert-ScopeEqual $mmaLocated.Slices[0].ScopeType JSON_OBJECT 'Located MMA record remains a JSONP object slice'
+
+$mmaAmbiguousText = $mmaListText -replace '\]\}\);\s*$', ',{"udgigwan_cd":"9992","udgigwan_yhnm":"(유)투투여행사","addr":"","udgigwan_telno":"","udggeopjong_gbnm":"여행사"}]});'
+$mmaAmbiguousDocument = New-BenefitSourceDocument -SourceRowNumber 2 -Url $mmaListDocument.Url -SourceFormat JSONP -FetchStatus COMPLETE -Text $mmaAmbiguousText -ObservedAt $mmaListDocument.ObservedAt
+$mmaAmbiguous = Find-BenefitBusinessEvidence -Observation (ConvertTo-MmaJsonpListObservation -Document $mmaAmbiguousDocument -ExpectedCallback MmaTestList) -Business $tourBusiness -CanonicalPhone '02-2789-0000'
+Assert-ScopeEqual $mmaAmbiguous.Status AMBIGUOUS 'Same normalized MMA business name without corroboration remains ambiguous'
+Assert-ScopeEqual @($mmaAmbiguous.Slices).Count 0 'Ambiguous MMA list candidates expose no usable slice'
+
+$mmaConflictText = 'MmaTestList({"success":true,"list":[{"udgigwan_cd":"9993","udgigwan_yhnm":"(유)투투여행사","addr":"서울특별시 다른구 충돌로 1","udgigwan_telno":"02-2789-0000","udggeopjong_gbnm":"여행사"}]});'
+$mmaConflictDocument = New-BenefitSourceDocument -SourceRowNumber 2 -Url $mmaListDocument.Url -SourceFormat JSONP -FetchStatus COMPLETE -Text $mmaConflictText -ObservedAt $mmaListDocument.ObservedAt
+$mmaConflict = Find-BenefitBusinessEvidence -Observation (ConvertTo-MmaJsonpListObservation -Document $mmaConflictDocument -ExpectedCallback MmaTestList) -Business $tourBusiness -CanonicalPhone '02-2789-0000'
+Assert-ScopeTrue ($mmaConflict.Status -ne 'LOCATED') 'Explicit MMA address conflict cannot be selected despite name and phone agreement'
+
+$mmaCodeOnlyText = 'MmaTestList({"success":true,"list":[{"udgigwan_cd":"2789","udgigwan_yhnm":"다른 여행사","addr":"서울특별시 테스트구 여행로 2789","udgigwan_telno":"02-2789-0000","udggeopjong_gbnm":"여행사"}]});'
+$mmaCodeOnlyDocument = New-BenefitSourceDocument -SourceRowNumber 2 -Url $mmaListDocument.Url -SourceFormat JSONP -FetchStatus COMPLETE -Text $mmaCodeOnlyText -ObservedAt $mmaListDocument.ObservedAt
+$mmaCodeOnly = Find-BenefitBusinessEvidence -Observation (ConvertTo-MmaJsonpListObservation -Document $mmaCodeOnlyDocument -ExpectedCallback MmaTestList) -Business $tourBusiness -CanonicalPhone '02-2789-0000'
+Assert-ScopeEqual $mmaCodeOnly.Status NOT_FOUND 'Institution code alone cannot override a different business identity'
 
 Write-Host 'Business evidence locator tests passed.'

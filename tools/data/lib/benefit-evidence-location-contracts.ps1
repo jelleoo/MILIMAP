@@ -56,6 +56,83 @@ function Copy-ScopeContractData {
     }
     return $Value
 }
+function Get-BenefitJsonStringEnd {
+    param([Parameter(Mandatory)][string]$JsonText, [int]$Start)
+    if ($Start -lt 0 -or $Start -ge $JsonText.Length -or $JsonText[$Start] -cne '"') { throw 'JSON string must start with a quote' }
+    $escaped = $false
+    for ($i=$Start+1; $i -lt $JsonText.Length; $i++) {
+        $character = $JsonText[$i]
+        if ($escaped) { $escaped=$false; continue }
+        if ($character -ceq '\') { $escaped=$true; continue }
+        if ($character -ceq '"') { return $i+1 }
+    }
+    throw 'Unterminated JSON string'
+}
+function Skip-BenefitJsonWhitespace {
+    param([Parameter(Mandatory)][string]$JsonText, [int]$Start)
+    $index=$Start
+    while ($index -lt $JsonText.Length -and [char]::IsWhiteSpace($JsonText[$index])) { $index++ }
+    return $index
+}
+function Get-BenefitJsonValueEnd {
+    param([Parameter(Mandatory)][string]$JsonText, [int]$Start)
+    $index = Skip-BenefitJsonWhitespace $JsonText $Start
+    if ($index -ge $JsonText.Length) { throw 'Missing JSON value' }
+    if ($JsonText[$index] -ceq '"') { return Get-BenefitJsonStringEnd $JsonText $index }
+    if ($JsonText[$index] -notin @('{','[')) {
+        $end=$index
+        while ($end -lt $JsonText.Length -and $JsonText[$end] -notin @(',','}',']') -and -not [char]::IsWhiteSpace($JsonText[$end])) { $end++ }
+        if ($end -eq $index) { throw 'Invalid JSON scalar value' }
+        return $end
+    }
+    $open=$JsonText[$index]; $close=if ($open -ceq '{') { '}' } else { ']' }
+    $depth=0; $inString=$false; $escaped=$false
+    for ($i=$index; $i -lt $JsonText.Length; $i++) {
+        $character=$JsonText[$i]
+        if ($inString) {
+            if ($escaped) { $escaped=$false; continue }
+            if ($character -ceq '\') { $escaped=$true; continue }
+            if ($character -ceq '"') { $inString=$false }
+            continue
+        }
+        if ($character -ceq '"') { $inString=$true; continue }
+        if ($character -ceq $open) { $depth++; continue }
+        if ($character -ceq $close) {
+            $depth--
+            if ($depth -eq 0) { return $i+1 }
+            if ($depth -lt 0) { break }
+        }
+    }
+    throw 'Unterminated JSON container'
+}
+function Get-BenefitJsonTopLevelPropertySpan {
+    param([Parameter(Mandatory)][string]$JsonText, [Parameter(Mandatory)][string]$PropertyName)
+    $rootStart=Skip-BenefitJsonWhitespace $JsonText 0
+    if ($rootStart -ge $JsonText.Length -or $JsonText[$rootStart] -cne '{') { throw 'MMA JSONP root must start with an object' }
+    $rootEnd=Get-BenefitJsonValueEnd $JsonText $rootStart
+    if ((Skip-BenefitJsonWhitespace $JsonText $rootEnd) -ne $JsonText.Length) { throw 'JSONP root has trailing data' }
+    $position=$rootStart+1; $found=@()
+    while ($true) {
+        $position=Skip-BenefitJsonWhitespace $JsonText $position
+        if ($position -ge $rootEnd) { throw 'Unterminated JSON root object' }
+        if ($JsonText[$position] -ceq '}') { break }
+        $keyStart=$position; $keyEnd=Get-BenefitJsonStringEnd $JsonText $keyStart
+        try { $key=('{"value":' + $JsonText.Substring($keyStart,$keyEnd-$keyStart) + '}') | ConvertFrom-Json -ErrorAction Stop | Select-Object -ExpandProperty value }
+        catch { throw 'JSONP property name cannot be decoded' }
+        $position=Skip-BenefitJsonWhitespace $JsonText $keyEnd
+        if ($position -ge $rootEnd -or $JsonText[$position] -cne ':') { throw 'JSONP property is missing a colon' }
+        $valueStart=Skip-BenefitJsonWhitespace $JsonText ($position+1)
+        $valueEnd=Get-BenefitJsonValueEnd $JsonText $valueStart
+        if ($key -ceq $PropertyName) { $found += [pscustomobject][ordered]@{ Start=[long]$valueStart; Length=[long]($valueEnd-$valueStart); Fragment=$JsonText.Substring($valueStart,$valueEnd-$valueStart) } }
+        $position=Skip-BenefitJsonWhitespace $JsonText $valueEnd
+        if ($position -ge $rootEnd) { throw 'Unterminated JSON root object' }
+        if ($JsonText[$position] -ceq '}') { break }
+        if ($JsonText[$position] -cne ',') { throw 'JSONP root has invalid property separator' }
+        $position++
+    }
+    if ($found.Count -ne 1) { throw "MMA JSONP must contain exactly one $PropertyName property" }
+    return $found[0]
+}
 function Assert-ScopeTimestamp {
     param([AllowNull()]$Value)
     Assert-ScopeText $Value 'ObservedAt'
@@ -148,7 +225,7 @@ function Get-ScopeElementFragment {
     }
     return $fragment
 }
-function Assert-ScopeUnit {
+function Assert-ScopeHtmlUnit {
     param([AllowNull()]$Unit, [Parameter(Mandatory)]$Snapshot)
     Assert-ScopeSnapshot $Snapshot
     Assert-ScopeObject $Unit 'SourceContentUnit' @('SnapshotId','UnitType','UnitReference','TableStart','TableLength','RawStart','RawLength','RawFragment','RawEvidenceText','StructuredFields','FieldReferences')
@@ -199,6 +276,46 @@ function Assert-ScopeUnit {
         if ($headerIndex -lt 0 -or $cellIndex -ne $headerIndex) { throw 'Header and cell must use the same original column' }
     }
 }
+function Assert-ScopeJsonpUnit {
+    param([AllowNull()]$Unit, [Parameter(Mandatory)]$Snapshot)
+    Assert-ScopeSnapshot $Snapshot
+    Assert-ScopeObject $Unit 'SourceContentUnit' @('SnapshotId','UnitType','UnitReference','RawStart','RawLength','RawFragment','RawEvidenceText','StructuredFields','FieldReferences')
+    if ($Snapshot.SourceFormat -cne 'JSONP' -or $Unit.UnitType -cne 'JSON_OBJECT' -or $Unit.SnapshotId -cne $Snapshot.SnapshotId) { throw 'JSONP unit source/type mismatch' }
+    if ($Unit.UnitReference -cnotmatch '^JSONP_(?:LIST_ITEM_[1-9]\d*|DETAIL_OBJECT)$') { throw 'Invalid JSONP unit reference' }
+    Assert-ScopeSpan $Unit.RawStart $Unit.RawLength 0 $Snapshot.Text.Length
+    if ($Snapshot.Text.Substring([int]$Unit.RawStart,[int]$Unit.RawLength) -cne $Unit.RawFragment) { throw 'JSONP raw fragment mismatch' }
+    Assert-ScopeText $Unit.RawEvidenceText 'RawEvidenceText'
+    if ($Unit.StructuredFields -isnot [Collections.IDictionary] -or $Unit.FieldReferences -isnot [Collections.IDictionary] -or
+        $Unit.StructuredFields.Count -ne $Unit.FieldReferences.Count) { throw 'JSONP fields and references must be matching dictionaries' }
+    try { $rawObject = $Unit.RawFragment | ConvertFrom-Json -ErrorAction Stop }
+    catch { throw 'JSONP unit raw fragment must be a valid JSON object' }
+    if ($null -eq $rawObject -or $rawObject -is [array]) { throw 'JSONP unit raw fragment must be a JSON object' }
+    foreach ($key in $Unit.StructuredFields.Keys) {
+        if (-not $Unit.FieldReferences.Contains($key)) { throw 'Missing JSONP field reference' }
+        $reference = $Unit.FieldReferences[$key]
+        if ($null -eq $reference) { throw 'Null JSONP field reference' }
+        foreach ($property in @('PropertyName','FieldReference','ValueStart','ValueLength')) {
+            if ($reference.PSObject.Properties.Name -notcontains $property) { throw "JSONP field reference is missing $property" }
+        }
+        Assert-ScopeText $reference.PropertyName 'JSONP PropertyName'
+        if ($reference.FieldReference -cne ($Unit.UnitReference + '/' + $reference.PropertyName)) { throw 'JSONP field reference must belong to selected object' }
+        if ($rawObject.PSObject.Properties.Name -notcontains $reference.PropertyName) { throw 'JSONP field reference property is absent from selected raw object' }
+        Assert-ScopeSpan $reference.ValueStart $reference.ValueLength $Unit.RawStart $Unit.RawLength
+        $propertySpan = Get-BenefitJsonTopLevelPropertySpan -JsonText $Unit.RawFragment -PropertyName $reference.PropertyName
+        if ($reference.ValueStart -ne ($Unit.RawStart + $propertySpan.Start) -or $reference.ValueLength -ne $propertySpan.Length) { throw 'JSONP field value span does not match the selected raw property span' }
+        try { $rawValue=('{"value":' + $Snapshot.Text.Substring([int]$reference.ValueStart,[int]$reference.ValueLength) + '}') | ConvertFrom-Json -ErrorAction Stop | Select-Object -ExpandProperty value }
+        catch { throw 'JSONP field value span is not valid source JSON' }
+        if ((ConvertTo-BenefitText $rawValue) -cne (ConvertTo-BenefitText $Unit.StructuredFields[$key])) { throw 'JSONP field value span does not match semantic field' }
+        if ((ConvertTo-BenefitText $rawObject.($reference.PropertyName)) -cne (ConvertTo-BenefitText $Unit.StructuredFields[$key])) { throw 'JSONP field value does not match selected raw property' }
+    }
+}
+function Assert-ScopeUnit {
+    param([AllowNull()]$Unit, [Parameter(Mandatory)]$Snapshot)
+    Assert-ScopeSnapshot $Snapshot
+    if ($Snapshot.SourceFormat -ceq 'HTML') { Assert-ScopeHtmlUnit $Unit $Snapshot; return }
+    if ($Snapshot.SourceFormat -ceq 'JSONP') { Assert-ScopeJsonpUnit $Unit $Snapshot; return }
+    throw 'Unsupported scoped source format'
+}
 function New-BenefitSourceContentUnit {
     param([Parameter(Mandatory)]$Snapshot, [Parameter(Mandatory)][string]$UnitReference,
         [long]$TableStart, [long]$TableLength, [long]$RawStart, [long]$RawLength,
@@ -212,6 +329,22 @@ function New-BenefitSourceContentUnit {
         UnitType='TABLE_ROW'; UnitReference=$UnitReference; TableStart=$TableStart; TableLength=$TableLength
         RawStart=$RawStart; RawLength=$RawLength; RawFragment=$Snapshot.Text.Substring([int]$RawStart,[int]$RawLength)
         RawEvidenceText=$RawEvidenceText; StructuredFields=(Copy-ScopeContractData $StructuredFields); FieldReferences=(Copy-ScopeContractData $FieldReferences)
+    }
+    Assert-ScopeUnit $result $Snapshot
+    return $result
+}
+function New-BenefitJsonpSourceContentUnit {
+    param([Parameter(Mandatory)]$Snapshot, [Parameter(Mandatory)][string]$UnitReference,
+        [long]$RawStart, [long]$RawLength, [Parameter(Mandatory)][string]$RawEvidenceText,
+        [Parameter(Mandatory)][AllowEmptyCollection()][Collections.IDictionary]$StructuredFields,
+        [Parameter(Mandatory)][AllowEmptyCollection()][Collections.IDictionary]$FieldReferences)
+    Assert-ScopeSnapshot $Snapshot
+    Assert-ScopeSpan $RawStart $RawLength 0 $Snapshot.Text.Length
+    $result = [pscustomobject][ordered]@{
+        ContractType='SourceContentUnit'; ContractVersion=1; SnapshotId=$Snapshot.SnapshotId
+        UnitType='JSON_OBJECT'; UnitReference=$UnitReference; RawStart=$RawStart; RawLength=$RawLength
+        RawFragment=$Snapshot.Text.Substring([int]$RawStart,[int]$RawLength); RawEvidenceText=$RawEvidenceText
+        StructuredFields=(Copy-ScopeContractData $StructuredFields); FieldReferences=(Copy-ScopeContractData $FieldReferences)
     }
     Assert-ScopeUnit $result $Snapshot
     return $result
@@ -263,11 +396,16 @@ function New-BenefitSourceObservation {
 }
 function Assert-ScopeSliceShape {
     param([AllowNull()]$Slice, [int]$SourceRowNumber)
-    Assert-ScopeObject $Slice 'RelevantEvidenceSlice' @('SourceRowNumber','SnapshotId','ContentHash','SourceUrl','SourceFormat','ObservedAt','LocatorMethod','ScopeType','EvidenceReference','TableStart','TableLength','RawStart','RawLength','RawFragment','RawEvidenceText','StructuredFields','FieldReferences','IdentityEvidence')
+    Assert-ScopeObject $Slice 'RelevantEvidenceSlice' @('SourceRowNumber','SnapshotId','ContentHash','SourceUrl','SourceFormat','ObservedAt','LocatorMethod','ScopeType','EvidenceReference','RawStart','RawLength','RawFragment','RawEvidenceText','StructuredFields','FieldReferences','IdentityEvidence')
     Assert-BenefitSourceRowNumber $SourceRowNumber
-    if ($Slice.SourceRowNumber -ne $SourceRowNumber -or $Slice.ScopeType -cne 'TABLE_ROW' -or $Slice.LocatorMethod -cne 'STRUCTURED_HTML_ROW') { throw 'Slice row or scope mismatch' }
-    if ($Slice.EvidenceReference -cnotmatch '^HTML_TABLE_[1-9]\d*_ROW_[1-9]\d*$' -or
-        $Slice.ContentHash -cnotmatch '^[0-9a-f]{64}$' -or $Slice.SnapshotId -cnotmatch '^[0-9a-f]{64}$') { throw 'Invalid slice reference or hash' }
+    if ($Slice.SourceRowNumber -ne $SourceRowNumber) { throw 'Slice source row mismatch' }
+    if ($Slice.SourceFormat -ceq 'HTML') {
+        Assert-ScopeObject $Slice 'RelevantEvidenceSlice' @('TableStart','TableLength')
+        if ($Slice.ScopeType -cne 'TABLE_ROW' -or $Slice.LocatorMethod -cne 'STRUCTURED_HTML_ROW' -or $Slice.EvidenceReference -cnotmatch '^HTML_TABLE_[1-9]\d*_ROW_[1-9]\d*$') { throw 'HTML slice scope mismatch' }
+    } elseif ($Slice.SourceFormat -ceq 'JSONP') {
+        if ($Slice.ScopeType -cne 'JSON_OBJECT' -or $Slice.LocatorMethod -cne 'STRUCTURED_JSONP_OBJECT' -or $Slice.EvidenceReference -cnotmatch '^JSONP_(?:LIST_ITEM_[1-9]\d*|DETAIL_OBJECT)$') { throw 'JSONP slice scope mismatch' }
+    } else { throw 'Unsupported slice source format' }
+    if ($Slice.ContentHash -cnotmatch '^[0-9a-f]{64}$' -or $Slice.SnapshotId -cnotmatch '^[0-9a-f]{64}$') { throw 'Invalid slice hash' }
     Assert-ScopeText $Slice.SourceUrl 'Slice.SourceUrl'
     Assert-ScopeTimestamp $Slice.ObservedAt
     if ($Slice.IdentityEvidence -isnot [array]) { throw 'IdentityEvidence must remain an array' }
@@ -280,12 +418,20 @@ function Assert-ScopeSliceAgainstSnapshot {
     foreach ($key in @('SnapshotId','ContentHash','SourceUrl','SourceFormat','ObservedAt')) {
         if ($Slice.$key -cne $Snapshot.$key) { throw 'Slice must preserve original source snapshot' }
     }
-    $unit = [pscustomobject][ordered]@{
-        ContractType='SourceContentUnit'; ContractVersion=1; SnapshotId=$Slice.SnapshotId; UnitType='TABLE_ROW'
-        UnitReference=$Slice.EvidenceReference; TableStart=$Slice.TableStart; TableLength=$Slice.TableLength
-        RawStart=$Slice.RawStart; RawLength=$Slice.RawLength; RawFragment=$Slice.RawFragment
-        RawEvidenceText=$Slice.RawEvidenceText; StructuredFields=$Slice.StructuredFields; FieldReferences=$Slice.FieldReferences
-    }
+    $unit = if ($Snapshot.SourceFormat -ceq 'HTML') {
+        [pscustomobject][ordered]@{
+            ContractType='SourceContentUnit'; ContractVersion=1; SnapshotId=$Slice.SnapshotId; UnitType='TABLE_ROW'
+            UnitReference=$Slice.EvidenceReference; TableStart=$Slice.TableStart; TableLength=$Slice.TableLength
+            RawStart=$Slice.RawStart; RawLength=$Slice.RawLength; RawFragment=$Slice.RawFragment
+            RawEvidenceText=$Slice.RawEvidenceText; StructuredFields=$Slice.StructuredFields; FieldReferences=$Slice.FieldReferences
+        }
+    } elseif ($Snapshot.SourceFormat -ceq 'JSONP') {
+        [pscustomobject][ordered]@{
+            ContractType='SourceContentUnit'; ContractVersion=1; SnapshotId=$Slice.SnapshotId; UnitType='JSON_OBJECT'
+            UnitReference=$Slice.EvidenceReference; RawStart=$Slice.RawStart; RawLength=$Slice.RawLength; RawFragment=$Slice.RawFragment
+            RawEvidenceText=$Slice.RawEvidenceText; StructuredFields=$Slice.StructuredFields; FieldReferences=$Slice.FieldReferences
+        }
+    } else { throw 'Unsupported slice source format' }
     Assert-ScopeUnit $unit $Snapshot
 }
 function New-RelevantBenefitEvidenceSlice {
@@ -298,16 +444,28 @@ function New-RelevantBenefitEvidenceSlice {
         (ConvertTo-Json -InputObject $members[0] -Depth 20 -Compress) -cne (ConvertTo-Json -InputObject $Unit -Depth 20 -Compress)) {
         throw 'Slice unit must be an exact member of its observation'
     }
-    $result = [pscustomobject][ordered]@{
-        ContractType='RelevantEvidenceSlice'; ContractVersion=1; SourceRowNumber=$Observation.SourceRowNumber
-        SnapshotId=$Observation.SnapshotId; ContentHash=$Observation.Snapshot.ContentHash
-        SourceUrl=$Observation.SourceUrl; SourceFormat=$Observation.SourceFormat; ObservedAt=$Observation.ObservedAt
-        LocatorMethod='STRUCTURED_HTML_ROW'; ScopeType='TABLE_ROW'; EvidenceReference=$Unit.UnitReference
-        TableStart=$Unit.TableStart; TableLength=$Unit.TableLength; RawStart=$Unit.RawStart; RawLength=$Unit.RawLength
-        RawFragment=$Unit.RawFragment; RawEvidenceText=$Unit.RawEvidenceText
-        StructuredFields=(Copy-ScopeContractData $Unit.StructuredFields); FieldReferences=(Copy-ScopeContractData $Unit.FieldReferences)
-        IdentityEvidence=(Copy-ScopeContractData $IdentityEvidence)
-    }
+    $result = if ($Observation.SourceFormat -ceq 'HTML') {
+        [pscustomobject][ordered]@{
+            ContractType='RelevantEvidenceSlice'; ContractVersion=1; SourceRowNumber=$Observation.SourceRowNumber
+            SnapshotId=$Observation.SnapshotId; ContentHash=$Observation.Snapshot.ContentHash
+            SourceUrl=$Observation.SourceUrl; SourceFormat=$Observation.SourceFormat; ObservedAt=$Observation.ObservedAt
+            LocatorMethod='STRUCTURED_HTML_ROW'; ScopeType='TABLE_ROW'; EvidenceReference=$Unit.UnitReference
+            TableStart=$Unit.TableStart; TableLength=$Unit.TableLength; RawStart=$Unit.RawStart; RawLength=$Unit.RawLength
+            RawFragment=$Unit.RawFragment; RawEvidenceText=$Unit.RawEvidenceText
+            StructuredFields=(Copy-ScopeContractData $Unit.StructuredFields); FieldReferences=(Copy-ScopeContractData $Unit.FieldReferences)
+            IdentityEvidence=(Copy-ScopeContractData $IdentityEvidence)
+        }
+    } elseif ($Observation.SourceFormat -ceq 'JSONP') {
+        [pscustomobject][ordered]@{
+            ContractType='RelevantEvidenceSlice'; ContractVersion=1; SourceRowNumber=$Observation.SourceRowNumber
+            SnapshotId=$Observation.SnapshotId; ContentHash=$Observation.Snapshot.ContentHash
+            SourceUrl=$Observation.SourceUrl; SourceFormat=$Observation.SourceFormat; ObservedAt=$Observation.ObservedAt
+            LocatorMethod='STRUCTURED_JSONP_OBJECT'; ScopeType='JSON_OBJECT'; EvidenceReference=$Unit.UnitReference
+            RawStart=$Unit.RawStart; RawLength=$Unit.RawLength; RawFragment=$Unit.RawFragment; RawEvidenceText=$Unit.RawEvidenceText
+            StructuredFields=(Copy-ScopeContractData $Unit.StructuredFields); FieldReferences=(Copy-ScopeContractData $Unit.FieldReferences)
+            IdentityEvidence=(Copy-ScopeContractData $IdentityEvidence)
+        }
+    } else { throw 'Unsupported scoped source format' }
     Assert-ScopeSliceAgainstSnapshot $result $Observation.Snapshot $Observation.SourceRowNumber
     return $result
 }

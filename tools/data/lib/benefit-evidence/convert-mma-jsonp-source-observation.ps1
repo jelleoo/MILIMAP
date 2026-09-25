@@ -147,7 +147,7 @@ function Get-BenefitJsonArrayObjectSpans {
 }
 
 function Get-MmaJsonpStructuredData {
-    param([Parameter(Mandatory)][string]$ObjectText, [Parameter(Mandatory)][string]$UnitReference, [Parameter(Mandatory)][hashtable]$FieldMap, [bool]$RequireInstitutionCode=$true)
+    param([Parameter(Mandatory)][string]$ObjectText, [Parameter(Mandatory)][string]$UnitReference, [Parameter(Mandatory)][hashtable]$FieldMap, [long]$ObjectStart, [bool]$RequireInstitutionCode=$true)
     try { $object=$ObjectText | ConvertFrom-Json -ErrorAction Stop }
     catch { throw 'MMA JSONP source object cannot be parsed' }
     if ($null -eq $object -or $object -is [array]) { throw 'MMA JSONP source object must be an object' }
@@ -155,8 +155,9 @@ function Get-MmaJsonpStructuredData {
     foreach ($semanticField in $FieldMap.Keys) {
         $rawProperty=$FieldMap[$semanticField]
         if ($object.PSObject.Properties.Name -notcontains $rawProperty) { throw "MMA JSONP schema is missing $rawProperty" }
+        $span=Get-BenefitJsonTopLevelPropertySpan -JsonText $ObjectText -PropertyName $rawProperty
         $fields[$semanticField]=ConvertTo-BenefitText $object.($rawProperty)
-        $references[$semanticField]=[pscustomobject][ordered]@{ PropertyName=$rawProperty; FieldReference="$UnitReference/$rawProperty" }
+        $references[$semanticField]=[pscustomobject][ordered]@{ PropertyName=$rawProperty; FieldReference="$UnitReference/$rawProperty"; ValueStart=[long]($ObjectStart+$span.Start); ValueLength=[long]$span.Length }
     }
     Assert-ScopeText $fields.BusinessName 'MMA JSONP BusinessName'
     if ($RequireInstitutionCode) { Assert-ScopeText $fields.InstitutionCode 'MMA JSONP InstitutionCode' }
@@ -175,7 +176,7 @@ function ConvertTo-MmaJsonpListTemplate {
     $rows=@(); $fieldMap=@{ BusinessName='udgigwan_yhnm'; Address='addr'; Phone='udgigwan_telno'; Category='udggeopjong_gbnm'; InstitutionCode='udgigwan_cd' }
     for ($i=0; $i -lt $objectSpans.Count; $i++) {
         $span=$objectSpans[$i]; $reference='JSONP_LIST_ITEM_' + ($i+1)
-        $data=Get-MmaJsonpStructuredData -ObjectText $span.Fragment -UnitReference $reference -FieldMap $fieldMap -RequireInstitutionCode:$false
+        $data=Get-MmaJsonpStructuredData -ObjectText $span.Fragment -UnitReference $reference -FieldMap $fieldMap -ObjectStart ($envelope.JsonStart+$span.Start) -RequireInstitutionCode:$false
         $rows += [pscustomobject][ordered]@{ UnitReference=$reference; RawStart=[long]($envelope.JsonStart+$span.Start); RawLength=$span.Length; RawEvidenceText=$data.StructuredFields.BusinessName; StructuredFields=$data.StructuredFields; FieldReferences=$data.FieldReferences }
     }
     return [pscustomobject][ordered]@{ Rows=@($rows) }
@@ -190,7 +191,7 @@ function ConvertTo-MmaJsonpDetailTemplate {
     $span=Get-BenefitJsonTopLevelPropertySpan -JsonText $envelope.JsonText -PropertyName 'udgigwanVO'
     if ($span.Fragment[0] -cne '{') { throw 'MMA JSONP detail must be an object' }
     $fieldMap=@{ BusinessName='udgigwan_yhnm'; Address='addr'; Phone='udgigwan_telno'; Category='udggeopjong_gbnm'; InstitutionCode='udgigwan_cd'; BenefitDescription='udsangse_cn'; EligibleTarget='uddaesang_cn'; UsageCondition='udjyjehan_cn'; VerificationMethod='udjbjaryo_cn'; ValidFrom='hyjeokyong_sjdt'; ValidUntilObserved='hyjeokyong_jrdt' }
-    $data=Get-MmaJsonpStructuredData -ObjectText $span.Fragment -UnitReference 'JSONP_DETAIL_OBJECT' -FieldMap $fieldMap
+    $data=Get-MmaJsonpStructuredData -ObjectText $span.Fragment -UnitReference 'JSONP_DETAIL_OBJECT' -FieldMap $fieldMap -ObjectStart ($envelope.JsonStart+$span.Start)
     return [pscustomobject][ordered]@{ Rows=@([pscustomobject][ordered]@{ UnitReference='JSONP_DETAIL_OBJECT'; RawStart=[long]($envelope.JsonStart+$span.Start); RawLength=$span.Length; RawEvidenceText=$data.StructuredFields.BenefitDescription; StructuredFields=$data.StructuredFields; FieldReferences=$data.FieldReferences }) }
 }
 

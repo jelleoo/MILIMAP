@@ -217,12 +217,16 @@ function Assert-ScopeJsonpUnit {
         if (-not $Unit.FieldReferences.Contains($key)) { throw 'Missing JSONP field reference' }
         $reference = $Unit.FieldReferences[$key]
         if ($null -eq $reference) { throw 'Null JSONP field reference' }
-        foreach ($property in @('PropertyName','FieldReference')) {
+        foreach ($property in @('PropertyName','FieldReference','ValueStart','ValueLength')) {
             if ($reference.PSObject.Properties.Name -notcontains $property) { throw "JSONP field reference is missing $property" }
         }
         Assert-ScopeText $reference.PropertyName 'JSONP PropertyName'
         if ($reference.FieldReference -cne ($Unit.UnitReference + '/' + $reference.PropertyName)) { throw 'JSONP field reference must belong to selected object' }
         if ($rawObject.PSObject.Properties.Name -notcontains $reference.PropertyName) { throw 'JSONP field reference property is absent from selected raw object' }
+        Assert-ScopeSpan $reference.ValueStart $reference.ValueLength $Unit.RawStart $Unit.RawLength
+        try { $rawValue=('{"value":' + $Snapshot.Text.Substring([int]$reference.ValueStart,[int]$reference.ValueLength) + '}') | ConvertFrom-Json -ErrorAction Stop | Select-Object -ExpandProperty value }
+        catch { throw 'JSONP field value span is not valid source JSON' }
+        if ((ConvertTo-BenefitText $rawValue) -cne (ConvertTo-BenefitText $Unit.StructuredFields[$key])) { throw 'JSONP field value span does not match semantic field' }
         if ((ConvertTo-BenefitText $rawObject.($reference.PropertyName)) -cne (ConvertTo-BenefitText $Unit.StructuredFields[$key])) { throw 'JSONP field value does not match selected raw property' }
     }
 }

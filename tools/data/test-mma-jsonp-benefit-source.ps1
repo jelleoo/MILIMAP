@@ -55,6 +55,13 @@ $tourRepeat = Invoke-MmaJsonpBenefitSourceCandidate -Candidate (New-MmaEntryCand
 Assert-ScopeEqual $requests.Count 3 'Same selected MMA institution reuses its detail request'
 Assert-ScopeEqual $tourRepeat.Document.Url $record.Document.Url 'Cached detail preserves selected institution provenance'
 
+$finiteDetail = $detail2789TransportText -replace '9999-12-31','2026-12-31'
+$finiteHttp = { param($Uri) if ($Uri -like '*mmanrsrListAjaxJsonCallNew.json*') { [pscustomobject]@{StatusCode=200;ContentType='application/json';Text=$listTransportText;Bytes=$null} } else { [pscustomobject]@{StatusCode=200;ContentType='application/json';Text=$finiteDetail;Bytes=$null} } }.GetNewClosure()
+$finiteRecord = Invoke-MmaJsonpBenefitSourceCandidate -Candidate (New-MmaEntryCandidate -SourceRowNumber 2) -Business $tourBusiness -CanonicalPhone '02-2789-0000' -RunContext (New-BenefitSourceRunContext) -RequestInvoker $finiteHttp
+Assert-ScopeEqual @($finiteRecord.Validation.Claims | Where-Object ClaimType -eq VALID_UNTIL).Count 1 'Finite MMA agreement end produces one source-backed valid-until claim'
+Assert-ScopeEqual (@($finiteRecord.Validation.Claims | Where-Object ClaimType -eq VALID_UNTIL)[0].ValidationStatus) VALIDATED 'Finite MMA agreement end validates against its selected source field'
+Assert-ScopeEqual @($record.Validation.Claims | Where-Object ClaimType -eq VALID_UNTIL).Count 0 '9999-12-31 remains observed source data without a decisive valid-until claim'
+
 function Invoke-MmaFailureCase {
     param([string]$ListBody=$listTransportText, [string]$DetailBody=$detail2789TransportText, [string]$ExpectedDiagnosticCode='')
     $failureHttp = {

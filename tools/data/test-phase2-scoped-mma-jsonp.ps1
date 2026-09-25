@@ -18,6 +18,16 @@ Assert-ScopeEqual @($run.Results).Count 2 'Two MMA controls complete shadow eval
 Assert-ScopeTrue (@($run.Results | Where-Object ProductionAction -ne NONE).Count -eq 0) 'MMA remains shadow-only'
 Assert-ScopeEqual @($run.EvidenceDiagnostics | Where-Object SourceFormat -eq JSONP).Count 2 'Claim evidence is JSONP'
 Assert-ScopeEqual @($run.EvidenceDiagnostics | Where-Object AdapterId -eq MMA_JSONP_DETAIL).Count 2 'MMA detail adapter identity is exposed'
+Assert-ScopeTrue ([string]$run.EvidenceDiagnostics[0].LinkageSnapshotId -match '^[0-9a-f]{64}$') 'MMA diagnostic exports list snapshot provenance'
+Assert-ScopeEqual $run.EvidenceDiagnostics[0].LinkageEvidenceReference JSONP_LIST_ITEM_1 'MMA diagnostic exports selected list evidence reference'
 Assert-ScopeTrue ((@($run.EvidenceDiagnostics[0].ValidatedClaims | Where-Object ClaimType -eq BENEFIT_DESCRIPTION).Count -eq 1)) 'First control has source-backed benefit'
 Assert-ScopeTrue ((@($run.EvidenceDiagnostics[1].ValidatedClaims | Where-Object ClaimType -eq BENEFIT_DESCRIPTION).Count -eq 1)) 'Second control has source-backed benefit'
+
+$htmlRow=New-ScopeTestRow -Name '테스트가게 A' -Building '12' -Phone '02-0000-0012'
+$mixedHttp={param($Uri) if($Uri -like '*mmanrsrListAjaxJsonCallNew*'){[pscustomobject]@{StatusCode=200;ContentType='application/json';Text=$list;Bytes=$null}}elseif($Uri -like '*2789*'){[pscustomobject]@{StatusCode=200;ContentType='application/json';Text=$detail2789;Bytes=$null}}elseif($Uri -like '*mma.go.kr*'){throw 'Unexpected MMA request'}else{[pscustomobject]@{StatusCode=200;ContentType='text/html';Text=(Get-ScopeTestHtml);Bytes=$null}}}.GetNewClosure()
+$mixed=Invoke-Phase2BenefitShadowMode -Rows @((New-MmaShadowRow 2789),$htmlRow) -SourceRowNumbers @(6,7) -UseScopedEvidence -RequestInvoker $mixedHttp
+Assert-ScopeEqual @($mixed.Results).Count 2 'Mixed MMA and HTML scoped evidence evaluates both rows'
+Assert-ScopeEqual @($mixed.EvidenceDiagnostics | Where-Object AdapterId -eq MMA_JSONP_DETAIL).Count 1 'Mixed run keeps MMA adapter identity'
+Assert-ScopeEqual @($mixed.EvidenceDiagnostics | Where-Object AdapterId -eq HTML_GENERIC).Count 1 'Mixed run keeps HTML adapter identity'
+Assert-ScopeTrue (@($mixed.EvidenceDiagnostics[0].ValidatedClaims.Value + $mixed.EvidenceDiagnostics[1].ValidatedClaims.Value | Where-Object { $_ -eq '30% 할인' }).Count -eq 0) 'Mixed families cannot leak unrelated source claims'
 Write-Host 'Phase 2 scoped MMA JSONP tests passed.'

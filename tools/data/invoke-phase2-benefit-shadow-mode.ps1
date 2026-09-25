@@ -178,6 +178,8 @@ function ConvertTo-Phase2ScopedBenefitEvidenceDiagnostic {
     param([Parameter(Mandatory)]$SourceRecord)
     $observation = $SourceRecord.Observation
     $location = $SourceRecord.LocationResult
+    $linkageObservation = if ($SourceRecord.PSObject.Properties.Name -contains 'LinkageObservation') { $SourceRecord.LinkageObservation } else { $null }
+    $linkageSlice = if ($null -ne $location -and @($location.Slices).Count -eq 1) { $location.Slices[0] } else { $null }
     $snapshot = if ($null -ne $observation) { $observation.Snapshot } else { $null }
     return [pscustomobject][ordered]@{
         SourceRowNumber=$SourceRecord.SourceRowNumber
@@ -204,6 +206,9 @@ function ConvertTo-Phase2ScopedBenefitEvidenceDiagnostic {
         ValidatedClaims=@($SourceRecord.Validation.Claims)
         Slices=@($SourceRecord.Slices)
         PreparationDiagnostics=@($SourceRecord.PreparationDiagnostics)
+        LinkageSnapshotId=$(if ($null -eq $linkageObservation) { '' } else { [string]$linkageObservation.SnapshotId })
+        LinkageEvidenceReference=$(if ($null -eq $linkageSlice) { '' } else { [string]$linkageSlice.EvidenceReference })
+        LinkageInstitutionCodeReference=$(if ($null -eq $linkageSlice -or -not $linkageSlice.FieldReferences.Contains('InstitutionCode')) { '' } else { [string]$linkageSlice.FieldReferences.InstitutionCode.FieldReference })
         ReasonCodes=@($SourceRecord.ReasonCodes)
     }
 }

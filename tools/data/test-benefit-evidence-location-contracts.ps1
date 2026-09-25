@@ -78,8 +78,8 @@ $jsonpFields = [ordered]@{
     BenefitDescription='서비스 이용료 3% 할인'
 }
 $jsonpReferences = [ordered]@{
-    InstitutionCode=[pscustomobject][ordered]@{PropertyName='udgigwan_cd';FieldReference='JSONP_DETAIL_OBJECT/udgigwan_cd'}
-    BenefitDescription=[pscustomobject][ordered]@{PropertyName='udsangse_cn';FieldReference='JSONP_DETAIL_OBJECT/udsangse_cn'}
+    InstitutionCode=[pscustomobject][ordered]@{PropertyName='udgigwan_cd';FieldReference='JSONP_DETAIL_OBJECT/udgigwan_cd';ValueStart=$jsonp.IndexOf('"2789"');ValueLength='"2789"'.Length}
+    BenefitDescription=[pscustomobject][ordered]@{PropertyName='udsangse_cn';FieldReference='JSONP_DETAIL_OBJECT/udsangse_cn';ValueStart=$jsonp.IndexOf('"서비스 이용료 3% 할인"');ValueLength='"서비스 이용료 3% 할인"'.Length}
 }
 $jsonpUnit = New-BenefitJsonpSourceContentUnit -Snapshot $jsonpSnapshot -UnitReference 'JSONP_DETAIL_OBJECT' -RawStart $jsonp.IndexOf('{"udgigwan_cd"') -RawLength '{"udgigwan_cd":"2789","udsangse_cn":"서비스 이용료 3% 할인"}'.Length -RawEvidenceText '서비스 이용료 3% 할인' -StructuredFields $jsonpFields -FieldReferences $jsonpReferences
 Assert-ScopeUnit $jsonpUnit $jsonpSnapshot

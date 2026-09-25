@@ -50,6 +50,8 @@ Assert-ScopeEqual $detailObservation.ContentUnits[0].UnitReference JSONP_DETAIL_
 Assert-ScopeEqual $detailObservation.ContentUnits[0].StructuredFields.BenefitDescription '서비스 이용료 3% 할인' 'Benefit detail is mapped from its observed source property'
 Assert-ScopeEqual $detailObservation.ContentUnits[0].StructuredFields.ValidUntilObserved '9999-12-31' 'Sentinel-like agreement end remains raw observed data'
 Assert-ScopeEqual $detailObservation.ContentUnits[0].FieldReferences.BenefitDescription.FieldReference 'JSONP_DETAIL_OBJECT/udsangse_cn' 'Detail benefit reference retains original raw property name'
+Assert-ScopeTrue ($detailObservation.ContentUnits[0].FieldReferences.BenefitDescription.ValueStart -ge $detailObservation.ContentUnits[0].RawStart) 'JSONP field value start is source-backed inside its selected object'
+Assert-ScopeTrue ($detailObservation.ContentUnits[0].FieldReferences.BenefitDescription.ValueLength -gt 0) 'JSONP field value has a preserved raw span length'
 
 $forgedOtherObject = Copy-ScopeContractData $listObservation.ContentUnits[0]
 $forgedOtherObject.FieldReferences.BusinessName = Copy-ScopeContractData $listObservation.ContentUnits[1].FieldReferences.BusinessName
@@ -63,5 +65,9 @@ Assert-ScopeThrows { Assert-ScopeUnit $forgedSpan $detailObservation.Snapshot } 
 $forgedValue = Copy-ScopeContractData $detailObservation.ContentUnits[0]
 $forgedValue.StructuredFields.BenefitDescription = 'fabricated benefit'
 Assert-ScopeThrows { Assert-ScopeUnit $forgedValue $detailObservation.Snapshot } 'Structured JSONP value must remain backed by selected raw property'
+$forgedValueOffset = Copy-ScopeContractData $detailObservation.ContentUnits[0]
+$forgedValueOffset.FieldReferences.BenefitDescription.ValueStart = $detailObservation.ContentUnits[0].FieldReferences.EligibleTarget.ValueStart
+$forgedValueOffset.FieldReferences.BenefitDescription.ValueLength = $detailObservation.ContentUnits[0].FieldReferences.EligibleTarget.ValueLength
+Assert-ScopeThrows { Assert-ScopeUnit $forgedValueOffset $detailObservation.Snapshot } 'Cross-property JSONP value offsets cannot back another semantic field'
 
 Write-Host 'MMA JSONP source observation parser tests passed.'

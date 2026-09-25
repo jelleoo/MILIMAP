@@ -210,6 +210,9 @@ function Assert-ScopeJsonpUnit {
     Assert-ScopeText $Unit.RawEvidenceText 'RawEvidenceText'
     if ($Unit.StructuredFields -isnot [Collections.IDictionary] -or $Unit.FieldReferences -isnot [Collections.IDictionary] -or
         $Unit.StructuredFields.Count -ne $Unit.FieldReferences.Count) { throw 'JSONP fields and references must be matching dictionaries' }
+    try { $rawObject = $Unit.RawFragment | ConvertFrom-Json -ErrorAction Stop }
+    catch { throw 'JSONP unit raw fragment must be a valid JSON object' }
+    if ($null -eq $rawObject -or $rawObject -is [array]) { throw 'JSONP unit raw fragment must be a JSON object' }
     foreach ($key in $Unit.StructuredFields.Keys) {
         if (-not $Unit.FieldReferences.Contains($key)) { throw 'Missing JSONP field reference' }
         $reference = $Unit.FieldReferences[$key]
@@ -219,6 +222,8 @@ function Assert-ScopeJsonpUnit {
         }
         Assert-ScopeText $reference.PropertyName 'JSONP PropertyName'
         if ($reference.FieldReference -cne ($Unit.UnitReference + '/' + $reference.PropertyName)) { throw 'JSONP field reference must belong to selected object' }
+        if ($rawObject.PSObject.Properties.Name -notcontains $reference.PropertyName) { throw 'JSONP field reference property is absent from selected raw object' }
+        if ((ConvertTo-BenefitText $rawObject.($reference.PropertyName)) -cne (ConvertTo-BenefitText $Unit.StructuredFields[$key])) { throw 'JSONP field value does not match selected raw property' }
     }
 }
 function Assert-ScopeUnit {

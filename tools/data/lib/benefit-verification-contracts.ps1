@@ -145,7 +145,7 @@ function New-BenefitSourceDocument {
     return [pscustomobject][ordered]@{
         ContractType='BenefitSourceDocument'; ContractVersion=1; SourceRowNumber=$SourceRowNumber; Url=ConvertTo-BenefitText $Url
         SourceFormat=ConvertTo-BenefitText $SourceFormat; FetchStatus=ConvertTo-BenefitText $FetchStatus
-        ContentType=ConvertTo-BenefitText $ContentType; Text=ConvertTo-BenefitText $Text; Bytes=$Bytes
+        ContentType=ConvertTo-BenefitText $ContentType; Text=$(if ($null -eq $Text) { '' } else { [string]$Text }); Bytes=$Bytes
         ObservedAt=ConvertTo-BenefitText $ObservedAt; ReasonCodes=@(ConvertTo-BenefitArray $ReasonCodes)
     }
 }

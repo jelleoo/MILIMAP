@@ -41,6 +41,14 @@ Assert-ScopeEqual $listObservation.ContentUnits[0].StructuredFields.InstitutionC
 Assert-ScopeEqual $listObservation.ContentUnits[0].FieldReferences.BusinessName.FieldReference 'JSONP_LIST_ITEM_1/udgigwan_yhnm' 'List field reference retains original raw property name'
 Assert-ScopeEqual ($listText.Substring([int]$listObservation.ContentUnits[0].RawStart,[int]$listObservation.ContentUnits[0].RawLength)) $listObservation.ContentUnits[0].RawFragment 'List raw source span reconstructs selected JSON object'
 
+$incompleteNeighborText = 'MmaTestList({"success":true,"list":[{"udgigwan_cd":"0000","udgigwan_yhnm":"","addr":"서울특별시 제외구","udgigwan_telno":"","udggeopjong_gbnm":"기타"},{"udgigwan_cd":"2789","udgigwan_yhnm":"(유)투투여행사","addr":"서울특별시 테스트구 여행로 2789","udgigwan_telno":"02-2789-0000","udggeopjong_gbnm":"여행사"}]});'
+$incompleteNeighborDocument = New-BenefitSourceDocument -SourceRowNumber 2 -Url 'https://open.mma.go.kr/caisGGGS/mmanrsrListAjaxJsonCallNew.json?callback=MmaTestList' -SourceFormat JSONP -FetchStatus COMPLETE -ContentType 'application/json' -Text $incompleteNeighborText -ObservedAt '2026-09-25T00:00:00Z'
+$incompleteNeighborObservation = ConvertTo-MmaJsonpListObservation -Document $incompleteNeighborDocument -ExpectedCallback 'MmaTestList'
+Assert-ScopeEqual $incompleteNeighborObservation.AdapterStatus COMPLETE 'Unrelated empty-name MMA list record does not fail the whole observation'
+Assert-ScopeEqual @($incompleteNeighborObservation.ContentUnits).Count 1 'Empty-name MMA list record is excluded from identity candidates'
+Assert-ScopeEqual $incompleteNeighborObservation.ContentUnits[0].UnitReference JSONP_LIST_ITEM_2 'Skipping an unusable list record preserves physical source indexing'
+Assert-ScopeEqual $incompleteNeighborObservation.ContentUnits[0].StructuredFields.BusinessName '(유)투투여행사' 'Usable neighboring MMA record remains source-backed'
+
 $detailDocument = New-BenefitSourceDocument -SourceRowNumber 2 -Url 'https://open.mma.go.kr/caisGGGS/mmanrsrSangSeAjaxJsonCall.json?udgigwan_cd=2789&callback=MmaTestDetail' -SourceFormat JSONP -FetchStatus COMPLETE -ContentType 'application/json' -Text $detail2789Text -ObservedAt '2026-09-25T00:00:00Z'
 $detailObservation = ConvertTo-MmaJsonpDetailObservation -Document $detailDocument -ExpectedCallback 'MmaTestDetail'
 Assert-ScopeEqual $detailObservation.AdapterStatus COMPLETE 'MMA detail fixture parses completely'
@@ -83,5 +91,11 @@ $sameValueCrossPropertyForgery = Copy-ScopeContractData $equalValueUnit
 $sameValueCrossPropertyForgery.FieldReferences.BenefitDescription.ValueStart = $equalValueUnit.FieldReferences.EligibleTarget.ValueStart
 $sameValueCrossPropertyForgery.FieldReferences.BenefitDescription.ValueLength = $equalValueUnit.FieldReferences.EligibleTarget.ValueLength
 Assert-ScopeThrows { Assert-ScopeUnit $sameValueCrossPropertyForgery $equalValueSnapshot } 'Equal JSON values from another property cannot satisfy the claimed property provenance'
+
+$forgedObservationUnit = Copy-ScopeContractData $listObservation.ContentUnits[0]
+$forgedObservationUnit.StructuredFields.BusinessName = 'forged business'
+Assert-ScopeThrows {
+    New-BenefitSourceObservation -SourceRowNumber 2 -Snapshot $listObservation.Snapshot -AdapterId MMA_JSONP_LIST -AdapterVersion '1' -AdapterStatus COMPLETE -ContentUnits @($forgedObservationUnit) -Diagnostics @()
+} 'JSONP observation fast path still rejects forged unit provenance'
 
 Write-Host 'MMA JSONP source observation parser tests passed.'

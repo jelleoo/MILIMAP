@@ -140,8 +140,20 @@ $groups = @(
 )
 foreach ($group in $groups) { Write-Host ('ISSUE76_GROUP ' + ($group | ConvertTo-Json -Depth 12 -Compress)) }
 
-$batch = Invoke-Issue76Set -Name 'REPRESENTATIVE_12' -Ids $sampleIds
-Write-Host ('ISSUE76_BATCH ' + ($batch | ConvertTo-Json -Depth 12 -Compress))
+$representativeSummary = [pscustomobject][ordered]@{
+    EvaluatedRows = @($individual | Where-Object HarnessStatus -eq 'COMPLETE').Count
+    Exceptions = @($individual | Where-Object HarnessStatus -eq 'EXCEPTION').Count
+    Green = @($individual | Where-Object ReviewClass -eq 'GREEN').Count
+    Yellow = @($individual | Where-Object ReviewClass -eq 'YELLOW').Count
+    Red = @($individual | Where-Object ReviewClass -eq 'RED').Count
+    Active = @($individual | Where-Object BenefitState -eq 'ACTIVE').Count
+    Changed = @($individual | Where-Object BenefitState -eq 'CHANGED').Count
+    Ended = @($individual | Where-Object BenefitState -eq 'ENDED').Count
+    NeedsVerification = @($individual | Where-Object BenefitState -eq 'NEEDS_VERIFICATION').Count
+    ProductionActionNotNone = @($individual | Where-Object { $_.ProductionAction -and $_.ProductionAction -ne 'NONE' }).Count
+    TotalExternalRequests = ($individual | Measure-Object -Property TotalExternalRequests -Sum).Sum
+}
+Write-Host ('ISSUE76_REPRESENTATIVE ' + ($representativeSummary | ConvertTo-Json -Depth 8 -Compress))
 
 $final = [pscustomobject][ordered]@{
     Baseline = 'c4ab1c1701a7b4c1aa7a108b6a45f15e310871de'
@@ -149,7 +161,7 @@ $final = [pscustomobject][ordered]@{
     Smoke = $smoke
     IndividualRows = $individual
     ReuseGroups = $groups
-    Batch = $batch
+    RepresentativeSummary = $representativeSummary
 }
 
 $outDir = Join-Path $env:RUNNER_TEMP 'issue76-validation'

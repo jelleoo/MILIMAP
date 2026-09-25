@@ -10,6 +10,7 @@ $libraryRoot = Join-Path $PSScriptRoot 'lib'
 . (Join-Path $libraryRoot 'benefit-evidence/extract-benefit-evidence.ps1')
 . (Join-Path $libraryRoot 'benefit-evidence/validate-benefit-evidence.ps1')
 . (Join-Path $libraryRoot 'benefit-evidence/invoke-scoped-benefit-source.ps1')
+. (Join-Path $libraryRoot 'benefit-evidence/invoke-mma-jsonp-benefit-source.ps1')
 . (Join-Path $libraryRoot 'benefit-verification/compare-benefit-claims.ps1')
 . (Join-Path $libraryRoot 'benefit-verification/evaluate-benefit-state.ps1')
 
@@ -239,7 +240,8 @@ function Invoke-Phase2ScopedBenefitShadowMode {
         [AllowNull()][int[]]$SourceRowNumbers=$null,
         [AllowNull()][scriptblock]$RequestInvoker=$null,
         [hashtable]$GoldenExpectations=@{},
-        [switch]$OperationalLiveRun
+        [switch]$OperationalLiveRun,
+        [switch]$UseMixedScopedEvidence
     )
 
     $results = [Collections.Generic.List[object]]::new()
@@ -269,7 +271,11 @@ function Invoke-Phase2ScopedBenefitShadowMode {
         if ($null -ne $existingCandidate) {
             $existingSourceUsed = $true
             $sourceEvaluations++
-            $sourceRecord = Invoke-ScopedPhase2BenefitSourceCandidate -Candidate $existingCandidate -Business $business -CanonicalPhone $canonicalPhone -RunContext $runContext -RequestInvoker $RequestInvoker
+            $sourceRecord = if ($UseMixedScopedEvidence -and (Test-MmaBenefitEntryUrl -Url $existingCandidate.Url)) {
+                Invoke-MmaJsonpBenefitSourceCandidate -Candidate $existingCandidate -Business $business -CanonicalPhone $canonicalPhone -RunContext $runContext -RequestInvoker $RequestInvoker
+            } else {
+                Invoke-ScopedPhase2BenefitSourceCandidate -Candidate $existingCandidate -Business $business -CanonicalPhone $canonicalPhone -RunContext $runContext -RequestInvoker $RequestInvoker
+            }
             $sourceRecords.Add($sourceRecord)
             $location = $sourceRecord.LocationResult
             if ($null -eq $location -or $location.OperationalStatus -cne 'COMPLETE') {
@@ -323,7 +329,8 @@ function Invoke-Phase2BenefitShadowMode {
         [hashtable]$GoldenExpectations=@{},
         [switch]$OperationalLiveRun,
         [AllowNull()][int[]]$SourceRowNumbers=$null,
-        [switch]$UseScopedHtmlEvidence
+        [switch]$UseScopedHtmlEvidence,
+        [switch]$UseScopedEvidence
     )
 
     $hasExplicitRows = $PSBoundParameters.ContainsKey('SourceRowNumbers')
@@ -335,7 +342,8 @@ function Invoke-Phase2BenefitShadowMode {
         if (@($SourceRowNumbers | Select-Object -Unique).Count -ne $SourceRowNumbers.Count) { throw 'SourceRowNumbers must be distinct' }
     }
 
-    if ($UseScopedHtmlEvidence) {
+    if ($UseScopedHtmlEvidence -and $UseScopedEvidence) { throw 'UseScopedHtmlEvidence and UseScopedEvidence cannot be combined' }
+    if ($UseScopedHtmlEvidence -or $UseScopedEvidence) {
         if ($null -ne $DiscoveryInvoker -or $null -ne $UnstructuredExtractor -or $null -ne $SpreadsheetExtractor -or $null -ne $PdfTextExtractor) {
             throw 'Scoped A1 does not allow discovery or external extraction providers'
         }
@@ -350,7 +358,7 @@ function Invoke-Phase2BenefitShadowMode {
                 PreparationSummary=(Get-Phase2ScopedPreparationSummary -RunContext $emptyContext -SourceEvaluations 0 -LocatorLocated 0 -LocatorAmbiguous 0 -LocatorNotFound 0 -LocationNotAttempted 0)
             }
         }
-        return Invoke-Phase2ScopedBenefitShadowMode -Rows $Rows -SourceRowNumberOffset $SourceRowNumberOffset -SourceRowNumbers $(if ($hasExplicitRows) { $SourceRowNumbers } else { $null }) -RequestInvoker $RequestInvoker -GoldenExpectations $GoldenExpectations -OperationalLiveRun:$OperationalLiveRun
+        return Invoke-Phase2ScopedBenefitShadowMode -Rows $Rows -SourceRowNumberOffset $SourceRowNumberOffset -SourceRowNumbers $(if ($hasExplicitRows) { $SourceRowNumbers } else { $null }) -RequestInvoker $RequestInvoker -GoldenExpectations $GoldenExpectations -OperationalLiveRun:$OperationalLiveRun -UseMixedScopedEvidence:$UseScopedEvidence
     }
 
     $results = [Collections.Generic.List[object]]::new()

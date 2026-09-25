@@ -3,6 +3,7 @@ $ErrorActionPreference = 'Stop'
 
 . (Join-Path $PSScriptRoot '../benefit-source/discover-official-benefit-sources.ps1')
 . (Join-Path $PSScriptRoot 'convert-html-source-observation.ps1')
+. (Join-Path $PSScriptRoot 'convert-mma-jsonp-source-observation.ps1')
 
 function New-BenefitSourceRunContext {
     $payloadCache = [Collections.Generic.Dictionary[string,object]]::new([StringComparer]::Ordinal)
@@ -110,6 +111,47 @@ function Get-BenefitRunSourceDocument {
     if ($document.FetchStatus -ceq 'FAILED') { $Context.Metrics.SourceFetchFailures++ }
     [void]$Context.Attempts.Add([pscustomobject][ordered]@{Stage='FETCH';Key=$key;CacheHit=$false;Status=$document.FetchStatus})
     return New-BenefitRunDocumentFromPayload -Candidate $Candidate -Payload $payload
+}
+
+function Get-BenefitRunExplicitDocument {
+    param([Parameter(Mandatory)]$Context, [Parameter(Mandatory)]$Candidate, [Parameter(Mandatory)][ValidateSet('JSONP')][string]$SourceFormat, [AllowNull()][scriptblock]$RequestInvoker=$null)
+    Assert-BenefitSourceRunContext $Context
+    Assert-BenefitSourceCandidate $Candidate
+    Assert-BenefitRunRequestInvokerProfile -Context $Context -RequestInvoker $RequestInvoker
+    $key = "EXPLICIT_$SourceFormat|$($Candidate.Url)"
+    if ($Context.PayloadCache.ContainsKey($key)) {
+        $Context.Metrics.FetchCacheHits++
+        $payload=$Context.PayloadCache[$key]
+        [void]$Context.Attempts.Add([pscustomobject][ordered]@{Stage='FETCH';Key=$key;CacheHit=$true;Status=$payload.FetchStatus})
+        return New-BenefitRunDocumentFromPayload -Candidate $Candidate -Payload $payload
+    }
+    $countingRequest=$null
+    if ($null -ne $RequestInvoker) {
+        $inner=$RequestInvoker; $metrics=$Context.Metrics
+        $countingRequest={ param($Uri) $metrics.ExternalFetchCount++; & $inner $Uri }.GetNewClosure()
+    }
+    $fetched=Get-BenefitSourceDocument -Candidate $Candidate -RequestInvoker $countingRequest
+    $document=New-BenefitSourceDocument -SourceRowNumber $Candidate.SourceRowNumber -Url $fetched.Url -SourceFormat $SourceFormat -FetchStatus $fetched.FetchStatus -ContentType $fetched.ContentType -Text $fetched.Text -Bytes (Copy-BenefitRunBytes $fetched.Bytes) -ObservedAt $fetched.ObservedAt -ReasonCodes $fetched.ReasonCodes
+    $payload=[pscustomobject][ordered]@{Url=$document.Url;SourceFormat=$document.SourceFormat;FetchStatus=$document.FetchStatus;ContentType=$document.ContentType;Text=$document.Text;Bytes=(Copy-BenefitRunBytes $document.Bytes);ObservedAt=$document.ObservedAt;ReasonCodes=@($document.ReasonCodes)}
+    $Context.PayloadCache.Add($key,$payload); $Context.Metrics.UniqueRequestKeys=$Context.PayloadCache.Count
+    if ($document.FetchStatus -ceq 'FAILED') {$Context.Metrics.SourceFetchFailures++}
+    [void]$Context.Attempts.Add([pscustomobject][ordered]@{Stage='FETCH';Key=$key;CacheHit=$false;Status=$document.FetchStatus})
+    return New-BenefitRunDocumentFromPayload -Candidate $Candidate -Payload $payload
+}
+
+function Get-BenefitRunMmaJsonpObservation {
+    param([Parameter(Mandatory)]$Context, [Parameter(Mandatory)]$Document, [Parameter(Mandatory)][ValidateSet('LIST','DETAIL')][string]$Role, [Parameter(Mandatory)][string]$ExpectedCallback)
+    Assert-BenefitSourceRunContext $Context; Assert-BenefitSourceDocument $Document
+    if ($Document.FetchStatus -cne 'COMPLETE' -or $Document.SourceFormat -cne 'JSONP') { throw 'MMA JSONP observation requires a successful JSONP document' }
+    $snapshot=New-BenefitSourceSnapshot -SourceUrl $Document.Url -SourceFormat JSONP -Text $Document.Text -ObservedAt $Document.ObservedAt
+    $adapterId="MMA_JSONP_$Role"; $key="$($snapshot.SnapshotId)|$adapterId|1"
+    if ($Context.TemplateCache.ContainsKey($key)) { $Context.Metrics.AdapterReuseCount++; $template=$Context.TemplateCache[$key]; $cacheHit=$true }
+    else {
+        $template=if ($Role -ceq 'LIST') { ConvertTo-MmaJsonpListObservation -Document $Document -ExpectedCallback $ExpectedCallback } else { ConvertTo-MmaJsonpDetailObservation -Document $Document -ExpectedCallback $ExpectedCallback }
+        $Context.TemplateCache.Add($key,$template); $Context.Metrics.AdapterParseCount++; $cacheHit=$false
+    }
+    [void]$Context.Attempts.Add([pscustomobject][ordered]@{Stage='PARSE';Key=$key;CacheHit=$cacheHit;Status=$template.AdapterStatus})
+    return New-BenefitSourceObservation -SourceRowNumber $Document.SourceRowNumber -Snapshot $snapshot -AdapterId $template.AdapterId -AdapterVersion $template.AdapterVersion -AdapterStatus $template.AdapterStatus -ContentUnits $template.ContentUnits -Diagnostics $template.Diagnostics
 }
 
 function Get-BenefitRunHtmlObservation {

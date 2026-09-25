@@ -19,6 +19,7 @@ function Get-BenefitValidationNumericTokens {
 function New-BenefitValidationResult {
     param([Parameter(Mandatory)]$Claim,[Parameter(Mandatory)][string]$Status,[AllowNull()][object[]]$ReasonCodes=@())
     $result=New-ValidatedBenefitClaim -ClaimType $Claim.ClaimType -Value $Claim.Value -ValidationStatus $Status -EvidenceText $Claim.EvidenceText -EvidenceReference $Claim.EvidenceReference -SourceUrl $Claim.SourceUrl -ReasonCodes $ReasonCodes
+    if ($Claim.PSObject.Properties.Name -contains 'ExtractionMethod') { $result | Add-Member -NotePropertyName ExtractionMethod -NotePropertyValue ([string]$Claim.ExtractionMethod) }
     Assert-ValidatedBenefitClaim $result;return $result
 }
 
@@ -47,7 +48,7 @@ function Test-ScopedBenefitExtractedClaim {
     Assert-ExtractedBenefitClaim $Claim
     Assert-BenefitSourceDocument $Document
     Assert-RelevantBenefitEvidenceSlice -Slice $EvidenceSlice -Document $Document -SourceRowNumber $Document.SourceRowNumber
-    $fieldMap = @{ BENEFIT_DESCRIPTION='BenefitDescription'; ELIGIBLE_TARGET='EligibleTarget'; USAGE_CONDITION='UsageCondition'; VERIFICATION_METHOD='VerificationMethod' }
+    $fieldMap = @{ BENEFIT_DESCRIPTION='BenefitDescription'; ELIGIBLE_TARGET='EligibleTarget'; USAGE_CONDITION='UsageCondition'; VERIFICATION_METHOD='VerificationMethod'; VALID_FROM='ValidFrom'; VALID_UNTIL='ValidUntilObserved' }
     $mismatch = $false
     $claimType = [string]$Claim.ClaimType
     if (-not $fieldMap.ContainsKey($claimType)) { $mismatch=$true }

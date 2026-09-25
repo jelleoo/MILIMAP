@@ -147,7 +147,7 @@ function Get-BenefitJsonArrayObjectSpans {
 }
 
 function Get-MmaJsonpStructuredData {
-    param([Parameter(Mandatory)][string]$ObjectText, [Parameter(Mandatory)][string]$UnitReference, [Parameter(Mandatory)][hashtable]$FieldMap)
+    param([Parameter(Mandatory)][string]$ObjectText, [Parameter(Mandatory)][string]$UnitReference, [Parameter(Mandatory)][hashtable]$FieldMap, [bool]$RequireInstitutionCode=$true)
     try { $object=$ObjectText | ConvertFrom-Json -ErrorAction Stop }
     catch { throw 'MMA JSONP source object cannot be parsed' }
     if ($null -eq $object -or $object -is [array]) { throw 'MMA JSONP source object must be an object' }
@@ -159,7 +159,7 @@ function Get-MmaJsonpStructuredData {
         $references[$semanticField]=[pscustomobject][ordered]@{ PropertyName=$rawProperty; FieldReference="$UnitReference/$rawProperty" }
     }
     Assert-ScopeText $fields.BusinessName 'MMA JSONP BusinessName'
-    Assert-ScopeText $fields.InstitutionCode 'MMA JSONP InstitutionCode'
+    if ($RequireInstitutionCode) { Assert-ScopeText $fields.InstitutionCode 'MMA JSONP InstitutionCode' }
     return [pscustomobject][ordered]@{ StructuredFields=$fields; FieldReferences=$references }
 }
 
@@ -175,7 +175,7 @@ function ConvertTo-MmaJsonpListTemplate {
     $rows=@(); $fieldMap=@{ BusinessName='udgigwan_yhnm'; Address='addr'; Phone='udgigwan_telno'; Category='udggeopjong_gbnm'; InstitutionCode='udgigwan_cd' }
     for ($i=0; $i -lt $objectSpans.Count; $i++) {
         $span=$objectSpans[$i]; $reference='JSONP_LIST_ITEM_' + ($i+1)
-        $data=Get-MmaJsonpStructuredData -ObjectText $span.Fragment -UnitReference $reference -FieldMap $fieldMap
+        $data=Get-MmaJsonpStructuredData -ObjectText $span.Fragment -UnitReference $reference -FieldMap $fieldMap -RequireInstitutionCode:$false
         $rows += [pscustomobject][ordered]@{ UnitReference=$reference; RawStart=[long]($envelope.JsonStart+$span.Start); RawLength=$span.Length; RawEvidenceText=$data.StructuredFields.BusinessName; StructuredFields=$data.StructuredFields; FieldReferences=$data.FieldReferences }
     }
     return [pscustomobject][ordered]@{ Rows=@($rows) }

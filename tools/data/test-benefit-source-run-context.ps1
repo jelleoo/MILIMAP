@@ -112,4 +112,36 @@ Assert-ScopeEqual $partialObs3.AdapterStatus 'PARTIAL' 'Partial parser result is
 Assert-ScopeEqual $partialCtx.Metrics.AdapterParseCount 1 'Partial snapshot parses once'
 Assert-ScopeEqual $partialCtx.Metrics.AdapterReuseCount 1 'Partial template is reusable'
 
+# A live official page can contain many safe rows.  Reusing the parsed
+# template must also reuse its position-only token stream; otherwise every
+# provenance assertion rescans the full source text once per row/wrapper.
+$tokenCounter = [pscustomobject]@{ Count=0 }
+$originalTokenizer = (Get-Item -Path Function:Get-ScopeHtmlTagTokens).ScriptBlock
+$fragmentCounter = [pscustomobject]@{ Count=0 }
+$originalFragment = (Get-Item -Path Function:Get-ScopeElementFragment).ScriptBlock
+$countingTokenizer = {
+    param([string]$Text)
+    $tokenCounter.Count++
+    & $originalTokenizer $Text
+}.GetNewClosure()
+$countingFragment = {
+    param($Text, $Start, $Length, $Tag)
+    $fragmentCounter.Count++
+    & $originalFragment @PSBoundParameters
+}.GetNewClosure()
+Set-Item -Path Function:Get-ScopeHtmlTagTokens -Value $countingTokenizer
+Set-Item -Path Function:Get-ScopeElementFragment -Value $countingFragment
+try {
+    $tokenCtx = New-BenefitSourceRunContext
+    $tokenDoc2 = Get-BenefitRunSourceDocument -Context $tokenCtx -Candidate $c2 -RequestInvoker $http
+    $tokenDoc3 = Get-BenefitRunSourceDocument -Context $tokenCtx -Candidate $c3 -RequestInvoker $http
+    $null = Get-BenefitRunHtmlObservation -Context $tokenCtx -Document $tokenDoc2
+    $null = Get-BenefitRunHtmlObservation -Context $tokenCtx -Document $tokenDoc3
+} finally {
+    Set-Item -Path Function:Get-ScopeHtmlTagTokens -Value $originalTokenizer
+    Set-Item -Path Function:Get-ScopeElementFragment -Value $originalFragment
+}
+Assert-ScopeEqual $tokenCounter.Count 1 'Parsed HTML token stream must be reused for all rows sharing one snapshot'
+Assert-ScopeEqual $fragmentCounter.Count 0 'Parsed HTML element spans must be reused for all rows sharing one snapshot'
+
 Write-Host 'Benefit source run context tests passed.'

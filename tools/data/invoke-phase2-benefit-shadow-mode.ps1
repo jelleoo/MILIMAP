@@ -9,6 +9,7 @@ $libraryRoot = Join-Path $PSScriptRoot 'lib'
 . (Join-Path $libraryRoot 'benefit-source/bind-benefit-source.ps1')
 . (Join-Path $libraryRoot 'benefit-evidence/extract-benefit-evidence.ps1')
 . (Join-Path $libraryRoot 'benefit-evidence/validate-benefit-evidence.ps1')
+. (Join-Path $libraryRoot 'benefit-evidence/invoke-scoped-benefit-source.ps1')
 . (Join-Path $libraryRoot 'benefit-verification/compare-benefit-claims.ps1')
 . (Join-Path $libraryRoot 'benefit-verification/evaluate-benefit-state.ps1')
 
@@ -172,15 +173,71 @@ function ConvertTo-Phase2BenefitReviewRow {
     }
 }
 
-function Invoke-Phase2BenefitShadowMode {
+function ConvertTo-Phase2ScopedBenefitEvidenceDiagnostic {
+    param([Parameter(Mandatory)]$SourceRecord)
+    $observation = $SourceRecord.Observation
+    $location = $SourceRecord.LocationResult
+    $snapshot = if ($null -ne $observation) { $observation.Snapshot } else { $null }
+    return [pscustomobject][ordered]@{
+        SourceRowNumber=$SourceRecord.SourceRowNumber
+        Url=$SourceRecord.Candidate.Url
+        SourceKind=$SourceRecord.Candidate.SourceKind
+        DiscoveryMethod=$SourceRecord.Candidate.DiscoveryMethod
+        DiscoveryExecution=$SourceRecord.DiscoveryExecution
+        FetchStatus=$SourceRecord.Document.FetchStatus
+        SourceFormat=$SourceRecord.Document.SourceFormat
+        SnapshotId=$(if ($null -ne $snapshot) { [string]$snapshot.SnapshotId } else { '' })
+        ContentHash=$(if ($null -ne $snapshot) { [string]$snapshot.ContentHash } else { '' })
+        ObservedAt=[string]$SourceRecord.Document.ObservedAt
+        AdapterId=$(if ($null -ne $observation) { [string]$observation.AdapterId } else { '' })
+        AdapterVersion=$(if ($null -ne $observation) { [string]$observation.AdapterVersion } else { '' })
+        AdapterStatus=$(if ($null -ne $observation) { [string]$observation.AdapterStatus } else { '' })
+        LocationOperationalStatus=$(if ($null -ne $location) { [string]$location.OperationalStatus } else { '' })
+        LocationStatus=$(if ($null -ne $location -and $null -ne $location.Status) { [string]$location.Status } else { '' })
+        CandidateReferences=$(if ($null -ne $location) { @($location.CandidateReferences) } else { @() })
+        OfficialityStatus=$SourceRecord.Qualified.OfficialityStatus
+        QualificationEvidence=@($SourceRecord.Qualified.QualificationEvidence)
+        BusinessBindingStatus=$SourceRecord.Bound.BusinessBindingStatus
+        BindingEvidence=@($SourceRecord.Bound.BindingEvidence)
+        ExtractionStatus=$SourceRecord.Extraction.Status
+        ValidatedClaims=@($SourceRecord.Validation.Claims)
+        Slices=@($SourceRecord.Slices)
+        PreparationDiagnostics=@($SourceRecord.PreparationDiagnostics)
+        ReasonCodes=@($SourceRecord.ReasonCodes)
+    }
+}
+
+function Get-Phase2ScopedPreparationSummary {
     param(
-        [Parameter(Mandatory)][object[]]$Rows,
+        [Parameter(Mandatory)]$RunContext,
+        [int]$SourceEvaluations,
+        [int]$LocatorLocated,
+        [int]$LocatorAmbiguous,
+        [int]$LocatorNotFound,
+        [int]$LocationNotAttempted
+    )
+    return [pscustomobject][ordered]@{
+        SourceEvaluations=$SourceEvaluations
+        UniqueRequestKeys=[int]$RunContext.Metrics.UniqueRequestKeys
+        ExternalFetchCount=[int]$RunContext.Metrics.ExternalFetchCount
+        FetchCacheHits=[int]$RunContext.Metrics.FetchCacheHits
+        SourceFetchFailures=[int]$RunContext.Metrics.SourceFetchFailures
+        AdapterParseCount=[int]$RunContext.Metrics.AdapterParseCount
+        AdapterReuseCount=[int]$RunContext.Metrics.AdapterReuseCount
+        LocatorLocated=$LocatorLocated
+        LocatorAmbiguous=$LocatorAmbiguous
+        LocatorNotFound=$LocatorNotFound
+        LocationNotAttempted=$LocationNotAttempted
+        LlmInvocationCount=0
+    }
+}
+
+function Invoke-Phase2ScopedBenefitShadowMode {
+    param(
+        [Parameter(Mandatory)][AllowEmptyCollection()][object[]]$Rows,
         [int]$SourceRowNumberOffset=1,
+        [AllowNull()][int[]]$SourceRowNumbers=$null,
         [AllowNull()][scriptblock]$RequestInvoker=$null,
-        [AllowNull()][scriptblock]$DiscoveryInvoker=$null,
-        [AllowNull()][scriptblock]$UnstructuredExtractor=$null,
-        [AllowNull()][scriptblock]$SpreadsheetExtractor=$null,
-        [AllowNull()][scriptblock]$PdfTextExtractor=$null,
         [hashtable]$GoldenExpectations=@{},
         [switch]$OperationalLiveRun
     )
@@ -188,10 +245,121 @@ function Invoke-Phase2BenefitShadowMode {
     $results = [Collections.Generic.List[object]]::new()
     $reportRows = [Collections.Generic.List[object]]::new()
     $diagnostics = [Collections.Generic.List[object]]::new()
+    $runContext = New-BenefitSourceRunContext
+    $sourceEvaluations = 0
+    $locatorLocated = 0
+    $locatorAmbiguous = 0
+    $locatorNotFound = 0
+    $locationNotAttempted = 0
 
     for ($index=0; $index -lt $Rows.Count; $index++) {
         $row = $Rows[$index]
-        $sourceRowNumber = $SourceRowNumberOffset + $index + 1
+        $sourceRowNumber = if ($null -ne $SourceRowNumbers) { [int]$SourceRowNumbers[$index] } else { $SourceRowNumberOffset + $index + 1 }
+        $business = ConvertTo-NormalizedBusiness -Row $row -SourceRowNumber $sourceRowNumber
+        Assert-NormalizedBusiness $business
+        $benefit = ConvertTo-Phase2CanonicalBenefitRecord -Row $row -SourceRowNumber $sourceRowNumber
+        if ($benefit.SourceRowNumber -ne $business.SourceRowNumber) { throw 'Benefit and Business SourceRowNumber chain mismatch' }
+
+        $canonicalPhone = Get-Phase2BenefitRowValue -Row $row -Name '업소전화번호'
+        $sourceRecords = [Collections.Generic.List[object]]::new()
+        $existingCandidate = Get-ExistingBenefitSourceCandidate -Benefit $benefit
+        $existingSourceUsed = $false
+        $beforeRequests = [int]$runContext.Metrics.ExternalFetchCount
+
+        if ($null -ne $existingCandidate) {
+            $existingSourceUsed = $true
+            $sourceEvaluations++
+            $sourceRecord = Invoke-ScopedPhase2BenefitSourceCandidate -Candidate $existingCandidate -Business $business -CanonicalPhone $canonicalPhone -RunContext $runContext -RequestInvoker $RequestInvoker
+            $sourceRecords.Add($sourceRecord)
+            $location = $sourceRecord.LocationResult
+            if ($null -eq $location -or $location.OperationalStatus -cne 'COMPLETE') {
+                $locationNotAttempted++
+            } elseif ($location.Status -ceq 'LOCATED') {
+                $locatorLocated++
+            } elseif ($location.Status -ceq 'AMBIGUOUS') {
+                $locatorAmbiguous++
+            } elseif ($location.Status -ceq 'NOT_FOUND') {
+                $locatorNotFound++
+            } else {
+                $locationNotAttempted++
+            }
+        }
+
+        $final = Get-Phase2BenefitEvaluation -Benefit $benefit -SourceRecords $sourceRecords.ToArray() -DiscoveryStatus 'COMPLETE'
+        $allReasons = [System.Collections.Generic.List[string]]::new()
+        Add-Phase2UniqueReasonCodes -Target $allReasons -ReasonCodes $final.Evaluation.ReasonCodes
+        foreach ($sourceRecord in $sourceRecords) { Add-Phase2UniqueReasonCodes -Target $allReasons -ReasonCodes $sourceRecord.ReasonCodes }
+
+        $result = New-BenefitVerificationResult -SourceRowNumber $sourceRowNumber -BusinessIdentity $business -BenefitState $final.Evaluation.BenefitState -ReviewClass $final.Evaluation.ReviewClass -ReasonCodes @($allReasons) -ClaimResults $final.ClaimResults -Evidence $final.Evaluation.Evidence -Warnings $final.Evaluation.Warnings -ProductionAction 'NONE'
+        Assert-BenefitVerificationResult $result
+        $results.Add($result)
+
+        $rowRequests = [int]$runContext.Metrics.ExternalFetchCount - $beforeRequests
+        $reportRows.Add((ConvertTo-Phase2BenefitReviewRow -Result $result -DiscoveryStatus 'COMPLETE' -SourceRecords $sourceRecords.ToArray() -ExistingSourceUsed $existingSourceUsed -FallbackUsed $false -TotalExternalRequests $rowRequests))
+        foreach ($sourceRecord in $sourceRecords) {
+            $diagnostics.Add((ConvertTo-Phase2ScopedBenefitEvidenceDiagnostic -SourceRecord $sourceRecord))
+        }
+    }
+
+    $rowsArray = $reportRows.ToArray()
+    return [pscustomobject][ordered]@{
+        Results=$results.ToArray()
+        Rows=$rowsArray
+        EvidenceDiagnostics=$diagnostics.ToArray()
+        Summary=(Get-Phase2BenefitShadowSummary -Rows $rowsArray -GoldenExpectations $GoldenExpectations -OperationalLiveRun:$OperationalLiveRun)
+        PreparationSummary=(Get-Phase2ScopedPreparationSummary -RunContext $runContext -SourceEvaluations $sourceEvaluations -LocatorLocated $locatorLocated -LocatorAmbiguous $locatorAmbiguous -LocatorNotFound $locatorNotFound -LocationNotAttempted $locationNotAttempted)
+    }
+}
+
+function Invoke-Phase2BenefitShadowMode {
+    param(
+        [Parameter(Mandatory)][AllowEmptyCollection()][object[]]$Rows,
+        [int]$SourceRowNumberOffset=1,
+        [AllowNull()][scriptblock]$RequestInvoker=$null,
+        [AllowNull()][scriptblock]$DiscoveryInvoker=$null,
+        [AllowNull()][scriptblock]$UnstructuredExtractor=$null,
+        [AllowNull()][scriptblock]$SpreadsheetExtractor=$null,
+        [AllowNull()][scriptblock]$PdfTextExtractor=$null,
+        [hashtable]$GoldenExpectations=@{},
+        [switch]$OperationalLiveRun,
+        [AllowNull()][int[]]$SourceRowNumbers=$null,
+        [switch]$UseScopedHtmlEvidence
+    )
+
+    $hasExplicitRows = $PSBoundParameters.ContainsKey('SourceRowNumbers')
+    $hasExplicitOffset = $PSBoundParameters.ContainsKey('SourceRowNumberOffset')
+    if ($hasExplicitRows) {
+        if ($null -eq $SourceRowNumbers -or $SourceRowNumbers.Count -ne $Rows.Count) { throw 'SourceRowNumbers must match Rows.Count' }
+        if ($hasExplicitOffset) { throw 'SourceRowNumbers cannot coexist with explicit SourceRowNumberOffset' }
+        if (@($SourceRowNumbers | Where-Object { $_ -le 1 }).Count -gt 0) { throw 'SourceRowNumbers must be greater than 1' }
+        if (@($SourceRowNumbers | Select-Object -Unique).Count -ne $SourceRowNumbers.Count) { throw 'SourceRowNumbers must be distinct' }
+    }
+
+    if ($UseScopedHtmlEvidence) {
+        if ($null -ne $DiscoveryInvoker -or $null -ne $UnstructuredExtractor -or $null -ne $SpreadsheetExtractor -or $null -ne $PdfTextExtractor) {
+            throw 'Scoped A1 does not allow discovery or external extraction providers'
+        }
+        if ($Rows.Count -eq 0) {
+            $emptyContext = New-BenefitSourceRunContext
+            $emptyRows = @()
+            return [pscustomobject][ordered]@{
+                Results=@()
+                Rows=@()
+                EvidenceDiagnostics=@()
+                Summary=(Get-Phase2BenefitShadowSummary -Rows $emptyRows -GoldenExpectations $GoldenExpectations -OperationalLiveRun:$OperationalLiveRun)
+                PreparationSummary=(Get-Phase2ScopedPreparationSummary -RunContext $emptyContext -SourceEvaluations 0 -LocatorLocated 0 -LocatorAmbiguous 0 -LocatorNotFound 0 -LocationNotAttempted 0)
+            }
+        }
+        return Invoke-Phase2ScopedBenefitShadowMode -Rows $Rows -SourceRowNumberOffset $SourceRowNumberOffset -SourceRowNumbers $(if ($hasExplicitRows) { $SourceRowNumbers } else { $null }) -RequestInvoker $RequestInvoker -GoldenExpectations $GoldenExpectations -OperationalLiveRun:$OperationalLiveRun
+    }
+
+    $results = [Collections.Generic.List[object]]::new()
+    $reportRows = [Collections.Generic.List[object]]::new()
+    $diagnostics = [Collections.Generic.List[object]]::new()
+
+    for ($index=0; $index -lt $Rows.Count; $index++) {
+        $row = $Rows[$index]
+        $sourceRowNumber = if ($hasExplicitRows) { [int]$SourceRowNumbers[$index] } else { $SourceRowNumberOffset + $index + 1 }
         $business = ConvertTo-NormalizedBusiness -Row $row -SourceRowNumber $sourceRowNumber
         Assert-NormalizedBusiness $business
         $benefit = ConvertTo-Phase2CanonicalBenefitRecord -Row $row -SourceRowNumber $sourceRowNumber
@@ -275,14 +443,25 @@ function Invoke-Phase2BenefitShadowMode {
     }
 }
 
+function Get-Phase2BenefitShadowNumericSum {
+    param(
+        [Parameter(Mandatory)][AllowEmptyCollection()][object[]]$Rows,
+        [Parameter(Mandatory)][string]$Property
+    )
+    if ($Rows.Count -eq 0) { return 0 }
+    $measurement = $Rows | Measure-Object -Property $Property -Sum
+    if ($null -eq $measurement -or $measurement.PSObject.Properties.Name -notcontains 'Sum' -or $null -eq $measurement.Sum) { return 0 }
+    return [int]$measurement.Sum
+}
+
 function Get-Phase2BenefitShadowSummary {
     param(
-        [Parameter(Mandatory)][object[]]$Rows,
+        [Parameter(Mandatory)][AllowEmptyCollection()][object[]]$Rows,
         [hashtable]$GoldenExpectations=@{},
         [switch]$OperationalLiveRun
     )
     $allRows = @($Rows)
-    $totalExternalRequests = [int](@($allRows | Measure-Object -Property TotalExternalRequests -Sum).Sum)
+    $totalExternalRequests = Get-Phase2BenefitShadowNumericSum -Rows $allRows -Property 'TotalExternalRequests'
     $falseGreen = @($allRows | Where-Object {
         $GoldenExpectations.ContainsKey([string]$_.SourceRowNumber) -and
         $_.ReviewClass -eq 'GREEN' -and
@@ -295,14 +474,14 @@ function Get-Phase2BenefitShadowSummary {
         DiscoveryPartial=@($allRows | Where-Object DiscoveryStatus -eq 'PARTIAL').Count
         DiscoveryFailed=@($allRows | Where-Object DiscoveryStatus -eq 'FAILED').Count
         QualifiedOfficialSourceRows=@($allRows | Where-Object QualifiedOfficialSource -eq $true).Count
-        BindingStrong=[int](@($allRows | Measure-Object -Property BindingStrongCount -Sum).Sum)
-        BindingPlausible=[int](@($allRows | Measure-Object -Property BindingPlausibleCount -Sum).Sum)
-        BindingAmbiguous=[int](@($allRows | Measure-Object -Property BindingAmbiguousCount -Sum).Sum)
-        BindingConflict=[int](@($allRows | Measure-Object -Property BindingConflictCount -Sum).Sum)
-        ExtractionComplete=[int](@($allRows | Measure-Object -Property ExtractionCompleteCount -Sum).Sum)
-        ExtractionPartial=[int](@($allRows | Measure-Object -Property ExtractionPartialCount -Sum).Sum)
-        ExtractionFailed=[int](@($allRows | Measure-Object -Property ExtractionFailedCount -Sum).Sum)
-        EvidenceValidationRejected=[int](@($allRows | Measure-Object -Property EvidenceValidationRejectedCount -Sum).Sum)
+        BindingStrong=(Get-Phase2BenefitShadowNumericSum -Rows $allRows -Property 'BindingStrongCount')
+        BindingPlausible=(Get-Phase2BenefitShadowNumericSum -Rows $allRows -Property 'BindingPlausibleCount')
+        BindingAmbiguous=(Get-Phase2BenefitShadowNumericSum -Rows $allRows -Property 'BindingAmbiguousCount')
+        BindingConflict=(Get-Phase2BenefitShadowNumericSum -Rows $allRows -Property 'BindingConflictCount')
+        ExtractionComplete=(Get-Phase2BenefitShadowNumericSum -Rows $allRows -Property 'ExtractionCompleteCount')
+        ExtractionPartial=(Get-Phase2BenefitShadowNumericSum -Rows $allRows -Property 'ExtractionPartialCount')
+        ExtractionFailed=(Get-Phase2BenefitShadowNumericSum -Rows $allRows -Property 'ExtractionFailedCount')
+        EvidenceValidationRejected=(Get-Phase2BenefitShadowNumericSum -Rows $allRows -Property 'EvidenceValidationRejectedCount')
         Active=@($allRows | Where-Object BenefitState -eq 'ACTIVE').Count
         Changed=@($allRows | Where-Object BenefitState -eq 'CHANGED').Count
         Ended=@($allRows | Where-Object BenefitState -eq 'ENDED').Count

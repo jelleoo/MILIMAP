@@ -286,6 +286,98 @@ BenefitVerificationResult + row report + summary + evidence diagnostics
 - `invoke-phase2-benefit-shadow-mode.ps1`: orchestration, metrics, diagnostics, protected export
 - `testdata/phase2-benefit-golden.psd1`: source-cited historical provenance와 synthetic safety fixture를 분리한 Golden data
 
+### A1 scoped HTML evidence path
+
+A1의 scoped HTML 경로는 기존 Phase 2 Shadow Mode를 대체하지 않는 **opt-in** 경로다. 호출자는 검증할 canonical 행과 원본 CSV 행 번호를 함께 넘기고, 이미 승인된 HTTP boundary인 `RequestInvoker`를 주입한다.
+
+```powershell
+. ./tools/data/invoke-phase2-benefit-shadow-mode.ps1
+
+$run = Invoke-Phase2BenefitShadowMode `
+  -Rows $selectedRows `
+  -SourceRowNumbers $originalCsvRowNumbers `
+  -UseScopedHtmlEvidence `
+  -RequestInvoker $httpInvoker
+
+$run.PreparationSummary
+```
+
+scoped 경로의 순서는 다음과 같다.
+
+```text
+existing PUBLIC_OFFICIAL source
+        ↓
+per-run cached fetch
+        ↓
+officiality qualification
+        ↓
+generic HTML observation
+        ↓
+business row locator
+        ↓
+RelevantEvidenceSlice
+        ↓
+scoped binding
+        ↓
+scoped deterministic extraction
+        ↓
+independent scoped validation
+        ↓
+existing claim comparison / BenefitState evaluator
+```
+
+안전 경계:
+
+- `-UseScopedHtmlEvidence`를 생략하면 기존 legacy Shadow Mode 동작과 반환 shape를 유지한다.
+- scoped A1에서는 `DiscoveryInvoker`, `UnstructuredExtractor`, `PdfTextExtractor`, `SpreadsheetExtractor`를 함께 사용할 수 없다.
+- `-SourceRowNumbers`는 `Rows.Count`와 같아야 하고, 중복 없이 모두 1보다 커야 하며, explicit `-SourceRowNumberOffset`과 동시에 사용할 수 없다.
+- 같은 exact URL은 한 run 안에서만 fetch reuse되며 path/query 대소문자와 query identity를 보존한다.
+- 같은 snapshot은 `SnapshotId + AdapterId + AdapterVersion` 기준으로 parse reuse된다.
+- cache에는 source payload/template만 저장하고 `SourceRowNumber`, BusinessIdentity, locator 결과, slice, binding, claim, BenefitState/ReviewClass를 저장하지 않는다.
+- fetch/parser/locator 실패나 ambiguity는 whole-page legacy extraction으로 fallback하지 않는다.
+- fetch 실패는 `NOT_FOUND`나 `ENDED`가 아니며 GREEN 근거도 아니다.
+- `LOCATED`는 대상 business row를 안전하게 특정했다는 뜻일 뿐, 혜택의 존재·현재성·종료를 확정한 것이 아니다. Generic A1 detail-only extraction은 정상적으로도 `NEEDS_VERIFICATION`에 머물 수 있다.
+- `ProductionAction`은 계속 `NONE`이며 모든 결과는 사람 검토 대상이다.
+
+`PreparationSummary` counter 의미:
+
+| Counter | 의미 |
+| --- | --- |
+| `SourceEvaluations` | business/source 조합 평가 수 |
+| `UniqueRequestKeys` | run 안에서 관측한 exact request URL key 수 |
+| `ExternalFetchCount` | 실제 underlying `RequestInvoker` 호출 수 |
+| `FetchCacheHits` | exact URL payload cache hit 수 |
+| `SourceFetchFailures` | cache miss에서 실제 fetch가 실패한 unique source 수 |
+| `AdapterParseCount` | 실제 `ConvertTo-BenefitHtmlTemplate` 실행 수 |
+| `AdapterReuseCount` | parsed template reuse 수 |
+| `LocatorLocated` / `LocatorAmbiguous` / `LocatorNotFound` | COMPLETE locator의 semantic 결과 수 |
+| `LocationNotAttempted` | fetch/qualification/parser 단계에서 locator semantic 결과까지 가지 못한 평가 수 |
+| `LlmInvocationCount` | A1에서는 항상 0 |
+
+Location counter 합계는 항상 `SourceEvaluations`와 일치해야 한다. `LocationNotAttempted`는 semantic absence가 아니다.
+
+A1 deterministic closeout 보고는 품질 통계 대신 다음처럼 기록한다.
+
+```text
+FixtureSafety:
+  tested cases = deterministic scoped fixture cases
+  wrong-row selections = 0 in tested cases
+  cross-business claim leaks = 0 in tested cases
+  false-GREEN = 0 in tested failure/ambiguity cases
+  false-ENDED = 0 in tested failure/cross-business-ending cases
+
+LiveAudit:
+  Status = NOT_RUN
+  AuditedRowCount = 0
+  LocatedPrecision = null
+  FalseGreenCount = null
+  FalseEndedCount = null
+```
+
+위 값은 **테스트한 fixture에 대한 safety evidence**이지 population precision/recall 주장이나 실제 source-family 지원 선언이 아니다. Generic synthetic HTML 표가 통과해도 MMA/DDC/Paju/Yangju가 모두 지원된다는 뜻이 아니다. 실제 entry URL, pagination, detail traversal, attachment, PDF/XLSX 요구사항은 A2 source-family inventory에서 별도로 확인해야 한다.
+
+Evidence diagnostic export는 original `SourceRowNumber`, source URL, snapshot hash/time, adapter version, selected slice text, table/row/field reference, binding evidence, validated claim을 보존한다. Shadow export는 기존과 동일하게 `data/canonical`, `data/seed`, `apps` 아래에 쓸 수 없다.
+
 ### Deterministic regression
 
 전체 데이터 도구 테스트:

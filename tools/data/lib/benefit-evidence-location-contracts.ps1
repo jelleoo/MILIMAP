@@ -197,8 +197,12 @@ function Get-ScopeHtmlTagTokens {
     }
 }
 function Assert-ScopePhysicalUnitReference {
-    param([Parameter(Mandatory)]$Unit, [Parameter(Mandatory)][string]$Text)
-    $tokens = @(Get-ScopeHtmlTagTokens -Text $Text)
+    param(
+        [Parameter(Mandatory)]$Unit,
+        [Parameter(Mandatory)][string]$Text,
+        [AllowNull()][object[]]$HtmlTokens=$null
+    )
+    $tokens = if ($null -eq $HtmlTokens) { @(Get-ScopeHtmlTagTokens -Text $Text) } else { @($HtmlTokens) }
     $tables = @($tokens | Where-Object { $_.Tag -ceq 'table' -and -not $_.IsClosing })
     $tableIndex = -1
     for ($i=0; $i -lt $tables.Count; $i++) { if ($tables[$i].Index -eq $Unit.TableStart) { $tableIndex=$i+1; break } }
@@ -211,6 +215,53 @@ function Assert-ScopePhysicalUnitReference {
         $Unit.UnitReference -cne "HTML_TABLE_${tableIndex}_ROW_${rowIndex}") {
         throw 'Physical reference does not match original table and row positions'
     }
+}
+function Get-ScopeHtmlPairs {
+    param([Parameter(Mandatory)][object[]]$Tokens, [Parameter(Mandatory)][string]$Tag)
+    $stack = [Collections.Generic.List[object]]::new()
+    $pairs = [Collections.Generic.List[object]]::new()
+    foreach ($token in $Tokens) {
+        if ($token.Tag -cne $Tag) { continue }
+        if (-not $token.IsClosing) { $stack.Add($token); continue }
+        if ($stack.Count -eq 0) { throw "Unbalanced $Tag source element" }
+        $open = $stack[$stack.Count-1]
+        $stack.RemoveAt($stack.Count-1)
+        $pairs.Add([pscustomobject]@{ Start=[long]$open.Index; OpenLength=[long]$open.Length; End=[long]($token.Index+$token.Length); CloseStart=[long]$token.Index; CloseLength=[long]$token.Length })
+    }
+    if ($stack.Count -ne 0) { throw "Unbalanced $Tag source element" }
+    return @($pairs | Sort-Object Start)
+}
+function New-ScopeHtmlValidationIndex {
+    param([Parameter(Mandatory)]$Snapshot, [AllowNull()][object[]]$HtmlTokens=$null)
+    Assert-ScopeSnapshot $Snapshot
+    if ($Snapshot.SourceFormat -cne 'HTML') { throw 'HTML validation index requires an HTML snapshot' }
+    $tokens = if ($null -eq $HtmlTokens) { @(Get-ScopeHtmlTagTokens -Text $Snapshot.Text) } else { @($HtmlTokens) }
+    foreach ($token in @($tokens | Where-Object { -not $_.IsClosing -and $_.Tag -in @('table','tr','th','td') })) {
+        $rawToken = $Snapshot.Text.Substring([int]$token.Index,[int]$token.Length)
+        if (@([regex]::Matches($rawToken, '<(?:table|tr|th|td)\b', [Text.RegularExpressions.RegexOptions]::IgnoreCase)).Count -ne 1) { return $null }
+    }
+    try {
+        return [pscustomobject]@{
+            SnapshotId=$Snapshot.SnapshotId; Tokens=$tokens
+            Tables=@(Get-ScopeHtmlPairs -Tokens $tokens -Tag 'table')
+            Rows=@(Get-ScopeHtmlPairs -Tokens $tokens -Tag 'tr')
+            Headers=@(Get-ScopeHtmlPairs -Tokens $tokens -Tag 'th')
+            Cells=@(Get-ScopeHtmlPairs -Tokens $tokens -Tag 'td')
+        }
+    } catch {
+        # Preserve the parser's existing PARTIAL/UNSUPPORTED semantics for
+        # malformed source structure.  Only a complete physical index may
+        # accelerate provenance validation.
+        return $null
+    }
+}
+function Assert-ScopeHtmlValidationIndex {
+    param([AllowNull()]$HtmlValidationIndex, [Parameter(Mandatory)]$Snapshot)
+    if ($null -eq $HtmlValidationIndex) { throw 'HTML validation index is required' }
+    foreach ($property in @('SnapshotId','Tokens','Tables','Rows','Headers','Cells')) {
+        if ($HtmlValidationIndex.PSObject.Properties.Name -notcontains $property) { throw "HTML validation index is missing $property" }
+    }
+    if ($HtmlValidationIndex.SnapshotId -cne $Snapshot.SnapshotId) { throw 'HTML validation index must belong to the original snapshot' }
 }
 function Get-ScopeElementFragment {
     param([string]$Text, [long]$Start, [long]$Length, [ValidateSet('table','tr','th','td')][string]$Tag)
@@ -226,16 +277,66 @@ function Get-ScopeElementFragment {
     return $fragment
 }
 function Assert-ScopeHtmlUnit {
-    param([AllowNull()]$Unit, [Parameter(Mandatory)]$Snapshot)
-    Assert-ScopeSnapshot $Snapshot
+    param([AllowNull()]$Unit, [Parameter(Mandatory)]$Snapshot, [AllowNull()][object[]]$HtmlTokens=$null, [AllowNull()]$HtmlValidationIndex=$null)
+    if ($null -ne $HtmlValidationIndex) { Assert-ScopeHtmlValidationIndex -HtmlValidationIndex $HtmlValidationIndex -Snapshot $Snapshot }
+    else { Assert-ScopeSnapshot $Snapshot }
     Assert-ScopeObject $Unit 'SourceContentUnit' @('SnapshotId','UnitType','UnitReference','TableStart','TableLength','RawStart','RawLength','RawFragment','RawEvidenceText','StructuredFields','FieldReferences')
     if ($Snapshot.SourceFormat -cne 'HTML' -or $Unit.UnitType -cne 'TABLE_ROW' -or $Unit.SnapshotId -cne $Snapshot.SnapshotId) { throw 'Unit source/type mismatch' }
     if ($Unit.UnitReference -cnotmatch '^HTML_TABLE_[1-9]\d*_ROW_[1-9]\d*$') { throw 'Invalid physical unit reference' }
     Assert-ScopeSpan $Unit.TableStart $Unit.TableLength 0 $Snapshot.Text.Length
     Assert-ScopeSpan $Unit.RawStart $Unit.RawLength $Unit.TableStart $Unit.TableLength
+    if ($null -ne $HtmlValidationIndex -or $null -ne $HtmlTokens) {
+        if ($null -ne $HtmlValidationIndex) {
+            Assert-ScopeHtmlValidationIndex -HtmlValidationIndex $HtmlValidationIndex -Snapshot $Snapshot
+            $HtmlTokens=@($HtmlValidationIndex.Tokens); $tables=@($HtmlValidationIndex.Tables); $rows=@($HtmlValidationIndex.Rows); $headers=@($HtmlValidationIndex.Headers); $cells=@($HtmlValidationIndex.Cells)
+        } else {
+            $tables = @(Get-ScopeHtmlPairs -Tokens $HtmlTokens -Tag 'table')
+            $rows = @(Get-ScopeHtmlPairs -Tokens $HtmlTokens -Tag 'tr')
+            $headers = @(Get-ScopeHtmlPairs -Tokens $HtmlTokens -Tag 'th')
+            $cells = @(Get-ScopeHtmlPairs -Tokens $HtmlTokens -Tag 'td')
+        }
+        $table = @($tables | Where-Object { $_.Start -eq $Unit.TableStart -and $_.End -eq ($Unit.TableStart+$Unit.TableLength) })
+        $row = @($rows | Where-Object { $_.Start -eq $Unit.RawStart -and $_.End -eq ($Unit.RawStart+$Unit.RawLength) })
+        if ($table.Count -ne 1 -or $row.Count -ne 1) { throw 'Expected one complete non-nested source element' }
+        $tableIndex = @($tables | ForEach-Object { $_.Start }).IndexOf([long]$Unit.TableStart) + 1
+        $physicalRows = @($rows | Where-Object { $_.Start -gt $Unit.TableStart -and $_.End -lt ($Unit.TableStart+$Unit.TableLength) })
+        $rowIndex = @($physicalRows | ForEach-Object { $_.Start }).IndexOf([long]$Unit.RawStart) + 1
+        if ($tableIndex -lt 1 -or $rowIndex -lt 1 -or $Unit.UnitReference -cne "HTML_TABLE_${tableIndex}_ROW_${rowIndex}") { throw 'Physical reference does not match original table and row positions' }
+        if ($Snapshot.Text.Substring([int]$Unit.RawStart,[int]$Unit.RawLength) -cne $Unit.RawFragment -or (ConvertFrom-ScopeHtmlText $Unit.RawFragment) -cne $Unit.RawEvidenceText) { throw 'Unit raw/decoded text mismatch' }
+        Assert-ScopeText $Unit.RawEvidenceText 'RawEvidenceText'
+        if ($Unit.StructuredFields -isnot [Collections.IDictionary] -or $Unit.FieldReferences -isnot [Collections.IDictionary] -or $Unit.StructuredFields.Count -ne $Unit.FieldReferences.Count) { throw 'Fields and references must be matching dictionaries' }
+        $tableHeaders = @($headers | Where-Object { $_.Start -gt $Unit.TableStart -and $_.End -lt ($Unit.TableStart+$Unit.TableLength) })
+        $rowCells = @($cells | Where-Object { $_.Start -gt $Unit.RawStart -and $_.End -lt ($Unit.RawStart+$Unit.RawLength) })
+        if ($Unit.StructuredFields.Count -gt 0 -and $tableHeaders.Count -ne $rowCells.Count) { throw 'Header/cell columns cannot be aligned safely' }
+        $map = Get-BenefitScopedHeaderMap
+        $usedHeaders = [Collections.Generic.HashSet[long]]::new()
+        $usedCells = [Collections.Generic.HashSet[long]]::new()
+        foreach ($key in $Unit.StructuredFields.Keys) {
+            if (-not $Unit.FieldReferences.Contains($key)) { throw 'Missing field reference' }
+            $reference = $Unit.FieldReferences[$key]
+            if ($null -eq $reference) { throw 'Null field reference' }
+            foreach ($property in @('HeaderStart','HeaderLength','CellStart','CellLength','OriginalHeader','FieldReference')) { if ($reference.PSObject.Properties.Name -notcontains $property) { throw "Field reference is missing $property" } }
+            Assert-ScopeSpan $reference.HeaderStart $reference.HeaderLength $Unit.TableStart $Unit.TableLength
+            Assert-ScopeSpan $reference.CellStart $reference.CellLength $Unit.RawStart $Unit.RawLength
+            if ($reference.HeaderStart -ge $Unit.RawStart) { throw 'Header must precede the selected data row' }
+            $header = @($tableHeaders | Where-Object { $_.Start -eq $reference.HeaderStart -and $_.OpenLength -le $reference.HeaderLength -and $_.End -eq ($reference.HeaderStart+$reference.HeaderLength) })
+            $cell = @($rowCells | Where-Object { $_.Start -eq $reference.CellStart -and $_.OpenLength -le $reference.CellLength -and $_.End -eq ($reference.CellStart+$reference.CellLength) })
+            if ($header.Count -ne 1 -or $cell.Count -ne 1) { throw 'Field span must match an original source element' }
+            $headerText = ConvertFrom-ScopeHtmlText -Text $Snapshot.Text.Substring([int]$reference.HeaderStart,[int]$reference.HeaderLength)
+            $cellText = ConvertFrom-ScopeHtmlText -Text $Snapshot.Text.Substring([int]$reference.CellStart,[int]$reference.CellLength)
+            if ($headerText -cne $reference.OriginalHeader -or -not $map.ContainsKey($headerText) -or $map[$headerText] -cne $key) { throw 'Original header does not support the claimed field' }
+            if ($Unit.StructuredFields[$key] -isnot [string] -or $cellText -cne $Unit.StructuredFields[$key]) { throw 'Field value does not match original cell' }
+            if ($reference.FieldReference -cne ($Unit.UnitReference + '/' + $key)) { throw 'Field reference must belong to its physical unit and field' }
+            if (-not $usedHeaders.Add([long]$reference.HeaderStart) -or -not $usedCells.Add([long]$reference.CellStart)) { throw 'Duplicate field source span' }
+            $headerIndex = @($tableHeaders | ForEach-Object { $_.Start }).IndexOf([long]$reference.HeaderStart)
+            $cellIndex = @($rowCells | ForEach-Object { $_.Start }).IndexOf([long]$reference.CellStart)
+            if ($headerIndex -lt 0 -or $cellIndex -ne $headerIndex) { throw 'Header and cell must use the same original column' }
+        }
+        return
+    }
     $table = Get-ScopeElementFragment $Snapshot.Text $Unit.TableStart $Unit.TableLength 'table'
     $row = Get-ScopeElementFragment $Snapshot.Text $Unit.RawStart $Unit.RawLength 'tr'
-    Assert-ScopePhysicalUnitReference -Unit $Unit -Text $Snapshot.Text
+    Assert-ScopePhysicalUnitReference -Unit $Unit -Text $Snapshot.Text -HtmlTokens $HtmlTokens
     if ($row -cne $Unit.RawFragment -or (ConvertFrom-ScopeHtmlText $row) -cne $Unit.RawEvidenceText) { throw 'Unit raw/decoded text mismatch' }
     Assert-ScopeText $Unit.RawEvidenceText 'RawEvidenceText'
     if ($Unit.StructuredFields -isnot [Collections.IDictionary] -or $Unit.FieldReferences -isnot [Collections.IDictionary] -or
@@ -310,9 +411,10 @@ function Assert-ScopeJsonpUnit {
     }
 }
 function Assert-ScopeUnit {
-    param([AllowNull()]$Unit, [Parameter(Mandatory)]$Snapshot)
-    Assert-ScopeSnapshot $Snapshot
-    if ($Snapshot.SourceFormat -ceq 'HTML') { Assert-ScopeHtmlUnit $Unit $Snapshot; return }
+    param([AllowNull()]$Unit, [Parameter(Mandatory)]$Snapshot, [AllowNull()][object[]]$HtmlTokens=$null, [AllowNull()]$HtmlValidationIndex=$null)
+    if ($null -ne $HtmlValidationIndex) { Assert-ScopeHtmlValidationIndex -HtmlValidationIndex $HtmlValidationIndex -Snapshot $Snapshot }
+    else { Assert-ScopeSnapshot $Snapshot }
+    if ($Snapshot.SourceFormat -ceq 'HTML') { Assert-ScopeHtmlUnit -Unit $Unit -Snapshot $Snapshot -HtmlTokens $HtmlTokens -HtmlValidationIndex $HtmlValidationIndex; return }
     if ($Snapshot.SourceFormat -ceq 'JSONP') { Assert-ScopeJsonpUnit $Unit $Snapshot; return }
     throw 'Unsupported scoped source format'
 }
@@ -321,7 +423,8 @@ function New-BenefitSourceContentUnit {
         [long]$TableStart, [long]$TableLength, [long]$RawStart, [long]$RawLength,
         [Parameter(Mandatory)][string]$RawEvidenceText,
         [Parameter(Mandatory)][AllowEmptyCollection()][Collections.IDictionary]$StructuredFields,
-        [Parameter(Mandatory)][AllowEmptyCollection()][Collections.IDictionary]$FieldReferences)
+        [Parameter(Mandatory)][AllowEmptyCollection()][Collections.IDictionary]$FieldReferences,
+        [AllowNull()][object[]]$HtmlTokens=$null, [AllowNull()]$HtmlValidationIndex=$null)
     Assert-ScopeSnapshot $Snapshot
     Assert-ScopeSpan $RawStart $RawLength 0 $Snapshot.Text.Length
     $result = [pscustomobject][ordered]@{
@@ -330,7 +433,7 @@ function New-BenefitSourceContentUnit {
         RawStart=$RawStart; RawLength=$RawLength; RawFragment=$Snapshot.Text.Substring([int]$RawStart,[int]$RawLength)
         RawEvidenceText=$RawEvidenceText; StructuredFields=(Copy-ScopeContractData $StructuredFields); FieldReferences=(Copy-ScopeContractData $FieldReferences)
     }
-    Assert-ScopeUnit $result $Snapshot
+    Assert-ScopeUnit -Unit $result -Snapshot $Snapshot -HtmlTokens $HtmlTokens -HtmlValidationIndex $HtmlValidationIndex
     return $result
 }
 function New-BenefitJsonpSourceContentUnit {
@@ -361,7 +464,7 @@ function Assert-ScopeDiagnostics {
     }
 }
 function Assert-ScopeObservation {
-    param([AllowNull()]$Observation)
+    param([AllowNull()]$Observation, [AllowNull()][object[]]$HtmlTokens=$null, [AllowNull()]$HtmlValidationIndex=$null)
     Assert-ScopeObject $Observation 'SourceObservation' @('SourceRowNumber','SnapshotId','SourceUrl','SourceFormat','ObservedAt','Snapshot','AdapterId','AdapterVersion','AdapterStatus','ContentUnits','Diagnostics')
     Assert-BenefitSourceRowNumber $Observation.SourceRowNumber
     Assert-ScopeSnapshot $Observation.Snapshot
@@ -375,7 +478,7 @@ function Assert-ScopeObservation {
     if ($Observation.AdapterStatus -cin @('FAILED','UNSUPPORTED') -and $Observation.ContentUnits.Count -gt 0) { throw 'Failed adapter must not supply content units' }
     $references = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
     foreach ($unit in $Observation.ContentUnits) {
-        Assert-ScopeUnit $unit $Observation.Snapshot
+        Assert-ScopeUnit -Unit $unit -Snapshot $Observation.Snapshot -HtmlTokens $HtmlTokens -HtmlValidationIndex $HtmlValidationIndex
         if (-not $references.Add([string]$unit.UnitReference)) { throw 'Duplicate content unit reference' }
     }
     Assert-ScopeDiagnostics $Observation.Diagnostics
@@ -383,7 +486,8 @@ function Assert-ScopeObservation {
 function New-BenefitSourceObservation {
     param([int]$SourceRowNumber, [Parameter(Mandatory)]$Snapshot, [Parameter(Mandatory)][string]$AdapterId,
         [Parameter(Mandatory)][string]$AdapterVersion, [Parameter(Mandatory)][string]$AdapterStatus,
-        [AllowEmptyCollection()][object[]]$ContentUnits=@(), [AllowEmptyCollection()][object[]]$Diagnostics=@())
+        [AllowEmptyCollection()][object[]]$ContentUnits=@(), [AllowEmptyCollection()][object[]]$Diagnostics=@(),
+        [AllowNull()][object[]]$HtmlTokens=$null, [AllowNull()]$HtmlValidationIndex=$null)
     Assert-ScopeSnapshot $Snapshot
     $result = [pscustomobject][ordered]@{
         ContractType='SourceObservation'; ContractVersion=1; SourceRowNumber=$SourceRowNumber
@@ -391,7 +495,7 @@ function New-BenefitSourceObservation {
         Snapshot=(Copy-ScopeContractData $Snapshot); AdapterId=$AdapterId; AdapterVersion=$AdapterVersion; AdapterStatus=$AdapterStatus
         ContentUnits=(Copy-ScopeContractData $ContentUnits); Diagnostics=(Copy-ScopeContractData $Diagnostics)
     }
-    Assert-ScopeObservation $result
+    Assert-ScopeObservation -Observation $result -HtmlTokens $HtmlTokens -HtmlValidationIndex $HtmlValidationIndex
     return $result
 }
 function Assert-ScopeSliceShape {
@@ -412,7 +516,7 @@ function Assert-ScopeSliceShape {
     foreach ($signal in $Slice.IdentityEvidence) { Assert-ScopeText $signal 'IdentityEvidence signal' }
 }
 function Assert-ScopeSliceAgainstSnapshot {
-    param([AllowNull()]$Slice, [Parameter(Mandatory)]$Snapshot, [int]$SourceRowNumber)
+    param([AllowNull()]$Slice, [Parameter(Mandatory)]$Snapshot, [int]$SourceRowNumber, [AllowNull()][object[]]$HtmlTokens=$null, [AllowNull()]$HtmlValidationIndex=$null)
     Assert-ScopeSliceShape $Slice $SourceRowNumber
     Assert-ScopeSnapshot $Snapshot
     foreach ($key in @('SnapshotId','ContentHash','SourceUrl','SourceFormat','ObservedAt')) {
@@ -432,13 +536,13 @@ function Assert-ScopeSliceAgainstSnapshot {
             RawEvidenceText=$Slice.RawEvidenceText; StructuredFields=$Slice.StructuredFields; FieldReferences=$Slice.FieldReferences
         }
     } else { throw 'Unsupported slice source format' }
-    Assert-ScopeUnit $unit $Snapshot
+    Assert-ScopeUnit -Unit $unit -Snapshot $Snapshot -HtmlTokens $HtmlTokens -HtmlValidationIndex $HtmlValidationIndex
 }
 function New-RelevantBenefitEvidenceSlice {
-    param([Parameter(Mandatory)]$Observation, [Parameter(Mandatory)]$Unit, [AllowEmptyCollection()][object[]]$IdentityEvidence=@())
-    Assert-ScopeObservation $Observation
+    param([Parameter(Mandatory)]$Observation, [Parameter(Mandatory)]$Unit, [AllowEmptyCollection()][object[]]$IdentityEvidence=@(), [AllowNull()][object[]]$HtmlTokens=$null, [AllowNull()]$HtmlValidationIndex=$null)
+    Assert-ScopeObservation -Observation $Observation -HtmlTokens $HtmlTokens -HtmlValidationIndex $HtmlValidationIndex
     if ($Observation.AdapterStatus -cne 'COMPLETE') { throw 'Only a complete observation can yield a usable slice' }
-    Assert-ScopeUnit $Unit $Observation.Snapshot
+    Assert-ScopeUnit -Unit $Unit -Snapshot $Observation.Snapshot -HtmlTokens $HtmlTokens -HtmlValidationIndex $HtmlValidationIndex
     $members = @($Observation.ContentUnits | Where-Object { $_.UnitReference -ceq $Unit.UnitReference })
     if ($members.Count -ne 1 -or
         (ConvertTo-Json -InputObject $members[0] -Depth 20 -Compress) -cne (ConvertTo-Json -InputObject $Unit -Depth 20 -Compress)) {
@@ -466,7 +570,7 @@ function New-RelevantBenefitEvidenceSlice {
             IdentityEvidence=(Copy-ScopeContractData $IdentityEvidence)
         }
     } else { throw 'Unsupported scoped source format' }
-    Assert-ScopeSliceAgainstSnapshot $result $Observation.Snapshot $Observation.SourceRowNumber
+    Assert-ScopeSliceAgainstSnapshot -Slice $result -Snapshot $Observation.Snapshot -SourceRowNumber $Observation.SourceRowNumber -HtmlTokens $HtmlTokens -HtmlValidationIndex $HtmlValidationIndex
     return $result
 }
 function Assert-RelevantBenefitEvidenceSlice {

@@ -123,7 +123,7 @@ function ConvertTo-BenefitHtmlTemplate {
     param([Parameter(Mandatory)]$Snapshot)
     Assert-ScopeSnapshot $Snapshot
     if ($Snapshot.SourceFormat -cne 'HTML') {
-        return [pscustomobject]@{ AdapterStatus='UNSUPPORTED'; Rows=@(); Diagnostics=@(New-A1HtmlDiagnostic 'HTML_FORMAT_UNSUPPORTED' 'Only HTML snapshots are supported') }
+        return [pscustomobject]@{ AdapterStatus='UNSUPPORTED'; Rows=@(); Diagnostics=@(New-A1HtmlDiagnostic 'HTML_FORMAT_UNSUPPORTED' 'Only HTML snapshots are supported'); HtmlTokens=@(); HtmlValidationIndex=$null }
     }
     $tokens = @(Get-ScopeHtmlTagTokens -Text $Snapshot.Text)
     $tables = Get-A1HtmlPairs -Tokens $tokens -Tag 'table'
@@ -163,7 +163,7 @@ function ConvertTo-BenefitHtmlTemplate {
     if ($unsafeSeen) { $status='PARTIAL' }
     elseif (-not $candidateSeen) { $status='UNSUPPORTED' }
     else { $status='COMPLETE' }
-    return [pscustomobject]@{ AdapterStatus=$status; Rows=@($resultRows); Diagnostics=@($diagnostics) }
+    return [pscustomobject]@{ AdapterStatus=$status; Rows=@($resultRows); Diagnostics=@($diagnostics); HtmlTokens=@($tokens); HtmlValidationIndex=(New-ScopeHtmlValidationIndex -Snapshot $Snapshot -HtmlTokens $tokens) }
 }
 
 function ConvertTo-BenefitHtmlObservation {
@@ -172,9 +172,11 @@ function ConvertTo-BenefitHtmlObservation {
     if ($Document.FetchStatus -cne 'COMPLETE') { throw 'HTML observation requires a successfully fetched source document' }
     $snapshot = New-BenefitSourceSnapshot -SourceUrl $Document.Url -SourceFormat $Document.SourceFormat -Text $Document.Text -ObservedAt $Document.ObservedAt
     $template = ConvertTo-BenefitHtmlTemplate -Snapshot $snapshot
+    $htmlValidationIndex = $template.HtmlValidationIndex
+    $htmlTokens = if ($null -eq $htmlValidationIndex) { $null } else { @($htmlValidationIndex.Tokens) }
     $units = @()
     foreach ($row in $template.Rows) {
-        $units += New-BenefitSourceContentUnit -Snapshot $snapshot -UnitReference $row.UnitReference -TableStart $row.TableStart -TableLength $row.TableLength -RawStart $row.RawStart -RawLength $row.RawLength -RawEvidenceText $row.RawEvidenceText -StructuredFields $row.StructuredFields -FieldReferences $row.FieldReferences
+        $units += New-BenefitSourceContentUnit -Snapshot $snapshot -UnitReference $row.UnitReference -TableStart $row.TableStart -TableLength $row.TableLength -RawStart $row.RawStart -RawLength $row.RawLength -RawEvidenceText $row.RawEvidenceText -StructuredFields $row.StructuredFields -FieldReferences $row.FieldReferences -HtmlTokens $htmlTokens -HtmlValidationIndex $htmlValidationIndex
     }
-    return New-BenefitSourceObservation -SourceRowNumber $Document.SourceRowNumber -Snapshot $snapshot -AdapterId 'HTML_GENERIC' -AdapterVersion '1' -AdapterStatus $template.AdapterStatus -ContentUnits $units -Diagnostics $template.Diagnostics
+    return New-BenefitSourceObservation -SourceRowNumber $Document.SourceRowNumber -Snapshot $snapshot -AdapterId 'HTML_GENERIC' -AdapterVersion '1' -AdapterStatus $template.AdapterStatus -ContentUnits $units -Diagnostics $template.Diagnostics -HtmlTokens $htmlTokens -HtmlValidationIndex $htmlValidationIndex
 }

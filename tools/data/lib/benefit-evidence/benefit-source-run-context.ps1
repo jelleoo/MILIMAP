@@ -176,10 +176,12 @@ function Get-BenefitRunHtmlObservation {
         $cacheHit = $false
     }
 
+    $htmlValidationIndex = $template.HtmlValidationIndex
+    $htmlTokens = if ($null -eq $htmlValidationIndex) { $null } else { @($htmlValidationIndex.Tokens) }
     $units = @()
     foreach ($row in @($template.Rows)) {
-        $units += New-BenefitSourceContentUnit -Snapshot $snapshot -UnitReference $row.UnitReference -TableStart $row.TableStart -TableLength $row.TableLength -RawStart $row.RawStart -RawLength $row.RawLength -RawEvidenceText $row.RawEvidenceText -StructuredFields $row.StructuredFields -FieldReferences $row.FieldReferences
+        $units += New-BenefitSourceContentUnit -Snapshot $snapshot -UnitReference $row.UnitReference -TableStart $row.TableStart -TableLength $row.TableLength -RawStart $row.RawStart -RawLength $row.RawLength -RawEvidenceText $row.RawEvidenceText -StructuredFields $row.StructuredFields -FieldReferences $row.FieldReferences -HtmlTokens $htmlTokens -HtmlValidationIndex $htmlValidationIndex
     }
     [void]$Context.Attempts.Add([pscustomobject][ordered]@{Stage='PARSE';Key=$key;CacheHit=$cacheHit;Status=$template.AdapterStatus})
-    return New-BenefitSourceObservation -SourceRowNumber $Document.SourceRowNumber -Snapshot $snapshot -AdapterId $adapterId -AdapterVersion $adapterVersion -AdapterStatus $template.AdapterStatus -ContentUnits $units -Diagnostics @($template.Diagnostics)
+    return New-BenefitSourceObservation -SourceRowNumber $Document.SourceRowNumber -Snapshot $snapshot -AdapterId $adapterId -AdapterVersion $adapterVersion -AdapterStatus $template.AdapterStatus -ContentUnits $units -Diagnostics @($template.Diagnostics) -HtmlTokens $htmlTokens -HtmlValidationIndex $htmlValidationIndex
 }

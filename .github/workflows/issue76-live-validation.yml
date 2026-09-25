@@ -1,0 +1,27 @@
+name: Issue 76 Live Validation
+
+on:
+  push:
+    branches:
+      - codex/phase2-issue76-validation-run
+    paths:
+      - "tools/data/run-issue76-live-validation.ps1"
+      - ".github/workflows/issue76-live-validation.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7.0.1
+
+      - name: Run Issue 76 representative validation
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          & ./tools/data/run-issue76-live-validation.ps1

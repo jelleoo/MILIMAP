@@ -25,7 +25,9 @@ Assert-ScopeTrue ((@($run.EvidenceDiagnostics[0].ValidatedClaims | Where-Object 
 Assert-ScopeTrue ((@($run.EvidenceDiagnostics[1].ValidatedClaims | Where-Object ClaimType -eq BENEFIT_DESCRIPTION).Count -eq 1)) 'Second control has source-backed benefit'
 
 $htmlRow=New-ScopeTestRow -Name '테스트가게 A' -Building '12' -Phone '02-0000-0012'
-$mixedHttp={param($Uri) if($Uri -like '*mmanrsrListAjaxJsonCallNew*'){[pscustomobject]@{StatusCode=200;ContentType='application/json';Text=$list;Bytes=$null}}elseif($Uri -like '*2789*'){[pscustomobject]@{StatusCode=200;ContentType='application/json';Text=$detail2789;Bytes=$null}}elseif($Uri -like '*mma.go.kr*'){throw 'Unexpected MMA request'}else{[pscustomobject]@{StatusCode=200;ContentType='text/html';Text=(Get-ScopeTestHtml);Bytes=$null}}}.GetNewClosure()
+$mixedHtml = Get-ScopeTestHtml
+Assert-ScopeTrue (-not [string]::IsNullOrWhiteSpace($mixedHtml)) 'Mixed HTML fixture is materialized before the request boundary'
+$mixedHttp={param($Uri) if($Uri -like '*mmanrsrListAjaxJsonCallNew*'){[pscustomobject]@{StatusCode=200;ContentType='application/json';Text=$list;Bytes=$null}}elseif($Uri -like '*2789*'){[pscustomobject]@{StatusCode=200;ContentType='application/json';Text=$detail2789;Bytes=$null}}elseif($Uri -like '*mma.go.kr*'){throw 'Unexpected MMA request'}else{[pscustomobject]@{StatusCode=200;ContentType='text/html';Text=$mixedHtml;Bytes=$null}}}.GetNewClosure()
 $mixed=Invoke-Phase2BenefitShadowMode -Rows @((New-MmaShadowRow 2789),$htmlRow) -SourceRowNumbers @(6,7) -UseScopedEvidence -RequestInvoker $mixedHttp
 Assert-ScopeEqual @($mixed.Results).Count 2 'Mixed MMA and HTML scoped evidence evaluates both rows'
 Assert-ScopeEqual @($mixed.EvidenceDiagnostics | Where-Object AdapterId -eq MMA_JSONP_DETAIL).Count 1 'Mixed run keeps MMA adapter identity'

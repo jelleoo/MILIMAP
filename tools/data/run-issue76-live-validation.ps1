@@ -36,9 +36,12 @@ function Convert-Issue76Run {
     param([Parameter(Mandatory)]$Run, [Parameter(Mandatory)][int[]]$SourceRowNumbers, [Parameter(Mandatory)][double]$ElapsedSeconds)
     $rows = @()
     foreach ($id in $SourceRowNumbers) {
-        $result = @($Run.Results | Where-Object SourceRowNumber -eq $id)[0]
-        $review = @($Run.Rows | Where-Object SourceRowNumber -eq $id)[0]
-        $diag = @($Run.EvidenceDiagnostics | Where-Object SourceRowNumber -eq $id)[0]
+        $result = @($Run.Results | Where-Object SourceRowNumber -eq $id | Select-Object -First 1)
+        $review = @($Run.Rows | Where-Object SourceRowNumber -eq $id | Select-Object -First 1)
+        $diag = @($Run.EvidenceDiagnostics | Where-Object SourceRowNumber -eq $id | Select-Object -First 1)
+        $result = if ($result.Count -gt 0) { $result[0] } else { $null }
+        $review = if ($review.Count -gt 0) { $review[0] } else { $null }
+        $diag = if ($diag.Count -gt 0) { $diag[0] } else { $null }
         $canonical = Get-Issue76Row -SourceRowNumber $id
         $greenPacket = $null
         if ($null -ne $result -and $result.ReviewClass -ceq 'GREEN') {

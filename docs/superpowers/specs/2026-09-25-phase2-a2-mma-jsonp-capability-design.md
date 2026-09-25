@@ -1,6 +1,6 @@
 # Phase 2 A2.2 MMA JSONP Capability Design
 
-- Status: Draft for user review
+- Status: Approved — written spec reviewed by user; implementation planning authorized
 - Date: 2026-09-25
 - Issue: #72
 - Baseline: `dev@bd05c15467730a6aca684ec1ec5723d88ff05241`

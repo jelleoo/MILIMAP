@@ -48,14 +48,14 @@ function Get-BenefitJsonObjectSpans {
 function Get-BenefitJsonArrayObjectSpans {
     param([Parameter(Mandatory)][string]$JsonText, [Parameter(Mandatory)]$ArraySpan)
     if ($ArraySpan.Fragment.Length -lt 2 -or $ArraySpan.Fragment[0] -cne '[') { throw 'MMA JSONP list must be an array' }
-    $arrayEnd=$ArraySpan.Start+$ArraySpan.Length; $position=$ArraySpan.Start+1; $spans=@()
+    $arrayEnd=$ArraySpan.Start+$ArraySpan.Length; $position=$ArraySpan.Start+1; $spans=[Collections.Generic.List[object]]::new()
     while ($true) {
         $position=Skip-BenefitJsonWhitespace $JsonText $position
         if ($position -ge $arrayEnd) { throw 'Unterminated JSONP list array' }
         if ($JsonText[$position] -ceq ']') { break }
         if ($JsonText[$position] -cne '{') { throw 'MMA JSONP list items must be objects' }
         $end=Get-BenefitJsonValueEnd $JsonText $position
-        $spans += [pscustomobject][ordered]@{ Start=[long]$position; Length=[long]($end-$position); Fragment=$JsonText.Substring($position,$end-$position) }
+        $spans.Add([pscustomobject][ordered]@{ Start=[long]$position; Length=[long]($end-$position); Fragment=$JsonText.Substring($position,$end-$position) })
         $position=Skip-BenefitJsonWhitespace $JsonText $end
         if ($position -ge $arrayEnd) { throw 'Unterminated JSONP list array' }
         if ($JsonText[$position] -ceq ']') { break }
@@ -71,10 +71,12 @@ function Get-MmaJsonpStructuredData {
     catch { throw 'MMA JSONP source object cannot be parsed' }
     if ($null -eq $object -or $object -is [array]) { throw 'MMA JSONP source object must be an object' }
     $fields=[ordered]@{}; $references=[ordered]@{}
+    $propertySpans=Get-BenefitJsonTopLevelPropertySpanIndex -JsonText $ObjectText
     foreach ($semanticField in $FieldMap.Keys) {
         $rawProperty=$FieldMap[$semanticField]
         if ($object.PSObject.Properties.Name -notcontains $rawProperty) { throw "MMA JSONP schema is missing $rawProperty" }
-        $span=Get-BenefitJsonTopLevelPropertySpan -JsonText $ObjectText -PropertyName $rawProperty
+        if (-not $propertySpans.ContainsKey($rawProperty) -or @($propertySpans[$rawProperty]).Count -ne 1) { throw "MMA JSONP must contain exactly one $rawProperty property" }
+        $span=@($propertySpans[$rawProperty])[0]
         $fields[$semanticField]=ConvertTo-BenefitText $object.($rawProperty)
         $references[$semanticField]=[pscustomobject][ordered]@{ PropertyName=$rawProperty; FieldReference="$UnitReference/$rawProperty"; ValueStart=[long]($ObjectStart+$span.Start); ValueLength=[long]$span.Length }
     }
@@ -91,12 +93,16 @@ function ConvertTo-MmaJsonpListTemplate {
     if ($envelope.Value.PSObject.Properties.Name -notcontains 'list' -or $envelope.Value.list -isnot [array]) { throw 'MMA JSONP list schema is unsupported' }
     $arraySpan=Get-BenefitJsonTopLevelPropertySpan -JsonText $envelope.JsonText -PropertyName 'list'
     $objectSpans=Get-BenefitJsonArrayObjectSpans -JsonText $envelope.JsonText -ArraySpan $arraySpan
-    if ($objectSpans.Count -ne @($envelope.Value.list).Count) { throw 'MMA JSONP list item spans do not match parsed list' }
-    $rows=@(); $fieldMap=@{ BusinessName='udgigwan_yhnm'; Address='addr'; Phone='udgigwan_telno'; Category='udggeopjong_gbnm'; InstitutionCode='udgigwan_cd' }
+    $parsedItems=@($envelope.Value.list)
+    if ($objectSpans.Count -ne $parsedItems.Count) { throw 'MMA JSONP list item spans do not match parsed list' }
+    $rows=[Collections.Generic.List[object]]::new(); $fieldMap=@{ BusinessName='udgigwan_yhnm'; Address='addr'; Phone='udgigwan_telno'; Category='udggeopjong_gbnm'; InstitutionCode='udgigwan_cd' }
     for ($i=0; $i -lt $objectSpans.Count; $i++) {
-        $span=$objectSpans[$i]; $reference='JSONP_LIST_ITEM_' + ($i+1)
+        $span=$objectSpans[$i]; $reference='JSONP_LIST_ITEM_' + ($i+1); $parsedItem=$parsedItems[$i]
+        if ($parsedItem.PSObject.Properties.Name -notcontains 'udgigwan_yhnm' -or [string]::IsNullOrWhiteSpace((ConvertTo-BenefitText $parsedItem.udgigwan_yhnm))) {
+            continue
+        }
         $data=Get-MmaJsonpStructuredData -ObjectText $span.Fragment -UnitReference $reference -FieldMap $fieldMap -ObjectStart ($envelope.JsonStart+$span.Start) -RequireInstitutionCode:$false
-        $rows += [pscustomobject][ordered]@{ UnitReference=$reference; RawStart=[long]($envelope.JsonStart+$span.Start); RawLength=$span.Length; RawEvidenceText=$data.StructuredFields.BusinessName; StructuredFields=$data.StructuredFields; FieldReferences=$data.FieldReferences }
+        $rows.Add([pscustomobject][ordered]@{ UnitReference=$reference; RawStart=[long]($envelope.JsonStart+$span.Start); RawLength=$span.Length; RawEvidenceText=$data.StructuredFields.BusinessName; StructuredFields=$data.StructuredFields; FieldReferences=$data.FieldReferences })
     }
     return [pscustomobject][ordered]@{ Rows=@($rows) }
 }
@@ -121,12 +127,17 @@ function ConvertTo-MmaJsonpObservation {
     $snapshot=New-BenefitSourceSnapshot -SourceUrl $Document.Url -SourceFormat $Document.SourceFormat -Text $Document.Text -ObservedAt $Document.ObservedAt
     try {
         $template=if ($Role -ceq 'LIST') { ConvertTo-MmaJsonpListTemplate -Snapshot $snapshot -ExpectedCallback $ExpectedCallback } else { ConvertTo-MmaJsonpDetailTemplate -Snapshot $snapshot -ExpectedCallback $ExpectedCallback }
-        $units=@()
+        $units=[Collections.Generic.List[object]]::new()
         foreach ($row in @($template.Rows)) {
-            $units += New-BenefitJsonpSourceContentUnit -Snapshot $snapshot -UnitReference $row.UnitReference -RawStart $row.RawStart -RawLength $row.RawLength -RawEvidenceText $row.RawEvidenceText -StructuredFields $row.StructuredFields -FieldReferences $row.FieldReferences
+            $units.Add([pscustomobject][ordered]@{
+                ContractType='SourceContentUnit'; ContractVersion=1; SnapshotId=$snapshot.SnapshotId
+                UnitType='JSON_OBJECT'; UnitReference=$row.UnitReference; RawStart=[long]$row.RawStart; RawLength=[long]$row.RawLength
+                RawFragment=$snapshot.Text.Substring([int]$row.RawStart,[int]$row.RawLength); RawEvidenceText=$row.RawEvidenceText
+                StructuredFields=(Copy-ScopeContractData $row.StructuredFields); FieldReferences=(Copy-ScopeContractData $row.FieldReferences)
+            })
         }
         if ($Role -ceq 'DETAIL' -and $units.Count -ne 1) { throw 'MMA JSONP detail must produce exactly one object' }
-        return New-BenefitSourceObservation -SourceRowNumber $Document.SourceRowNumber -Snapshot $snapshot -AdapterId ("MMA_JSONP_$Role") -AdapterVersion '1' -AdapterStatus COMPLETE -ContentUnits $units -Diagnostics @()
+        return New-BenefitSourceObservation -SourceRowNumber $Document.SourceRowNumber -Snapshot $snapshot -AdapterId ("MMA_JSONP_$Role") -AdapterVersion '1' -AdapterStatus COMPLETE -ContentUnits @($units) -Diagnostics @()
     } catch {
         return New-BenefitSourceObservation -SourceRowNumber $Document.SourceRowNumber -Snapshot $snapshot -AdapterId ("MMA_JSONP_$Role") -AdapterVersion '1' -AdapterStatus FAILED -ContentUnits @() -Diagnostics @(New-MmaJsonpDiagnostic 'JSONP_ADAPTER_FAILED' $_.Exception.Message)
     }

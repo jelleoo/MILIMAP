@@ -105,33 +105,41 @@ function Get-BenefitJsonValueEnd {
     }
     throw 'Unterminated JSON container'
 }
-function Get-BenefitJsonTopLevelPropertySpan {
-    param([Parameter(Mandatory)][string]$JsonText, [Parameter(Mandatory)][string]$PropertyName)
+function Get-BenefitJsonTopLevelPropertySpanIndex {
+    param([Parameter(Mandatory)][string]$JsonText)
     $rootStart=Skip-BenefitJsonWhitespace $JsonText 0
     if ($rootStart -ge $JsonText.Length -or $JsonText[$rootStart] -cne '{') { throw 'MMA JSONP root must start with an object' }
     $rootEnd=Get-BenefitJsonValueEnd $JsonText $rootStart
     if ((Skip-BenefitJsonWhitespace $JsonText $rootEnd) -ne $JsonText.Length) { throw 'JSONP root has trailing data' }
-    $position=$rootStart+1; $found=@()
+    $position=$rootStart+1
+    $index=[Collections.Generic.Dictionary[string,object]]::new([StringComparer]::Ordinal)
     while ($true) {
         $position=Skip-BenefitJsonWhitespace $JsonText $position
         if ($position -ge $rootEnd) { throw 'Unterminated JSON root object' }
         if ($JsonText[$position] -ceq '}') { break }
         $keyStart=$position; $keyEnd=Get-BenefitJsonStringEnd $JsonText $keyStart
-        try { $key=('{"value":' + $JsonText.Substring($keyStart,$keyEnd-$keyStart) + '}') | ConvertFrom-Json -ErrorAction Stop | Select-Object -ExpandProperty value }
+        try { $key=[string](('{"value":' + $JsonText.Substring($keyStart,$keyEnd-$keyStart) + '}') | ConvertFrom-Json -ErrorAction Stop | Select-Object -ExpandProperty value) }
         catch { throw 'JSONP property name cannot be decoded' }
         $position=Skip-BenefitJsonWhitespace $JsonText $keyEnd
         if ($position -ge $rootEnd -or $JsonText[$position] -cne ':') { throw 'JSONP property is missing a colon' }
         $valueStart=Skip-BenefitJsonWhitespace $JsonText ($position+1)
         $valueEnd=Get-BenefitJsonValueEnd $JsonText $valueStart
-        if ($key -ceq $PropertyName) { $found += [pscustomobject][ordered]@{ Start=[long]$valueStart; Length=[long]($valueEnd-$valueStart); Fragment=$JsonText.Substring($valueStart,$valueEnd-$valueStart) } }
+        $span=[pscustomobject][ordered]@{ Start=[long]$valueStart; Length=[long]($valueEnd-$valueStart); Fragment=$JsonText.Substring($valueStart,$valueEnd-$valueStart) }
+        if (-not $index.ContainsKey($key)) { $index[$key]=[Collections.Generic.List[object]]::new() }
+        ([Collections.Generic.List[object]]$index[$key]).Add($span)
         $position=Skip-BenefitJsonWhitespace $JsonText $valueEnd
         if ($position -ge $rootEnd) { throw 'Unterminated JSON root object' }
         if ($JsonText[$position] -ceq '}') { break }
         if ($JsonText[$position] -cne ',') { throw 'JSONP root has invalid property separator' }
         $position++
     }
-    if ($found.Count -ne 1) { throw "MMA JSONP must contain exactly one $PropertyName property" }
-    return $found[0]
+    return $index
+}
+function Get-BenefitJsonTopLevelPropertySpan {
+    param([Parameter(Mandatory)][string]$JsonText, [Parameter(Mandatory)][string]$PropertyName)
+    $index=Get-BenefitJsonTopLevelPropertySpanIndex -JsonText $JsonText
+    if (-not $index.ContainsKey($PropertyName) -or @($index[$PropertyName]).Count -ne 1) { throw "MMA JSONP must contain exactly one $PropertyName property" }
+    return @($index[$PropertyName])[0]
 }
 function Assert-ScopeTimestamp {
     param([AllowNull()]$Value)
@@ -377,9 +385,8 @@ function Assert-ScopeHtmlUnit {
         if ($headerIndex -lt 0 -or $cellIndex -ne $headerIndex) { throw 'Header and cell must use the same original column' }
     }
 }
-function Assert-ScopeJsonpUnit {
+function Assert-ScopeJsonpUnitCore {
     param([AllowNull()]$Unit, [Parameter(Mandatory)]$Snapshot)
-    Assert-ScopeSnapshot $Snapshot
     Assert-ScopeObject $Unit 'SourceContentUnit' @('SnapshotId','UnitType','UnitReference','RawStart','RawLength','RawFragment','RawEvidenceText','StructuredFields','FieldReferences')
     if ($Snapshot.SourceFormat -cne 'JSONP' -or $Unit.UnitType -cne 'JSON_OBJECT' -or $Unit.SnapshotId -cne $Snapshot.SnapshotId) { throw 'JSONP unit source/type mismatch' }
     if ($Unit.UnitReference -cnotmatch '^JSONP_(?:LIST_ITEM_[1-9]\d*|DETAIL_OBJECT)$') { throw 'Invalid JSONP unit reference' }
@@ -391,6 +398,7 @@ function Assert-ScopeJsonpUnit {
     try { $rawObject = $Unit.RawFragment | ConvertFrom-Json -ErrorAction Stop }
     catch { throw 'JSONP unit raw fragment must be a valid JSON object' }
     if ($null -eq $rawObject -or $rawObject -is [array]) { throw 'JSONP unit raw fragment must be a JSON object' }
+    $propertySpans=Get-BenefitJsonTopLevelPropertySpanIndex -JsonText $Unit.RawFragment
     foreach ($key in $Unit.StructuredFields.Keys) {
         if (-not $Unit.FieldReferences.Contains($key)) { throw 'Missing JSONP field reference' }
         $reference = $Unit.FieldReferences[$key]
@@ -402,13 +410,19 @@ function Assert-ScopeJsonpUnit {
         if ($reference.FieldReference -cne ($Unit.UnitReference + '/' + $reference.PropertyName)) { throw 'JSONP field reference must belong to selected object' }
         if ($rawObject.PSObject.Properties.Name -notcontains $reference.PropertyName) { throw 'JSONP field reference property is absent from selected raw object' }
         Assert-ScopeSpan $reference.ValueStart $reference.ValueLength $Unit.RawStart $Unit.RawLength
-        $propertySpan = Get-BenefitJsonTopLevelPropertySpan -JsonText $Unit.RawFragment -PropertyName $reference.PropertyName
+        if (-not $propertySpans.ContainsKey([string]$reference.PropertyName) -or @($propertySpans[[string]$reference.PropertyName]).Count -ne 1) { throw 'JSONP field reference property must occur exactly once in selected raw object' }
+        $propertySpan = @($propertySpans[[string]$reference.PropertyName])[0]
         if ($reference.ValueStart -ne ($Unit.RawStart + $propertySpan.Start) -or $reference.ValueLength -ne $propertySpan.Length) { throw 'JSONP field value span does not match the selected raw property span' }
         try { $rawValue=('{"value":' + $Snapshot.Text.Substring([int]$reference.ValueStart,[int]$reference.ValueLength) + '}') | ConvertFrom-Json -ErrorAction Stop | Select-Object -ExpandProperty value }
         catch { throw 'JSONP field value span is not valid source JSON' }
         if ((ConvertTo-BenefitText $rawValue) -cne (ConvertTo-BenefitText $Unit.StructuredFields[$key])) { throw 'JSONP field value span does not match semantic field' }
         if ((ConvertTo-BenefitText $rawObject.($reference.PropertyName)) -cne (ConvertTo-BenefitText $Unit.StructuredFields[$key])) { throw 'JSONP field value does not match selected raw property' }
     }
+}
+function Assert-ScopeJsonpUnit {
+    param([AllowNull()]$Unit, [Parameter(Mandatory)]$Snapshot)
+    Assert-ScopeSnapshot $Snapshot
+    Assert-ScopeJsonpUnitCore -Unit $Unit -Snapshot $Snapshot
 }
 function Assert-ScopeUnit {
     param([AllowNull()]$Unit, [Parameter(Mandatory)]$Snapshot, [AllowNull()][object[]]$HtmlTokens=$null, [AllowNull()]$HtmlValidationIndex=$null)
@@ -478,7 +492,11 @@ function Assert-ScopeObservation {
     if ($Observation.AdapterStatus -cin @('FAILED','UNSUPPORTED') -and $Observation.ContentUnits.Count -gt 0) { throw 'Failed adapter must not supply content units' }
     $references = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
     foreach ($unit in $Observation.ContentUnits) {
-        Assert-ScopeUnit -Unit $unit -Snapshot $Observation.Snapshot -HtmlTokens $HtmlTokens -HtmlValidationIndex $HtmlValidationIndex
+        if ($Observation.SourceFormat -ceq 'JSONP') {
+            Assert-ScopeJsonpUnitCore -Unit $unit -Snapshot $Observation.Snapshot
+        } else {
+            Assert-ScopeUnit -Unit $unit -Snapshot $Observation.Snapshot -HtmlTokens $HtmlTokens -HtmlValidationIndex $HtmlValidationIndex
+        }
         if (-not $references.Add([string]$unit.UnitReference)) { throw 'Duplicate content unit reference' }
     }
     Assert-ScopeDiagnostics $Observation.Diagnostics

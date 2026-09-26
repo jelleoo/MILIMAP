@@ -275,16 +275,20 @@ BenefitVerificationResult + row report + summary + evidence diagnostics
 - unresolved source conflict는 `NEEDS_VERIFICATION + RED`다.
 - `ProductionAction`은 항상 `NONE`이고 GREEN도 최종 사람 승인이 필요하다.
 - `data/canonical`, `data/seed`, `apps` 아래로 Shadow 결과를 export할 수 없다.
-- general web-search provider, LLM provider, PDF text extractor, XLSX extractor는 현재 Core에 내장하지 않고 injectable boundary로만 둔다.
+- general web-search provider, LLM provider, PDF/HWP/OCR text extractor는 현재 Core에 내장하지 않고 injectable boundary로만 둔다. XLSX는 raw-byte/sheet/row/cell provenance가 있는 scoped path만 지원하며, generic attachment fallback은 없다.
 
 주요 구현:
 
 - `lib/benefit-verification-contracts.ps1`: Phase 2 in-memory contract
 - `lib/benefit-source/*`: existing-source discovery/fetch, officiality qualification, business binding
-- `lib/benefit-evidence/*`: deterministic HTML/CSV extraction, injectable PDF/XLSX/free-text extraction boundary, evidence validation
+- `lib/benefit-evidence/*`: deterministic scoped HTML, MMA JSONP, and XLSX extraction plus evidence validation
 - `lib/benefit-verification/*`: claim comparison, deterministic BenefitState/ReviewClass
 - `invoke-phase2-benefit-shadow-mode.ps1`: orchestration, metrics, diagnostics, protected export
 - `testdata/phase2-benefit-golden.psd1`: source-cited historical provenance와 synthetic safety fixture를 분리한 Golden data
+
+### Current scoped source families
+
+The current scoped path supports HTML table rows, MMA JSONP list-to-detail evidence, and XLSX rows with raw-byte-bound sheet/row/cell provenance. It does not relabel JSONP as HTML, and it does not treat PDFs, HWP/OCR, SNS/blog, or discovery signals as strong verification evidence. `ProductionAction` remains `NONE` for every family.
 
 ### A1 scoped HTML evidence path
 
@@ -433,8 +437,8 @@ Paju/Yangju HTML과 Suwon PDF는 현재 adapter 경계에서 충분한 row-speci
 
 - existing canonical official URL만 fetch한다.
 - discovery provider는 승인 전 사용하지 않는다.
-- unsupported PDF/XLSX/free-text는 missing-adapter reason으로 fail closed한다.
+- unsupported PDF/HWP/OCR/free-text는 missing-adapter reason으로 fail closed한다; XLSX is accepted only through its validated row/cell path.
 - smoke 후 `git diff -- data/canonical data/seed apps`가 비어 있는지 확인한다.
 - smoke 결과를 release 승인이나 canonical 자동 수정 근거로 사용하지 않는다.
 
-Full Phase 2 완료에는 별도 승인된 discovery/extraction adapter, 247 hold 중심 representative validation, positive controls, human GREEN audit가 추가로 필요하다.
+Phase 2 Core closeout is recorded by the fixed representative validation in [`docs/handover/2026-09-26-phase2-benefit-verification-closeout.md`](../../docs/handover/2026-09-26-phase2-benefit-verification-closeout.md). It does not expand support to PDF/HWP/OCR, SNS/blog, or general discovery; any future real-source GREEN still requires human audit.

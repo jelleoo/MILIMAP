@@ -8,7 +8,8 @@ function ConvertTo-BenefitXlsxObservation {
     Assert-BenefitSourceDocument $Document
     if ($Document.FetchStatus -cne 'COMPLETE' -or $Document.SourceFormat -cne 'XLSX') { throw 'XLSX observation requires a successfully fetched XLSX document' }
     if ($null -eq $Snapshot) { $snapshot=New-BenefitSourceSnapshot -SourceUrl $Document.Url -SourceFormat XLSX -Text '' -Bytes $Document.Bytes -ObservedAt $Document.ObservedAt }
-    if ($null -eq $XlsxValidationIndex) { $index=New-BenefitXlsxValidationIndex -Snapshot $snapshot -SnapshotAlreadyValidated } else { $index=$XlsxValidationIndex; Assert-ScopeXlsxValidationIndexBinding -Snapshot $snapshot -XlsxValidationIndex $index }
+    Assert-ScopeSnapshot $snapshot
+    if ($null -eq $XlsxValidationIndex) { $index=New-BenefitXlsxValidationIndex -Snapshot $snapshot } else { $index=$XlsxValidationIndex; Assert-ScopeXlsxValidationIndexBinding -Snapshot $snapshot -XlsxValidationIndex $index }
     $units = [Collections.Generic.List[object]]::new()
     $diagnostics = [Collections.Generic.List[object]]::new()
     $map = Get-BenefitScopedHeaderMap
@@ -78,13 +79,13 @@ function ConvertTo-BenefitXlsxObservation {
                     continue
                 }
                 if ($rowIsUsable -and $fields.Contains('BusinessName')) {
-                    $units.Add((New-BenefitXlsxSourceContentUnit -Snapshot $snapshot -XlsxValidationIndex $index -SheetName $sheet.Name -SheetIndex $sheet.Index -HeaderRowNumber $header.Number -RowNumber $row.Number -StructuredFields $fields -FieldReferences $references -SnapshotAlreadyValidated))
+                    $units.Add((New-InternalBenefitXlsxSourceContentUnit -Snapshot $snapshot -XlsxValidationIndex $index -SheetName $sheet.Name -SheetIndex $sheet.Index -HeaderRowNumber $header.Number -RowNumber $row.Number -StructuredFields $fields -FieldReferences $references))
                 }
             }
         }
     }
     $adapterStatus = if ($diagnostics.Count -gt 0) { 'PARTIAL' } elseif (-not $identityHeaderSeen) { 'UNSUPPORTED' } else { 'COMPLETE' }
-    $observation = New-BenefitSourceObservation -SourceRowNumber $Document.SourceRowNumber -Snapshot $snapshot -AdapterId XLSX_GENERIC -AdapterVersion '1' -AdapterStatus $adapterStatus -ContentUnits @($units) -Diagnostics @($diagnostics) -XlsxValidationIndex $index -SnapshotAlreadyValidated
+    $observation = New-BenefitSourceObservation -SourceRowNumber $Document.SourceRowNumber -Snapshot $snapshot -AdapterId XLSX_GENERIC -AdapterVersion '1' -AdapterStatus $adapterStatus -ContentUnits @($units) -Diagnostics @($diagnostics) -XlsxValidationIndex $index
     $observation | Add-Member -NotePropertyName XlsxValidationIndex -NotePropertyValue $index
     return $observation
 }

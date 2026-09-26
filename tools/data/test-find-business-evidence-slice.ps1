@@ -135,7 +135,7 @@ function Get-BenefitEvidenceByteHash {
 try {
     $xlsxLocatedWithValidatedIndex = Find-BenefitBusinessEvidence -Observation $xlsxConverted -Business $xlsxBusiness -CanonicalPhone '031-861-4800' -XlsxValidationIndex $xlsxConverted.XlsxValidationIndex
     Assert-ScopeEqual $xlsxLocatedWithValidatedIndex.Status LOCATED 'A supplied validated XLSX index preserves locator behavior'
-    Assert-ScopeEqual $script:locatorByteHashCallCount 0 'A locator with a validated XLSX index performs no full-byte hash'
+    Assert-ScopeEqual $script:locatorByteHashCallCount 1 'A public XLSX locator validates its snapshot exactly once'
     Write-Host "XLSX locator byte-hash calls: $script:locatorByteHashCallCount"
 } finally {
     Set-Item Function:Get-BenefitEvidenceByteHash -Value $script:originalLocatorByteHash

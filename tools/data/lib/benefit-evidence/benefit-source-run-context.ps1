@@ -205,9 +205,13 @@ function Get-BenefitRunXlsxObservation {
         $Document | Add-Member -NotePropertyName ValidatedXlsxSnapshot -NotePropertyValue $snapshot
     }
     if ($Context.TemplateCache.ContainsKey($key)) { $Context.Metrics.AdapterReuseCount++; $template=$Context.TemplateCache[$key]; $cacheHit=$true }
-    else { $template=ConvertTo-BenefitXlsxObservation -Document $Document -Snapshot $snapshot; $Context.TemplateCache.Add($key,$template); $Context.Metrics.AdapterParseCount++; $cacheHit=$false }
+    else {
+        $template=ConvertTo-BenefitXlsxObservation -Document $Document -Snapshot $snapshot
+        Set-InternalBenefitXlsxRunContextTrust -Snapshot $snapshot -XlsxValidationIndex $template.XlsxValidationIndex
+        $Context.TemplateCache.Add($key,$template); $Context.Metrics.AdapterParseCount++; $cacheHit=$false
+    }
     [void]$Context.Attempts.Add([pscustomobject][ordered]@{Stage='PARSE';Key=$key;CacheHit=$cacheHit;Status=$template.AdapterStatus})
-    $observation=New-BenefitSourceObservation -SourceRowNumber $Document.SourceRowNumber -Snapshot $snapshot -AdapterId $template.AdapterId -AdapterVersion $template.AdapterVersion -AdapterStatus $template.AdapterStatus -ContentUnits $template.ContentUnits -Diagnostics $template.Diagnostics -XlsxValidationIndex $template.XlsxValidationIndex -SnapshotAlreadyValidated
+    $observation=New-BenefitSourceObservation -SourceRowNumber $Document.SourceRowNumber -Snapshot $snapshot -AdapterId $template.AdapterId -AdapterVersion $template.AdapterVersion -AdapterStatus $template.AdapterStatus -ContentUnits $template.ContentUnits -Diagnostics $template.Diagnostics -XlsxValidationIndex $template.XlsxValidationIndex
     $observation | Add-Member -NotePropertyName XlsxValidationIndex -NotePropertyValue $template.XlsxValidationIndex
     return $observation
 }

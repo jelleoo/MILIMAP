@@ -127,6 +127,14 @@ try {
 
     $staleIndex=Get-HistoryLatestEntry -Store $store -BusinessId $businessId -Domain 'BENEFIT' -ComparableOnly
     Assert-Equal $staleIndex.LatestComparableObservationId 'obs-0011' 'Index may remain stale immediately after post-commit crash'
+
+    $staleRecoveryRun=New-HistoryRunId
+    $staleRecoveryPrepared=Prepare-One -Store $store -RunId $staleRecoveryRun -ObservationId 'obs-stale-recovery-attempt' -ObservedAt '2026-09-26T00:07:30Z'
+    $staleRecovery=Commit-HistoryRun -Store $store -PreparedRun $staleRecoveryPrepared -ExpectedBaselines @{ (Get-Key)='obs-0011' }
+    Assert-Equal $staleRecovery.Code 'BASELINE_MOVED' 'Committed history must outrank a stale derived index during CAS recovery'
+    Assert-Equal $staleRecovery.RetryRequired $true 'Recovered stale baseline must require explicit caller retry'
+    Assert-Equal (Get-HistoryLatestEntry -Store $store -BusinessId $businessId -Domain 'BENEFIT' -ComparableOnly).LatestComparableObservationId 'obs-post-commit' 'CAS recovery must rebuild the stale index from committed history'
+
     [void](Rebuild-HistoryIndexes -Store $store)
     $repaired=Get-HistoryLatestEntry -Store $store -BusinessId $businessId -Domain 'BENEFIT' -ComparableOnly
     Assert-Equal $repaired.LatestComparableObservationId 'obs-post-commit' 'Rebuild must recover committed observation after index-update crash'

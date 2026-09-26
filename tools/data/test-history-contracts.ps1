@@ -34,4 +34,25 @@ $index = New-HistoryIndexEntry -BusinessId 'biz-0123456789abcdef0123456789abcdef
 Assert-HistoryIndexEntry $index
 Assert-Throws { New-HistoryIndexEntry -BusinessId 'bad' -Domain 'BENEFIT' -LatestObservationId 'obs-current' } 'Malformed business ID must fail in index'
 
+
+$badArtifact = New-HistoryArtifactReference -Kind 'RAW_SOURCE_PAYLOAD' -ContentHash ('b'*64) -RelativePath 'artifacts/sha256/test.bin'
+$badArtifact.ContractType='WrongArtifact'
+Assert-Throws { Assert-HistoryArtifactReference $badArtifact } 'Artifact ContractType must be validated'
+
+$badObservation = New-HistoryObservation -ObservationId 'obs-contract-type' -RunId 'run-contract-type' -BusinessId 'biz-0123456789abcdef0123456789abcdef' -Domain 'BENEFIT' -ObservedAt '2026-09-26T00:00:00Z' -OperationalStatus 'COMPLETE' -Comparable $true -InputFingerprint ('1'*64) -EvidenceFingerprint ('2'*64) -SemanticFingerprint ('3'*64) -ExecutionFingerprint ('4'*64)
+$badObservation.ContractType='WrongObservation'
+Assert-Throws { Assert-HistoryObservation $badObservation } 'Observation ContractType must be validated'
+
+$badComparison = New-ObservationComparison -ComparisonId 'cmp-contract-type' -RunId 'run-contract-type' -BusinessId 'biz-0123456789abcdef0123456789abcdef' -Domain 'BENEFIT' -PreviousObservationId 'obs-a' -CurrentObservationId 'obs-b' -ComparisonStatus 'COMPLETE' -DeltaDimensions @() -ComparatorVersion 1
+$badComparison.ContractType='WrongComparison'
+Assert-Throws { Assert-ObservationComparison $badComparison } 'Comparison ContractType must be validated'
+
+$badManifest = New-HistoryRunManifest -RunId 'run-contract-type' -StartedAt '2026-09-26T00:00:00Z' -CompletedAt '2026-09-26T00:01:00Z' -RepositoryRevision ('a'*40) -HistoryContractVersion 1 -FingerprintSchemaVersion 1 -RequestedBusinessIds @() -CompletedBusinessIds @() -FailedBusinessIds @() -ExecutionStatus 'COMPLETE' -RunCommitStatus 'COMMITTED'
+$badManifest.ContractType='WrongManifest'
+Assert-Throws { Assert-HistoryRunManifest $badManifest } 'Run manifest ContractType must be validated'
+
+$badIndex = New-HistoryIndexEntry -BusinessId 'biz-0123456789abcdef0123456789abcdef' -Domain 'BENEFIT' -LatestObservationId 'obs-current'
+$badIndex.ContractVersion=2
+Assert-Throws { Assert-HistoryIndexEntry $badIndex } 'Index ContractVersion must be validated'
+
 Write-Host 'History contract tests passed.'

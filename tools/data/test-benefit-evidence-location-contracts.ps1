@@ -10,6 +10,14 @@ $fixtureData = Import-PowerShellDataFile -LiteralPath $script:ScopeTestFixturePa
 Assert-ScopeEqual $fixtureData.FixtureKind 'SYNTHETIC_ALGORITHM_ONLY' 'Fixture must not impersonate real evidence'
 Assert-ScopeEqual $fixtureData.Status 'TEST_ONLY' 'Fixture status must be explicit'
 Assert-ScopeEqual (Get-BenefitEvidenceTextHash -Text 'abc') 'ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad' 'Hash must be SHA-256 of UTF-8 text'
+$xlsxBytes = [byte[]](1,2,3,4)
+$xlsxSnapshot = New-BenefitSourceSnapshot -SourceUrl 'https://city.example.go.kr/benefits.xlsx' -SourceFormat XLSX -Text '' -Bytes $xlsxBytes -ObservedAt '2026-09-26T00:00:00Z'
+Assert-ScopeTrue ($xlsxSnapshot.Bytes -is [byte[]]) 'XLSX snapshot must preserve byte array payload'
+Assert-ScopeEqual $xlsxSnapshot.ContentHash '9f64a747e1b97f131fabb6b447296c9b6f0201e79fb3c5356e6c77e89b6a806a' 'XLSX hash must be original bytes SHA-256'
+$xlsxBytes[0] = 99
+Assert-ScopeEqual $xlsxSnapshot.Bytes[0] 1 'XLSX snapshot owns a byte-array clone rather than the caller buffer'
+$xlsxChanged = New-BenefitSourceSnapshot -SourceUrl 'https://city.example.go.kr/benefits.xlsx' -SourceFormat XLSX -Text '' -Bytes ([byte[]](1,2,3,5)) -ObservedAt '2026-09-26T00:00:00Z'
+Assert-ScopeTrue ($xlsxSnapshot.SnapshotId -cne $xlsxChanged.SnapshotId) 'XLSX snapshot identity must change when original bytes change'
 Assert-ScopeEqual (ConvertFrom-ScopeHtmlText -Text 'A &amp; B &lt;5 &gt;3<br><b>C</b>') 'A & B <5 >3 C' 'Decode entities after removing real markup'
 $map = Get-BenefitScopedHeaderMap
 Assert-ScopeEqual $map['업소명'] 'BusinessName' 'Known header mapping'

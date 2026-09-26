@@ -1,7 +1,9 @@
 $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'testdata/benefit-evidence-location/test-support.ps1')
+. (Join-Path $PSScriptRoot 'testdata/benefit-evidence-xlsx/test-support.ps1')
 . (Join-Path $PSScriptRoot 'lib/benefit-evidence/convert-html-source-observation.ps1')
 . (Join-Path $PSScriptRoot 'lib/benefit-evidence/convert-mma-jsonp-source-observation.ps1')
+. (Join-Path $PSScriptRoot 'lib/benefit-evidence/convert-xlsx-source-observation.ps1')
 $locatorPath = Join-Path $PSScriptRoot 'lib/benefit-evidence/find-business-evidence-slice.ps1'
 if (-not (Test-Path -LiteralPath $locatorPath)) { throw 'Business evidence locator is missing' }
 . $locatorPath
@@ -111,5 +113,32 @@ $mmaCodeOnlyText = 'MmaTestList({"success":true,"list":[{"udgigwan_cd":"2789","u
 $mmaCodeOnlyDocument = New-BenefitSourceDocument -SourceRowNumber 2 -Url $mmaListDocument.Url -SourceFormat JSONP -FetchStatus COMPLETE -Text $mmaCodeOnlyText -ObservedAt $mmaListDocument.ObservedAt
 $mmaCodeOnly = Find-BenefitBusinessEvidence -Observation (ConvertTo-MmaJsonpListObservation -Document $mmaCodeOnlyDocument -ExpectedCallback MmaTestList) -Business $tourBusiness -CanonicalPhone '02-2789-0000'
 Assert-ScopeEqual $mmaCodeOnly.Status NOT_FOUND 'Institution code alone cannot override a different business identity'
+
+$xlsxBusinessRow = [pscustomobject]@{
+    업소명='가마골 백숙'; 시도='경기도'; 시군구='양주시'; 소재지도로명주소='양주시 장흥면 북한산로 1028'; 소재지지번주소=''
+    업소전화번호='031-861-4800'; 할인정보=''; 적용대상=''; 이용조건=''; 인증방법=''; 출처유형='지자체 공식 자료'; 출처URL='https://city.example.go.kr/benefits.xlsx'; 최근확인일='2026-09-26'
+}
+$xlsxBusiness = ConvertTo-NormalizedBusiness -Row $xlsxBusinessRow -SourceRowNumber 2
+$xlsxDocument = New-BenefitSourceDocument -SourceRowNumber 2 -Url 'https://city.example.go.kr/benefits.xlsx' -SourceFormat XLSX -FetchStatus COMPLETE -Text '' -Bytes (New-XlsxTestBytes) -ObservedAt '2026-09-26T00:00:00Z'
+$xlsxConverted = ConvertTo-BenefitXlsxObservation -Document $xlsxDocument
+$xlsxLocated = Find-BenefitBusinessEvidence -Observation $xlsxConverted -Business $xlsxBusiness -CanonicalPhone '031-861-4800' -XlsxValidationIndex $xlsxConverted.XlsxValidationIndex
+Assert-ScopeEqual $xlsxLocated.Status LOCATED 'XLSX rows reuse the deterministic identity matcher'
+Assert-ScopeEqual $xlsxLocated.Slices[0].EvidenceReference XLSX_SHEET_1_ROW_22 'XLSX locator preserves the physical row reference'
+Assert-ScopeEqual $xlsxLocated.Slices[0].FieldReferences.BenefitDescription.CellReference F22 'XLSX locator preserves benefit-cell provenance'
+$xlsxLocatedWithAttachedIndex = Find-BenefitBusinessEvidence -Observation $xlsxConverted -Business $xlsxBusiness -CanonicalPhone '031-861-4800'
+Assert-ScopeEqual $xlsxLocatedWithAttachedIndex.Status LOCATED 'XLSX locator reuses its attached snapshot-bound validation index without a reparse'
+$xlsxDuplicateDocument = New-BenefitSourceDocument -SourceRowNumber 2 -Url 'https://city.example.go.kr/duplicates.xlsx' -SourceFormat XLSX -FetchStatus COMPLETE -Text '' -Bytes (New-XlsxTestBytes -DuplicateBusinessNameCell) -ObservedAt '2026-09-26T00:00:00Z'
+$xlsxDuplicate = Find-BenefitBusinessEvidence -Observation (ConvertTo-BenefitXlsxObservation -Document $xlsxDuplicateDocument) -Business $xlsxBusiness -CanonicalPhone '031-861-4800'
+Assert-ScopeEqual $xlsxDuplicate.Status AMBIGUOUS 'Duplicate XLSX name candidates cannot be selected by one strong row'
+Assert-ScopeEqual @($xlsxDuplicate.Slices).Count 0 'Ambiguous XLSX identity yields no slice'
+$xlsxAbsent = Find-BenefitBusinessEvidence -Observation $xlsxConverted -Business (ConvertTo-NormalizedBusiness -Row ([pscustomobject]@{ 업소명='없는 가게'; 시도='경기도'; 시군구='양주시'; 소재지도로명주소='양주시 장흥면 북한산로 1028'; 소재지지번주소=''; 업소전화번호='031-861-4800'; 할인정보=''; 적용대상=''; 이용조건=''; 인증방법=''; 출처유형='지자체 공식 자료'; 출처URL='https://city.example.go.kr/benefits.xlsx'; 최근확인일='2026-09-26' }) -SourceRowNumber 2) -CanonicalPhone '031-861-4800'
+Assert-ScopeEqual $xlsxAbsent.Status NOT_FOUND 'Absent XLSX identity is not a lifecycle conclusion'
+$xlsxUnsupportedDocument = New-BenefitSourceDocument -SourceRowNumber 2 -Url 'https://city.example.go.kr/no-identity.xlsx' -SourceFormat XLSX -FetchStatus COMPLETE -Text '' -Bytes (New-XlsxTestBytes -NoIdentityHeader) -ObservedAt '2026-09-26T00:00:00Z'
+$xlsxUnsupported = Find-BenefitBusinessEvidence -Observation (ConvertTo-BenefitXlsxObservation -Document $xlsxUnsupportedDocument) -Business $xlsxBusiness -CanonicalPhone '031-861-4800'
+Assert-ScopeEqual $xlsxUnsupported.OperationalStatus UNSUPPORTED 'Unsupported XLSX structure preserves an operational rather than semantic outcome'
+Assert-ScopeTrue ($null -eq $xlsxUnsupported.Status) 'Unsupported XLSX structure cannot claim NOT_FOUND'
+$otherXlsxDocument = New-BenefitSourceDocument -SourceRowNumber 2 -Url 'https://city.example.go.kr/other.xlsx' -SourceFormat XLSX -FetchStatus COMPLETE -Text '' -Bytes (New-XlsxTestBytes -Name '다른 가게') -ObservedAt '2026-09-26T00:00:00Z'
+$otherXlsxIndex = (ConvertTo-BenefitXlsxObservation -Document $otherXlsxDocument).XlsxValidationIndex
+Assert-ScopeThrows { Find-BenefitBusinessEvidence -Observation $xlsxConverted -Business $xlsxBusiness -CanonicalPhone '031-861-4800' -XlsxValidationIndex $otherXlsxIndex } 'The locator rejects a validation index from another XLSX snapshot'
 
 Write-Host 'Business evidence locator tests passed.'

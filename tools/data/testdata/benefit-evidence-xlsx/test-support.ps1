@@ -1,0 +1,31 @@
+function New-XlsxTestBytes {
+    param(
+        [string]$Name='가마골 백숙',[string]$Address='양주시 장흥면 북한산로 1028',[string]$Phone='031-861-4800',[string]$Benefit='만두 서비스',
+        [switch]$DuplicateBusinessNameCell,[switch]$FormulaBenefit,[switch]$UnrelatedUnsupportedRow,[switch]$DuplicateBenefitHeader,
+        [switch]$DuplicateRelationshipId,[switch]$DuplicateWorksheetTarget,[switch]$ExternalRelationship,[switch]$WorkbookDtd,[switch]$UnsafeArchivePath,
+        [ValidateSet('s','inlineStr','str','n','b')][string]$BenefitCellType='s',[switch]$MissingBenefitCell,[switch]$DuplicateCell,[switch]$DuplicateRow,[switch]$MalformedCellRow,[switch]$NoIdentityHeader,
+        [int]$ExtraEntryCount=0,[int]$LargeEntryBytes=0,[int]$TotalLargeEntryBytes=0,[switch]$DuplicateWorkbookEntry
+    )
+    $ms=[IO.MemoryStream]::new(); $zip=[IO.Compression.ZipArchive]::new($ms,[IO.Compression.ZipArchiveMode]::Create,$true)
+    try {
+        $workbook = '<?xml version="1.0"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="음식점" sheetId="1" r:id="rId1"/>' + $(if($DuplicateWorksheetTarget){'<sheet name="중복시트" sheetId="2" r:id="rId2"/>'}else{''}) + '</sheets></workbook>'
+        if($WorkbookDtd){$workbook='<!DOCTYPE workbook [<!ENTITY xxe SYSTEM "https://example.invalid/entity">]>' + $workbook}
+        $relationships = '<?xml version="1.0"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"' + $(if($ExternalRelationship){' TargetMode="External"'}else{''}) + '/>' + $(if($DuplicateRelationshipId){'<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/>'}elseif($DuplicateWorksheetTarget){'<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/>'}else{''}) + '</Relationships>'
+        $benefitCell = if($MissingBenefitCell){''}elseif($FormulaBenefit){'<c r="F22" t="s"><f>1+1</f><v>7</v></c>'}elseif($BenefitCellType -ceq 'inlineStr'){'<c r="F22" t="inlineStr"><is><t>' + $Benefit + '</t></is></c>'}elseif($BenefitCellType -ceq 'str'){'<c r="F22" t="str"><v>' + $Benefit + '</v></c>'}elseif($BenefitCellType -ceq 'n'){'<c r="F22"><v>10</v></c>'}elseif($BenefitCellType -ceq 'b'){'<c r="F22" t="b"><v>1</v></c>'}else{'<c r="F22" t="s"><v>7</v></c>'}
+        $primaryRow = '<row r="22"><c r="' + $(if($MalformedCellRow){'B23'}else{'B22'}) + '" t="s"><v>4</v></c>' + $(if($DuplicateCell){'<c r="B22" t="s"><v>4</v></c>'}else{''}) + '<c r="C22" t="s"><v>5</v></c><c r="D22" t="s"><v>6</v></c>' + $benefitCell + '</row>'
+        $parts=[ordered]@{
+            '[Content_Types].xml'='<?xml version="1.0"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"/>'
+            'xl/workbook.xml'=$workbook
+            'xl/_rels/workbook.xml.rels'=$relationships
+            'xl/sharedStrings.xml'='<?xml version="1.0"?><sst xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><si><t>업소명</t></si><si><t>소재지</t></si><si><t>전화번호</t></si><si><t>할인내용</t></si><si><t>'+$Name+'</t></si><si><t>'+$Address+'</t></si><si><t>'+$Phone+'</t></si><si><t>'+$Benefit+'</t></si><si><t>비고</t></si></sst>'
+            'xl/worksheets/sheet1.xml'=('<?xml version="1.0"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData><row r="2"><c r="B2" t="s"><v>' + $(if($NoIdentityHeader){'8'}else{'0'}) + '</v></c><c r="C2" t="s"><v>1</v></c><c r="D2" t="s"><v>2</v></c><c r="F2" t="s"><v>3</v></c>' + $(if($DuplicateBenefitHeader){'<c r="G2" t="s"><v>3</v></c>'}else{''}) + '</row>' + $primaryRow + $(if($DuplicateRow){$primaryRow}else{''}) + $(if($DuplicateBusinessNameCell){'<row r="23"><c r="B23" t="s"><v>4</v></c></row>'}else{''}) + $(if($UnrelatedUnsupportedRow){'<row r="24"><c r="H24" t="b"><v>1</v></c></row>'}else{''}) + '</sheetData></worksheet>')
+        }
+        if($UnsafeArchivePath){$parts['xl/../unsafe.xml']='unsafe'}
+        foreach($p in $parts.GetEnumerator()) { $e=$zip.CreateEntry($p.Key); $w=[IO.StreamWriter]::new($e.Open(),[Text.Encoding]::UTF8); try{$w.Write($p.Value)}finally{$w.Dispose()} }
+        if($DuplicateWorkbookEntry){$e=$zip.CreateEntry('xl/workbook.xml');$w=[IO.StreamWriter]::new($e.Open(),[Text.Encoding]::UTF8);try{$w.Write($workbook)}finally{$w.Dispose()}}
+        for($i=0;$i -lt $ExtraEntryCount;$i++){$e=$zip.CreateEntry("xl/extra-$i.xml");$w=[IO.StreamWriter]::new($e.Open(),[Text.Encoding]::UTF8);try{$w.Write('x')}finally{$w.Dispose()}}
+        if($LargeEntryBytes -gt 0){$e=$zip.CreateEntry('xl/large.xml');$w=[IO.StreamWriter]::new($e.Open(),[Text.Encoding]::UTF8);try{$w.Write(('x' * $LargeEntryBytes))}finally{$w.Dispose()}}
+        if($TotalLargeEntryBytes -gt 0){for($i=0;$i -lt 5;$i++){$e=$zip.CreateEntry("xl/total-$i.xml");$w=[IO.StreamWriter]::new($e.Open(),[Text.Encoding]::UTF8);try{$w.Write(('x' * $TotalLargeEntryBytes))}finally{$w.Dispose()}}}
+    } finally { $zip.Dispose() }
+    return $ms.ToArray()
+}

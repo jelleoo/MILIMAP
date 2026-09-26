@@ -43,13 +43,92 @@ function Get-PreparedArtifactReferenceKeys {
         [Parameter(Mandatory)]$Store,
         [object[]]$Artifacts=@()
     )
+
     $keys=[Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
     foreach($artifact in @($Artifacts)){
         if($null -eq $artifact){ throw 'Prepared artifact cannot be null' }
+
         $hash=[string]$artifact.ContentHash
         $extension=[string]$artifact.Extension
         Assert-HistoryHash -Value $hash -Name 'content hash'
-        if($extension -cnotmatch '^[a-z0-9]{1,16}
+        if($extension -cnotmatch '^[a-z0-9]{1,16}$'){ throw 'Invalid artifact extension' }
+
+        $path=Get-HistoryArtifactPath -Store $Store -ContentHash $hash -Extension $extension
+        $relative=Get-HistoryRelativePath -Store $Store -FullPath $path
+        [void]$keys.Add($hash + '|' + $relative)
+    }
+    return $keys
+}
+
+function Assert-PreparedObservationReferences {
+    param(
+        [Parameter(Mandatory)]$Store,
+        [Parameter(Mandatory)][object[]]$Observations,
+        [Parameter(Mandatory)][Collections.Generic.HashSet[string]]$PreparedArtifactKeys
+    )
+
+    foreach($observation in @($Observations)){
+        foreach($reference in @($observation.ArtifactReferences)){
+            Assert-HistoryArtifactReference $reference
+            $key=([string]$reference.ContentHash) + '|' + ([string]$reference.RelativePath)
+            if($PreparedArtifactKeys.Contains($key)){ continue }
+            Assert-HistoryArtifactReferenceExists -Store $Store -Reference $reference
+        }
+    }
+}
+
+function Assert-HistoryObservationIsCommitted {
+    param(
+        [Parameter(Mandatory)]$Store,
+        [Parameter(Mandatory)]$Observation
+    )
+
+    $manifestPath=Get-HistoryRunManifestPath -Store $Store -RunId ([string]$Observation.RunId)
+    $manifest=Read-HistoryJsonFile -Store $Store -Path $manifestPath -Kind 'run manifest'
+    if($null -eq $manifest){ throw "Previous observation run is not committed: $($Observation.ObservationId)" }
+
+    Assert-HistoryRunManifest $manifest
+    if([string]$manifest.RunCommitStatus -cne 'COMMITTED'){
+        throw "Previous observation run is not committed: $($Observation.ObservationId)"
+    }
+}
+
+function Assert-PreparedComparisonReferences {
+    param(
+        [Parameter(Mandatory)]$Store,
+        [Parameter(Mandatory)][object[]]$Observations,
+        [Parameter(Mandatory)][object[]]$Comparisons
+    )
+
+    $currentById=@{}
+    foreach($observation in @($Observations)){
+        $currentById[[string]$observation.ObservationId]=$observation
+    }
+
+    foreach($comparison in @($Comparisons)){
+        $currentId=[string]$comparison.CurrentObservationId
+        if(-not $currentById.ContainsKey($currentId)){
+            throw "Comparison current observation is not part of prepared run: $currentId"
+        }
+
+        $current=$currentById[$currentId]
+        if([string]$current.BusinessId -cne [string]$comparison.BusinessId -or [string]$current.Domain -cne [string]$comparison.Domain){
+            throw 'Comparison current observation identity/domain mismatch'
+        }
+
+        $previousId=[string]$comparison.PreviousObservationId
+        if([string]::IsNullOrWhiteSpace($previousId)){ continue }
+
+        $previous=Read-HistoryObservation -Store $Store -ObservationId $previousId
+        if($null -eq $previous){ throw "Comparison previous observation does not exist: $previousId" }
+        if([string]$previous.BusinessId -cne [string]$comparison.BusinessId -or [string]$previous.Domain -cne [string]$comparison.Domain){
+            throw 'Comparison previous observation identity/domain mismatch'
+        }
+
+        Assert-HistoryObservationIsCommitted -Store $Store -Observation $previous
+    }
+}
+
 function Prepare-HistoryRun {
     param(
         [Parameter(Mandatory)]$Store,

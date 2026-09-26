@@ -113,3 +113,118 @@ function Get-BenefitIncrementalBaseline {
         SemanticProjection = Read-BenefitHistorySemanticProjection -Store $Store -Observation $observation
     }
 }
+
+function Get-BenefitIncrementalProjectionCheckpoint {
+    param([Parameter(Mandatory)]$EvidenceProjection)
+
+    if ([string]$EvidenceProjection.ProjectionType -cne 'BenefitHistoryEvidence' -or [int]$EvidenceProjection.ProjectionVersion -ne 1) {
+        throw 'Unsupported benefit evidence projection'
+    }
+    $sources = @($EvidenceProjection.Sources)
+    if ($sources.Count -ne 1) { throw 'Incremental reuse requires exactly one previous evidence source' }
+    $source = $sources[0]
+    if ([string]::IsNullOrWhiteSpace([string]$source.SourceUrl) -or
+        [string]$source.SourceFormat -notin @('HTML','XLSX') -or
+        [string]$source.ContentHash -cnotmatch '^[0-9a-f]{64}$') {
+        throw 'Previous evidence projection has no supported payload checkpoint'
+    }
+    return [pscustomobject][ordered]@{
+        ContractType = 'BenefitIncrementalPayloadCheckpoint'
+        ContractVersion = 1
+        SourceUrl = [string]$source.SourceUrl
+        SourceFormat = [string]$source.SourceFormat
+        ContentHash = [string]$source.ContentHash
+    }
+}
+
+function Test-BenefitIncrementalPayloadCheckpointMatch {
+    param(
+        [Parameter(Mandatory)]$Previous,
+        [Parameter(Mandatory)]$Current
+    )
+    return ([string]$Previous.SourceUrl -ceq [string]$Current.SourceUrl -and
+        [string]$Previous.SourceFormat -ceq [string]$Current.SourceFormat -and
+        [string]$Previous.ContentHash -ceq [string]$Current.ContentHash)
+}
+
+function New-BenefitIncrementalReuseDecision {
+    param(
+        [bool]$ReuseApplied,
+        [string]$Capability,
+        [AllowNull()]$Baseline = $null,
+        [AllowNull()]$PreviousPayloadCheckpoint = $null,
+        [AllowNull()]$CurrentPayloadCheckpoint = $null,
+        [bool]$InputMatch = $false,
+        [bool]$ExecutionMatch = $false,
+        [bool]$PayloadMatch = $false,
+        [bool]$RepositoryClean = $false,
+        [string[]]$ReasonCodes = @()
+    )
+    return [pscustomobject][ordered]@{
+        ReuseApplied = $ReuseApplied
+        Capability = $Capability
+        Baseline = $Baseline
+        PreviousPayloadCheckpoint = $PreviousPayloadCheckpoint
+        CurrentPayloadCheckpoint = $CurrentPayloadCheckpoint
+        InputMatch = $InputMatch
+        ExecutionMatch = $ExecutionMatch
+        PayloadMatch = $PayloadMatch
+        RepositoryClean = $RepositoryClean
+        PreviousComparable = ($null -ne $Baseline -and [bool]$Baseline.Observation.Comparable)
+        ReasonCodes = @($ReasonCodes)
+    }
+}
+
+function Get-BenefitIncrementalReuseDecision {
+    param(
+        [Parameter(Mandatory)]$Store,
+        [Parameter(Mandatory)][string]$BusinessId,
+        [Parameter(Mandatory)]$Candidate,
+        [Parameter(Mandatory)]$Document,
+        [Parameter(Mandatory)][string]$CurrentInputFingerprint,
+        [Parameter(Mandatory)][string]$CurrentExecutionFingerprint,
+        [Parameter(Mandatory)][scriptblock]$RepositoryStateProvider
+    )
+
+    Assert-HistoryBusinessId -Value $BusinessId
+    Assert-HistoryHash -Value $CurrentInputFingerprint -Name 'current input fingerprint'
+    Assert-HistoryHash -Value $CurrentExecutionFingerprint -Name 'current execution fingerprint'
+    $capability = Get-BenefitIncrementalCapability -Candidate $Candidate -Document $Document
+    if ($capability -cne 'POST_FETCH') {
+        return New-BenefitIncrementalReuseDecision -ReuseApplied $false -Capability $capability -ReasonCodes @('CAPABILITY_NONE')
+    }
+    if (-not (Test-BenefitIncrementalRepositoryClean -RepositoryStateProvider $RepositoryStateProvider)) {
+        return New-BenefitIncrementalReuseDecision -ReuseApplied $false -Capability $capability -ReasonCodes @('DIRTY_REPOSITORY')
+    }
+
+    try { $baseline = Get-BenefitIncrementalBaseline -Store $Store -BusinessId $BusinessId }
+    catch { return New-BenefitIncrementalReuseDecision -ReuseApplied $false -Capability $capability -ReasonCodes @('PRIOR_ARTIFACT_INVALID') }
+    if ($null -eq $baseline) {
+        return New-BenefitIncrementalReuseDecision -ReuseApplied $false -Capability $capability -ReasonCodes @('NO_BASELINE')
+    }
+    if ([string]$baseline.Observation.OperationalStatus -cne 'COMPLETE') {
+        return New-BenefitIncrementalReuseDecision -ReuseApplied $false -Capability $capability -Baseline $baseline -ReasonCodes @('PREVIOUS_NOT_COMPLETE')
+    }
+    if (-not [bool]$baseline.Observation.Comparable) {
+        return New-BenefitIncrementalReuseDecision -ReuseApplied $false -Capability $capability -Baseline $baseline -ReasonCodes @('PREVIOUS_NOT_COMPARABLE')
+    }
+    $inputMatch = [string]$baseline.Observation.InputFingerprint -ceq $CurrentInputFingerprint
+    if (-not $inputMatch) {
+        return New-BenefitIncrementalReuseDecision -ReuseApplied $false -Capability $capability -Baseline $baseline -InputMatch $false -ReasonCodes @('INPUT_CHANGED')
+    }
+    $executionMatch = [string]$baseline.Observation.ExecutionFingerprint -ceq $CurrentExecutionFingerprint
+    if (-not $executionMatch) {
+        return New-BenefitIncrementalReuseDecision -ReuseApplied $false -Capability $capability -Baseline $baseline -InputMatch $true -ExecutionMatch $false -ReasonCodes @('EXECUTION_CHANGED')
+    }
+    try {
+        $previousCheckpoint = Get-BenefitIncrementalProjectionCheckpoint -EvidenceProjection $baseline.EvidenceProjection
+        $currentCheckpoint = New-BenefitIncrementalPayloadCheckpoint -Document $Document
+    } catch {
+        return New-BenefitIncrementalReuseDecision -ReuseApplied $false -Capability $capability -Baseline $baseline -InputMatch $true -ExecutionMatch $true -ReasonCodes @('PRIOR_ARTIFACT_INVALID')
+    }
+    $payloadMatch = Test-BenefitIncrementalPayloadCheckpointMatch -Previous $previousCheckpoint -Current $currentCheckpoint
+    if (-not $payloadMatch) {
+        return New-BenefitIncrementalReuseDecision -ReuseApplied $false -Capability $capability -Baseline $baseline -PreviousPayloadCheckpoint $previousCheckpoint -CurrentPayloadCheckpoint $currentCheckpoint -InputMatch $true -ExecutionMatch $true -PayloadMatch $false -RepositoryClean $true -ReasonCodes @('PAYLOAD_CHANGED')
+    }
+    return New-BenefitIncrementalReuseDecision -ReuseApplied $true -Capability $capability -Baseline $baseline -PreviousPayloadCheckpoint $previousCheckpoint -CurrentPayloadCheckpoint $currentCheckpoint -InputMatch $true -ExecutionMatch $true -PayloadMatch $true -RepositoryClean $true -ReasonCodes @('REUSE_ELIGIBLE')
+}

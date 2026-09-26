@@ -89,6 +89,7 @@ git commit -m "feat: add phase3 history contracts"
 - Produces: `ConvertTo-HistoryCanonicalJson -Value <object> -OrderInsensitivePaths <string[]> -> string`
 - Produces: `Get-HistorySha256 -Text <string> -> 64-char lowercase hex`
 - Produces: `Get-HistoryFingerprint -Projection <object> -SchemaVersion 1 -OrderInsensitivePaths <string[]> -> string`
+- Produces: `New-HistoryFingerprintSet -InputProjection <object> -EvidenceProjection <object> -SemanticProjection <object> -ExecutionProjection <object> -> object` with exactly `InputFingerprint`, `EvidenceFingerprint`, `SemanticFingerprint`, and `ExecutionFingerprint`.
 - Produces: `Get-HistoryDeltaDimensions -Previous <HistoryObservation> -Current <HistoryObservation> -> string[]`
 
 - [ ] **Step 1: Write the fingerprint mutation matrix**
@@ -100,6 +101,7 @@ Tests cover:
 - `$null` distinct from empty string/empty array;
 - invariant floating-point representation under non-English current culture;
 - schema version participates in the hash;
+- `New-HistoryFingerprintSet` emits all four non-empty 64-char fingerprints from the four projections;
 - changing each of Input/Evidence/Semantic/Execution fingerprint yields the expected delta dimension.
 
 - [ ] **Step 2: Run RED**

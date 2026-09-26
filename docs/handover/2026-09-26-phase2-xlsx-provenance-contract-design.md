@@ -36,6 +36,7 @@ For `XLSX` only, it additionally carries non-empty original `Bytes` and follows 
 - `Text` is the empty string for XLSX and is not hashed. `Bytes` is mandatory for XLSX; no reconstructed worksheet text can substitute for it.
 - For HTML and JSONP, the current required non-empty `Text`, UTF-8 text hash, and snapshot-id semantics remain exactly unchanged. Their objects need not gain a `Bytes` property.
 - `Assert-ScopeSnapshot` branches by source format: it preserves the legacy text rule for HTML/JSONP and requires valid raw bytes plus their hash for XLSX. Other currently unsupported binary formats do not gain scoped snapshot support from this change.
+- `Copy-ScopeContractData` must clone `[byte[]]` in a byte-array-specific branch before its generic array branch. Snapshot copies in XLSX observations and XLSX slice reconstruction must remain `[byte[]]`, never a boxed `object[]`; the slice itself still embeds no bytes.
 
 This is a binary-aware extension of the existing snapshot, not a new snapshot type or parallel hash. A second binary hash field would duplicate the sole provenance root and make slice validation ambiguous.
 
@@ -91,7 +92,7 @@ EvidenceReference=UnitReference, SheetName, SheetIndex, HeaderRowNumber,
 RowNumber, StructuredFields, FieldReferences, IdentityEvidence
 ```
 
-It adds no raw-text span fields and embeds no workbook bytes. `ContentHash` is the original-byte hash from the snapshot, and `Assert-ScopeSliceAgainstSnapshot` reconstructs an `XLSX_ROW` unit from the slice and validates it against those bytes. HTML and JSONP slice property requirements remain unchanged.
+It adds no raw-text span fields and embeds no workbook bytes. `ContentHash` is the original-byte hash from the snapshot, and `Assert-ScopeSliceAgainstSnapshot` reconstructs an `XLSX_ROW` unit from the slice and validates it against those bytes. `Assert-RelevantBenefitEvidenceSlice` must branch for XLSX and reconstruct that snapshot from `Document.Bytes` (with empty `Text`), not `Document.Text`; its HTML/JSONP text reconstruction path remains unchanged.
 
 ## 9. Validation invariants
 
@@ -127,13 +128,13 @@ The same validated index is the only input for XLSX provenance revalidation; it 
 
 PowerShell 7.6.6 exposes `System.IO.Compression.ZipArchive` and `System.Xml.XmlReader`, so the needed bounded validation is feasible without a third-party XLSX library.
 
-The future adapter/validator must use an in-memory read-only ZIP and XML path:
+The future adapter/validator must use an in-memory read-only ZIP and XML path with fixed, source-independent caps for ZIP entry count, each entry's uncompressed size, and total uncompressed size. It must reject the package before XML parsing when any cap is exceeded.
 
 1. Verify non-empty XLSX bytes and the raw-byte snapshot hash before parsing.
-2. Require exactly one readable `[Content_Types].xml`, `xl/workbook.xml`, and `xl/_rels/workbook.xml.rels`; reject duplicate or traversal/external worksheet relationship targets.
-3. Resolve the unit's unique sheet name and document index through workbook XML and relationships, then require its worksheet entry.
-4. Read optional `xl/sharedStrings.xml` only when an `s` cell needs it. Resolve a shared-string index exactly once; support `inlineStr` by reading its source text nodes; retain numeric lexical values without Excel display formatting.
-5. Locate the exact `<row r>` and exact `<c r>` cells. Sparse rows and missing cells are normal only when they are not claimed; a claimed missing cell fails. Duplicate selected row/cell coordinates, invalid references, or malformed selected-sheet XML fail closed.
+2. Build a canonical ZIP-entry map within those caps. Require exactly one readable `[Content_Types].xml`, `xl/workbook.xml`, and `xl/_rels/workbook.xml.rels`; duplicate or ambiguous required parts fail closed. Preserve traversal and external worksheet relationship-target rejection.
+3. Resolve the unit's unique sheet name and document index through workbook XML and relationships, then require exactly one selected worksheet entry. A duplicate selected worksheet part or resolved relationship target fails closed.
+4. Read optional `xl/sharedStrings.xml` only when an `s` cell needs it; duplicate or ambiguous `sharedStrings.xml` then fails closed. Resolve a shared-string index exactly once; support `inlineStr` by reading its source text nodes; retain numeric lexical values without Excel display formatting.
+5. Parse XML with DTD processing prohibited and external entity resolution disabled. Locate the exact `<row r>` and exact `<c r>` cells. Sparse rows and missing cells are normal only when they are not claimed; a claimed missing cell fails. Duplicate selected row/cell coordinates, invalid references, or malformed selected-sheet XML fail closed.
 6. Verify every header/value coordinate, header mapping, cell type, raw value, and normalized semantic value. A selected formula field is unsupported rather than evaluated.
 
 Malformed semantic data in an unrelated row may be isolated as a row diagnostic only when the worksheet XML is well-formed and the row cannot contribute a candidate. Malformed selected-sheet XML, a malformed selected row, or any ambiguity affecting identity fails the selected lookup closed.

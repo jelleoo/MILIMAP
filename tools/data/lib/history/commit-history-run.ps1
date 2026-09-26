@@ -340,6 +340,23 @@ function Ensure-HistoryIndexesAvailableForCas {
     }
 }
 
+function Assert-HistoryComparisonBaselinesMatchExpected {
+    param(
+        [Parameter(Mandatory)][AllowEmptyCollection()][object[]]$Comparisons,
+        [Parameter(Mandatory)][hashtable]$ExpectedBaselines
+    )
+
+    foreach($comparison in @($Comparisons)){
+        $key=([string]$comparison.BusinessId) + '|' + ([string]$comparison.Domain)
+        if(-not $ExpectedBaselines.ContainsKey($key)){ throw "Missing expected baseline for $key" }
+        $expected=if($null -eq $ExpectedBaselines[$key]){''}else{[string]$ExpectedBaselines[$key]}
+        $previous=if([string]::IsNullOrWhiteSpace([string]$comparison.PreviousObservationId)){''}else{[string]$comparison.PreviousObservationId}
+        if($previous -cne $expected){
+            throw "Comparison previous observation does not match expected baseline for $key"
+        }
+    }
+}
+
 function Test-HistoryExpectedBaselines {
     param(
         [Parameter(Mandatory)]$Store,
@@ -399,6 +416,7 @@ function Commit-HistoryRun {
 
     $manifestCommitted=$false
     try {
+        Assert-HistoryComparisonBaselinesMatchExpected -Comparisons @($PreparedRun.Comparisons) -ExpectedBaselines $ExpectedBaselines
         $cas=Test-HistoryExpectedBaselines -Store $Store -Observations @($PreparedRun.Observations) -ExpectedBaselines $ExpectedBaselines
         if(-not [bool]$cas.Matches){
             if(Test-Path -LiteralPath $PreparedRun.StageRoot){ Remove-Item -LiteralPath $PreparedRun.StageRoot -Recurse -Force -ErrorAction SilentlyContinue }

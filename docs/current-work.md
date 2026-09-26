@@ -8,7 +8,8 @@
 - Phase 1 code baseline: `97d6070113196e922fb76af7508314b6eda8e7b7`
 - Phase 2 Task 6 merge baseline: `d43c00ee07b471a55ed7ece4abecc1dc242ed8ce`
 - Phase 2 Core Foundation: Issue #43 / Task 7 validation PR #50
-- 기준일: 2026-09-24
+- current dev baseline: `9c43a1bd028d0c48f2b9760d26201e4275e0e9d7` (PR #84 merged)
+- 기준일: 2026-09-26
 - Phase 1 A — Business Identity / Normalization: PR #37 merged
 - Phase 1 B — POI Discovery: PR #34 merged
 - Phase 1 C — POI Matching / Evaluation: PR #36 merged
@@ -22,6 +23,44 @@
 - Android bundled seed version: 7
 
 현재 코드/설정이 이 문서와 다르면 최신 `dev` 코드와 해당 Issue/PR을 우선합니다. release data 수치는 이번 closeout에서 변경하지 않았다.
+
+## 2026-09-26 Phase 2 최신 상태
+
+Phase 2는 Core Foundation 이후 scoped source capability, representative validation, attachment inventory까지 진행됐다. roadmap의 오래된 `Phase 2 — NOT STARTED` 문구보다 최신 `dev`, 해당 Issue/PR, 이 문서를 우선한다.
+
+최근 완료된 항목:
+
+- scoped generic HTML path와 business-bound extraction
+- DDC generic HTML live stall 진단/최적화: Issue #77 / PR #78
+- early representative benefit validation: Issue #76 / PR #79
+  - fixed 12-row source/failure-stratified sample 완료
+  - GREEN / YELLOW / RED = 0 / 12 / 0
+  - ENDED = 0
+  - `ProductionAction != NONE` = 0
+  - canonical / seed / apps write = 0
+- MMA JSONP live compatibility 복구: Issue #80 / PR #81
+  - live list 2,497 records
+  - empty business-name rows 446 isolated from identity candidates
+  - usable JSONP content units 2,051
+  - live adapter status `COMPLETE`
+  - shared-source fetch 1 / parse 1 / reuse 1
+  - row 4/5 remain safely `NEEDS_VERIFICATION / YELLOW / NOT_FOUND`
+  - final live parse observation approximately 41 seconds
+- official attachment capability inventory: Issue #82 / PR #84
+  - Suwon PDF: deterministic business identity observed, but no per-business validity/detail columns
+  - Yangju XLSX: deterministic business row binding observed for 가마골 백숙; 거석골 absent from observed workbook without ENDED inference
+  - primary next capability selected: XLSX row/cell provenance
+  - verdict: `APPROVAL_REQUIRED` because scoped physical provenance contract needs a minimal XLSX extension
+
+현재 확인된 주요 Phase 2 병목:
+
+- DDC: row-scoped benefit extraction은 가능하지만 individual currentness evidence가 부족함
+- MMA: live compatibility는 복구됐지만 일부 canonical businesses는 current official list에서 safe identity를 찾지 못함
+- XLSX: top-level `SourceFormat=XLSX`와 `BenefitSourceDocument.Bytes`는 이미 존재하지만 `SourceContentUnit` / `RelevantEvidenceSlice`가 workbook/sheet/row/cell provenance를 아직 지원하지 않음
+- PDF: safe machine text/layout extraction runtime과 page/row provenance가 아직 승인되지 않음
+- long heterogeneous live batch의 transport latency/retry/isolation은 별도 operational concern이며 현재 source adapter issue와 섞지 않음
+
+현재 다음 공식 작업은 Issue #85 `[Phase 2 XLSX] Design minimal row/cell provenance contract`이다. 이 Issue는 design/approval only이며 parser 구현은 승인 전 금지한다.
 
 ## Phase 1 상태
 
@@ -112,12 +151,12 @@ Task 7 Golden fixture는 real source-cited historical provenance와 synthetic al
 
 - general official-source discovery/search provider
 - LLM provider/model/SDK
-- PDF text extraction dependency
-- XLSX parsing dependency
+- PDF text extraction capability/dependency
+- XLSX row/cell provenance contract 및 parser capability
 - OCR/HWP pipeline
-- representative 247 hold workload validation
-- positive control validation
-- human GREEN audit
+- full 247 hold workload validation
+- attachment-backed positive controls
+- GREEN이 발생하는 후속 표본에 대한 human audit
 
 따라서 **Phase 2 Core Foundation 완료와 roadmap Phase 2 COMPLETE는 동일하지 않다.**
 
@@ -131,9 +170,10 @@ Task 7 Golden fixture는 real source-cited historical provenance와 synthetic al
 
 ## 다음 액션
 
-1. Issue #43에서 Task 7 Golden regression, live existing-source smoke, deterministic CI, protected-path non-write evidence를 Core Foundation closeout 근거로 유지한다.
-2. full Phase 2로 넘어가기 전에 discovery provider, LLM/free-text extraction, PDF/XLSX adapter 중 필요한 항목을 별도 Issue/ADR 수준으로 승인받는다.
-3. 승인된 adapter 이후 247 hold 중심 representative validation + positive controls + human GREEN audit를 수행한다.
-4. 이 후속 validation 전에는 roadmap Phase 2를 COMPLETE로 표시하지 않는다.
+1. Issue #85에서 XLSX binary snapshot identity, `XLSX_ROW`, sheet/row/cell provenance, XLSX slice shape, validation invariants, run-context reuse를 design-only로 확정한다.
+2. `.NET` 기본 ZIP/XML 기능만으로 구현 가능한지 확인하고, 새 external dependency가 필요하면 구현 전에 별도 승인을 받는다.
+3. 승인된 최소 XLSX contract 이후에만 Yangju XLSX adapter를 TDD로 구현한다.
+4. 구현 후 가마골 백숙 positive control과 거석골 absence control을 live 검증하고 manual-review workload 감소 여부를 측정한다.
+5. Phase 2 전체 closeout 전까지 `ProductionAction=NONE`, canonical/seed automatic write 금지, GREEN human approval requirement를 유지한다.
 
 장기 개발 방향은 [`docs/roadmap.md`](roadmap.md)를 확인한다.

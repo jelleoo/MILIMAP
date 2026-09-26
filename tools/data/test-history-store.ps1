@@ -71,9 +71,9 @@ try {
 
     $latest = Get-HistoryLatestEntry -Store $store -BusinessId $obs1.BusinessId -Domain 'BENEFIT'
     $latestComparable = Get-HistoryLatestEntry -Store $store -BusinessId $obs1.BusinessId -Domain 'BENEFIT' -ComparableOnly
-    Assert-Equal $latest.ObservationId 'obs-0004' 'Latest observation includes committed FAILED observation'
-    Assert-Equal $latestComparable.ObservationId 'obs-0003' 'Latest comparable must ignore committed FAILED observation'
-    Assert-True ($latest.ObservationId -ne 'obs-0005' -and $latest.ObservationId -ne 'obs-0006') 'PREPARED/ABORTED observations never become baseline'
+    Assert-Equal $latest.LatestObservationId 'obs-0004' 'Latest observation includes committed FAILED observation'
+    Assert-Equal $latestComparable.LatestComparableObservationId 'obs-0003' 'Latest comparable must ignore committed FAILED observation'
+    Assert-True ($latest.LatestObservationId -ne 'obs-0005' -and $latest.LatestObservationId -ne 'obs-0006') 'PREPARED/ABORTED observations never become baseline'
 
     $read = Read-HistoryObservation -Store $store -ObservationId 'obs-0003'
     Assert-Equal $read.ObservationId 'obs-0003' 'Observation must be directly readable by id'

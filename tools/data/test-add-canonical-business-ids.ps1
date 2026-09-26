@@ -81,10 +81,10 @@ try {
 
     Assert-Throws { & $scriptPath -InputCsv $input -OutputCsv $input } 'Input and output paths must be distinct'
 
-    $inputBytesBefore = [IO.File]::ReadAllBytes($input)
+    $failedInputBytesBefore = [IO.File]::ReadAllBytes($mixed)
     Assert-Throws { & $scriptPath -InputCsv $mixed -OutputCsv (Join-Path $root 'failed-output.csv') } 'Validation failure must throw'
-    $inputBytesAfter = [IO.File]::ReadAllBytes($input)
-    Assert-Equal ([Convert]::ToBase64String($inputBytesAfter)) ([Convert]::ToBase64String($inputBytesBefore)) 'A failed migration must not modify the original input'
+    $failedInputBytesAfter = [IO.File]::ReadAllBytes($mixed)
+    Assert-Equal ([Convert]::ToBase64String($failedInputBytesAfter)) ([Convert]::ToBase64String($failedInputBytesBefore)) 'A failed migration must not modify the failing input'
 } finally {
     Remove-Item -LiteralPath $root -Recurse -Force -ErrorAction SilentlyContinue
 }

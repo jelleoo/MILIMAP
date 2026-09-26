@@ -273,10 +273,11 @@ function New-BenefitHistoryProjectionArtifact {
     param(
         [Parameter(Mandatory)]$Store,
         [Parameter(Mandatory)][string]$Kind,
-        [Parameter(Mandatory)]$Projection
+        [Parameter(Mandatory)]$Projection,
+        [string[]]$OrderInsensitivePaths=@()
     )
 
-    $json=ConvertTo-HistoryCanonicalJson -Value $Projection
+    $json=ConvertTo-HistoryCanonicalJson -Value $Projection -OrderInsensitivePaths $OrderInsensitivePaths
     $hash=Get-HistorySha256 -Text $json
     $path=Get-HistoryArtifactPath -Store $Store -ContentHash $hash -Extension 'json'
     $relative=Get-HistoryRelativePath -Store $Store -FullPath $path
@@ -324,8 +325,8 @@ function New-BenefitHistoryObservationPackage {
     $fingerprints=New-HistoryFingerprintSet -InputProjection $input -EvidenceProjection $evidence -SemanticProjection $semantic -ExecutionProjection $execution -SchemaVersion $script:FingerprintSchemaVersion -EvidenceOrderInsensitivePaths @('Sources','Sources[].CandidateReferences') -SemanticOrderInsensitivePaths @('Claims','Claims[].MaterialReasonCodes','MaterialReasonCodes')
     $assessment=Get-BenefitHistoryOperationalAssessment -OperationalStatus $OperationalStatus -EvidenceDiagnostics $EvidenceDiagnostics
 
-    $evidenceArtifact=New-BenefitHistoryProjectionArtifact -Store $Store -Kind 'BENEFIT_EVIDENCE_PROJECTION' -Projection $evidence
-    $semanticArtifact=New-BenefitHistoryProjectionArtifact -Store $Store -Kind 'BENEFIT_SEMANTIC_PROJECTION' -Projection $semantic
+    $evidenceArtifact=New-BenefitHistoryProjectionArtifact -Store $Store -Kind 'BENEFIT_EVIDENCE_PROJECTION' -Projection $evidence -OrderInsensitivePaths @('Sources','Sources[].CandidateReferences')
+    $semanticArtifact=New-BenefitHistoryProjectionArtifact -Store $Store -Kind 'BENEFIT_SEMANTIC_PROJECTION' -Projection $semantic -OrderInsensitivePaths @('Claims','Claims[].MaterialReasonCodes','MaterialReasonCodes')
 
     $identityMaterial=$RunId + '|' + $BusinessId + '|BENEFIT|' + $fingerprints.InputFingerprint + '|' + $fingerprints.EvidenceFingerprint + '|' + $fingerprints.SemanticFingerprint + '|' + $fingerprints.ExecutionFingerprint
     $observationId='obs-' + (Get-HistorySha256 -Text $identityMaterial).Substring(0,32)

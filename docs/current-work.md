@@ -26,7 +26,7 @@
 
 ## 2026-09-26 Phase 2 최신 상태
 
-Phase 2 Benefit Verification Core의 scoped HTML, MMA JSONP, XLSX 경로와 fixed representative closeout gate를 완료했다. 이 branch의 Issue #92 closeout evidence가 병합되면 roadmap Phase 2 상태는 `COMPLETE`다.
+Phase 2 Benefit Verification Core의 scoped HTML, MMA JSONP, XLSX 경로와 fixed representative closeout **evidence matrix**를 완료했다. current-code fixed-12 live replay는 replayable raw capture가 없어 `NOT_RUN_NO_REPLAYABLE_RAW_CAPTURE`이며, 이 branch의 Issue #92 evidence가 병합되면 roadmap Phase 2 상태는 현재 구현 범위에서 `COMPLETE`다.
 
 최근 완료된 항목:
 
@@ -57,9 +57,9 @@ Phase 2 Benefit Verification Core의 scoped HTML, MMA JSONP, XLSX 경로와 fixe
   - Yangju committed control: 가마골 백숙 is LOCATED/STRONG/VALIDATED; 거석골 absence is COMPLETE/NOT_FOUND only, never ENDED
 - Phase 2 closeout: Issue #92
   - fixed rows `2, 4, 5, 22, 74, 75, 118, 119, 139, 280, 337, 338`; no sample substitution
-  - HTML, MMA JSONP, XLSX each retain official provenance, scoped identity isolation, binding, extraction, and validated evidence controls
-  - representative GREEN / YELLOW / RED = `0 / 12 / 0`; `ENDED = 0`; `ProductionAction != NONE = 0`
-  - canonical / seed / apps writes = `0`; GREEN human audit = `NOT_APPLICABLE (0 GREEN rows)`
+  - completion evidence combines prior authoritative fixed-12 bounded live evidence, Issue #80 / PR #81 MMA post-fix live validation, the committed Yangju XLSX artifact, and current HTML / JSONP / XLSX deterministic regressions
+  - observed real-source GREEN rows = `0`; GREEN human audit = `NOT_APPLICABLE`, not a positive audit
+  - current deterministic controls: false ENDED / cross-business leakage / hard-conflict bypass / `ProductionAction != NONE` / protected-path writes = `0`
 
 현재 확인된 주요 Phase 2 병목:
 
@@ -142,7 +142,7 @@ BenefitState / ReviewClass
 Shadow review artifact
 ```
 
-Task 7 Golden fixture는 real source-cited historical provenance와 synthetic algorithm fixture를 분리한다. historical release evidence는 현재 `ACTIVE` truth로 자동 승격하지 않으며, source/binding conflict fixture는 silent GREEN을 허용하지 않는다. Issue #92 closeout은 fixed 12-row matrix, scoped HTML/MMA JSONP/XLSX regressions, and committed Yangju live-control artifact를 함께 검증한다.
+Task 7 Golden fixture는 real source-cited historical provenance와 synthetic algorithm fixture를 분리한다. historical release evidence는 현재 `ACTIVE` truth로 자동 승격하지 않으며, source/binding conflict fixture는 silent GREEN을 허용하지 않는다. Issue #92 closeout은 fixed 12-row evidence matrix, scoped HTML/MMA JSONP/XLSX regressions, and committed Yangju live-control artifact를 함께 검증한다; it does not replay all 12 rows through current code.
 
 2026-09-24 existing-source live smoke는 canonical에 이미 저장된 공식 URL 5건을 source-stratified로 직접 fetch했다.
 
@@ -165,7 +165,7 @@ Task 7 Golden fixture는 real source-cited historical provenance와 synthetic al
 - full 247 hold workload validation
 - snapshot/history persistence and periodic execution
 
-이들은 현재 Phase 2 Core closeout의 blocker가 아니다. real-source GREEN이 미래 run에서 생기면 그 row는 계속 human audit 없이는 production approval을 받을 수 없다.
+이들은 현재 Phase 2 Core closeout의 blocker가 아니다. full 247-row validation is `NOT_RUN`, and future real-source GREEN은 그 row가 human audit을 통과하기 전까지 production approval을 받을 수 없다.
 
 ## 안전 경계
 

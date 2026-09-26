@@ -117,9 +117,9 @@ Phase 1의 위치 검증 Core와 Phase 2의 혜택 검증 Core는 모두 shadow-
 
 ### 상태
 
-**COMPLETE** — Issue #92 closeout은 fixed representative rows `2, 4, 5, 22, 74, 75, 118, 119, 139, 280, 337, 338`을 고정한 채 current implementation을 deterministic/captured evidence로 재검증했다. scoped HTML, MMA JSONP, and XLSX each preserve official provenance, business isolation, scoped evidence, and validated claims in their positive controls. Representative results are GREEN / YELLOW / RED = `0 / 12 / 0`, ENDED = `0`, ProductionAction != NONE = `0`, and canonical / seed / apps writes = `0`.
+**COMPLETE** — Issue #92 retains fixed representative rows `2, 4, 5, 22, 74, 75, 118, 119, 139, 280, 337, 338` as an authoritative evidence matrix. It does **not** replay all 12 rows through current code: `CurrentFixed12ReplayStatus = NOT_RUN_NO_REPLAYABLE_RAW_CAPTURE`. Completion is supported by prior authoritative bounded live evidence, Issue #80 / PR #81 MMA post-fix live validation, the committed Yangju XLSX live artifact, and current scoped HTML / JSONP / XLSX deterministic regressions. The three supported families preserve official provenance, business isolation, scoped evidence, and validated claims in positive controls.
 
-There were zero real-source GREEN rows, so `GREEN human audit = NOT_APPLICABLE (0 GREEN rows)`. This is not a positive human audit. PDF/HWP/OCR, SNS/blog strong-evidence expansion, and general discovery remain fail-closed later source-expansion work, not Phase 2 Core blockers. Evidence and limitations are recorded in [`docs/handover/2026-09-26-phase2-benefit-verification-closeout.md`](handover/2026-09-26-phase2-benefit-verification-closeout.md).
+Observed real-source GREEN rows are `0`, so `GREEN human audit = NOT_APPLICABLE`; this is not a positive human audit. Current deterministic controls observe false ENDED / cross-business leakage / hard-conflict bypass / `ProductionAction != NONE` / protected-path writes = `0`. Full 247-row validation is `NOT_RUN`, and no population precision/recall is claimed. PDF/HWP/OCR, SNS/blog strong-evidence expansion, and general discovery remain fail-closed later source-expansion work, not Phase 2 Core blockers. Evidence and limitations are recorded in [`docs/handover/2026-09-26-phase2-benefit-verification-closeout.md`](handover/2026-09-26-phase2-benefit-verification-closeout.md).
 
 ### 방향
 

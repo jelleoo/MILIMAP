@@ -2,12 +2,13 @@
 
 - Issue: #92
 - Baseline: `origin/dev@1e504809743ffce89a0d141b274fff2dc694680f`
-- Evidence mode: committed deterministic fixtures and captured artifacts only; no new live request
+- Evidence mode: authoritative evidence matrix, committed deterministic fixtures, and captured artifacts only; no new live request
+- Current fixed-12 replay: `NOT_RUN_NO_REPLAYABLE_RAW_CAPTURE`
 - Scope: Phase 2 Core closeout, not source-family expansion
 
 ## Verdict
 
-**Phase 2 Benefit Verification Core is COMPLETE within its implemented official source-family boundary: scoped HTML, MMA JSONP, and XLSX.** This conclusion does not approve automatic production mutation, does not assert population accuracy, and does not extend support to PDF/HWP/OCR, SNS/blog, or general discovery.
+**Phase 2 Benefit Verification Core is COMPLETE within its implemented official source-family boundary: scoped HTML, MMA JSONP, and XLSX.** Completion is supported by prior authoritative fixed-12 bounded live evidence, Issue #80 / PR #81 MMA post-fix live validation, the committed Yangju XLSX artifact, and current HTML / JSONP / XLSX deterministic regressions. This conclusion does not approve automatic production mutation, does not assert population accuracy, and does not extend support to PDF/HWP/OCR, SNS/blog, or general discovery.
 
 ## Fixed representative sample
 
@@ -17,24 +18,26 @@ The sample was fixed before this closeout and was not changed after inspecting r
 2, 4, 5, 22, 74, 75, 118, 119, 139, 280, 337, 338
 ```
 
-`tools/data/testdata/phase2-closeout/representative-results.psd1` binds each result to its original canonical row, source type, and committed evidence reference. `tools/data/test-phase2-closeout-validation.ps1` rejects a changed order, changed canonical business/source class, missing reference, or any non-fail-closed result.
+`tools/data/testdata/phase2-closeout/representative-results.psd1` is an authoritative evidence matrix: it binds each result to its original canonical row, source type, evidence class, and evidence reference. It is **not** a current-code execution record. `tools/data/test-phase2-closeout-validation.ps1` rejects a changed order, changed canonical business/source class, wrong evidence class, missing reference, or any non-fail-closed result.
 
-| Row | Business | Evidence path | Closeout result |
-| ---: | --- | --- | --- |
-| 2 | 레드폴바버샵 강남신사점 | Review/community source policy | `NEEDS_VERIFICATION / YELLOW`; not an admitted strong source |
-| 4 | 우동명가기리야마본진 | MMA JSONP list capture | `NEEDS_VERIFICATION / YELLOW`; no safe identity result is promoted to lifecycle evidence |
-| 5 | 투오프커피 | MMA JSONP list capture | `NEEDS_VERIFICATION / YELLOW`; same fail-closed identity behavior |
-| 22 | 쵸리 | Official SNS/blog policy | `NEEDS_VERIFICATION / YELLOW`; excluded from strong verification |
-| 74 | 게이트호텔 | Paju official list assessment | `NEEDS_VERIFICATION / YELLOW`; per-business benefit detail is insufficient |
-| 75 | 두둑한한판 | Paju official list assessment | `NEEDS_VERIFICATION / YELLOW`; per-business benefit detail is insufficient |
-| 118 | 개성연출 | DDC captured HTML assessment | `NEEDS_VERIFICATION / YELLOW`; scoped benefit description does not invent currentness |
-| 119 | 고미나 헤어모드 | DDC captured HTML assessment | `NEEDS_VERIFICATION / YELLOW`; scoped benefit description does not invent currentness |
-| 139 | 정헤어샾 | DDC captured HTML assessment | `NEEDS_VERIFICATION / YELLOW`; identity absence is not ending |
-| 280 | 고려이발관 | Suwon official PDF assessment | `NEEDS_VERIFICATION / YELLOW`; PDF scoped extraction remains unsupported |
-| 337 | 가마골 백숙 | Yangju XLSX live-control artifact | `NEEDS_VERIFICATION / YELLOW`; valid benefit-description provenance does not create lifecycle evidence |
-| 338 | 거석골 | Yangju XLSX live-control artifact | `NEEDS_VERIFICATION / YELLOW`; COMPLETE observation + `NOT_FOUND` only, never ending |
+All fixed-12 raw captures cannot currently be replayed through the current pipeline, so `CurrentFixed12ReplayStatus = NOT_RUN_NO_REPLAYABLE_RAW_CAPTURE`. No text below represents a new all-12 live replay or a new human audit.
 
-The row-level capture references are observation-time evidence, not claims that the remote sources remain unchanged. The closeout deliberately does not refresh them with new live traffic.
+| Row | Business | Evidence class | Authoritative evidence | Recorded result |
+| ---: | --- | --- | --- | --- |
+| 2 | 레드폴바버샵 강남신사점 | Policy/capability boundary | Review/community sources are excluded from strong verification | `NEEDS_VERIFICATION / YELLOW` |
+| 4 | 우동명가기리야마본진 | Latest family-specific live result | Issue #80 / PR #81 MMA post-fix live validation | `NEEDS_VERIFICATION / YELLOW / NOT_FOUND` |
+| 5 | 투오프커피 | Latest family-specific live result | Issue #80 / PR #81 MMA post-fix live validation | `NEEDS_VERIFICATION / YELLOW / NOT_FOUND` |
+| 22 | 쵸리 | Policy/capability boundary | Official SNS/blog is excluded from strong verification | `NEEDS_VERIFICATION / YELLOW` |
+| 74 | 게이트호텔 | Documented capability limitation | Paju official-list detail assessment | `NEEDS_VERIFICATION / YELLOW` |
+| 75 | 두둑한한판 | Documented capability limitation | Paju official-list detail assessment | `NEEDS_VERIFICATION / YELLOW` |
+| 118 | 개성연출 | Prior authoritative bounded live result | Issue #76 / PR #79 historical observation-time result | `NEEDS_VERIFICATION / YELLOW` |
+| 119 | 고미나 헤어모드 | Prior authoritative bounded live result | Issue #76 / PR #79 historical observation-time result | `NEEDS_VERIFICATION / YELLOW` |
+| 139 | 정헤어샾 | Prior authoritative bounded live result | Issue #76 / PR #79 historical observation-time result | `NEEDS_VERIFICATION / YELLOW` |
+| 280 | 고려이발관 | Documented capability limitation | Suwon official PDF capability assessment | `NEEDS_VERIFICATION / YELLOW` |
+| 337 | 가마골 백숙 | Committed live artifact | Yangju XLSX live-control artifact | `NEEDS_VERIFICATION / YELLOW` |
+| 338 | 거석골 | Committed live artifact | Yangju XLSX live-control artifact | `NEEDS_VERIFICATION / YELLOW / NOT_FOUND` |
+
+The row-level live references are observation-time evidence, not claims that the remote sources remain unchanged. The closeout deliberately does not refresh them with new live traffic.
 
 ## Supported-family controls
 
@@ -50,19 +53,18 @@ The committed Yangju capture records one shared attachment fetch and parse for �
 
 | Gate | Result |
 | --- | --- |
-| Evaluated fixed representative rows | 12 |
-| Harness exceptions | 0 |
-| GREEN / YELLOW / RED | 0 / 12 / 0 |
-| ACTIVE / CHANGED / ENDED / NEEDS_VERIFICATION | 0 / 0 / 0 / 12 |
-| False GREEN in audited representative cases | 0 |
-| False ENDED | 0 |
-| Cross-business claim leakage | 0 |
-| Known hard-conflict bypass | 0 |
-| `ProductionAction != NONE` | 0 |
-| Canonical / seed / apps writes | 0 |
-| Operational failure mapped to `NOT_FOUND` or `ENDED` | 0 |
+| Prior authoritative bounded run harness exceptions | 0 |
+| Observed real-source GREEN rows | 0 |
+| GREEN human audit | `NOT_APPLICABLE` |
+| Current fixed-12 replay | `NOT_RUN_NO_REPLAYABLE_RAW_CAPTURE` |
+| Current deterministic false ENDED in tested controls | 0 |
+| Current deterministic cross-business leakage in tested controls | 0 |
+| Current deterministic hard-conflict bypass in tested controls | 0 |
+| Current deterministic `ProductionAction != NONE` | 0 |
+| Current deterministic canonical / seed / apps writes | 0 |
+| Operational failure mapped to `NOT_FOUND` or `ENDED` in tested controls | 0 |
 
-`GREEN human audit = NOT_APPLICABLE (0 real-source GREEN rows)`. This is not evidence of a positive human audit; every future real-source GREEN still requires one.
+`GREEN human audit = NOT_APPLICABLE (0 observed real-source GREEN rows)`. This is not evidence of a positive human audit; every future real-source GREEN still requires one.
 
 ## Deferred source families and manual-review bottlenecks
 
@@ -71,7 +73,7 @@ The committed Yangju capture records one shared attachment fetch and parse for �
 - Paju's observed official list lacks per-business benefit-detail/currentness evidence.
 - DDC row-level benefit text and Yangju XLSX values do not themselves establish individual current applicability.
 - MMA capability is supported, but canonical businesses may safely remain identity-absent in a captured/current list.
-- The fixed sample is source/failure stratified and does not estimate precision, recall, or coverage for the 247 held rows.
+- The fixed sample is source/failure stratified and does not estimate precision, recall, or coverage. Full 247-row validation is `NOT_RUN`.
 
 ## Verification
 

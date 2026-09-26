@@ -35,7 +35,7 @@ function New-TestResult {
     New-BenefitVerificationResult -SourceRowNumber 2 -BusinessIdentity (New-TestBusiness) -BenefitState $State -ReviewClass $Review -ReasonCodes @() -ClaimResults $Claims -Evidence @() -Warnings @() -ProductionAction 'NONE'
 }
 function New-TestDiagnostic {
-    param([string]$Hash=('a'*64),[string]$ObservedAt='2026-09-26T00:00:00Z',[string]$LocationStatus='LOCATED',[string]$LocationOperationalStatus='COMPLETE',[string]$ExtractionStatus='COMPLETE',[string]$FetchStatus='COMPLETE')
+    param([string]$Hash=('a'*64),[string]$ObservedAt='2026-09-26T00:00:00Z',[string]$LocationStatus='LOCATED',[string]$LocationOperationalStatus='COMPLETE',[string]$ExtractionStatus='COMPLETE',[string]$FetchStatus='COMPLETE',[string]$OfficialityStatus='VERIFIED_OFFICIAL',[string]$AdapterStatus='COMPLETE')
     [pscustomobject][ordered]@{
         Url='https://city.example.go.kr/benefit'
         SourceFormat='HTML'
@@ -44,10 +44,11 @@ function New-TestDiagnostic {
         ObservedAt=$ObservedAt
         AdapterId='HTML_GENERIC'
         AdapterVersion=1
+        AdapterStatus=$AdapterStatus
         LocationOperationalStatus=$LocationOperationalStatus
         LocationStatus=$LocationStatus
         CandidateReferences=@('TABLE_ROW:1')
-        OfficialityStatus='VERIFIED_OFFICIAL'
+        OfficialityStatus=$OfficialityStatus
         BusinessBindingStatus='STRONG'
         ExtractionStatus=$ExtractionStatus
         ValidatedClaims=@()
@@ -158,6 +159,17 @@ try {
     $absenceComparison=Compare-BenefitHistoryObservations -Store $store -Previous $previous.Observation -Current $absence.Observation
     Assert-Equal $absenceComparison.ChangeCandidates[0] 'BENEFIT_ABSENCE_SUSPECTED' 'Complete explicit NOT_FOUND may create absence candidate'
     Assert-True (@($absenceComparison.ChangeCandidates) -notcontains 'ENDED') 'Absence candidate must never imply ENDED'
+
+    $unverifiedBusiness=New-TestBusiness
+    $unverifiedBenefit=New-TestBenefit
+    $unverifiedResult=New-BenefitVerificationResult -SourceRowNumber 2 -BusinessIdentity $unverifiedBusiness -BenefitState 'NEEDS_VERIFICATION' -ReviewClass 'YELLOW' -ReasonCodes @() -ClaimResults @() -Evidence @() -Warnings @() -ProductionAction 'NONE'
+    $unverifiedDiagnostic=New-TestDiagnostic -Hash ('1'*64) -LocationStatus 'NOT_FOUND' -LocationOperationalStatus 'COMPLETE' -ExtractionStatus 'FAILED' -OfficialityStatus 'UNVERIFIED'
+    $unverifiedAbsence=New-BenefitHistoryObservationPackage -Store $store -RunId 'run-68686868686868686868686868686868' -BusinessId $businessId -ObservedAt '2026-09-26T01:00:00Z' -RepositoryRevision $revision -Benefit $unverifiedBenefit -BusinessIdentity $unverifiedBusiness -Result $unverifiedResult -EvidenceDiagnostics @($unverifiedDiagnostic) -OperationalStatus ([pscustomobject]@{DiscoveryStatus='COMPLETE';ExtractionStatus='FAILED'})
+    Assert-True (-not $unverifiedAbsence.Observation.Comparable) 'Unverified source NOT_FOUND must not become comparable absence'
+
+    $missingLookupDiagnostic=New-TestDiagnostic -Hash ('2'*64) -LocationStatus '' -LocationOperationalStatus '' -ExtractionStatus 'FAILED'
+    $mixedAbsence=New-BenefitHistoryObservationPackage -Store $store -RunId 'run-69696969696969696969696969696969' -BusinessId $businessId -ObservedAt '2026-09-26T01:05:00Z' -RepositoryRevision $revision -Benefit $unverifiedBenefit -BusinessIdentity $unverifiedBusiness -Result $unverifiedResult -EvidenceDiagnostics @((New-TestDiagnostic -Hash ('3'*64) -LocationStatus 'NOT_FOUND' -LocationOperationalStatus 'COMPLETE' -ExtractionStatus 'FAILED'),$missingLookupDiagnostic) -OperationalStatus ([pscustomobject]@{DiscoveryStatus='COMPLETE';ExtractionStatus='FAILED'})
+    Assert-True (-not $mixedAbsence.Observation.Comparable) 'Every source used for absence must have a complete business lookup'
 
     $failedNotFound=New-TestPackage -Store $store -RunIdValue 'run-77777777777777777777777777777777' -EvidenceHash ('e'*64) -FetchStatus 'FAILED' -LocationStatus 'NOT_FOUND' -LocationOperationalStatus 'PARTIAL' -DiscoveryStatus 'PARTIAL' -ExtractionStatus 'FAILED' -State 'NEEDS_VERIFICATION' -Review 'YELLOW' -Claims @()
     Assert-True (-not $failedNotFound.Observation.Comparable) 'Partial/failed NOT_FOUND must not be comparable'

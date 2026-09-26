@@ -160,6 +160,14 @@ try {
     Assert-Equal $absenceComparison.ChangeCandidates[0] 'BENEFIT_ABSENCE_SUSPECTED' 'Complete explicit NOT_FOUND may create absence candidate'
     Assert-True (@($absenceComparison.ChangeCandidates) -notcontains 'ENDED') 'Absence candidate must never imply ENDED'
 
+
+    $unknownPresence=New-TestPackage -Store $store -RunIdValue 'run-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' -EvidenceHash ('8'*64) -LocationStatus 'NOT_FOUND' -LocationOperationalStatus 'PARTIAL' -DiscoveryStatus 'COMPLETE' -ExtractionStatus 'COMPLETE'
+    $unknownPresence.Observation.Comparable=$true
+    $unknownPresence.Observation.NonComparableReasons=@()
+    Publish-TestPackageArtifacts -Store $store -Package $unknownPresence
+    $absenceAfterUnknown=Compare-BenefitHistoryObservations -Store $store -Previous $unknownPresence.Observation -Current $absence.Observation
+    Assert-True (@($absenceAfterUnknown.ChangeCandidates) -notcontains 'BENEFIT_ABSENCE_SUSPECTED') 'Absence requires a prior confirmed PRESENT observation, not merely prior non-absence'
+
     $unverifiedBusiness=New-TestBusiness
     $unverifiedBenefit=New-TestBenefit
     $unverifiedResult=New-BenefitVerificationResult -SourceRowNumber 2 -BusinessIdentity $unverifiedBusiness -BenefitState 'NEEDS_VERIFICATION' -ReviewClass 'YELLOW' -ReasonCodes @() -ClaimResults @() -Evidence @() -Warnings @() -ProductionAction 'NONE'

@@ -46,6 +46,32 @@ try {
         Prepare-One -Store $store -RunId $runA -ObservationId 'obs-reuse-runid' -ObservedAt '2026-09-26T00:01:30Z'
     } 'Committed RunId must be immutable and cannot be prepared again'
 
+    Assert-Throws {
+        Prepare-One -Store $store -RunId $runA -ObservationId 'obs-runid-reuse' -ObservedAt '2026-09-26T00:01:30Z'
+    } 'A committed RunId must never be reused'
+
+    $missingHash=Get-HistorySha256 -Text 'missing-artifact'
+    $missingRef=New-HistoryArtifactReference -Kind 'RAW_SOURCE_PAYLOAD' -ContentHash $missingHash -RelativePath ('artifacts/sha256/' + $missingHash + '.html')
+    $badArtifactRun=New-HistoryRunId
+    $badArtifactObs=New-HistoryObservation -ObservationId 'obs-missing-artifact' -RunId $badArtifactRun -BusinessId $businessId -Domain 'BENEFIT' -ObservedAt '2026-09-26T00:01:40Z' -OperationalStatus 'COMPLETE' -Comparable $true -InputFingerprint ('1'*64) -EvidenceFingerprint ('2'*64) -SemanticFingerprint ('3'*64) -ExecutionFingerprint ('4'*64) -ArtifactReferences @($missingRef)
+    Assert-Throws {
+        Prepare-HistoryRun -Store $store -RunManifest (New-TestManifest -RunId $badArtifactRun) -Artifacts @() -Observations @($badArtifactObs) -Comparisons @()
+    } 'Prepared observations may not reference missing/unprepared artifacts'
+
+    $badComparisonRun=New-HistoryRunId
+    $badCurrent=New-TestObservation -Id 'obs-comparison-current' -RunId $badComparisonRun -ObservedAt '2026-09-26T00:01:45Z'
+    $badComparison=New-ObservationComparison -ComparisonId 'cmp-missing-current' -RunId $badComparisonRun -BusinessId $businessId -Domain 'BENEFIT' -PreviousObservationId 'obs-0010' -CurrentObservationId 'obs-not-prepared' -ComparisonStatus 'COMPLETE' -DeltaDimensions @('SEMANTIC') -ComparatorVersion 1 -ChangeCandidates @('BENEFIT_CHANGE_SUSPECTED') -ReasonCodes @()
+    Assert-Throws {
+        Prepare-HistoryRun -Store $store -RunManifest (New-TestManifest -RunId $badComparisonRun) -Artifacts @() -Observations @($badCurrent) -Comparisons @($badComparison)
+    } 'Comparison current observation must be part of the same prepared run'
+
+    $badPreviousRun=New-HistoryRunId
+    $badPreviousCurrent=New-TestObservation -Id 'obs-comparison-current-2' -RunId $badPreviousRun -ObservedAt '2026-09-26T00:01:46Z'
+    $badPreviousComparison=New-ObservationComparison -ComparisonId 'cmp-missing-previous' -RunId $badPreviousRun -BusinessId $businessId -Domain 'BENEFIT' -PreviousObservationId 'obs-never-committed' -CurrentObservationId 'obs-comparison-current-2' -ComparisonStatus 'COMPLETE' -DeltaDimensions @('SEMANTIC') -ComparatorVersion 1 -ChangeCandidates @('BENEFIT_CHANGE_SUSPECTED') -ReasonCodes @()
+    Assert-Throws {
+        Prepare-HistoryRun -Store $store -RunManifest (New-TestManifest -RunId $badPreviousRun) -Artifacts @() -Observations @($badPreviousCurrent) -Comparisons @($badPreviousComparison)
+    } 'Comparison previous observation must exist in committed history'
+
     $runB=New-HistoryRunId
     $preparedB=Prepare-One -Store $store -RunId $runB -ObservationId 'obs-0011' -ObservedAt '2026-09-26T00:02:00Z'
     $resultB=Commit-HistoryRun -Store $store -PreparedRun $preparedB -ExpectedBaselines @{ (Get-Key)='obs-0010' }

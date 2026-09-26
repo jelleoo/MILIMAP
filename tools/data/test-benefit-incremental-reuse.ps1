@@ -184,6 +184,104 @@ try {
     Assert-Equal $xlsxSecondRun.Observation.SemanticResultReference $xlsxFirstPackage.Observation.SemanticResultReference 'Second XLSX reuse retains previous semantic result artifact'
     Assert-Equal @($xlsxSecondRun.Observation.ArtifactReferences | Where-Object Kind -eq 'BENEFIT_REUSE_DECISION').Count 1 'Second XLSX reuse records its audit artifact'
     Assert-Equal $xlsxSecondRun.Commit.Code COMMITTED 'Second XLSX reuse commits successfully'
+
+    # Task 7 RED: every rejected gate must recompute using the already fetched
+    # run-context payload.  The counters prove real Phase 2 work occurs.
+    function Invoke-Task7RejectedRecompute {
+        param(
+            [Parameter(Mandatory)][string]$RunId,
+            [Parameter(Mandatory)][string]$BusinessId,
+            [Parameter(Mandatory)]$Benefit,
+            [Parameter(Mandatory)][byte[]]$Bytes,
+            [Parameter(Mandatory)][string]$RepositoryRevision,
+            [Parameter(Mandatory)][scriptblock]$RepositoryStateProvider
+        )
+
+        $fetch = [pscustomobject]@{ Count=0 }
+        $http = { param($Uri) $fetch.Count++; [pscustomobject]@{ StatusCode=200; ContentType='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'; Text=''; Bytes=$Bytes } }.GetNewClosure()
+        $context = New-BenefitSourceRunContext
+        $script:task7ParserCount = 0
+        $script:task7ExtractionCount = 0
+        $script:task7EvaluationCount = 0
+        $script:task7OriginalIndex = (Get-Item Function:New-InternalBenefitXlsxValidationIndex).ScriptBlock
+        $script:task7OriginalExtraction = (Get-Item Function:Invoke-BenefitEvidenceExtraction).ScriptBlock
+        $script:task7OriginalEvaluation = (Get-Item Function:Get-Phase2BenefitEvaluation).ScriptBlock
+        function New-InternalBenefitXlsxValidationIndex { param([Parameter(Mandatory)]$Snapshot); $script:task7ParserCount++; & $script:task7OriginalIndex -Snapshot $Snapshot }
+        function Invoke-BenefitEvidenceExtraction { param($Source,$Document,$EvidenceSlice,$XlsxValidationIndex); $script:task7ExtractionCount++; & $script:task7OriginalExtraction @PSBoundParameters }
+        function Get-Phase2BenefitEvaluation { param($Benefit,$SourceRecords,$DiscoveryStatus); $script:task7EvaluationCount++; & $script:task7OriginalEvaluation @PSBoundParameters }
+        try {
+            $run = Invoke-BenefitIncrementalPostFetch -Store $incrementalStore -RunId $RunId -ObservedAt '2026-09-28T00:00:00Z' -RepositoryRevision $RepositoryRevision -BusinessId $BusinessId -Benefit $Benefit -BusinessIdentity $xlsxBusiness -CanonicalPhone '031-861-4800' -Candidate $xlsxCandidate -RunContext $context -RequestInvoker $http -RepositoryStateProvider $RepositoryStateProvider
+            return [pscustomobject]@{ Run=$run; Fetch=$fetch; Context=$context; ParserCount=$script:task7ParserCount; ExtractionCount=$script:task7ExtractionCount; EvaluationCount=$script:task7EvaluationCount }
+        } finally {
+            Set-Item Function:New-InternalBenefitXlsxValidationIndex -Value $script:task7OriginalIndex
+            Set-Item Function:Invoke-BenefitEvidenceExtraction -Value $script:task7OriginalExtraction
+            Set-Item Function:Get-Phase2BenefitEvaluation -Value $script:task7OriginalEvaluation
+            Remove-Variable -Scope Script -Name task7OriginalIndex,task7OriginalExtraction,task7OriginalEvaluation -ErrorAction SilentlyContinue
+        }
+    }
+
+    function Assert-Task7RejectedRecompute {
+        param([Parameter(Mandatory)]$Tracked,[Parameter(Mandatory)][string]$ReasonCode,[Parameter(Mandatory)][string]$Message)
+        Assert-Equal $Tracked.Fetch.Count 1 ($Message + ': one current external fetch')
+        Assert-Equal $Tracked.Context.Metrics.ExternalFetchCount 1 ($Message + ': run context records one external fetch')
+        Assert-Equal $Tracked.Context.Metrics.FetchCacheHits 1 ($Message + ': scoped recompute reuses the current document')
+        Assert-Equal $Tracked.Run.Metrics.ReuseApplied 0 ($Message + ': reuse is not applied')
+        Assert-Equal $Tracked.Run.Metrics.ReuseRejected 1 ($Message + ': rejection is recorded')
+        Assert-Equal $Tracked.Run.Metrics.AvoidedParseCount 0 ($Message + ': parse is not reported as avoided')
+        Assert-Equal $Tracked.Run.Metrics.AvoidedExtractionCount 0 ($Message + ': extraction is not reported as avoided')
+        Assert-Equal $Tracked.Run.Metrics.AvoidedEvaluationCount 0 ($Message + ': evaluation is not reported as avoided')
+        Assert-True ($Tracked.Run.ReuseDecision.ReasonCodes -contains $ReasonCode) ($Message + ': deterministic rejection reason is preserved')
+        Assert-True ($Tracked.ParserCount -gt 0) ($Message + ': XLSX parser/index actually runs')
+        Assert-True ($Tracked.ExtractionCount -gt 0) ($Message + ': extraction actually runs')
+        Assert-True ($Tracked.EvaluationCount -gt 0) ($Message + ': evaluation actually runs')
+        Assert-Equal $Tracked.Run.Commit.Code COMMITTED ($Message + ': fresh recompute observation commits')
+        Assert-Equal @($Tracked.Run.Observation.ArtifactReferences | Where-Object Kind -eq 'BENEFIT_REUSE_DECISION').Count 0 ($Message + ': rejected recompute has no reuse audit artifact')
+    }
+
+    [byte[]]$task7ChangedBytes = New-XlsxTestBytes -Benefit '다른 서비스'
+    $task7PayloadChanged = Invoke-Task7RejectedRecompute -RunId 'run-66666666666666666666666666666666' -BusinessId $xlsxBusinessId -Benefit $xlsxBenefit -Bytes $task7ChangedBytes -RepositoryRevision ('a'*40) -RepositoryStateProvider { [pscustomobject]@{ IsClean=$true } }
+    Assert-Task7RejectedRecompute -Tracked $task7PayloadChanged -ReasonCode PAYLOAD_CHANGED -Message 'Payload changed'
+    Assert-NotEqual $task7PayloadChanged.Run.Observation.EvidenceFingerprint $xlsxSecondRun.Observation.EvidenceFingerprint 'Payload changed recompute does not reuse the prior evidence fingerprint'
+
+    $task7InputChangedBenefit = New-CanonicalBenefitRecord -SourceRowNumber 2 -BusinessName '가마골 백숙' -BenefitDescription '입력 변경' -EligibleTarget '' -UsageCondition '' -VerificationMethod '' -ExistingSourceType '지자체 공식 자료' -ExistingSourceUrl $xlsxCandidate.Url -ExistingVerifiedOn '2026-09-26'
+    $task7InputChanged = Invoke-Task7RejectedRecompute -RunId 'run-77777777777777777777777777777777' -BusinessId $xlsxBusinessId -Benefit $task7InputChangedBenefit -Bytes $task7ChangedBytes -RepositoryRevision ('a'*40) -RepositoryStateProvider { [pscustomobject]@{ IsClean=$true } }
+    Assert-Task7RejectedRecompute -Tracked $task7InputChanged -ReasonCode INPUT_CHANGED -Message 'Input fingerprint changed'
+    Assert-True (@($task7InputChanged.Run.Comparison.ChangeCandidates) -contains 'CANONICAL_INPUT_CHANGED') 'Input change is not misclassified as an external benefit change'
+    Assert-True (@($task7InputChanged.Run.Comparison.ChangeCandidates) -notcontains 'BENEFIT_CHANGE_SUSPECTED') 'Input change never becomes a benefit change candidate'
+
+    $task7ExecutionChanged = Invoke-Task7RejectedRecompute -RunId 'run-88888888888888888888888888888888' -BusinessId $xlsxBusinessId -Benefit $task7InputChangedBenefit -Bytes $task7ChangedBytes -RepositoryRevision ('b'*40) -RepositoryStateProvider { [pscustomobject]@{ IsClean=$true } }
+    Assert-Task7RejectedRecompute -Tracked $task7ExecutionChanged -ReasonCode EXECUTION_CHANGED -Message 'Execution fingerprint changed'
+    Assert-True (@($task7ExecutionChanged.Run.Comparison.ChangeCandidates) -contains 'PROCESSOR_OUTPUT_CHANGED') 'Execution change is not misclassified as an external benefit change'
+    Assert-True (@($task7ExecutionChanged.Run.Comparison.ChangeCandidates) -notcontains 'BENEFIT_CHANGE_SUSPECTED') 'Execution change never becomes a benefit change candidate'
+
+    $task7Dirty = Invoke-Task7RejectedRecompute -RunId 'run-99999999999999999999999999999999' -BusinessId $xlsxBusinessId -Benefit $task7InputChangedBenefit -Bytes $task7ChangedBytes -RepositoryRevision ('b'*40) -RepositoryStateProvider { [pscustomobject]@{ IsClean=$false } }
+    Assert-Task7RejectedRecompute -Tracked $task7Dirty -ReasonCode DIRTY_REPOSITORY -Message 'Dirty repository'
+
+    $task7NoBaselineId = 'biz-22222222222222222222222222222222'
+    $task7NoBaseline = Invoke-Task7RejectedRecompute -RunId 'run-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' -BusinessId $task7NoBaselineId -Benefit $xlsxBenefit -Bytes $task7ChangedBytes -RepositoryRevision ('a'*40) -RepositoryStateProvider { [pscustomobject]@{ IsClean=$true } }
+    Assert-Task7RejectedRecompute -Tracked $task7NoBaseline -ReasonCode NO_BASELINE -Message 'No usable comparable baseline'
+    Assert-Equal $task7NoBaseline.Run.Comparison.ChangeCandidates[0] BASELINE_ESTABLISHED 'No baseline recompute does not reuse a prior semantic result'
+
+    $invalidPriorEntry=Get-HistoryLatestEntry -Store $incrementalStore -BusinessId $xlsxBusinessId -Domain BENEFIT -ComparableOnly
+    $invalidPriorObservation=Read-HistoryObservation -Store $incrementalStore -ObservationId $invalidPriorEntry.LatestComparableObservationId
+    $invalidPriorEvidenceReference=@($invalidPriorObservation.ArtifactReferences | Where-Object Kind -eq 'BENEFIT_EVIDENCE_PROJECTION')[0]
+    Set-Content -LiteralPath (Join-Path $incrementalStore.Root $invalidPriorEvidenceReference.RelativePath) -Value '{"ProjectionType":"BenefitHistoryEvidence","ProjectionVersion":1,"tampered":true}' -Encoding utf8 -NoNewline
+    [byte[]]$task7FreshBytesAfterInvalidPrior = New-XlsxTestBytes -Benefit '새로운 서비스'
+    $task7InvalidPrior = Invoke-Task7RejectedRecompute -RunId 'run-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb' -BusinessId $xlsxBusinessId -Benefit $task7InputChangedBenefit -Bytes $task7FreshBytesAfterInvalidPrior -RepositoryRevision ('b'*40) -RepositoryStateProvider { [pscustomobject]@{ IsClean=$true } }
+    Assert-Task7RejectedRecompute -Tracked $task7InvalidPrior -ReasonCode PRIOR_ARTIFACT_INVALID -Message 'Invalid prior artifact'
+    Assert-True ($null -eq $task7InvalidPrior.Run.Comparison) 'Invalid prior artifact is never used as a semantic comparison baseline'
+
+    $fetchFailureContext=New-BenefitSourceRunContext
+    $fetchFailureCount=[pscustomobject]@{ Count=0 }
+    $fetchFailureHttp={ param($Uri) $fetchFailureCount.Count++; [pscustomobject]@{ StatusCode=500; ContentType='text/plain'; Text='upstream failed'; Bytes=$null } }.GetNewClosure()
+    $fetchFailureRun=Invoke-BenefitIncrementalPostFetch -Store $incrementalStore -RunId 'run-cccccccccccccccccccccccccccccccc' -ObservedAt '2026-09-28T00:00:00Z' -RepositoryRevision ('b'*40) -BusinessId $xlsxBusinessId -Benefit $task7InputChangedBenefit -BusinessIdentity $xlsxBusiness -CanonicalPhone '031-861-4800' -Candidate $xlsxCandidate -RunContext $fetchFailureContext -RequestInvoker $fetchFailureHttp -RepositoryStateProvider { [pscustomobject]@{ IsClean=$true } }
+    Assert-Equal $fetchFailureCount.Count 1 'Fetch failure performs one current external request'
+    Assert-Equal $fetchFailureRun.Metrics.ReuseApplied 0 'Fetch failure never applies reuse'
+    Assert-Equal $fetchFailureRun.Metrics.AvoidedParseCount 0 'Fetch failure is not counted as avoided parse work'
+    Assert-Equal $fetchFailureRun.Result.BenefitState NEEDS_VERIFICATION 'Fetch failure remains operationally unresolved'
+    Assert-True (@($fetchFailureRun.Result.ClaimResults | Where-Object Result -in @('ENDED','UNCHANGED')).Count -eq 0) 'Fetch failure never becomes UNCHANGED or ENDED'
+    Assert-True (@($fetchFailureRun.Comparison.ChangeCandidates) -notcontains 'BENEFIT_ABSENCE_SUSPECTED') 'Fetch failure never becomes benefit absence'
+    Assert-True (@($fetchFailureRun.Comparison.ChangeCandidates) -notcontains 'ENDED') 'Fetch failure never becomes ended'
 } finally { if(Test-Path -LiteralPath $incrementalRoot){ Remove-Item -LiteralPath $incrementalRoot -Recurse -Force } }
 
 Write-Host 'Benefit incremental checkpoint tests passed.'

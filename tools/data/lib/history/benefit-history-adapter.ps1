@@ -399,6 +399,36 @@ function Read-BenefitHistorySemanticProjection {
     return $projection
 }
 
+function Get-InternalStagedBenefitHistorySemanticProjection {
+    param(
+        [Parameter(Mandatory)]$Current,
+        [Parameter(Mandatory)]$StagedCurrentSemanticProjection
+    )
+
+    Assert-HistoryObservation $Current
+    if([string]$Current.Domain -cne 'BENEFIT'){ throw 'Staged benefit semantic projection requires BENEFIT current observation' }
+    if([string]$StagedCurrentSemanticProjection.ProjectionType -cne 'BenefitHistorySemantic' -or [int]$StagedCurrentSemanticProjection.ProjectionVersion -ne 1){
+        throw 'Unsupported staged benefit semantic projection'
+    }
+
+    $references=@($Current.ArtifactReferences | Where-Object { [string]$_.Kind -ceq 'BENEFIT_SEMANTIC_PROJECTION' })
+    if($references.Count -ne 1){ throw 'Current benefit observation requires exactly one semantic projection artifact' }
+    $reference=$references[0]
+    if([string]$Current.SemanticResultReference -cne [string]$reference.RelativePath){
+        throw 'Current semantic result reference does not match semantic artifact'
+    }
+
+    $fingerprint=Get-HistoryFingerprint -Projection $StagedCurrentSemanticProjection -SchemaVersion $script:FingerprintSchemaVersion -OrderInsensitivePaths @('Claims','Claims[].MaterialReasonCodes','MaterialReasonCodes')
+    if($fingerprint -cne [string]$Current.SemanticFingerprint){
+        throw 'Staged benefit semantic projection fingerprint mismatch'
+    }
+    $artifactHash=Get-HistorySha256 -Text (ConvertTo-HistoryCanonicalJson -Value $StagedCurrentSemanticProjection -OrderInsensitivePaths @('Claims','Claims[].MaterialReasonCodes','MaterialReasonCodes'))
+    if($artifactHash -cne [string]$reference.ContentHash){
+        throw 'Staged benefit semantic projection artifact hash mismatch'
+    }
+    return $StagedCurrentSemanticProjection
+}
+
 function Get-BenefitHistoryComparableClaimsByType {
     param([Parameter(Mandatory)]$Projection)
 
@@ -448,11 +478,12 @@ function Resolve-BenefitHistoryDomainChange {
     param(
         [Parameter(Mandatory)]$Store,
         [Parameter(Mandatory)]$Previous,
-        [Parameter(Mandatory)]$Current
+        [Parameter(Mandatory)]$Current,
+        [AllowNull()]$StagedCurrentSemanticProjection=$null
     )
 
     $previousProjection=Read-BenefitHistorySemanticProjection -Store $Store -Observation $Previous
-    $currentProjection=Read-BenefitHistorySemanticProjection -Store $Store -Observation $Current
+    $currentProjection=if($null -eq $StagedCurrentSemanticProjection){Read-BenefitHistorySemanticProjection -Store $Store -Observation $Current}else{Get-InternalStagedBenefitHistorySemanticProjection -Current $Current -StagedCurrentSemanticProjection $StagedCurrentSemanticProjection}
 
     $previousPresence=[string]$previousProjection.BusinessPresence
     $currentAbsent=[bool]$currentProjection.AbsenceEligible
@@ -480,7 +511,8 @@ function Compare-BenefitHistoryObservations {
     param(
         [Parameter(Mandatory)]$Store,
         [AllowNull()]$Previous,
-        [Parameter(Mandatory)]$Current
+        [Parameter(Mandatory)]$Current,
+        [AllowNull()]$StagedCurrentSemanticProjection=$null
     )
 
     Assert-HistoryObservation $Current
@@ -488,6 +520,9 @@ function Compare-BenefitHistoryObservations {
     if($null -ne $Previous){
         Assert-HistoryObservation $Previous
         if([string]$Previous.Domain -cne 'BENEFIT'){ throw 'Benefit history comparison requires BENEFIT previous observation' }
+    }
+    if($null -ne $StagedCurrentSemanticProjection){
+        [void](Get-InternalStagedBenefitHistorySemanticProjection -Current $Current -StagedCurrentSemanticProjection $StagedCurrentSemanticProjection)
     }
 
     $gateResolver={
@@ -502,7 +537,7 @@ function Compare-BenefitHistoryObservations {
         return $gate
     }
 
-    $resolved=Resolve-BenefitHistoryDomainChange -Store $Store -Previous $Previous -Current $Current
+    $resolved=Resolve-BenefitHistoryDomainChange -Store $Store -Previous $Previous -Current $Current -StagedCurrentSemanticProjection $StagedCurrentSemanticProjection
     $gate.ChangeCandidates=@($resolved.ChangeCandidates | Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_) })
     $gate.ReasonCodes=@($resolved.ReasonCodes | Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_) })
     Assert-ObservationComparison $gate

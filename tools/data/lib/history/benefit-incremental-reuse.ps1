@@ -101,11 +101,12 @@ function Read-BenefitIncrementalEvidenceProjection {
 function Get-BenefitIncrementalBaseline {
     param(
         [Parameter(Mandatory)]$Store,
-        [Parameter(Mandatory)][string]$BusinessId
+        [Parameter(Mandatory)][string]$BusinessId,
+        [AllowNull()]$Entry=$null
     )
 
     Assert-HistoryBusinessId -Value $BusinessId
-    $entry = Get-HistoryLatestEntry -Store $Store -BusinessId $BusinessId -Domain BENEFIT -ComparableOnly
+    $entry = if ($PSBoundParameters.ContainsKey('Entry')) { $Entry } else { Get-HistoryLatestEntry -Store $Store -BusinessId $BusinessId -Domain BENEFIT -ComparableOnly }
     if ($null -eq $entry) { return $null }
 
     $observation = Read-HistoryObservation -Store $Store -ObservationId ([string]$entry.LatestComparableObservationId)
@@ -166,6 +167,7 @@ function New-BenefitIncrementalReuseDecision {
         [bool]$ExecutionMatch = $false,
         [bool]$PayloadMatch = $false,
         [bool]$RepositoryClean = $false,
+        [string]$ExpectedBaselineObservationId='',
         [string[]]$ReasonCodes = @()
     )
     return [pscustomobject][ordered]@{
@@ -179,6 +181,7 @@ function New-BenefitIncrementalReuseDecision {
         PayloadMatch = $PayloadMatch
         RepositoryClean = $RepositoryClean
         PreviousComparable = ($null -ne $Baseline -and [bool]$Baseline.Observation.Comparable)
+        ExpectedBaselineObservationId = $(if ($null -ne $Baseline) { [string]$Baseline.Observation.ObservationId } else { $ExpectedBaselineObservationId })
         ReasonCodes = @($ReasonCodes)
     }
 }
@@ -199,15 +202,20 @@ function Get-BenefitIncrementalReuseDecision {
     Assert-HistoryHash -Value $CurrentInputFingerprint -Name 'current input fingerprint'
     Assert-HistoryHash -Value $CurrentExecutionFingerprint -Name 'current execution fingerprint'
     $capability = Get-BenefitIncrementalCapability -Candidate $Candidate -Document $Document
+    # Every post-fetch outcome that reaches commit needs the current indexed
+    # baseline identity for CAS, including capability/dirty early rejections.
+    # This is the one indexed lookup for this decision; no history scan occurs.
+    $baselineEntry = Get-HistoryLatestEntry -Store $Store -BusinessId $BusinessId -Domain BENEFIT -ComparableOnly
+    $expectedBaselineObservationId = if ($null -eq $baselineEntry) { '' } else { [string]$baselineEntry.LatestComparableObservationId }
+    try { $baseline = Get-BenefitIncrementalBaseline -Store $Store -BusinessId $BusinessId -Entry $baselineEntry }
+    catch { return New-BenefitIncrementalReuseDecision -ReuseApplied $false -Capability $capability -ExpectedBaselineObservationId $expectedBaselineObservationId -ReasonCodes @('PRIOR_ARTIFACT_INVALID') }
     if ($capability -cne 'POST_FETCH') {
-        return New-BenefitIncrementalReuseDecision -ReuseApplied $false -Capability $capability -ReasonCodes @('CAPABILITY_NONE')
+        return New-BenefitIncrementalReuseDecision -ReuseApplied $false -Capability $capability -Baseline $baseline -ExpectedBaselineObservationId $expectedBaselineObservationId -ReasonCodes @('CAPABILITY_NONE')
     }
     if (-not (Test-BenefitIncrementalRepositoryClean -RepositoryStateProvider $RepositoryStateProvider)) {
-        return New-BenefitIncrementalReuseDecision -ReuseApplied $false -Capability $capability -ReasonCodes @('DIRTY_REPOSITORY')
+        return New-BenefitIncrementalReuseDecision -ReuseApplied $false -Capability $capability -Baseline $baseline -ExpectedBaselineObservationId $expectedBaselineObservationId -ReasonCodes @('DIRTY_REPOSITORY')
     }
 
-    try { $baseline = Get-BenefitIncrementalBaseline -Store $Store -BusinessId $BusinessId }
-    catch { return New-BenefitIncrementalReuseDecision -ReuseApplied $false -Capability $capability -ReasonCodes @('PRIOR_ARTIFACT_INVALID') }
     if ($null -eq $baseline) {
         return New-BenefitIncrementalReuseDecision -ReuseApplied $false -Capability $capability -ReasonCodes @('NO_BASELINE')
     }
@@ -300,18 +308,56 @@ function Invoke-BenefitIncrementalPostFetch {
     $input=ConvertTo-BenefitHistoryInputProjection -BusinessId $BusinessId -Benefit $Benefit -BusinessIdentity $BusinessIdentity -CanonicalPhone $CanonicalPhone
     $execution=ConvertTo-BenefitHistoryExecutionProjection -RepositoryRevision $RepositoryRevision
     $decision=Get-BenefitIncrementalReuseDecision -Store $Store -BusinessId $BusinessId -Candidate $Candidate -Document $document -CurrentSnapshot $snapshot -CurrentInputFingerprint (Get-HistoryFingerprint -Projection $input -SchemaVersion $script:FingerprintSchemaVersion) -CurrentExecutionFingerprint (Get-HistoryFingerprint -Projection $execution -SchemaVersion $script:FingerprintSchemaVersion) -RepositoryStateProvider $RepositoryStateProvider
-    if(-not $decision.ReuseApplied){throw 'Task 5 orchestration currently supports only the eligible reuse path'}
-    $package=New-BenefitIncrementalReusePackage -Store $Store -RunId $RunId -ObservedAt $ObservedAt -Decision $decision
+    $result=$null
+    $sourceRecord=$null
+    if($decision.ReuseApplied){
+        $package=New-BenefitIncrementalReusePackage -Store $Store -RunId $RunId -ObservedAt $ObservedAt -Decision $decision
+        $comparison=$null
+        $metrics=[pscustomobject][ordered]@{
+            ExternalFetchCount=$RunContext.Metrics.ExternalFetchCount
+            ReuseEligible=1
+            ReuseApplied=1
+            ReuseRejected=0
+            AvoidedParseCount=1
+            AvoidedExtractionCount=1
+            AvoidedEvaluationCount=1
+        }
+    } else {
+        # Recompute uses the same run context and therefore the document that
+        # has already been fetched above.  It composes existing Phase 2 and
+        # P3-3 helpers; no parser, cache, or semantic evaluator is duplicated.
+        if($null -eq (Get-Command -Name Invoke-ScopedPhase2BenefitSourceCandidate -ErrorAction SilentlyContinue)){
+            . (Join-Path (Split-Path -Parent $dataLibRoot) 'invoke-phase2-benefit-shadow-mode.ps1')
+        }
+        $sourceRecord=Invoke-ScopedPhase2BenefitSourceCandidate -Candidate $Candidate -Business $BusinessIdentity -CanonicalPhone $CanonicalPhone -RunContext $RunContext -RequestInvoker $RequestInvoker
+        $final=Get-Phase2BenefitEvaluation -Benefit $Benefit -SourceRecords @($sourceRecord) -DiscoveryStatus COMPLETE
+        $reasonCodes=[Collections.Generic.List[string]]::new()
+        Add-Phase2UniqueReasonCodes -Target $reasonCodes -ReasonCodes $final.Evaluation.ReasonCodes
+        Add-Phase2UniqueReasonCodes -Target $reasonCodes -ReasonCodes $sourceRecord.ReasonCodes
+        $result=New-BenefitVerificationResult -SourceRowNumber $Benefit.SourceRowNumber -BusinessIdentity $BusinessIdentity -BenefitState $final.Evaluation.BenefitState -ReviewClass $final.Evaluation.ReviewClass -ReasonCodes @($reasonCodes) -ClaimResults $final.ClaimResults -Evidence $final.Evaluation.Evidence -Warnings $final.Evaluation.Warnings -ProductionAction NONE
+        $package=New-BenefitHistoryObservationPackage -Store $Store -RunId $RunId -BusinessId $BusinessId -ObservedAt $ObservedAt -RepositoryRevision $RepositoryRevision -Benefit $Benefit -BusinessIdentity $BusinessIdentity -CanonicalPhone $CanonicalPhone -Result $result -EvidenceDiagnostics @((ConvertTo-Phase2ScopedBenefitEvidenceDiagnostic -SourceRecord $sourceRecord)) -OperationalStatus $final.OperationalStatus
+        $comparison=$null
+        if($null -ne $decision.Baseline){
+            $comparison=Compare-BenefitHistoryObservations -Store $Store -Previous $decision.Baseline.Observation -Current $package.Observation -StagedCurrentSemanticProjection $package.SemanticProjection
+        } elseif([string]::IsNullOrEmpty([string]$decision.ExpectedBaselineObservationId)) {
+            $comparison=Compare-BenefitHistoryObservations -Store $Store -Previous $null -Current $package.Observation -StagedCurrentSemanticProjection $package.SemanticProjection
+        }
+        $metrics=[pscustomobject][ordered]@{
+            ExternalFetchCount=$RunContext.Metrics.ExternalFetchCount
+            ReuseEligible=0
+            ReuseApplied=0
+            ReuseRejected=1
+            AvoidedParseCount=0
+            AvoidedExtractionCount=0
+            AvoidedEvaluationCount=0
+        }
+    }
     $manifest=New-HistoryRunManifest -RunId $RunId -StartedAt $ObservedAt -RepositoryRevision $RepositoryRevision -RequestedBusinessIds @($BusinessId) -CompletedBusinessIds @($BusinessId) -FailedBusinessIds @() -ExecutionStatus COMPLETE -RunCommitStatus PREPARED
-    $prepared=Prepare-HistoryRun -Store $Store -RunManifest $manifest -Artifacts $package.PreparedArtifacts -Observations @($package.Observation) -Comparisons @()
-    $commit=Commit-HistoryRun -Store $Store -PreparedRun $prepared -ExpectedBaselines @{ (($BusinessId+'|BENEFIT'))=[string]$decision.Baseline.Observation.ObservationId }
-    return [pscustomobject][ordered]@{ReuseDecision=$decision;Observation=$package.Observation;Commit=$commit;Metrics=[pscustomobject][ordered]@{
-        ExternalFetchCount=$RunContext.Metrics.ExternalFetchCount
-        ReuseEligible=$(if($decision.ReuseApplied){1}else{0})
-        ReuseApplied=$(if($decision.ReuseApplied){1}else{0})
-        ReuseRejected=$(if($decision.ReuseApplied){0}else{1})
-        AvoidedParseCount=1
-        AvoidedExtractionCount=1
-        AvoidedEvaluationCount=1
-    }}
+    if($null -eq $comparison){
+        $prepared=Prepare-HistoryRun -Store $Store -RunManifest $manifest -Artifacts $package.PreparedArtifacts -Observations @($package.Observation) -Comparisons @()
+    } else {
+        $prepared=Prepare-HistoryRun -Store $Store -RunManifest $manifest -Artifacts $package.PreparedArtifacts -Observations @($package.Observation) -Comparisons @($comparison)
+    }
+    $commit=Commit-HistoryRun -Store $Store -PreparedRun $prepared -ExpectedBaselines @{ (($BusinessId+'|BENEFIT'))=[string]$decision.ExpectedBaselineObservationId }
+    return [pscustomobject][ordered]@{ReuseDecision=$decision;Observation=$package.Observation;Comparison=$comparison;Result=$result;SourceRecord=$sourceRecord;Commit=$commit;Metrics=$metrics}
 }

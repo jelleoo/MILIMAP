@@ -5,6 +5,7 @@ $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'lib/benefit-evidence/convert-html-source-observation.ps1')
 . (Join-Path $PSScriptRoot 'lib/benefit-evidence/convert-xlsx-source-observation.ps1')
 . (Join-Path $PSScriptRoot 'lib/benefit-evidence/find-business-evidence-slice.ps1')
+. (Join-Path $PSScriptRoot 'lib/benefit-evidence/invoke-scoped-benefit-source.ps1')
 
 $path = Join-Path $PSScriptRoot 'lib/benefit-evidence/benefit-source-run-context.ps1'
 if (-not (Test-Path -LiteralPath $path)) { throw 'Source run context is missing' }
@@ -39,7 +40,22 @@ Assert-ScopeEqual $d3.SourceRowNumber 3 'Second caller receives its own row numb
 Assert-ScopeEqual $d2.ObservedAt $d3.ObservedAt 'Cache hit preserves original retrieval time'
 Assert-ScopeTrue (-not [object]::ReferenceEquals($d2, $d3)) 'Documents must be independently reconstructed'
 
-$o2 = Get-BenefitRunHtmlObservation -Context $ctx -Document $d2
+# P3-4 obtains a trusted checkpoint before parsing.  That snapshot must be
+# run-local and must be exactly the snapshot the later parser consumes.
+$snapshotHashCount = [pscustomobject]@{ Count=0 }
+$originalTextHash = (Get-Item Function:Get-BenefitEvidenceTextHash).ScriptBlock
+$countingTextHash = { param([string]$Text) $snapshotHashCount.Count++; & $originalTextHash -Text $Text }.GetNewClosure()
+Set-Item Function:Get-BenefitEvidenceTextHash -Value $countingTextHash
+try {
+    $preParseHtmlSnapshot = Get-BenefitRunSourceSnapshot -Context $ctx -Document $d2
+    $preParseHtmlHashCount = $snapshotHashCount.Count
+    $samePayloadHtmlSnapshot = Get-BenefitRunSourceSnapshot -Context $ctx -Document $d3
+    $o2 = Get-BenefitRunHtmlObservation -Context $ctx -Document $d2
+} finally { Set-Item Function:Get-BenefitEvidenceTextHash -Value $originalTextHash }
+Assert-ScopeTrue ($preParseHtmlHashCount -gt 0) 'Pre-parse HTML snapshot establishes one trusted payload hash boundary'
+Assert-ScopeEqual $snapshotHashCount.Count $preParseHtmlHashCount 'Pre-parse HTML checkpoint, second wrapper, and observation must not rehash one payload'
+Assert-ScopeTrue ([object]::ReferenceEquals($preParseHtmlSnapshot,$samePayloadHtmlSnapshot)) 'Two business wrappers share one cached HTML snapshot'
+
 $o3 = Get-BenefitRunHtmlObservation -Context $ctx -Document $d3
 Assert-ScopeEqual $ctx.Metrics.AdapterParseCount 1 'Same snapshot parses once'
 Assert-ScopeEqual $ctx.Metrics.AdapterReuseCount 1 'Second observation reuses parsed template'
@@ -89,6 +105,7 @@ for ($i=0; $i -lt $failedDocs.Count; $i++) {
     Assert-ScopeTrue ($failedDocs[$i].ReasonCodes -contains 'SOURCE_FETCH_FAILED') 'Failed retrieval preserves source failure reason'
 }
 Assert-ScopeThrows { Get-BenefitRunHtmlObservation -Context $failedCtx -Document $failedDocs[0] } 'Failed HTTP document must not be parsed into semantic observation'
+Assert-ScopeThrows { Get-BenefitRunSourceSnapshot -Context $failedCtx -Document $failedDocs[0] } 'Failed document must never create a snapshot'
 Assert-ScopeEqual $failedCtx.Metrics.AdapterParseCount 0 'Failed HTTP fetch must not invoke the HTML parser'
 
 $profileACount = [pscustomobject]@{ Count=0 }
@@ -158,6 +175,9 @@ $script:xlsxHashCount = 0
 $script:originalXlsxHash = (Get-Item Function:Get-BenefitEvidenceByteHash).ScriptBlock
 function Get-BenefitEvidenceByteHash { param([Parameter(Mandatory)][byte[]]$Bytes); $script:xlsxHashCount++; & $script:originalXlsxHash -Bytes $Bytes }
 try {
+    $preParseXlsxSnapshot = Get-BenefitRunSourceSnapshot -Context $xlsxContext -Document $xlsxDocument2
+    $preParseXlsxHashCount = $script:xlsxHashCount
+    $samePayloadXlsxSnapshot = Get-BenefitRunSourceSnapshot -Context $xlsxContext -Document $xlsxDocument3
     $xlsxObservation2 = Get-BenefitRunXlsxObservation -Context $xlsxContext -Document $xlsxDocument2
     $firstXlsxHashCount = $script:xlsxHashCount
     $xlsxObservation3 = Get-BenefitRunXlsxObservation -Context $xlsxContext -Document $xlsxDocument3
@@ -167,9 +187,17 @@ Assert-ScopeEqual $xlsxContext.Metrics.ExternalFetchCount 1 'XLSX external fetch
 Assert-ScopeEqual $xlsxContext.Metrics.FetchCacheHits 1 'Second XLSX business hits payload cache'
 Assert-ScopeEqual $xlsxContext.Metrics.AdapterParseCount 1 'XLSX package/index parses once'
 Assert-ScopeEqual $xlsxContext.Metrics.AdapterReuseCount 1 'Second XLSX business reuses cached template'
-Assert-ScopeTrue ($firstXlsxHashCount -gt 0) 'First XLSX business establishes the snapshot hash before caching'
+Assert-ScopeTrue ($preParseXlsxHashCount -gt 0) 'Pre-parse XLSX snapshot establishes the workbook hash before caching'
+Assert-ScopeEqual $firstXlsxHashCount $preParseXlsxHashCount 'XLSX observation must reuse the pre-parse snapshot without hashing again'
 Assert-ScopeEqual $script:xlsxHashCount $firstXlsxHashCount 'Second XLSX business does not hash the workbook'
+Assert-ScopeTrue ([object]::ReferenceEquals($preParseXlsxSnapshot,$samePayloadXlsxSnapshot)) 'Two business wrappers share one cached XLSX snapshot'
 Assert-ScopeTrue ([object]::ReferenceEquals($xlsxObservation2.XlsxValidationIndex, $xlsxObservation3.XlsxValidationIndex)) 'Both XLSX wrappers reuse the same validation index'
+$xlsxBusiness = New-NormalizedBusiness -SourceRowNumber 2 -OriginalName '가마골 백숙' -NormalizedName '가마골백숙' -BaseName '가마골 백숙' -OriginalRoadAddress '양주시 장흥면 북한산로 1028' -PreferredAddress '양주시 장흥면 북한산로 1028' -Province '경기도' -City '양주시' -RoadName '북한산로' -BuildingMain '1028' -AddressParseStatus COMPLETE
+$xlsxScopedRecord = Invoke-ScopedPhase2BenefitSourceCandidate -Candidate (New-RunCandidate -RowNumber 2 -Url 'https://city.example.go.kr/attachment') -Business $xlsxBusiness -CanonicalPhone '031-861-4800' -RunContext $xlsxContext -RequestInvoker $xlsxHttp
+Assert-ScopeEqual $xlsxContext.Metrics.AdapterParseCount 1 'Trusted XLSX scoped downstream does not parse again'
+Assert-ScopeEqual $xlsxScopedRecord.LocationResult.Status LOCATED 'Trusted XLSX scoped downstream preserves locator semantics'
+Assert-ScopeEqual $xlsxScopedRecord.Bound.BusinessBindingStatus STRONG 'Trusted XLSX scoped downstream preserves binding semantics'
+Assert-ScopeEqual $xlsxScopedRecord.Validation.Status COMPLETE 'Trusted XLSX scoped downstream preserves validation semantics'
 
 $differentXlsxDocument = Get-BenefitRunSourceDocument -Context $xlsxContext -Candidate (New-RunCandidate -RowNumber 4 -Url 'https://city.example.go.kr/attachment-2') -RequestInvoker $xlsxHttp
 $differentXlsxObservation = Get-BenefitRunXlsxObservation -Context $xlsxContext -Document $differentXlsxDocument
@@ -185,5 +213,61 @@ $partialLocation = Find-BenefitBusinessEvidence -Observation $partialXlsxObserva
 Assert-ScopeEqual $partialXlsxObservation.AdapterStatus PARTIAL 'Partial XLSX observation remains partial in run context'
 Assert-ScopeEqual $partialLocation.OperationalStatus PARTIAL 'Partial XLSX location remains operationally partial'
 Assert-ScopeTrue ($null -eq $partialLocation.Status) 'Partial XLSX cannot claim semantic NOT_FOUND'
+
+# The run-context fast path covers the complete scoped HTML chain, not just
+# observation creation.  Once the fetch boundary created its trusted snapshot,
+# no later locator/binding/extraction/validation step may hash the same text.
+$pipelineHashCount = [pscustomobject]@{ Count=0 }
+$pipelineTokenCount = [pscustomobject]@{ Count=0 }
+$originalPipelineHash = (Get-Item Function:Get-BenefitEvidenceTextHash).ScriptBlock
+$originalPipelineTokenizer = (Get-Item Function:Get-ScopeHtmlTagTokens).ScriptBlock
+$countingPipelineHash = { param([string]$Text) $pipelineHashCount.Count++; & $originalPipelineHash -Text $Text }.GetNewClosure()
+$countingPipelineTokenizer = { param([string]$Text) $pipelineTokenCount.Count++; & $originalPipelineTokenizer -Text $Text }.GetNewClosure()
+Set-Item Function:Get-BenefitEvidenceTextHash -Value $countingPipelineHash
+Set-Item Function:Get-ScopeHtmlTagTokens -Value $countingPipelineTokenizer
+try {
+    $pipelineContext = New-BenefitSourceRunContext
+    $pipelineCandidate = New-RunCandidate -RowNumber 2 -Url 'https://city.example.go.kr/pipeline'
+    $pipelineDocument = Get-BenefitRunSourceDocument -Context $pipelineContext -Candidate $pipelineCandidate -RequestInvoker $http
+    $pipelineSnapshot = Get-BenefitRunSourceSnapshot -Context $pipelineContext -Document $pipelineDocument
+    $pipelineInitialHashCount = $pipelineHashCount.Count
+    $pipelineBusiness = New-ScopeTestBusiness -RowNumber 2
+    $pipelineRecord = Invoke-ScopedPhase2BenefitSourceCandidate -Candidate $pipelineCandidate -Business $pipelineBusiness -CanonicalPhone '02-0000-0012' -RunContext $pipelineContext -RequestInvoker $http
+} finally {
+    Set-Item Function:Get-BenefitEvidenceTextHash -Value $originalPipelineHash
+    Set-Item Function:Get-ScopeHtmlTagTokens -Value $originalPipelineTokenizer
+}
+Assert-ScopeEqual $pipelineContext.Metrics.ExternalFetchCount 1 'Trusted full HTML chain still performs one external fetch'
+Assert-ScopeEqual $pipelineContext.Metrics.AdapterParseCount 1 'Trusted full HTML chain parses once'
+Assert-ScopeEqual $pipelineHashCount.Count $pipelineInitialHashCount 'Trusted full HTML chain adds no payload SHA-256 after checkpoint'
+Assert-ScopeEqual $pipelineTokenCount.Count 1 'Trusted full HTML chain tokenizes exactly once'
+Assert-ScopeEqual $pipelineRecord.LocationResult.Status LOCATED 'Trusted full HTML chain preserves locator semantics'
+Assert-ScopeEqual $pipelineRecord.Bound.BusinessBindingStatus STRONG 'Trusted full HTML chain preserves binding semantics'
+Assert-ScopeEqual $pipelineRecord.Extraction.Status COMPLETE 'Trusted full HTML chain preserves extraction semantics'
+Assert-ScopeEqual $pipelineRecord.Validation.Status COMPLETE 'Trusted full HTML chain preserves validation semantics'
+Assert-ScopeTrue (Test-InternalBenefitHtmlRunContextTrust -Snapshot $pipelineRecord.Observation.Snapshot -HtmlValidationIndex $pipelineRecord.Observation.HtmlValidationIndex) 'Run-context observation carries an exact trusted snapshot/index binding'
+
+$differentSnapshot = New-BenefitSourceSnapshot -SourceUrl $pipelineDocument.Url -SourceFormat HTML -Text $pipelineDocument.Text -ObservedAt $pipelineDocument.ObservedAt
+Assert-ScopeTrue (-not (Test-InternalBenefitHtmlRunContextTrust -Snapshot $differentSnapshot -HtmlValidationIndex $pipelineRecord.Observation.HtmlValidationIndex)) 'Different snapshot object cannot reuse an HTML trust binding'
+$differentIndex = New-ScopeHtmlValidationIndex -Snapshot $pipelineRecord.Observation.Snapshot -HtmlTokens $pipelineRecord.Observation.HtmlValidationIndex.Tokens
+Assert-ScopeTrue (-not (Test-InternalBenefitHtmlRunContextTrust -Snapshot $pipelineRecord.Observation.Snapshot -HtmlValidationIndex $differentIndex)) 'Different HTML validation index cannot reuse an HTML trust binding'
+$originalIndexSnapshotId = $pipelineRecord.Observation.HtmlValidationIndex.SnapshotId
+$pipelineRecord.Observation.HtmlValidationIndex.SnapshotId = ('f' * 64)
+Assert-ScopeTrue (-not (Test-InternalBenefitHtmlRunContextTrust -Snapshot $pipelineRecord.Observation.Snapshot -HtmlValidationIndex $pipelineRecord.Observation.HtmlValidationIndex)) 'Forged HTML validation index identity invalidates run-context trust'
+$pipelineRecord.Observation.HtmlValidationIndex.SnapshotId = $originalIndexSnapshotId
+$originalPipelineText = $pipelineRecord.Observation.Snapshot.Text
+$pipelineRecord.Observation.Snapshot.Text = '<html>tampered</html>'
+Assert-ScopeTrue (-not (Test-InternalBenefitHtmlRunContextTrust -Snapshot $pipelineRecord.Observation.Snapshot -HtmlValidationIndex $pipelineRecord.Observation.HtmlValidationIndex)) 'Replacing snapshot text invalidates HTML run-context trust'
+$pipelineRecord.Observation.Snapshot.Text = $originalPipelineText
+
+$directHashCount = [pscustomobject]@{ Count=0 }
+$originalDirectHash = (Get-Item Function:Get-BenefitEvidenceTextHash).ScriptBlock
+$countingDirectHash = { param([string]$Text) $directHashCount.Count++; & $originalDirectHash -Text $Text }.GetNewClosure()
+Set-Item Function:Get-BenefitEvidenceTextHash -Value $countingDirectHash
+try {
+    $directDocument = New-BenefitSourceDocument -SourceRowNumber 2 -Url 'https://city.example.go.kr/direct' -SourceFormat HTML -FetchStatus COMPLETE -ContentType 'text/html' -Text $html -ObservedAt '2026-09-24T00:00:00Z'
+    $null = ConvertTo-BenefitHtmlObservation -Document $directDocument
+} finally { Set-Item Function:Get-BenefitEvidenceTextHash -Value $originalDirectHash }
+Assert-ScopeTrue ($directHashCount.Count -gt 0) 'Direct/public HTML conversion retains strict snapshot hash validation'
 
 Write-Host 'Benefit source run context tests passed.'

@@ -3,13 +3,13 @@ $ErrorActionPreference = 'Stop'
 
 . (Join-Path $PSScriptRoot '../benefit-evidence-location-contracts.ps1')
 
-function ConvertTo-BenefitXlsxObservation {
-    param([Parameter(Mandatory)]$Document, [AllowNull()]$Snapshot=$null, [AllowNull()]$XlsxValidationIndex=$null)
-    Assert-BenefitSourceDocument $Document
-    if ($Document.FetchStatus -cne 'COMPLETE' -or $Document.SourceFormat -cne 'XLSX') { throw 'XLSX observation requires a successfully fetched XLSX document' }
-    if ($null -eq $Snapshot) { $snapshot=New-BenefitSourceSnapshot -SourceUrl $Document.Url -SourceFormat XLSX -Text '' -Bytes $Document.Bytes -ObservedAt $Document.ObservedAt }
-    Assert-ScopeSnapshot $snapshot
-    if ($null -eq $XlsxValidationIndex) { $index=New-BenefitXlsxValidationIndex -Snapshot $snapshot } else { $index=$XlsxValidationIndex; Assert-ScopeXlsxValidationIndexBinding -Snapshot $snapshot -XlsxValidationIndex $index }
+function ConvertTo-InternalBenefitXlsxObservation {
+    # The caller has already established the public snapshot boundary or the
+    # private run-context snapshot/index binding.  Keep row conversion in one
+    # shared core so the two paths cannot diverge semantically.
+    param([Parameter(Mandatory)]$Document, [Parameter(Mandatory)]$Snapshot, [Parameter(Mandatory)]$XlsxValidationIndex)
+    $snapshot=$Snapshot
+    $index=$XlsxValidationIndex
     $units = [Collections.Generic.List[object]]::new()
     $diagnostics = [Collections.Generic.List[object]]::new()
     $map = Get-BenefitScopedHeaderMap
@@ -88,4 +88,14 @@ function ConvertTo-BenefitXlsxObservation {
     $observation = New-BenefitSourceObservation -SourceRowNumber $Document.SourceRowNumber -Snapshot $snapshot -AdapterId XLSX_GENERIC -AdapterVersion '1' -AdapterStatus $adapterStatus -ContentUnits @($units) -Diagnostics @($diagnostics) -XlsxValidationIndex $index
     $observation | Add-Member -NotePropertyName XlsxValidationIndex -NotePropertyValue $index
     return $observation
+}
+
+function ConvertTo-BenefitXlsxObservation {
+    param([Parameter(Mandatory)]$Document, [AllowNull()]$Snapshot=$null, [AllowNull()]$XlsxValidationIndex=$null)
+    Assert-BenefitSourceDocument $Document
+    if ($Document.FetchStatus -cne 'COMPLETE' -or $Document.SourceFormat -cne 'XLSX') { throw 'XLSX observation requires a successfully fetched XLSX document' }
+    if ($null -eq $Snapshot) { $Snapshot=New-BenefitSourceSnapshot -SourceUrl $Document.Url -SourceFormat XLSX -Text '' -Bytes $Document.Bytes -ObservedAt $Document.ObservedAt }
+    Assert-ScopeSnapshot $Snapshot
+    if ($null -eq $XlsxValidationIndex) { $index=New-BenefitXlsxValidationIndex -Snapshot $Snapshot } else { $index=$XlsxValidationIndex; Assert-ScopeXlsxValidationIndexBinding -Snapshot $Snapshot -XlsxValidationIndex $index }
+    return ConvertTo-InternalBenefitXlsxObservation -Document $Document -Snapshot $Snapshot -XlsxValidationIndex $index
 }

@@ -51,7 +51,46 @@ function Copy-BenefitRunBytes {
 
 function New-BenefitRunDocumentFromPayload {
     param([Parameter(Mandatory)]$Candidate, [Parameter(Mandatory)]$Payload)
-    return New-BenefitSourceDocument -SourceRowNumber $Candidate.SourceRowNumber -Url $Payload.Url -SourceFormat $Payload.SourceFormat -FetchStatus $Payload.FetchStatus -ContentType $Payload.ContentType -Text $Payload.Text -Bytes (Copy-BenefitRunBytes $Payload.Bytes) -ObservedAt $Payload.ObservedAt -ReasonCodes @($Payload.ReasonCodes)
+    $document = New-BenefitSourceDocument -SourceRowNumber $Candidate.SourceRowNumber -Url $Payload.Url -SourceFormat $Payload.SourceFormat -FetchStatus $Payload.FetchStatus -ContentType $Payload.ContentType -Text $Payload.Text -Bytes (Copy-BenefitRunBytes $Payload.Bytes) -ObservedAt $Payload.ObservedAt -ReasonCodes @($Payload.ReasonCodes)
+    # This run-local reference is not part of BenefitSourceDocument.  It lets
+    # composition code prove a wrapper came from this context without hashing
+    # or byte-comparing the payload again.
+    $document | Add-Member -NotePropertyName RunContextPayload -NotePropertyValue $Payload
+    return $document
+}
+
+function Get-BenefitRunSourceSnapshot {
+    param([Parameter(Mandatory)]$Context, [Parameter(Mandatory)]$Document)
+
+    Assert-BenefitSourceRunContext $Context
+    Assert-BenefitSourceDocument $Document
+    if ($Document.FetchStatus -cne 'COMPLETE' -or $Document.SourceFormat -notin @('HTML','XLSX')) {
+        throw 'Run-context snapshot requires a successfully fetched HTML or XLSX document'
+    }
+    $key = [string]$Document.Url
+    if (-not $Context.PayloadCache.ContainsKey($key)) { throw 'Run-context snapshot requires a cached payload' }
+    $payload = $Context.PayloadCache[$key]
+    if ([string]$payload.Url -cne [string]$Document.Url -or
+        [string]$payload.SourceFormat -cne [string]$Document.SourceFormat -or
+        [string]$payload.FetchStatus -cne 'COMPLETE') {
+        throw 'Run-context payload/document identity mismatch'
+    }
+    $trustedWrapper = ($Document.PSObject.Properties.Name -contains 'RunContextPayload' -and [object]::ReferenceEquals($Document.RunContextPayload,$payload))
+    if (-not $trustedWrapper) {
+        if ($Document.SourceFormat -ceq 'XLSX') {
+            if ($Document.Bytes -isnot [byte[]] -or $payload.Bytes -isnot [byte[]] -or -not [Linq.Enumerable]::SequenceEqual([byte[]]$Document.Bytes,[byte[]]$payload.Bytes)) {
+                throw 'Run-context XLSX payload/document bytes mismatch'
+            }
+        } elseif ([string]$Document.Text -cne [string]$payload.Text) {
+            throw 'Run-context HTML payload/document text mismatch'
+        }
+    }
+    if ($payload.PSObject.Properties.Name -notcontains 'SourceSnapshot') {
+        $snapshot = New-BenefitSourceSnapshot -SourceUrl $payload.Url -SourceFormat $payload.SourceFormat -Text $payload.Text -Bytes $payload.Bytes -ObservedAt $payload.ObservedAt
+        if ($snapshot.SourceFormat -ceq 'HTML') { Set-InternalBenefitHtmlRunContextSnapshotTrust -Snapshot $snapshot }
+        $payload | Add-Member -NotePropertyName SourceSnapshot -NotePropertyValue $snapshot
+    }
+    return $payload.SourceSnapshot
 }
 
 function Assert-BenefitRunRequestInvokerProfile {
@@ -161,7 +200,7 @@ function Get-BenefitRunHtmlObservation {
     Assert-BenefitSourceDocument $Document
     if ($Document.FetchStatus -cne 'COMPLETE') { throw 'HTML observation requires a successfully fetched source document' }
 
-    $snapshot = New-BenefitSourceSnapshot -SourceUrl $Document.Url -SourceFormat $Document.SourceFormat -Text $Document.Text -ObservedAt $Document.ObservedAt
+    $snapshot = Get-BenefitRunSourceSnapshot -Context $Context -Document $Document
     $adapterId = 'HTML_GENERIC'
     $adapterVersion = '1'
     $key = "$($snapshot.SnapshotId)|$adapterId|$adapterVersion"
@@ -171,7 +210,8 @@ function Get-BenefitRunHtmlObservation {
         $template = $Context.TemplateCache[$key]
         $cacheHit = $true
     } else {
-        $template = ConvertTo-BenefitHtmlTemplate -Snapshot $snapshot
+        $template = ConvertTo-BenefitHtmlTemplate -Snapshot $snapshot -RunContextSnapshot $snapshot
+        if ($null -ne $template.HtmlValidationIndex) { Set-InternalBenefitHtmlRunContextTrust -Snapshot $snapshot -HtmlValidationIndex $template.HtmlValidationIndex }
         $Context.TemplateCache.Add($key, $template)
         $Context.Metrics.AdapterParseCount++
         $cacheHit = $false
@@ -184,19 +224,20 @@ function Get-BenefitRunHtmlObservation {
         $units += New-BenefitSourceContentUnit -Snapshot $snapshot -UnitReference $row.UnitReference -TableStart $row.TableStart -TableLength $row.TableLength -RawStart $row.RawStart -RawLength $row.RawLength -RawEvidenceText $row.RawEvidenceText -StructuredFields $row.StructuredFields -FieldReferences $row.FieldReferences -HtmlTokens $htmlTokens -HtmlValidationIndex $htmlValidationIndex
     }
     [void]$Context.Attempts.Add([pscustomobject][ordered]@{Stage='PARSE';Key=$key;CacheHit=$cacheHit;Status=$template.AdapterStatus})
-    return New-BenefitSourceObservation -SourceRowNumber $Document.SourceRowNumber -Snapshot $snapshot -AdapterId $adapterId -AdapterVersion $adapterVersion -AdapterStatus $template.AdapterStatus -ContentUnits $units -Diagnostics @($template.Diagnostics) -HtmlTokens $htmlTokens -HtmlValidationIndex $htmlValidationIndex
+    $observation = New-BenefitSourceObservation -SourceRowNumber $Document.SourceRowNumber -Snapshot $snapshot -AdapterId $adapterId -AdapterVersion $adapterVersion -AdapterStatus $template.AdapterStatus -ContentUnits $units -Diagnostics @($template.Diagnostics) -HtmlTokens $htmlTokens -HtmlValidationIndex $htmlValidationIndex
+    if ($null -ne $htmlValidationIndex -and (Test-InternalBenefitHtmlRunContextTrust -Snapshot $snapshot -HtmlValidationIndex $htmlValidationIndex)) {
+        $observation | Add-Member -NotePropertyName HtmlValidationIndex -NotePropertyValue $htmlValidationIndex
+        $Document | Add-Member -NotePropertyName ValidatedHtmlSnapshot -NotePropertyValue $snapshot -Force
+        $Document | Add-Member -NotePropertyName HtmlValidationIndex -NotePropertyValue $htmlValidationIndex -Force
+    }
+    return $observation
 }
 
 function Get-BenefitRunXlsxObservation {
     param([Parameter(Mandatory)]$Context, [Parameter(Mandatory)]$Document)
     Assert-BenefitSourceRunContext $Context; Assert-BenefitSourceDocument $Document
     if ($Document.FetchStatus -cne 'COMPLETE' -or $Document.SourceFormat -cne 'XLSX') { throw 'XLSX observation requires a successful XLSX document' }
-    $payload = $Context.PayloadCache[[string]$Document.Url]
-    if ($null -eq $payload) { throw 'XLSX observation requires a run-context payload' }
-    if ($payload.PSObject.Properties.Name -notcontains 'XlsxSnapshot') {
-        $payload | Add-Member -NotePropertyName XlsxSnapshot -NotePropertyValue (New-BenefitSourceSnapshot -SourceUrl $Document.Url -SourceFormat XLSX -Text '' -Bytes $Document.Bytes -ObservedAt $Document.ObservedAt)
-    }
-    $snapshot=$payload.XlsxSnapshot; $adapterId='XLSX_GENERIC'; $key="$($snapshot.SnapshotId)|$adapterId|1"
+    $snapshot=Get-BenefitRunSourceSnapshot -Context $Context -Document $Document; $adapterId='XLSX_GENERIC'; $key="$($snapshot.SnapshotId)|$adapterId|1"
     # Use the exact byte array which was validated to create the cached
     # snapshot.  Later scoped stages can prove this identity by reference and
     # reuse its index without rehashing a copied workbook.
@@ -206,8 +247,9 @@ function Get-BenefitRunXlsxObservation {
     }
     if ($Context.TemplateCache.ContainsKey($key)) { $Context.Metrics.AdapterReuseCount++; $template=$Context.TemplateCache[$key]; $cacheHit=$true }
     else {
-        $template=ConvertTo-BenefitXlsxObservation -Document $Document -Snapshot $snapshot
-        Set-InternalBenefitXlsxRunContextTrust -Snapshot $snapshot -XlsxValidationIndex $template.XlsxValidationIndex
+        $index=New-InternalBenefitXlsxValidationIndex -Snapshot $snapshot
+        Set-InternalBenefitXlsxRunContextTrust -Snapshot $snapshot -XlsxValidationIndex $index
+        $template=ConvertTo-InternalBenefitXlsxObservation -Document $Document -Snapshot $snapshot -XlsxValidationIndex $index
         $Context.TemplateCache.Add($key,$template); $Context.Metrics.AdapterParseCount++; $cacheHit=$false
     }
     [void]$Context.Attempts.Add([pscustomobject][ordered]@{Stage='PARSE';Key=$key;CacheHit=$cacheHit;Status=$template.AdapterStatus})

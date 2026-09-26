@@ -120,8 +120,9 @@ function Get-A1HtmlTableTemplate {
 }
 
 function ConvertTo-BenefitHtmlTemplate {
-    param([Parameter(Mandatory)]$Snapshot)
-    Assert-ScopeSnapshot $Snapshot
+    param([Parameter(Mandatory)]$Snapshot, [AllowNull()]$RunContextSnapshot=$null)
+    $trustedRunContext = ($null -ne $RunContextSnapshot -and [object]::ReferenceEquals($RunContextSnapshot,$Snapshot) -and (Test-InternalBenefitHtmlRunContextSnapshotTrust -Snapshot $Snapshot))
+    if (-not $trustedRunContext) { Assert-ScopeSnapshot $Snapshot }
     if ($Snapshot.SourceFormat -cne 'HTML') {
         return [pscustomobject]@{ AdapterStatus='UNSUPPORTED'; Rows=@(); Diagnostics=@(New-A1HtmlDiagnostic 'HTML_FORMAT_UNSUPPORTED' 'Only HTML snapshots are supported'); HtmlTokens=@(); HtmlValidationIndex=$null }
     }
@@ -163,7 +164,8 @@ function ConvertTo-BenefitHtmlTemplate {
     if ($unsafeSeen) { $status='PARTIAL' }
     elseif (-not $candidateSeen) { $status='UNSUPPORTED' }
     else { $status='COMPLETE' }
-    return [pscustomobject]@{ AdapterStatus=$status; Rows=@($resultRows); Diagnostics=@($diagnostics); HtmlTokens=@($tokens); HtmlValidationIndex=(New-ScopeHtmlValidationIndex -Snapshot $Snapshot -HtmlTokens $tokens) }
+    $index = if ($trustedRunContext) { New-InternalScopeHtmlValidationIndex -Snapshot $Snapshot -HtmlTokens $tokens } else { New-ScopeHtmlValidationIndex -Snapshot $Snapshot -HtmlTokens $tokens }
+    return [pscustomobject]@{ AdapterStatus=$status; Rows=@($resultRows); Diagnostics=@($diagnostics); HtmlTokens=@($tokens); HtmlValidationIndex=$index }
 }
 
 function ConvertTo-BenefitHtmlObservation {

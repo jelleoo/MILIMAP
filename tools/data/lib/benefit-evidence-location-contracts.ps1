@@ -369,6 +369,13 @@ function Get-ScopeHtmlPairs {
 function New-ScopeHtmlValidationIndex {
     param([Parameter(Mandatory)]$Snapshot, [AllowNull()][object[]]$HtmlTokens=$null)
     Assert-ScopeSnapshot $Snapshot
+    return New-InternalScopeHtmlValidationIndex -Snapshot $Snapshot -HtmlTokens $HtmlTokens
+}
+function New-InternalScopeHtmlValidationIndex {
+    # Run-context callers reach this only after the exact snapshot/text object
+    # was validated at the fetch boundary.  Public callers stay on the strict
+    # wrapper above.
+    param([Parameter(Mandatory)]$Snapshot, [AllowNull()][object[]]$HtmlTokens=$null)
     if ($Snapshot.SourceFormat -cne 'HTML') { throw 'HTML validation index requires an HTML snapshot' }
     $tokens = if ($null -eq $HtmlTokens) { @(Get-ScopeHtmlTagTokens -Text $Snapshot.Text) } else { @($HtmlTokens) }
     foreach ($token in @($tokens | Where-Object { -not $_.IsClosing -and $_.Tag -in @('table','tr','th','td') })) {
@@ -397,6 +404,37 @@ function Assert-ScopeHtmlValidationIndex {
         if ($HtmlValidationIndex.PSObject.Properties.Name -notcontains $property) { throw "HTML validation index is missing $property" }
     }
     if ($HtmlValidationIndex.SnapshotId -cne $Snapshot.SnapshotId) { throw 'HTML validation index must belong to the original snapshot' }
+}
+function Set-InternalBenefitHtmlRunContextSnapshotTrust {
+    param([Parameter(Mandatory)]$Snapshot)
+    if ($Snapshot.SourceFormat -cne 'HTML' -or $Snapshot.Text -isnot [string] -or [string]::IsNullOrWhiteSpace($Snapshot.Text)) { throw 'HTML run-context trust requires an HTML text snapshot' }
+    if (@('RunContextSnapshot','RunContextText','RunContextTrust') | Where-Object { $Snapshot.PSObject.Properties.Name -contains $_ }) { throw 'HTML run-context snapshot trust is already initialized' }
+    $Snapshot | Add-Member -NotePropertyName RunContextSnapshot -NotePropertyValue $Snapshot
+    $Snapshot | Add-Member -NotePropertyName RunContextText -NotePropertyValue $Snapshot.Text
+    $Snapshot | Add-Member -NotePropertyName RunContextTrust -NotePropertyValue ([object]::new())
+}
+function Test-InternalBenefitHtmlRunContextSnapshotTrust {
+    param([Parameter(Mandatory)]$Snapshot)
+    $missing = @(@('RunContextSnapshot','RunContextText','RunContextTrust') | Where-Object { $Snapshot.PSObject.Properties.Name -notcontains $_ })
+    if ($Snapshot.SourceFormat -cne 'HTML' -or $missing.Count -gt 0) { return $false }
+    return ([object]::ReferenceEquals($Snapshot.RunContextSnapshot,$Snapshot) -and [object]::ReferenceEquals($Snapshot.RunContextText,$Snapshot.Text) -and $null -ne $Snapshot.RunContextTrust)
+}
+function Set-InternalBenefitHtmlRunContextTrust {
+    param([Parameter(Mandatory)]$Snapshot,[Parameter(Mandatory)]$HtmlValidationIndex)
+    if (-not (Test-InternalBenefitHtmlRunContextSnapshotTrust -Snapshot $Snapshot)) { throw 'HTML run-context snapshot trust is required before index binding' }
+    Assert-ScopeHtmlValidationIndex -HtmlValidationIndex $HtmlValidationIndex -Snapshot $Snapshot
+    if ($HtmlValidationIndex.PSObject.Properties.Name -contains 'RunContextHtmlSnapshot' -or $HtmlValidationIndex.PSObject.Properties.Name -contains 'RunContextHtmlText') { throw 'HTML run-context index trust is already initialized' }
+    $HtmlValidationIndex | Add-Member -NotePropertyName RunContextHtmlSnapshot -NotePropertyValue $Snapshot
+    $HtmlValidationIndex | Add-Member -NotePropertyName RunContextHtmlText -NotePropertyValue $Snapshot.Text
+}
+function Test-InternalBenefitHtmlRunContextTrust {
+    param([Parameter(Mandatory)]$Snapshot,[AllowNull()]$HtmlValidationIndex)
+    if ($null -eq $HtmlValidationIndex -or -not (Test-InternalBenefitHtmlRunContextSnapshotTrust -Snapshot $Snapshot)) { return $false }
+    $missing = @(@('RunContextHtmlSnapshot','RunContextHtmlText') | Where-Object { $HtmlValidationIndex.PSObject.Properties.Name -notcontains $_ })
+    if ($missing.Count -gt 0) { return $false }
+    if (-not [object]::ReferenceEquals($HtmlValidationIndex.RunContextHtmlSnapshot,$Snapshot) -or -not [object]::ReferenceEquals($HtmlValidationIndex.RunContextHtmlText,$Snapshot.Text)) { return $false }
+    try { Assert-ScopeHtmlValidationIndex -HtmlValidationIndex $HtmlValidationIndex -Snapshot $Snapshot } catch { return $false }
+    return $true
 }
 function Get-ScopeElementFragment {
     param([string]$Text, [long]$Start, [long]$Length, [ValidateSet('table','tr','th','td')][string]$Tag)
@@ -626,7 +664,8 @@ function New-BenefitSourceContentUnit {
         [Parameter(Mandatory)][AllowEmptyCollection()][Collections.IDictionary]$StructuredFields,
         [Parameter(Mandatory)][AllowEmptyCollection()][Collections.IDictionary]$FieldReferences,
         [AllowNull()][object[]]$HtmlTokens=$null, [AllowNull()]$HtmlValidationIndex=$null)
-    Assert-ScopeSnapshot $Snapshot
+    $trustedHtml = Test-InternalBenefitHtmlRunContextTrust -Snapshot $Snapshot -HtmlValidationIndex $HtmlValidationIndex
+    if (-not $trustedHtml) { Assert-ScopeSnapshot $Snapshot }
     Assert-ScopeSpan $RawStart $RawLength 0 $Snapshot.Text.Length
     $result = [pscustomobject][ordered]@{
         ContractType='SourceContentUnit'; ContractVersion=1; SnapshotId=$Snapshot.SnapshotId
@@ -669,7 +708,8 @@ function Assert-ScopeObservation {
     Assert-ScopeObject $Observation 'SourceObservation' @('SourceRowNumber','SnapshotId','SourceUrl','SourceFormat','ObservedAt','Snapshot','AdapterId','AdapterVersion','AdapterStatus','ContentUnits','Diagnostics')
     Assert-BenefitSourceRowNumber $Observation.SourceRowNumber
     $trustedXlsx = ($Observation.SourceFormat -ceq 'XLSX' -and (Test-InternalBenefitXlsxRunContextTrust -Snapshot $Observation.Snapshot -XlsxValidationIndex $XlsxValidationIndex))
-    if (-not $trustedXlsx) { Assert-ScopeSnapshot $Observation.Snapshot }
+    $trustedHtml = ($Observation.SourceFormat -ceq 'HTML' -and (Test-InternalBenefitHtmlRunContextTrust -Snapshot $Observation.Snapshot -HtmlValidationIndex $HtmlValidationIndex))
+    if (-not $trustedXlsx -and -not $trustedHtml) { Assert-ScopeSnapshot $Observation.Snapshot }
     foreach ($key in @('SnapshotId','SourceUrl','SourceFormat','ObservedAt')) {
         if ($Observation.$key -cne $Observation.Snapshot.$key) { throw 'Observation must preserve snapshot identity' }
     }
@@ -697,11 +737,12 @@ function New-BenefitSourceObservation {
         [AllowEmptyCollection()][object[]]$ContentUnits=@(), [AllowEmptyCollection()][object[]]$Diagnostics=@(),
         [AllowNull()][object[]]$HtmlTokens=$null, [AllowNull()]$HtmlValidationIndex=$null, [AllowNull()]$XlsxValidationIndex=$null)
     $trustedXlsx = ($Snapshot.SourceFormat -ceq 'XLSX' -and (Test-InternalBenefitXlsxRunContextTrust -Snapshot $Snapshot -XlsxValidationIndex $XlsxValidationIndex))
-    if (-not $trustedXlsx) { Assert-ScopeSnapshot $Snapshot }
+    $trustedHtml = ($Snapshot.SourceFormat -ceq 'HTML' -and (Test-InternalBenefitHtmlRunContextTrust -Snapshot $Snapshot -HtmlValidationIndex $HtmlValidationIndex))
+    if (-not $trustedXlsx -and -not $trustedHtml) { Assert-ScopeSnapshot $Snapshot }
     $result = [pscustomobject][ordered]@{
         ContractType='SourceObservation'; ContractVersion=1; SourceRowNumber=$SourceRowNumber
         SnapshotId=$Snapshot.SnapshotId; SourceUrl=$Snapshot.SourceUrl; SourceFormat=$Snapshot.SourceFormat; ObservedAt=$Snapshot.ObservedAt
-        Snapshot=$(if ($trustedXlsx) { $Snapshot } else { Copy-ScopeContractData $Snapshot }); AdapterId=$AdapterId; AdapterVersion=$AdapterVersion; AdapterStatus=$AdapterStatus
+        Snapshot=$(if ($trustedXlsx -or $trustedHtml) { $Snapshot } else { Copy-ScopeContractData $Snapshot }); AdapterId=$AdapterId; AdapterVersion=$AdapterVersion; AdapterStatus=$AdapterStatus
         ContentUnits=(Copy-ScopeContractData $ContentUnits); Diagnostics=(Copy-ScopeContractData $Diagnostics)
     }
     Assert-ScopeObservation -Observation $result -HtmlTokens $HtmlTokens -HtmlValidationIndex $HtmlValidationIndex -XlsxValidationIndex $XlsxValidationIndex
@@ -734,7 +775,9 @@ function Assert-ScopeSliceShape {
 function Assert-ScopeSliceAgainstSnapshot {
     param([AllowNull()]$Slice, [Parameter(Mandatory)]$Snapshot, [int]$SourceRowNumber, [AllowNull()][object[]]$HtmlTokens=$null, [AllowNull()]$HtmlValidationIndex=$null, [AllowNull()]$XlsxValidationIndex=$null)
     Assert-ScopeSliceShape $Slice $SourceRowNumber
-    if (-not ($Snapshot.SourceFormat -ceq 'XLSX' -and (Test-InternalBenefitXlsxRunContextTrust -Snapshot $Snapshot -XlsxValidationIndex $XlsxValidationIndex))) { Assert-ScopeSnapshot $Snapshot }
+    $trustedXlsx = ($Snapshot.SourceFormat -ceq 'XLSX' -and (Test-InternalBenefitXlsxRunContextTrust -Snapshot $Snapshot -XlsxValidationIndex $XlsxValidationIndex))
+    $trustedHtml = ($Snapshot.SourceFormat -ceq 'HTML' -and (Test-InternalBenefitHtmlRunContextTrust -Snapshot $Snapshot -HtmlValidationIndex $HtmlValidationIndex))
+    if (-not $trustedXlsx -and -not $trustedHtml) { Assert-ScopeSnapshot $Snapshot }
     foreach ($key in @('SnapshotId','ContentHash','SourceUrl','SourceFormat','ObservedAt')) {
         if ($Slice.$key -cne $Snapshot.$key) { throw 'Slice must preserve original source snapshot' }
     }
@@ -844,7 +887,18 @@ function Assert-RelevantBenefitEvidenceSlice {
     param([AllowNull()]$Slice, [Parameter(Mandatory)]$Document, [int]$SourceRowNumber, [AllowNull()]$XlsxValidationIndex=$null)
     Assert-BenefitSourceDocument $Document
     if ($Document.SourceRowNumber -ne $SourceRowNumber -or $Document.FetchStatus -cne 'COMPLETE') { throw 'Slice requires the original successful source row document' }
-    if ($Document.SourceFormat -ceq 'XLSX' -and $null -ne $XlsxValidationIndex -and
+    $htmlValidationIndex = $null
+    if ($Document.SourceFormat -ceq 'HTML' -and $Document.PSObject.Properties.Name -contains 'ValidatedHtmlSnapshot' -and
+        $Document.PSObject.Properties.Name -contains 'HtmlValidationIndex') {
+        $snapshot = $Document.ValidatedHtmlSnapshot
+        $htmlValidationIndex = $Document.HtmlValidationIndex
+        if ($snapshot.SourceFormat -cne 'HTML' -or $snapshot.SourceUrl -cne $Document.Url -or $snapshot.ObservedAt -cne $Document.ObservedAt -or
+            $snapshot.Text -cne $Document.Text -or -not [object]::ReferenceEquals($snapshot.Text,$Document.Text) -or
+            -not (Test-InternalBenefitHtmlRunContextTrust -Snapshot $snapshot -HtmlValidationIndex $htmlValidationIndex)) {
+            $snapshot = New-BenefitSourceSnapshot -SourceUrl $Document.Url -SourceFormat $Document.SourceFormat -Text $Document.Text -ObservedAt $Document.ObservedAt
+            $htmlValidationIndex = $null
+        }
+    } elseif ($Document.SourceFormat -ceq 'XLSX' -and $null -ne $XlsxValidationIndex -and
         $Document.PSObject.Properties.Name -contains 'ValidatedXlsxSnapshot') {
         $snapshot = $Document.ValidatedXlsxSnapshot
         Assert-ScopeObject $snapshot 'BenefitSourceSnapshot' @('SnapshotId','SourceUrl','SourceFormat','Text','ObservedAt','ContentHash','Bytes')
@@ -859,7 +913,7 @@ function Assert-RelevantBenefitEvidenceSlice {
         if ($Document.SourceFormat -ceq 'XLSX') { $snapshotParameters.Text = ''; $snapshotParameters.Bytes = $Document.Bytes }
         $snapshot = New-BenefitSourceSnapshot @snapshotParameters
     }
-    Assert-ScopeSliceAgainstSnapshot -Slice $Slice -Snapshot $snapshot -SourceRowNumber $SourceRowNumber -XlsxValidationIndex $XlsxValidationIndex
+    Assert-ScopeSliceAgainstSnapshot -Slice $Slice -Snapshot $snapshot -SourceRowNumber $SourceRowNumber -HtmlValidationIndex $htmlValidationIndex -XlsxValidationIndex $XlsxValidationIndex
 }
 function New-BenefitEvidenceLocationResult {
     param([int]$SourceRowNumber, [Parameter(Mandatory)][string]$OperationalStatus, [AllowNull()]$Status=$null,

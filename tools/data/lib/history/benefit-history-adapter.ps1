@@ -321,3 +321,134 @@ function New-BenefitHistoryObservationPackage {
         ExecutionProjection=$execution
     }
 }
+
+
+function Read-BenefitHistorySemanticProjection {
+    param(
+        [Parameter(Mandatory)]$Store,
+        [Parameter(Mandatory)]$Observation
+    )
+
+    Assert-HistoryObservation $Observation
+    if([string]$Observation.Domain -cne 'BENEFIT'){ throw 'Benefit semantic projection requires BENEFIT observation' }
+
+    $references=@($Observation.ArtifactReferences | Where-Object { [string]$_.Kind -ceq 'BENEFIT_SEMANTIC_PROJECTION' })
+    if($references.Count -ne 1){ throw 'Benefit observation requires exactly one semantic projection artifact' }
+    $reference=$references[0]
+    if([string]$Observation.SemanticResultReference -cne [string]$reference.RelativePath){
+        throw 'Benefit semantic result reference does not match semantic artifact'
+    }
+
+    Assert-HistoryArtifactReferenceExists -Store $Store -Reference $reference
+    $path=Assert-HistoryStorePathWithinRoot -Store $Store -Path (Join-Path $Store.Root ([string]$reference.RelativePath))
+    $projection=Read-HistoryJsonFile -Store $Store -Path $path -Kind 'benefit semantic projection'
+    if($null -eq $projection){ throw 'Benefit semantic projection artifact is missing' }
+    if([string]$projection.ProjectionType -cne 'BenefitHistorySemantic' -or [int]$projection.ProjectionVersion -ne 1){
+        throw 'Unsupported benefit semantic projection'
+    }
+
+    $fingerprint=Get-HistoryFingerprint -Projection $projection -SchemaVersion $script:FingerprintSchemaVersion -OrderInsensitivePaths @('Claims','Claims[].MaterialReasonCodes','MaterialReasonCodes')
+    if($fingerprint -cne [string]$Observation.SemanticFingerprint){
+        throw 'Benefit semantic projection fingerprint mismatch'
+    }
+    return $projection
+}
+
+function Get-BenefitHistoryComparableClaimsByType {
+    param([Parameter(Mandatory)]$Projection)
+
+    $result=@{}
+    foreach($claim in @($Projection.Claims)){
+        if([string]$claim.ValidationStatus -cne 'VALIDATED'){ continue }
+        $type=[string]$claim.ClaimType
+        if([string]::IsNullOrWhiteSpace($type)){ continue }
+        if(-not $result.ContainsKey($type)){ $result[$type]=[Collections.Generic.List[object]]::new() }
+        $result[$type].Add($claim)
+    }
+    return $result
+}
+
+function Test-BenefitHistoryMaterialClaimDelta {
+    param(
+        [Parameter(Mandatory)]$PreviousProjection,
+        [Parameter(Mandatory)]$CurrentProjection
+    )
+
+    $previousByType=Get-BenefitHistoryComparableClaimsByType -Projection $PreviousProjection
+    $currentByType=Get-BenefitHistoryComparableClaimsByType -Projection $CurrentProjection
+    foreach($claimType in @($previousByType.Keys | Where-Object { $currentByType.ContainsKey($_) } | Sort-Object -CaseSensitive)){
+        $previousClaims=@($previousByType[$claimType])
+        $currentClaims=@($currentByType[$claimType])
+        if($previousClaims.Count -ne 1 -or $currentClaims.Count -ne 1){ continue }
+
+        $previous=$previousClaims[0]
+        $current=$currentClaims[0]
+        if($claimType -in @('BENEFIT_EXISTENCE','CURRENT_APPLICABILITY')){
+            $previousResult=[string]$previous.ClaimResult
+            $currentResult=[string]$current.ClaimResult
+            if($previousResult -in @('CONFIRMED','ENDED') -and $currentResult -in @('CONFIRMED','ENDED') -and $previousResult -cne $currentResult){
+                return $true
+            }
+            continue
+        }
+
+        $comparison=Compare-BenefitClaim -ClaimType $claimType -CanonicalValue ([string]$previous.SemanticValue) -EvidenceValue ([string]$current.SemanticValue)
+        if([string]$comparison.Result -ceq 'CHANGED'){ return $true }
+    }
+    return $false
+}
+
+function Resolve-BenefitHistoryDomainChange {
+    param(
+        [Parameter(Mandatory)]$Store,
+        [Parameter(Mandatory)]$Previous,
+        [Parameter(Mandatory)]$Current
+    )
+
+    $previousProjection=Read-BenefitHistorySemanticProjection -Store $Store -Observation $Previous
+    $currentProjection=Read-BenefitHistorySemanticProjection -Store $Store -Observation $Current
+
+    $previousAbsent=[bool]$previousProjection.AbsenceEligible
+    $currentAbsent=[bool]$currentProjection.AbsenceEligible
+    if($currentAbsent -and -not $previousAbsent){
+        return [pscustomobject][ordered]@{
+            ChangeCandidates=@('BENEFIT_ABSENCE_SUSPECTED')
+            ReasonCodes=@('COMPLETE_BUSINESS_NOT_FOUND')
+        }
+    }
+
+    if(Test-BenefitHistoryMaterialClaimDelta -PreviousProjection $previousProjection -CurrentProjection $currentProjection){
+        return [pscustomobject][ordered]@{
+            ChangeCandidates=@('BENEFIT_CHANGE_SUSPECTED')
+            ReasonCodes=@('MATERIAL_BENEFIT_SEMANTIC_DELTA')
+        }
+    }
+
+    return [pscustomobject][ordered]@{
+        ChangeCandidates=@()
+        ReasonCodes=@('BENEFIT_SEMANTIC_DELTA_NOT_MATERIAL')
+    }
+}
+
+function Compare-BenefitHistoryObservations {
+    param(
+        [Parameter(Mandatory)]$Store,
+        [AllowNull()]$Previous,
+        [Parameter(Mandatory)]$Current
+    )
+
+    Assert-HistoryObservation $Current
+    if([string]$Current.Domain -cne 'BENEFIT'){ throw 'Benefit history comparison requires BENEFIT current observation' }
+    if($null -ne $Previous){
+        Assert-HistoryObservation $Previous
+        if([string]$Previous.Domain -cne 'BENEFIT'){ throw 'Benefit history comparison requires BENEFIT previous observation' }
+    }
+
+    $historyStore=$Store
+    $resolver={
+        param($PreviousObservation,$CurrentObservation)
+        Resolve-BenefitHistoryDomainChange -Store $historyStore -Previous $PreviousObservation -Current $CurrentObservation
+    }.GetNewClosure()
+
+    return Compare-HistoryObservations -Previous $Previous -Current $Current -DomainChangeResolver $resolver
+}

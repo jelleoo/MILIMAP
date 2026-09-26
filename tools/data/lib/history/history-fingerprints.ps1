@@ -11,7 +11,7 @@ function ConvertTo-HistoryJsonString {
 function ConvertTo-HistoryCanonicalNode {
     param(
         [AllowNull()]$Value,
-        [Parameter(Mandatory)][Collections.Generic.HashSet[string]]$OrderInsensitive,
+        [Parameter(Mandatory)][AllowEmptyCollection()][Collections.Generic.HashSet[string]]$OrderInsensitive,
         [string]$Path=''
     )
 

@@ -96,8 +96,8 @@ function Assert-HistoryObservationIsCommitted {
 function Assert-PreparedComparisonReferences {
     param(
         [Parameter(Mandatory)]$Store,
-        [Parameter(Mandatory)][object[]]$Observations,
-        [Parameter(Mandatory)][object[]]$Comparisons
+        [Parameter(Mandatory)][AllowEmptyCollection()][object[]]$Observations,
+        [Parameter(Mandatory)][AllowEmptyCollection()][object[]]$Comparisons
     )
 
     $currentById=@{}

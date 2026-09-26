@@ -16,8 +16,6 @@ $missing = @($rows | Where-Object {
 })
 
 if ($missing.Count -gt 0) {
-    $migrationIds = @(1..$rows.Count | ForEach-Object { New-CanonicalBusinessId })
-    Write-Host ('P3_CANONICAL_BUSINESS_IDS=' + ($migrationIds -join ','))
     throw "Canonical rows are missing businessId: $($missing.Count)"
 }
 

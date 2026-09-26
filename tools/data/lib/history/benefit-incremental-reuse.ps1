@@ -186,6 +186,22 @@ function New-BenefitIncrementalReuseDecision {
     }
 }
 
+function Get-BenefitIncrementalNonReusableDecision {
+    param(
+        [Parameter(Mandatory)]$Store,
+        [Parameter(Mandatory)][string]$BusinessId,
+        [Parameter(Mandatory)][string]$Capability,
+        [Parameter(Mandatory)][string]$ReasonCode
+    )
+
+    Assert-HistoryBusinessId -Value $BusinessId
+    $entry=Get-HistoryLatestEntry -Store $Store -BusinessId $BusinessId -Domain BENEFIT -ComparableOnly
+    $expectedBaselineObservationId=if($null -eq $entry){''}else{[string]$entry.LatestComparableObservationId}
+    try { $baseline=Get-BenefitIncrementalBaseline -Store $Store -BusinessId $BusinessId -Entry $entry }
+    catch { return New-BenefitIncrementalReuseDecision -ReuseApplied $false -Capability $Capability -ExpectedBaselineObservationId $expectedBaselineObservationId -ReasonCodes @('PRIOR_ARTIFACT_INVALID') }
+    return New-BenefitIncrementalReuseDecision -ReuseApplied $false -Capability $Capability -Baseline $baseline -ExpectedBaselineObservationId $expectedBaselineObservationId -ReasonCodes @($ReasonCode)
+}
+
 function Get-BenefitIncrementalReuseDecision {
     param(
         [Parameter(Mandatory)]$Store,
@@ -296,20 +312,35 @@ function Invoke-BenefitIncrementalPostFetch {
         [Parameter(Mandatory)][string]$BusinessId,[Parameter(Mandatory)]$Benefit,[Parameter(Mandatory)]$BusinessIdentity,[string]$CanonicalPhone='',
         [Parameter(Mandatory)]$Candidate,[Parameter(Mandatory)]$RunContext,[AllowNull()][scriptblock]$RequestInvoker=$null,[Parameter(Mandatory)][scriptblock]$RepositoryStateProvider
     )
-    $document=Get-BenefitRunSourceDocument -Context $RunContext -Candidate $Candidate -RequestInvoker $RequestInvoker
-    $snapshot=$null
-    if($document.FetchStatus -ceq 'COMPLETE' -and $document.SourceFormat -in @('HTML','XLSX')){
-        $snapshot=Get-BenefitRunSourceSnapshot -Context $RunContext -Document $document
-        # The run-context snapshot is the byte-validated XLSX payload.  Bind
-        # this local wrapper to its exact bytes before the generic checkpoint
-        # verifies snapshot/document identity; no bytes are copied or rehashed.
-        if($document.SourceFormat -ceq 'XLSX'){$document.Bytes=$snapshot.Bytes}
-    }
-    $input=ConvertTo-BenefitHistoryInputProjection -BusinessId $BusinessId -Benefit $Benefit -BusinessIdentity $BusinessIdentity -CanonicalPhone $CanonicalPhone
-    $execution=ConvertTo-BenefitHistoryExecutionProjection -RepositoryRevision $RepositoryRevision
-    $decision=Get-BenefitIncrementalReuseDecision -Store $Store -BusinessId $BusinessId -Candidate $Candidate -Document $document -CurrentSnapshot $snapshot -CurrentInputFingerprint (Get-HistoryFingerprint -Projection $input -SchemaVersion $script:FingerprintSchemaVersion) -CurrentExecutionFingerprint (Get-HistoryFingerprint -Projection $execution -SchemaVersion $script:FingerprintSchemaVersion) -RepositoryStateProvider $RepositoryStateProvider
     $result=$null
     $sourceRecord=$null
+    $isMmaEntry=$false
+    $candidateUri=[Uri]$Candidate.Url
+    if($candidateUri.Host -ceq 'www.mma.go.kr' -and $candidateUri.AbsolutePath -ceq '/about/udgg/list.do'){
+        if($null -eq (Get-Command -Name Invoke-MmaJsonpBenefitSourceCandidate -ErrorAction SilentlyContinue)){
+            . (Join-Path (Split-Path -Parent $dataLibRoot) 'invoke-phase2-benefit-shadow-mode.ps1')
+        }
+        $isMmaEntry=Test-MmaBenefitEntryUrl -Url $Candidate.Url
+    }
+    if($isMmaEntry){
+        # MMA owns its LIST/DETAIL retrieval and JSONP parsing.  It is always
+        # recomputed and never enters the HTML/XLSX post-fetch shortcut.
+        $sourceRecord=Invoke-MmaJsonpBenefitSourceCandidate -Candidate $Candidate -Business $BusinessIdentity -CanonicalPhone $CanonicalPhone -RunContext $RunContext -RequestInvoker $RequestInvoker
+        $decision=Get-BenefitIncrementalNonReusableDecision -Store $Store -BusinessId $BusinessId -Capability NONE -ReasonCode CAPABILITY_NONE
+    } else {
+        $document=Get-BenefitRunSourceDocument -Context $RunContext -Candidate $Candidate -RequestInvoker $RequestInvoker
+        $snapshot=$null
+        if($document.FetchStatus -ceq 'COMPLETE' -and $document.SourceFormat -in @('HTML','XLSX')){
+            $snapshot=Get-BenefitRunSourceSnapshot -Context $RunContext -Document $document
+            # The run-context snapshot is the byte-validated XLSX payload.  Bind
+            # this local wrapper to its exact bytes before the generic checkpoint
+            # verifies snapshot/document identity; no bytes are copied or rehashed.
+            if($document.SourceFormat -ceq 'XLSX'){$document.Bytes=$snapshot.Bytes}
+        }
+        $input=ConvertTo-BenefitHistoryInputProjection -BusinessId $BusinessId -Benefit $Benefit -BusinessIdentity $BusinessIdentity -CanonicalPhone $CanonicalPhone
+        $execution=ConvertTo-BenefitHistoryExecutionProjection -RepositoryRevision $RepositoryRevision
+        $decision=Get-BenefitIncrementalReuseDecision -Store $Store -BusinessId $BusinessId -Candidate $Candidate -Document $document -CurrentSnapshot $snapshot -CurrentInputFingerprint (Get-HistoryFingerprint -Projection $input -SchemaVersion $script:FingerprintSchemaVersion) -CurrentExecutionFingerprint (Get-HistoryFingerprint -Projection $execution -SchemaVersion $script:FingerprintSchemaVersion) -RepositoryStateProvider $RepositoryStateProvider
+    }
     if($decision.ReuseApplied){
         $package=New-BenefitIncrementalReusePackage -Store $Store -RunId $RunId -ObservedAt $ObservedAt -Decision $decision
         $comparison=$null
@@ -329,7 +360,9 @@ function Invoke-BenefitIncrementalPostFetch {
         if($null -eq (Get-Command -Name Invoke-ScopedPhase2BenefitSourceCandidate -ErrorAction SilentlyContinue)){
             . (Join-Path (Split-Path -Parent $dataLibRoot) 'invoke-phase2-benefit-shadow-mode.ps1')
         }
-        $sourceRecord=Invoke-ScopedPhase2BenefitSourceCandidate -Candidate $Candidate -Business $BusinessIdentity -CanonicalPhone $CanonicalPhone -RunContext $RunContext -RequestInvoker $RequestInvoker
+        if($null -eq $sourceRecord){
+            $sourceRecord=Invoke-ScopedPhase2BenefitSourceCandidate -Candidate $Candidate -Business $BusinessIdentity -CanonicalPhone $CanonicalPhone -RunContext $RunContext -RequestInvoker $RequestInvoker
+        }
         $final=Get-Phase2BenefitEvaluation -Benefit $Benefit -SourceRecords @($sourceRecord) -DiscoveryStatus COMPLETE
         $reasonCodes=[Collections.Generic.List[string]]::new()
         Add-Phase2UniqueReasonCodes -Target $reasonCodes -ReasonCodes $final.Evaluation.ReasonCodes

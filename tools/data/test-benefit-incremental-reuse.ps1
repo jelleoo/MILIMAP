@@ -282,6 +282,40 @@ try {
     Assert-True (@($fetchFailureRun.Result.ClaimResults | Where-Object Result -in @('ENDED','UNCHANGED')).Count -eq 0) 'Fetch failure never becomes UNCHANGED or ENDED'
     Assert-True (@($fetchFailureRun.Comparison.ChangeCandidates) -notcontains 'BENEFIT_ABSENCE_SUSPECTED') 'Fetch failure never becomes benefit absence'
     Assert-True (@($fetchFailureRun.Comparison.ChangeCandidates) -notcontains 'ENDED') 'Fetch failure never becomes ended'
+
+    # Task 8 RED: MMA remains its existing LIST/DETAIL JSONP family.  P3-4
+    # may record a fresh history result but must never route it through the
+    # HTML/XLSX shortcut.
+    $mmaRow=[pscustomobject]@{업소명='(유)투투여행사';시도='서울특별시';시군구='테스트구';소재지도로명주소='서울특별시 테스트구 여행로 2789';소재지지번주소='';업소전화번호='02-2789-0000';할인정보='서비스 이용료 3% 할인';적용대상='군장병';이용조건='제휴 조건 적용';인증방법='군 신분증 제시';출처유형='병무청 공식 자료';출처URL='https://www.mma.go.kr/about/udgg/list.do?mc=mma0003357';최근확인일='2026-09-25'}
+    $mmaBusiness=ConvertTo-NormalizedBusiness -Row $mmaRow -SourceRowNumber 2
+    $mmaBenefit=ConvertTo-Phase2CanonicalBenefitRecord -Row $mmaRow -SourceRowNumber 2
+    $mmaCandidate=New-BenefitSourceCandidate -SourceRowNumber 2 -Url $mmaRow.출처URL -SourceKind PUBLIC_OFFICIAL -SourceLabel '병무청 나라사랑 가게조회' -DiscoveryMethod EXISTING_CANONICAL_URL -ObservedAt '2026-09-25T00:00:00Z'
+    $mmaCapabilityDocument=New-BenefitSourceDocument -SourceRowNumber 2 -Url $mmaCandidate.Url -SourceFormat JSONP -FetchStatus COMPLETE -ContentType 'application/json' -Text 'MmaBenefitList({});' -ObservedAt '2026-09-25T00:00:00Z'
+    Assert-Equal (Get-BenefitIncrementalCapability -Candidate $mmaCandidate -Document $mmaCapabilityDocument) NONE 'MMA JSONP remains outside POST_FETCH reuse capability'
+    $mmaFixtureRoot=Join-Path $PSScriptRoot 'testdata/benefit-evidence-mma'
+    $mmaList=(Get-Content -Raw -LiteralPath (Join-Path $mmaFixtureRoot 'mma-list.fixture.jsonp')) -replace '^MmaTestList','MmaBenefitList'
+    $mmaDetail=(Get-Content -Raw -LiteralPath (Join-Path $mmaFixtureRoot 'mma-detail-2789.fixture.jsonp')) -replace '^MmaTestDetail','MmaBenefitDetail'
+    $mmaRequests=[Collections.Generic.List[string]]::new()
+    $mmaHttp={param($Uri);[void]$mmaRequests.Add([string]$Uri);if($Uri -like '*mmanrsrListAjaxJsonCallNew.json*'){return [pscustomobject]@{StatusCode=200;ContentType='application/json';Text=$mmaList;Bytes=$null}}if($Uri -like '*udgigwan_cd=2789*'){return [pscustomobject]@{StatusCode=200;ContentType='application/json';Text=$mmaDetail;Bytes=$null}}throw "Unexpected MMA request: $Uri"}.GetNewClosure()
+    $mmaRun=Invoke-BenefitIncrementalPostFetch -Store $incrementalStore -RunId 'run-dddddddddddddddddddddddddddddddd' -ObservedAt '2026-09-28T00:00:00Z' -RepositoryRevision ('b'*40) -BusinessId 'biz-33333333333333333333333333333333' -Benefit $mmaBenefit -BusinessIdentity $mmaBusiness -CanonicalPhone '02-2789-0000' -Candidate $mmaCandidate -RunContext (New-BenefitSourceRunContext) -RequestInvoker $mmaHttp -RepositoryStateProvider { [pscustomobject]@{IsClean=$true} }
+    Assert-Equal $mmaRun.ReuseDecision.Capability NONE 'MMA orchestration preserves capability NONE'
+    Assert-Equal $mmaRun.Metrics.ReuseApplied 0 'MMA never applies reuse'
+    Assert-Equal $mmaRun.Metrics.AvoidedParseCount 0 'MMA never reports avoided HTML/XLSX parsing'
+    Assert-Equal $mmaRun.Metrics.AvoidedExtractionCount 0 'MMA never reports avoided extraction'
+    Assert-Equal $mmaRun.Metrics.AvoidedEvaluationCount 0 'MMA never reports avoided evaluation'
+    Assert-Equal $mmaRequests.Count 2 'MMA uses existing list then selected detail requests without a shortcut'
+    Assert-Equal $mmaRun.SourceRecord.Document.SourceFormat JSONP 'MMA returns the existing JSONP detail source record'
+    Assert-Equal @($mmaRun.SourceRecord.Validation.Claims | Where-Object ClaimType -eq BENEFIT_DESCRIPTION).Count 1 'MMA preserves existing detail claim validation'
+    Assert-Equal @($mmaRun.Observation.ArtifactReferences | Where-Object Kind -eq 'BENEFIT_REUSE_DECISION').Count 0 'MMA creates no reuse audit artifact'
+
+    $unsupportedCandidate=New-BenefitSourceCandidate -SourceRowNumber 2 -Url 'https://city.example.go.kr/source.unknown' -SourceKind PUBLIC_OFFICIAL -SourceLabel 'unknown fixture' -DiscoveryMethod TEST -ObservedAt '2026-09-28T00:00:00Z'
+    $unsupportedContext=New-BenefitSourceRunContext
+    $unsupportedRun=Invoke-BenefitIncrementalPostFetch -Store $incrementalStore -RunId 'run-eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee' -ObservedAt '2026-09-28T00:00:00Z' -RepositoryRevision ('b'*40) -BusinessId 'biz-44444444444444444444444444444444' -Benefit $xlsxBenefit -BusinessIdentity $xlsxBusiness -CanonicalPhone '031-861-4800' -Candidate $unsupportedCandidate -RunContext $unsupportedContext -RequestInvoker { param($Uri) [pscustomobject]@{StatusCode=200;ContentType='application/unknown';Text='opaque';Bytes=$null} } -RepositoryStateProvider { [pscustomobject]@{IsClean=$true} }
+    Assert-Equal $unsupportedRun.ReuseDecision.Capability NONE 'Unknown source format remains capability NONE'
+    Assert-Equal $unsupportedRun.Metrics.ReuseApplied 0 'Unknown source format never applies reuse'
+    Assert-Equal $unsupportedRun.Metrics.AvoidedParseCount 0 'Unknown source format never reports avoided parse work'
+    Assert-Equal $unsupportedRun.Result.BenefitState NEEDS_VERIFICATION 'Unknown source format preserves existing safe unresolved result'
+    Assert-Equal @($unsupportedRun.Observation.ArtifactReferences | Where-Object Kind -eq 'BENEFIT_REUSE_DECISION').Count 0 'Unknown source format creates no reuse audit artifact'
 } finally { if(Test-Path -LiteralPath $incrementalRoot){ Remove-Item -LiteralPath $incrementalRoot -Recurse -Force } }
 
 Write-Host 'Benefit incremental checkpoint tests passed.'

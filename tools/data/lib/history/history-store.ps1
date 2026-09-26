@@ -84,7 +84,7 @@ function Get-HistoryRelativePath {
     $root = [IO.Path]::GetFullPath([string]$Store.Root)
     $safeFull = Assert-HistoryStorePathWithinRoot -Store $Store -Path $FullPath
     $relative = [IO.Path]::GetRelativePath($root,$safeFull)
-    return ($relative -replace '\','/')
+    return $relative.Replace([string][IO.Path]::DirectorySeparatorChar,'/').Replace([string][IO.Path]::AltDirectorySeparatorChar,'/')
 }
 
 function Write-HistoryArtifact {

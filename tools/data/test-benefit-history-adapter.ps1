@@ -38,6 +38,7 @@ function New-TestDiagnostic {
     [pscustomobject][ordered]@{
         Url='https://city.example.go.kr/benefit'
         SourceFormat='HTML'
+        FetchStatus='COMPLETE'
         ContentHash=$Hash
         ObservedAt=$ObservedAt
         AdapterId='HTML_GENERIC'

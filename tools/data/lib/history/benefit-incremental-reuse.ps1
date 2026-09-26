@@ -290,7 +290,13 @@ function Invoke-BenefitIncrementalPostFetch {
     )
     $document=Get-BenefitRunSourceDocument -Context $RunContext -Candidate $Candidate -RequestInvoker $RequestInvoker
     $snapshot=$null
-    if($document.FetchStatus -ceq 'COMPLETE' -and $document.SourceFormat -in @('HTML','XLSX')){$snapshot=Get-BenefitRunSourceSnapshot -Context $RunContext -Document $document}
+    if($document.FetchStatus -ceq 'COMPLETE' -and $document.SourceFormat -in @('HTML','XLSX')){
+        $snapshot=Get-BenefitRunSourceSnapshot -Context $RunContext -Document $document
+        # The run-context snapshot is the byte-validated XLSX payload.  Bind
+        # this local wrapper to its exact bytes before the generic checkpoint
+        # verifies snapshot/document identity; no bytes are copied or rehashed.
+        if($document.SourceFormat -ceq 'XLSX'){$document.Bytes=$snapshot.Bytes}
+    }
     $input=ConvertTo-BenefitHistoryInputProjection -BusinessId $BusinessId -Benefit $Benefit -BusinessIdentity $BusinessIdentity -CanonicalPhone $CanonicalPhone
     $execution=ConvertTo-BenefitHistoryExecutionProjection -RepositoryRevision $RepositoryRevision
     $decision=Get-BenefitIncrementalReuseDecision -Store $Store -BusinessId $BusinessId -Candidate $Candidate -Document $document -CurrentSnapshot $snapshot -CurrentInputFingerprint (Get-HistoryFingerprint -Projection $input -SchemaVersion $script:FingerprintSchemaVersion) -CurrentExecutionFingerprint (Get-HistoryFingerprint -Projection $execution -SchemaVersion $script:FingerprintSchemaVersion) -RepositoryStateProvider $RepositoryStateProvider
@@ -299,5 +305,13 @@ function Invoke-BenefitIncrementalPostFetch {
     $manifest=New-HistoryRunManifest -RunId $RunId -StartedAt $ObservedAt -RepositoryRevision $RepositoryRevision -RequestedBusinessIds @($BusinessId) -CompletedBusinessIds @($BusinessId) -FailedBusinessIds @() -ExecutionStatus COMPLETE -RunCommitStatus PREPARED
     $prepared=Prepare-HistoryRun -Store $Store -RunManifest $manifest -Artifacts $package.PreparedArtifacts -Observations @($package.Observation) -Comparisons @()
     $commit=Commit-HistoryRun -Store $Store -PreparedRun $prepared -ExpectedBaselines @{ (($BusinessId+'|BENEFIT'))=[string]$decision.Baseline.Observation.ObservationId }
-    return [pscustomobject][ordered]@{ReuseDecision=$decision;Observation=$package.Observation;Commit=$commit;Metrics=[pscustomobject]@{ExternalFetchCount=$RunContext.Metrics.ExternalFetchCount;AvoidedParseCount=1;AvoidedExtractionCount=1;AvoidedEvaluationCount=1}}
+    return [pscustomobject][ordered]@{ReuseDecision=$decision;Observation=$package.Observation;Commit=$commit;Metrics=[pscustomobject][ordered]@{
+        ExternalFetchCount=$RunContext.Metrics.ExternalFetchCount
+        ReuseEligible=$(if($decision.ReuseApplied){1}else{0})
+        ReuseApplied=$(if($decision.ReuseApplied){1}else{0})
+        ReuseRejected=$(if($decision.ReuseApplied){0}else{1})
+        AvoidedParseCount=1
+        AvoidedExtractionCount=1
+        AvoidedEvaluationCount=1
+    }}
 }

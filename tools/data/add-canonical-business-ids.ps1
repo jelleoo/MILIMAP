@@ -112,10 +112,7 @@ function Invoke-CanonicalBusinessIdMigration {
         $roundTripRows = @(Import-Csv -LiteralPath $tempPath -Encoding utf8)
         Assert-CanonicalMigrationRoundTrip -BeforeRows $rows -AfterRows $roundTripRows -OriginalPropertyNames $originalPropertyNames
 
-        if (Test-Path -LiteralPath $resolvedOutput) {
-            Remove-Item -LiteralPath $resolvedOutput -Force
-        }
-        Move-Item -LiteralPath $tempPath -Destination $resolvedOutput
+        [IO.File]::Move($tempPath, $resolvedOutput, $true)
     } finally {
         if (Test-Path -LiteralPath $tempPath) {
             Remove-Item -LiteralPath $tempPath -Force -ErrorAction SilentlyContinue

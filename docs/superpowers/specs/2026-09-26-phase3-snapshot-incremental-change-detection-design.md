@@ -1,6 +1,6 @@
 # Phase 3 Snapshot / Incremental Change Detection Design
 
-- Status: Proposed for user review
+- Status: Approved design
 - Date: 2026-09-26
 - Design Issue: #94
 - Baseline: `dev@85335705f15484ba59b86ad850d98da127b849ba`
@@ -762,6 +762,6 @@ Any implementation need in these areas requires a separate design/approval step.
 
 ## 32. Acceptance
 
-After user review of this committed written spec, the next allowed architectural step is a detailed implementation plan using the writing-plans workflow.
+User approved this committed design on 2026-09-26. The next allowed architectural step is a detailed implementation plan using the writing-plans workflow.
 
 No Phase 3 product implementation begins before that plan is reviewed and an execution method is selected.

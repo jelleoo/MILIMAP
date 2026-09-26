@@ -12,12 +12,12 @@ function New-TestObservation {
         [string]$ObservationId,
         [string]$OperationalStatus='COMPLETE',
         [bool]$Comparable=$true,
-        [string]$Input='1',
+        [string]$InputValue='1',
         [string]$Evidence='2',
         [string]$Semantic='3',
         [string]$Execution='4'
     )
-    New-HistoryObservation -ObservationId $ObservationId -RunId 'run-test' -BusinessId 'biz-0123456789abcdef0123456789abcdef' -Domain 'BENEFIT' -ObservedAt '2026-09-26T00:00:00Z' -OperationalStatus $OperationalStatus -Comparable $Comparable -InputFingerprint ($Input*64) -EvidenceFingerprint ($Evidence*64) -SemanticFingerprint ($Semantic*64) -ExecutionFingerprint ($Execution*64)
+    New-HistoryObservation -ObservationId $ObservationId -RunId 'run-test' -BusinessId 'biz-0123456789abcdef0123456789abcdef' -Domain 'BENEFIT' -ObservedAt '2026-09-26T00:00:00Z' -OperationalStatus $OperationalStatus -Comparable $Comparable -InputFingerprint ($InputValue*64) -EvidenceFingerprint ($Evidence*64) -SemanticFingerprint ($Semantic*64) -ExecutionFingerprint ($Execution*64)
 }
 
 $current = New-TestObservation -ObservationId 'obs-current'
@@ -42,7 +42,7 @@ Assert-True (@($failure.ChangeCandidates) -contains 'COMPARISON_UNAVAILABLE') 'F
 Assert-Equal $failure.ComparisonStatus 'UNAVAILABLE' 'Operational failure must make comparison unavailable'
 Assert-Equal $called 0 'Operational failure must not call domain resolver'
 
-$inputChanged = New-TestObservation -ObservationId 'obs-input' -Input 'a' -Semantic 'b'
+$inputChanged = New-TestObservation -ObservationId 'obs-input' -InputValue 'a' -Semantic 'b'
 $inputComparison = Compare-HistoryObservations -Previous $current -Current $inputChanged -DomainChangeResolver $resolver
 Assert-Equal $inputComparison.ChangeCandidates[0] 'CANONICAL_INPUT_CHANGED' 'Input delta must take precedence over semantic/domain change'
 Assert-Equal $called 0 'Input change must not call domain resolver'

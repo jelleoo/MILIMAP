@@ -37,10 +37,17 @@ function Get-BenefitIncrementalCapability {
 }
 
 function New-BenefitIncrementalPayloadCheckpoint {
-    param([Parameter(Mandatory)]$Document)
+    param([Parameter(Mandatory)]$Document, [AllowNull()]$Snapshot=$null)
 
     Assert-BenefitSourceDocument $Document
     if ($Document.FetchStatus -cne 'COMPLETE') { throw 'Payload checkpoint requires a successfully fetched source document' }
+    if ($null -ne $Snapshot) {
+        if ($Snapshot.SourceUrl -cne $Document.Url -or $Snapshot.SourceFormat -cne $Document.SourceFormat -or $Snapshot.ObservedAt -cne $Document.ObservedAt) { throw 'Checkpoint snapshot/document identity mismatch' }
+        if ($Document.SourceFormat -ceq 'XLSX') {
+            if ($Document.Bytes -isnot [byte[]] -or -not [object]::ReferenceEquals($Snapshot.Bytes,$Document.Bytes)) { throw 'Checkpoint XLSX snapshot does not own the document bytes' }
+        } elseif ($Snapshot.Text -cne $Document.Text -or -not [object]::ReferenceEquals($Snapshot.Text,$Document.Text)) { throw 'Checkpoint HTML snapshot does not own the document text' }
+        return [pscustomobject][ordered]@{ ContractType='BenefitIncrementalPayloadCheckpoint'; ContractVersion=1; SourceUrl=[string]$Snapshot.SourceUrl; SourceFormat=[string]$Snapshot.SourceFormat; ContentHash=[string]$Snapshot.ContentHash }
+    }
 
     $contentHash = if ($Document.SourceFormat -ceq 'XLSX') {
         if ($Document.Bytes -isnot [byte[]] -or $Document.Bytes.Length -eq 0) { throw 'XLSX payload checkpoint requires original Bytes' }
@@ -181,6 +188,7 @@ function Get-BenefitIncrementalReuseDecision {
         [Parameter(Mandatory)][string]$BusinessId,
         [Parameter(Mandatory)]$Candidate,
         [Parameter(Mandatory)]$Document,
+        [AllowNull()]$CurrentSnapshot=$null,
         [Parameter(Mandatory)][string]$CurrentInputFingerprint,
         [Parameter(Mandatory)][string]$CurrentExecutionFingerprint,
         [Parameter(Mandatory)][scriptblock]$RepositoryStateProvider
@@ -218,7 +226,7 @@ function Get-BenefitIncrementalReuseDecision {
     }
     try {
         $previousCheckpoint = Get-BenefitIncrementalProjectionCheckpoint -EvidenceProjection $baseline.EvidenceProjection
-        $currentCheckpoint = New-BenefitIncrementalPayloadCheckpoint -Document $Document
+        $currentCheckpoint = New-BenefitIncrementalPayloadCheckpoint -Document $Document -Snapshot $CurrentSnapshot
     } catch {
         return New-BenefitIncrementalReuseDecision -ReuseApplied $false -Capability $capability -Baseline $baseline -InputMatch $true -ExecutionMatch $true -ReasonCodes @('PRIOR_ARTIFACT_INVALID')
     }

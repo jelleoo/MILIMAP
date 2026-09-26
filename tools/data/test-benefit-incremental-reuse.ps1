@@ -24,6 +24,9 @@ $failedDocument=New-BenefitSourceDocument -SourceRowNumber 2 -Url $htmlCandidate
 Assert-Equal (Get-BenefitIncrementalCapability -Candidate $htmlCandidate -Document $failedDocument) 'NONE' 'Failed fetch cannot enter reuse capability'
 
 $checkpoint1=New-BenefitIncrementalPayloadCheckpoint -Document $htmlDocument
+$trustedHtmlSnapshot=New-BenefitSourceSnapshot -SourceUrl $htmlDocument.Url -SourceFormat HTML -Text $htmlDocument.Text -ObservedAt $htmlDocument.ObservedAt
+$checkpointFromSnapshot=New-BenefitIncrementalPayloadCheckpoint -Document $htmlDocument -Snapshot $trustedHtmlSnapshot
+Assert-Equal $checkpointFromSnapshot.ContentHash $trustedHtmlSnapshot.ContentHash 'Trusted snapshot checkpoint reuses the established content hash'
 $htmlDocumentLater=New-BenefitSourceDocument -SourceRowNumber 2 -Url $htmlCandidate.Url -SourceFormat HTML -FetchStatus COMPLETE -ContentType 'text/html' -Text $htmlDocument.Text -ObservedAt '2026-09-27T00:00:00Z'
 $checkpoint2=New-BenefitIncrementalPayloadCheckpoint -Document $htmlDocumentLater
 Assert-Equal $checkpoint1.ContentHash $checkpoint2.ContentHash 'ObservedAt must not affect payload checkpoint'

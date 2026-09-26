@@ -64,7 +64,7 @@ function Assert-PreparedObservationReferences {
     param(
         [Parameter(Mandatory)]$Store,
         [Parameter(Mandatory)][object[]]$Observations,
-        [Parameter(Mandatory)][Collections.Generic.HashSet[string]]$PreparedArtifactKeys
+        [Parameter(Mandatory)]$PreparedArtifactKeys
     )
 
     foreach($observation in @($Observations)){
@@ -102,7 +102,8 @@ function Assert-PreparedComparisonReferences {
 
     $currentById=@{}
     foreach($observation in @($Observations)){
-        $currentById[[string]$observation.ObservationId]=$observation
+        $observationId=[string]$observation.ObservationId
+        $currentById[$observationId]=$observation
     }
 
     foreach($comparison in @($Comparisons)){

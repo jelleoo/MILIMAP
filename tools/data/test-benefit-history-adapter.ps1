@@ -204,6 +204,19 @@ try {
     )
     Assert-True (-not $mixedAbsence) 'Mixed LOCATED/NOT_FOUND sources must never become absence'
 
+    $unknownLookup=New-TestDiagnostic -Hash ('5'*64)
+    $unknownLookup.LocationOperationalStatus=''
+    $unknownLookup.LocationStatus=''
+    $partialLookupAbsence=Test-BenefitHistoryAbsenceEligible -EvidenceDiagnostics @(
+        (New-TestDiagnostic -Hash ('a'*64) -LocationStatus 'NOT_FOUND'),
+        $unknownLookup
+    )
+    Assert-True (-not $partialLookupAbsence) 'Every source must have a complete NOT_FOUND business lookup before absence is eligible'
+
+    $artifactAB=New-BenefitHistoryProjectionArtifact -Store $store -Kind 'BENEFIT_EVIDENCE_PROJECTION' -Projection $evidenceAB -OrderInsensitivePaths @('Sources','Sources[].CandidateReferences')
+    $artifactBA=New-BenefitHistoryProjectionArtifact -Store $store -Kind 'BENEFIT_EVIDENCE_PROJECTION' -Projection $evidenceBA -OrderInsensitivePaths @('Sources','Sources[].CandidateReferences')
+    Assert-Equal $artifactAB.PreparedArtifact.ContentHash $artifactBA.PreparedArtifact.ContentHash 'Order-insensitive evidence projections must deduplicate to one physical artifact'
+
     $ambiguousClaimA=New-TestClaim -Value '20% 할인' -Result 'CHANGED' -Reasons @('MATERIAL_CHANGE')
     $ambiguousClaimB=New-TestClaim -Value '30% 할인' -Result 'CHANGED' -Reasons @('MATERIAL_CHANGE')
     $ambiguous=New-TestPackage -Store $store -RunIdValue 'run-88888888888888888888888888888888' -EvidenceHash ('6'*64) -Claims @($ambiguousClaimA,$ambiguousClaimB) -State 'CHANGED'

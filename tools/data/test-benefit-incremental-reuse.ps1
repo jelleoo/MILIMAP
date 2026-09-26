@@ -41,4 +41,35 @@ Assert-True (Test-BenefitIncrementalRepositoryClean -RepositoryStateProvider { [
 Assert-True (-not (Test-BenefitIncrementalRepositoryClean -RepositoryStateProvider { [pscustomobject]@{IsClean=$false} })) 'Injected dirty repository state rejects reuse'
 Assert-True (-not (Test-BenefitIncrementalRepositoryClean -RepositoryStateProvider { throw 'git unavailable' })) 'Repository-state failure is fail closed'
 
+function New-IncrementalBaselineFixture {
+    param([Parameter(Mandatory)]$Store)
+
+    $business = New-NormalizedBusiness -SourceRowNumber 2 -OriginalName '테스트 식당' -NormalizedName '테스트식당' -BaseName '테스트 식당' -OriginalRoadAddress '경기도 양주시 테스트로 10' -PreferredAddress '경기도 양주시 테스트로 10' -Province '경기도' -City '양주시' -RoadName '테스트로' -BuildingMain '10' -AddressParseStatus COMPLETE
+    $benefit = New-CanonicalBenefitRecord -SourceRowNumber 2 -BusinessName '테스트 식당' -BenefitDescription '10% 할인' -EligibleTarget '현역 장병' -UsageCondition '평일' -VerificationMethod '군인증' -ExistingSourceType '지자체 공식 자료' -ExistingSourceUrl $htmlDocument.Url -ExistingVerifiedOn '2026-09-26'
+    $validated = New-ValidatedBenefitClaim -ClaimType BENEFIT_DESCRIPTION -Value '10% 할인' -ValidationStatus VALIDATED -EvidenceText '10% 할인' -EvidenceReference 'TABLE_ROW:1:CELL:2' -SourceUrl $htmlDocument.Url
+    $claim = New-BenefitClaimVerification -ClaimType BENEFIT_DESCRIPTION -CanonicalValue '10% 할인' -EvidenceValue '10% 할인' -Result CONFIRMED -ValidatedClaim $validated -ReasonCodes @()
+    $result = New-BenefitVerificationResult -SourceRowNumber 2 -BusinessIdentity $business -BenefitState ACTIVE -ReviewClass GREEN -ReasonCodes @() -ClaimResults @($claim) -Evidence @() -Warnings @() -ProductionAction NONE
+    $diagnostic = [pscustomobject]@{ Url=$htmlDocument.Url; SourceFormat='HTML'; FetchStatus='COMPLETE'; ContentHash=(Get-BenefitEvidenceTextHash -Text $htmlDocument.Text); AdapterId='HTML_GENERIC'; AdapterVersion='1'; AdapterStatus='COMPLETE'; LocationOperationalStatus='COMPLETE'; LocationStatus='LOCATED'; CandidateReferences=@('TABLE_ROW:1'); OfficialityStatus='VERIFIED_OFFICIAL'; BusinessBindingStatus='STRONG'; ExtractionStatus='COMPLETE' }
+    $runId='run-11111111111111111111111111111111'
+    $package=New-BenefitHistoryObservationPackage -Store $Store -RunId $runId -BusinessId 'biz-0123456789abcdef0123456789abcdef' -ObservedAt '2026-09-26T00:00:00Z' -RepositoryRevision ('a'*40) -Benefit $benefit -BusinessIdentity $business -Result $result -EvidenceDiagnostics @($diagnostic) -OperationalStatus ([pscustomobject]@{DiscoveryStatus='COMPLETE';ExtractionStatus='COMPLETE'})
+    foreach($artifact in @($package.PreparedArtifacts)){ [void](Write-HistoryArtifact -Store $Store -ContentHash $artifact.ContentHash -Extension $artifact.Extension -Text $artifact.Text) }
+    $observationPath=Get-HistoryObservationPath -Store $Store -ObservationId $package.Observation.ObservationId
+    $package.Observation | ConvertTo-Json -Depth 30 -Compress | Set-Content -LiteralPath $observationPath -Encoding utf8 -NoNewline
+    $manifest=New-HistoryRunManifest -RunId $runId -StartedAt '2026-09-26T00:00:00Z' -CompletedAt '2026-09-26T00:01:00Z' -RepositoryRevision ('a'*40) -RequestedBusinessIds @($package.Observation.BusinessId) -CompletedBusinessIds @($package.Observation.BusinessId) -FailedBusinessIds @() -ExecutionStatus COMPLETE -RunCommitStatus COMMITTED
+    $runRoot=Join-Path $Store.RunsRoot $runId; New-Item -ItemType Directory -Force -Path $runRoot | Out-Null
+    $manifest | ConvertTo-Json -Depth 30 -Compress | Set-Content -LiteralPath (Join-Path $runRoot 'manifest.json') -Encoding utf8 -NoNewline
+    Write-HistoryIndexEntry -Store $Store -Entry (New-HistoryIndexEntry -BusinessId $package.Observation.BusinessId -Domain BENEFIT -LatestObservationId $package.Observation.ObservationId -LatestComparableObservationId $package.Observation.ObservationId)
+    return $package
+}
+
+$incrementalRoot=Join-Path ([IO.Path]::GetTempPath()) ('milimap-incremental-' + [Guid]::NewGuid().ToString('N'))
+try {
+    $incrementalStore=New-HistoryStoreLayout -Root $incrementalRoot
+    $baselinePackage=New-IncrementalBaselineFixture -Store $incrementalStore
+    $baseline=Get-BenefitIncrementalBaseline -Store $incrementalStore -BusinessId $baselinePackage.Observation.BusinessId
+    Assert-Equal $baseline.Observation.ObservationId $baselinePackage.Observation.ObservationId 'Indexed comparable baseline must load the committed observation'
+    Assert-Equal $baseline.EvidenceProjection.ProjectionType 'BenefitHistoryEvidence' 'Baseline must validate the persisted evidence projection'
+    Assert-Equal $baseline.SemanticProjection.ProjectionType 'BenefitHistorySemantic' 'Baseline must validate the persisted semantic projection'
+} finally { if(Test-Path -LiteralPath $incrementalRoot){ Remove-Item -LiteralPath $incrementalRoot -Recurse -Force } }
+
 Write-Host 'Benefit incremental checkpoint tests passed.'

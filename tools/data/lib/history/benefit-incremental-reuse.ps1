@@ -6,6 +6,11 @@ $dataLibRoot = Split-Path -Parent $historyRoot
 
 . (Join-Path $dataLibRoot 'benefit-verification-contracts.ps1')
 . (Join-Path $dataLibRoot 'benefit-evidence-location-contracts.ps1')
+. (Join-Path $historyRoot 'history-contracts.ps1')
+. (Join-Path $historyRoot 'history-fingerprints.ps1')
+. (Join-Path $historyRoot 'history-store.ps1')
+. (Join-Path $historyRoot 'commit-history-run.ps1')
+. (Join-Path $historyRoot 'benefit-history-adapter.ps1')
 
 function Get-BenefitIncrementalCapability {
     param(
@@ -61,5 +66,50 @@ function Test-BenefitIncrementalRepositoryClean {
         return ($null -ne $state -and $state.PSObject.Properties.Name -contains 'IsClean' -and [bool]$state.IsClean)
     } catch {
         return $false
+    }
+}
+
+function Read-BenefitIncrementalEvidenceProjection {
+    param(
+        [Parameter(Mandatory)]$Store,
+        [Parameter(Mandatory)]$Observation
+    )
+
+    Assert-HistoryObservation $Observation
+    $references = @($Observation.ArtifactReferences | Where-Object { [string]$_.Kind -ceq 'BENEFIT_EVIDENCE_PROJECTION' })
+    if ($references.Count -ne 1) { throw 'Benefit observation requires exactly one evidence projection artifact' }
+    $reference = $references[0]
+    Assert-HistoryArtifactReferenceExists -Store $Store -Reference $reference
+    $path = Assert-HistoryStorePathWithinRoot -Store $Store -Path (Join-Path $Store.Root ([string]$reference.RelativePath))
+    $projection = Read-HistoryJsonFile -Store $Store -Path $path -Kind 'benefit evidence projection'
+    if ($null -eq $projection -or [string]$projection.ProjectionType -cne 'BenefitHistoryEvidence' -or [int]$projection.ProjectionVersion -ne 1) {
+        throw 'Unsupported benefit evidence projection'
+    }
+    $fingerprint = Get-HistoryFingerprint -Projection $projection -SchemaVersion $script:FingerprintSchemaVersion -OrderInsensitivePaths @('Sources','Sources[].CandidateReferences')
+    if ($fingerprint -cne [string]$Observation.EvidenceFingerprint) { throw 'Benefit evidence projection fingerprint mismatch' }
+    return $projection
+}
+
+function Get-BenefitIncrementalBaseline {
+    param(
+        [Parameter(Mandatory)]$Store,
+        [Parameter(Mandatory)][string]$BusinessId
+    )
+
+    Assert-HistoryBusinessId -Value $BusinessId
+    $entry = Get-HistoryLatestEntry -Store $Store -BusinessId $BusinessId -Domain BENEFIT -ComparableOnly
+    if ($null -eq $entry) { return $null }
+
+    $observation = Read-HistoryObservation -Store $Store -ObservationId ([string]$entry.LatestComparableObservationId)
+    if ($null -eq $observation) { throw 'Indexed comparable benefit observation is missing' }
+    Assert-HistoryObservationIsCommitted -Store $Store -Observation $observation
+    if ([string]$observation.OperationalStatus -cne 'COMPLETE' -or -not [bool]$observation.Comparable) {
+        throw 'Indexed baseline is not a complete comparable observation'
+    }
+
+    return [pscustomobject][ordered]@{
+        Observation = $observation
+        EvidenceProjection = Read-BenefitIncrementalEvidenceProjection -Store $Store -Observation $observation
+        SemanticProjection = Read-BenefitHistorySemanticProjection -Store $Store -Observation $observation
     }
 }

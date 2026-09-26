@@ -294,14 +294,50 @@ function Publish-HistoryPreparedRecords {
     }
 }
 
+function Get-HistoryCommittedRecoveryStages {
+    param([Parameter(Mandatory)]$Store)
+
+    $result=[Collections.Generic.List[string]]::new()
+    foreach($stageDirectory in @(Get-ChildItem -LiteralPath $Store.TempRoot -Directory -ErrorAction SilentlyContinue)){
+        $runId=[string]$stageDirectory.Name
+        try {
+            Assert-HistoryToken -Value $runId -Name 'run id'
+            $manifestPath=Get-HistoryRunManifestPath -Store $Store -RunId $runId
+            $manifest=Read-HistoryJsonFile -Store $Store -Path $manifestPath -Kind 'run manifest'
+            if($null -eq $manifest){ continue }
+            Assert-HistoryRunManifest $manifest
+            if([string]$manifest.RunId -cne $runId){ throw 'Run manifest identity mismatch' }
+            if([string]$manifest.RunCommitStatus -ceq 'COMMITTED'){
+                $result.Add([string]$stageDirectory.FullName)
+            }
+        } catch {
+            throw
+        }
+    }
+    return @($result)
+}
+
 function Ensure-HistoryIndexesAvailableForCas {
     param([Parameter(Mandatory)]$Store,[Parameter(Mandatory)][object[]]$Observations)
-    $missing=$false
-    foreach($observation in @($Observations)){
-        $path=Get-HistoryIndexPath -Store $Store -BusinessId $observation.BusinessId -Domain $observation.Domain
-        if(-not (Test-Path -LiteralPath $path -PathType Leaf)){ $missing=$true; break }
+
+    $recoveryStages=@(Get-HistoryCommittedRecoveryStages -Store $Store)
+    $rebuild=($recoveryStages.Count -gt 0)
+
+    if(-not $rebuild){
+        foreach($observation in @($Observations)){
+            $path=Get-HistoryIndexPath -Store $Store -BusinessId $observation.BusinessId -Domain $observation.Domain
+            if(-not (Test-Path -LiteralPath $path -PathType Leaf)){ $rebuild=$true; break }
+        }
     }
-    if($missing){ [void](Rebuild-HistoryIndexes -Store $Store) }
+
+    if($rebuild){
+        [void](Rebuild-HistoryIndexes -Store $Store)
+        foreach($stage in $recoveryStages){
+            if(Test-Path -LiteralPath $stage -PathType Container){
+                Remove-Item -LiteralPath $stage -Recurse -Force -ErrorAction Stop
+            }
+        }
+    }
 }
 
 function Test-HistoryExpectedBaselines {

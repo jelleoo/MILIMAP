@@ -448,7 +448,7 @@ function Compare-BenefitHistoryObservations {
         param($PreviousObservation,$CurrentObservation)
         [pscustomobject][ordered]@{
             ChangeCandidates=@('BENEFIT_DOMAIN_RESOLUTION_REQUIRED')
-            ReasonCodes=@()
+            ReasonCodes=@('BENEFIT_DOMAIN_RESOLUTION_REQUIRED')
         }
     }
     $gate=Compare-HistoryObservations -Previous $Previous -Current $Current -DomainChangeResolver $gateResolver

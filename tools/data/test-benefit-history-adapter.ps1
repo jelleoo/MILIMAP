@@ -35,7 +35,7 @@ function New-TestResult {
     New-BenefitVerificationResult -SourceRowNumber 2 -BusinessIdentity (New-TestBusiness) -BenefitState $State -ReviewClass $Review -ReasonCodes @() -ClaimResults $Claims -Evidence @() -Warnings @() -ProductionAction 'NONE'
 }
 function New-TestDiagnostic {
-    param([string]$Hash=('a'*64),[string]$ObservedAt='2026-09-26T00:00:00Z',[string]$LocationStatus='LOCATED',[string]$LocationOperationalStatus='COMPLETE',[string]$ExtractionStatus='COMPLETE',[string]$FetchStatus='COMPLETE',[string]$OfficialityStatus='VERIFIED_OFFICIAL',[string]$AdapterStatus='COMPLETE')
+    param([string]$Hash=('a'*64),[string]$ObservedAt='2026-09-26T00:00:00Z',[string]$LocationStatus='LOCATED',[string]$LocationOperationalStatus='COMPLETE',[string]$ExtractionStatus='COMPLETE',[string]$FetchStatus='COMPLETE',[string]$OfficialityStatus='VERIFIED_OFFICIAL',[string]$AdapterStatus='COMPLETE',[string]$BusinessBindingStatus='STRONG')
     [pscustomobject][ordered]@{
         Url='https://city.example.go.kr/benefit'
         SourceFormat='HTML'
@@ -49,7 +49,7 @@ function New-TestDiagnostic {
         LocationStatus=$LocationStatus
         CandidateReferences=@('TABLE_ROW:1')
         OfficialityStatus=$OfficialityStatus
-        BusinessBindingStatus='STRONG'
+        BusinessBindingStatus=$BusinessBindingStatus
         ExtractionStatus=$ExtractionStatus
         ValidatedClaims=@()
         ReasonCodes=@()
@@ -70,6 +70,7 @@ function New-TestPackage {
         [string]$FetchStatus='COMPLETE',
         [string]$LocationOperationalStatus='COMPLETE',
         [string]$LocationStatus='LOCATED',
+        [string]$BusinessBindingStatus='STRONG',
         [string]$State='ACTIVE',
         [string]$Review='GREEN',
         [AllowEmptyCollection()][object[]]$Claims=@((New-TestClaim))
@@ -77,7 +78,7 @@ function New-TestPackage {
     $business=New-TestBusiness -Name $BusinessName
     $benefit=New-TestBenefit -Description $BenefitDescription
     $result=New-BenefitVerificationResult -SourceRowNumber 2 -BusinessIdentity $business -BenefitState $State -ReviewClass $Review -ReasonCodes @() -ClaimResults $Claims -Evidence @() -Warnings @() -ProductionAction 'NONE'
-    $diagnostic=New-TestDiagnostic -Hash $EvidenceHash -ObservedAt $DiagnosticObservedAt -ExtractionStatus $ExtractionStatus -FetchStatus $FetchStatus -LocationOperationalStatus $LocationOperationalStatus -LocationStatus $LocationStatus
+    $diagnostic=New-TestDiagnostic -Hash $EvidenceHash -ObservedAt $DiagnosticObservedAt -ExtractionStatus $ExtractionStatus -FetchStatus $FetchStatus -LocationOperationalStatus $LocationOperationalStatus -LocationStatus $LocationStatus -BusinessBindingStatus $BusinessBindingStatus
     $operational=[pscustomobject]@{DiscoveryStatus=$DiscoveryStatus;ExtractionStatus=$ExtractionStatus}
     New-BenefitHistoryObservationPackage -Store $Store -RunId $RunIdValue -BusinessId $businessId -ObservedAt $ObservedAt -RepositoryRevision $Revision -Benefit $benefit -BusinessIdentity $business -CanonicalPhone '031-000-0000' -Result $result -EvidenceDiagnostics @($diagnostic) -OperationalStatus $operational
 }
@@ -152,6 +153,12 @@ try {
     Publish-TestPackageArtifacts -Store $store -Package $materialChange
     $materialComparison=Compare-BenefitHistoryObservations -Store $store -Previous $previous.Observation -Current $materialChange.Observation
     Assert-Equal $materialComparison.ChangeCandidates[0] 'BENEFIT_CHANGE_SUSPECTED' 'Validated material semantic delta may create benefit change candidate'
+
+
+    $ambiguousBinding=New-TestPackage -Store $store -RunIdValue 'run-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb' -EvidenceHash ('9'*64) -Claims @($changedClaim) -State 'CHANGED' -BusinessBindingStatus 'AMBIGUOUS'
+    Publish-TestPackageArtifacts -Store $store -Package $ambiguousBinding
+    $ambiguousBindingComparison=Compare-BenefitHistoryObservations -Store $store -Previous $previous.Observation -Current $ambiguousBinding.Observation
+    Assert-True (@($ambiguousBindingComparison.ChangeCandidates) -notcontains 'BENEFIT_CHANGE_SUSPECTED') 'Validated claim without STRONG business binding must not create benefit change candidate'
 
     $absence=New-TestPackage -Store $store -RunIdValue 'run-66666666666666666666666666666666' -EvidenceHash ('d'*64) -LocationStatus 'NOT_FOUND' -LocationOperationalStatus 'COMPLETE' -ExtractionStatus 'FAILED' -State 'NEEDS_VERIFICATION' -Review 'YELLOW' -Claims @()
     Assert-True $absence.Observation.Comparable 'Complete business lookup NOT_FOUND is comparable as an absence observation'

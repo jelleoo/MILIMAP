@@ -110,6 +110,7 @@ try {
 
     $wordingClaim=New-TestClaim -Value '이용 금액 10% 할인'
     $wordingChanged=New-TestPackage -Store $store -EvidenceHash ('c'*64) -Claims @($wordingClaim)
+    Assert-Equal (ConvertTo-HistoryCanonicalJson -Value $wordingChanged.SemanticProjection) (ConvertTo-HistoryCanonicalJson -Value $base.SemanticProjection) 'Comparison-equivalent wording must have identical semantic projection'
     Assert-Equal $wordingChanged.Observation.SemanticFingerprint $base.Observation.SemanticFingerprint 'Phase 2 comparison-equivalent wording must not create semantic drift'
 
     $executionChanged=New-TestPackage -Store $store -Revision ('f'*40)

@@ -90,6 +90,7 @@ git commit -m "feat: add canonical business id contract"
 
 Use temp CSV fixtures and assert:
 - a file with no `businessId` gains one valid unique ID per row;
+- a fixture containing quoted commas, quotes, and embedded newlines round-trips with identical imported field values;
 - all original property values compare equal after import before/after;
 - row order/count are unchanged;
 - an already fully migrated file preserves every existing ID;

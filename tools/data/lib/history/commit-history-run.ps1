@@ -57,7 +57,7 @@ function Get-PreparedArtifactReferenceKeys {
         $relative=Get-HistoryRelativePath -Store $Store -FullPath $path
         [void]$keys.Add($hash + '|' + $relative)
     }
-    return $keys
+    return ,$keys
 }
 
 function Assert-PreparedObservationReferences {

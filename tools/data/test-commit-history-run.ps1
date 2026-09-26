@@ -42,6 +42,10 @@ try {
     $latestA=Get-HistoryLatestEntry -Store $store -BusinessId $businessId -Domain 'BENEFIT' -ComparableOnly
     Assert-Equal $latestA.LatestComparableObservationId 'obs-0010' 'Initial comparable baseline must be indexed'
 
+    Assert-Throws {
+        Prepare-One -Store $store -RunId $runA -ObservationId 'obs-reuse-runid' -ObservedAt '2026-09-26T00:01:30Z'
+    } 'Committed RunId must be immutable and cannot be prepared again'
+
     $runB=New-HistoryRunId
     $preparedB=Prepare-One -Store $store -RunId $runB -ObservationId 'obs-0011' -ObservedAt '2026-09-26T00:02:00Z'
     $resultB=Commit-HistoryRun -Store $store -PreparedRun $preparedB -ExpectedBaselines @{ (Get-Key)='obs-0010' }

@@ -1,14 +1,14 @@
 # MILIMAP Development Roadmap
 
 - Status: Directional roadmap
-- Date: 2026-09-24
+- Date: 2026-09-26
 - Current development branch: `dev`
-- Current state: Phase 1 COMPLETE
-- Next phase: Phase 2 — NOT STARTED (design discussion next)
+- Current state: Phase 1 COMPLETE; Phase 2 Benefit Verification Core COMPLETE
+- Next phase: Phase 3 — Snapshot / Incremental Change Detection (approval/design required)
 
 이 문서는 MILIMAP의 장기 개발 방향을 팀원이 한눈에 확인하기 위한 로드맵입니다.
 
-Phase 1 POI Verification Core / Shadow Mode의 구현과 validation closeout evidence는 완료되었습니다. Phase 2 이후는 방향과 목적만 공유하며, 미래 담당자·세부 Issue·구현 파일·Contract는 지금 고정하지 않습니다.
+Phase 1 POI Verification Core / Shadow Mode와 Phase 2 Benefit Verification Core의 구현 및 bounded closeout evidence는 완료되었습니다. Phase 3 이후는 방향과 목적만 공유하며, 미래 담당자·세부 Issue·구현 파일·Contract는 지금 고정하지 않습니다.
 
 항상 최신 `dev`, 해당 시점의 Issue/PR, 승인된 ADR/docs가 이 문서보다 우선합니다.
 
@@ -109,21 +109,17 @@ Phase 1 closeout Gate는 A/B/C 연결, deterministic Shadow regression, Golden s
 
 ### Phase 1 이후
 
-Phase 1 결과를 바탕으로 Phase 2를 바로 구현하지 않습니다. Phase 2는 **NOT STARTED**이며 다음 작업은 design discussion입니다.
-
-먼저 팀에서 다음을 다시 논의합니다.
-
-- Phase 1 matcher/discovery 품질
-- 실제 수동 검토량 감소 효과
-- false GREEN 및 보류 패턴
-- 현재 데이터/코드 구조
-- Phase 2에 필요한 Contract와 병렬화 방식
-
-그 후 최신 `dev` 기준으로 Phase 2의 실제 Issue를 생성합니다.
+Phase 1의 위치 검증 Core와 Phase 2의 혜택 검증 Core는 모두 shadow-only 안전 경계에서 완료되었습니다. 다음 Phase는 snapshot/history 설계이며, 아직 persistent schema 또는 자동 production mutation을 승인하지 않습니다.
 
 ---
 
 ## Phase 2 — Benefit Verification Core
+
+### 상태
+
+**COMPLETE** — Issue #92 retains fixed representative rows `2, 4, 5, 22, 74, 75, 118, 119, 139, 280, 337, 338` as an authoritative evidence matrix. It does **not** replay all 12 rows through current code: `CurrentFixed12ReplayStatus = NOT_RUN_NO_REPLAYABLE_RAW_CAPTURE`. Completion is supported by prior authoritative bounded live evidence, Issue #80 / PR #81 MMA post-fix live validation, the committed Yangju XLSX live artifact, and current scoped HTML / JSONP / XLSX deterministic regressions. The three supported families preserve official provenance, business isolation, scoped evidence, and validated claims in positive controls.
+
+Observed real-source GREEN rows are `0`, so `GREEN human audit = NOT_APPLICABLE`; this is not a positive human audit. Current deterministic controls observe false ENDED / cross-business leakage / hard-conflict bypass / `ProductionAction != NONE` / protected-path writes = `0`. Full 247-row validation is `NOT_RUN`, and no population precision/recall is claimed. PDF/HWP/OCR, SNS/blog strong-evidence expansion, and general discovery remain fail-closed later source-expansion work, not Phase 2 Core blockers. Evidence and limitations are recorded in [`docs/handover/2026-09-26-phase2-benefit-verification-closeout.md`](handover/2026-09-26-phase2-benefit-verification-closeout.md).
 
 ### 방향
 

@@ -23,6 +23,15 @@ $slice = New-RelevantBenefitEvidenceSlice -Observation $converted -Unit $convert
 Assert-ScopeEqual $slice.ScopeType 'XLSX_ROW' 'XLSX slices retain their format-specific scope type'
 Assert-ScopeEqual $slice.FieldReferences.BusinessName.CellReference 'B22' 'XLSX slice retains the exact cell provenance'
 Assert-RelevantBenefitEvidenceSlice -Slice $slice -Document $document -SourceRowNumber 2 -XlsxValidationIndex $converted.XlsxValidationIndex
+$forgedSnapshot = Copy-ScopeContractData $converted.Snapshot
+$forgedSnapshot.Bytes = [byte[]](New-XlsxTestBytes -Benefit '변조된 혜택')
+Assert-ScopeThrows { New-BenefitXlsxValidationIndex -Snapshot $forgedSnapshot } 'A public XLSX index constructor must independently validate forged bytes'
+Assert-ScopeThrows { New-BenefitSourceObservation -SourceRowNumber 2 -Snapshot $forgedSnapshot -AdapterId XLSX_GENERIC -AdapterVersion '1' -AdapterStatus COMPLETE -ContentUnits @($converted.ContentUnits[0]) -Diagnostics @() -XlsxValidationIndex $converted.XlsxValidationIndex } 'A public XLSX observation constructor must independently validate forged bytes'
+Assert-ScopeThrows { New-BenefitXlsxValidationIndex -Snapshot $forgedSnapshot -SnapshotAlreadyValidated } 'A public XLSX index constructor must not accept a fast-path switch for forged bytes'
+Assert-ScopeThrows { New-BenefitSourceObservation -SourceRowNumber 2 -Snapshot $forgedSnapshot -AdapterId XLSX_GENERIC -AdapterVersion '1' -AdapterStatus COMPLETE -ContentUnits @($converted.ContentUnits[0]) -Diagnostics @() -XlsxValidationIndex $converted.XlsxValidationIndex -SnapshotAlreadyValidated } 'A public XLSX observation constructor must not accept a fast-path switch for forged bytes'
+$forgedDocument = New-BenefitSourceDocument -SourceRowNumber 2 -Url $document.Url -SourceFormat XLSX -FetchStatus COMPLETE -Text '' -Bytes $forgedSnapshot.Bytes -ObservedAt $document.ObservedAt
+$forgedDocument | Add-Member -NotePropertyName ValidatedXlsxSnapshot -NotePropertyValue $forgedSnapshot
+Assert-ScopeThrows { Assert-RelevantBenefitEvidenceSlice -Slice $slice -Document $forgedDocument -SourceRowNumber 2 -XlsxValidationIndex $converted.XlsxValidationIndex } 'A public XLSX slice validator must reject forged validated-snapshot bytes'
 $forgedSlice = Copy-ScopeContractData $slice
 $forgedSlice | Add-Member -NotePropertyName RawStart -NotePropertyValue 0
 Assert-ScopeThrows { Assert-RelevantBenefitEvidenceSlice -Slice $forgedSlice -Document $document -SourceRowNumber 2 -XlsxValidationIndex $converted.XlsxValidationIndex } 'XLSX slices must reject synthetic raw-span properties'

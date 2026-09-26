@@ -44,10 +44,10 @@ function ConvertTo-BenefitScopedValidationText {
 }
 
 function Test-ScopedBenefitExtractedClaim {
-    param([Parameter(Mandatory)]$Claim,[Parameter(Mandatory)]$Document,[Parameter(Mandatory)]$EvidenceSlice)
+    param([Parameter(Mandatory)]$Claim,[Parameter(Mandatory)]$Document,[Parameter(Mandatory)]$EvidenceSlice,[AllowNull()]$XlsxValidationIndex=$null)
     Assert-ExtractedBenefitClaim $Claim
     Assert-BenefitSourceDocument $Document
-    Assert-RelevantBenefitEvidenceSlice -Slice $EvidenceSlice -Document $Document -SourceRowNumber $Document.SourceRowNumber
+    Assert-RelevantBenefitEvidenceSlice -Slice $EvidenceSlice -Document $Document -SourceRowNumber $Document.SourceRowNumber -XlsxValidationIndex $XlsxValidationIndex
     $fieldMap = @{ BENEFIT_DESCRIPTION='BenefitDescription'; ELIGIBLE_TARGET='EligibleTarget'; USAGE_CONDITION='UsageCondition'; VERIFICATION_METHOD='VerificationMethod'; VALID_FROM='ValidFrom'; VALID_UNTIL='ValidUntilObserved' }
     $mismatch = $false
     $claimType = [string]$Claim.ClaimType
@@ -68,14 +68,14 @@ function Test-ScopedBenefitExtractedClaim {
 }
 
 function ConvertTo-ValidatedBenefitEvidence {
-    param([Parameter(Mandatory)]$Extraction,[Parameter(Mandatory)]$Document,[AllowNull()]$EvidenceSlice=$null)
+    param([Parameter(Mandatory)]$Extraction,[Parameter(Mandatory)]$Document,[AllowNull()]$EvidenceSlice=$null,[AllowNull()]$XlsxValidationIndex=$null)
     foreach($property in @('SourceRowNumber','Status','Claims','ReasonCodes')){if($Extraction.PSObject.Properties.Name -notcontains $property){throw "Missing extraction property: $property"}}
     Assert-BenefitSourceDocument $Document;Assert-BenefitSourceRowNumber ([int]$Extraction.SourceRowNumber);Assert-BenefitAllowedCode 'ExtractionStatus' ([string]$Extraction.Status);Assert-BenefitReasonCodes $Extraction.ReasonCodes
     if([int]$Extraction.SourceRowNumber -ne [int]$Document.SourceRowNumber){throw 'Validation inputs must preserve one SourceRowNumber'}
     if ($PSBoundParameters.ContainsKey('EvidenceSlice')) {
         if ($null -eq $EvidenceSlice) { throw 'Explicit scoped evidence cannot be null' }
-        Assert-RelevantBenefitEvidenceSlice -Slice $EvidenceSlice -Document $Document -SourceRowNumber $Document.SourceRowNumber
-        $claims=@($Extraction.Claims|ForEach-Object{Test-ScopedBenefitExtractedClaim -Claim $_ -Document $Document -EvidenceSlice $EvidenceSlice})
+        Assert-RelevantBenefitEvidenceSlice -Slice $EvidenceSlice -Document $Document -SourceRowNumber $Document.SourceRowNumber -XlsxValidationIndex $XlsxValidationIndex
+        $claims=@($Extraction.Claims|ForEach-Object{Test-ScopedBenefitExtractedClaim -Claim $_ -Document $Document -EvidenceSlice $EvidenceSlice -XlsxValidationIndex $XlsxValidationIndex})
         $status=if([string]$Extraction.Status -eq 'FAILED'){'FAILED'}elseif(@($claims|Where-Object{$_.ValidationStatus -eq 'INVALID'}).Count -gt 0){'PARTIAL'}else{'COMPLETE'}
         return [pscustomobject][ordered]@{SourceRowNumber=[int]$Extraction.SourceRowNumber;Status=$status;Claims=$claims;ReasonCodes=@($Extraction.ReasonCodes)}
     }

@@ -112,13 +112,13 @@ function ConvertTo-BenefitExtractorClaims {
 }
 
 function Invoke-BenefitEvidenceExtraction {
-    param([Parameter(Mandatory)]$Source,[Parameter(Mandatory)]$Document,[AllowNull()][scriptblock]$UnstructuredExtractor=$null,[AllowNull()][scriptblock]$SpreadsheetExtractor=$null,[AllowNull()][scriptblock]$PdfTextExtractor=$null,[AllowNull()]$EvidenceSlice=$null)
+    param([Parameter(Mandatory)]$Source,[Parameter(Mandatory)]$Document,[AllowNull()][scriptblock]$UnstructuredExtractor=$null,[AllowNull()][scriptblock]$SpreadsheetExtractor=$null,[AllowNull()][scriptblock]$PdfTextExtractor=$null,[AllowNull()]$EvidenceSlice=$null,[AllowNull()]$XlsxValidationIndex=$null)
     Assert-BenefitEvidenceSourceDocument -Source $Source -Document $Document
     if ($PSBoundParameters.ContainsKey('EvidenceSlice')) {
         if ($null -eq $EvidenceSlice) { throw 'Explicit scoped evidence cannot be null' }
-        Assert-RelevantBenefitEvidenceSlice -Slice $EvidenceSlice -Document $Document -SourceRowNumber $Document.SourceRowNumber
+        Assert-RelevantBenefitEvidenceSlice -Slice $EvidenceSlice -Document $Document -SourceRowNumber $Document.SourceRowNumber -XlsxValidationIndex $XlsxValidationIndex
         $detailMap = [ordered]@{ BenefitDescription='BENEFIT_DESCRIPTION'; EligibleTarget='ELIGIBLE_TARGET'; UsageCondition='USAGE_CONDITION'; VerificationMethod='VERIFICATION_METHOD'; ValidFrom='VALID_FROM'; ValidUntilObserved='VALID_UNTIL' }
-        $method = if ($EvidenceSlice.SourceFormat -ceq 'JSONP') { 'SCOPED_JSONP_FIELD' } else { 'SCOPED_HTML_CELL' }
+        $method = if ($EvidenceSlice.SourceFormat -ceq 'JSONP') { 'SCOPED_JSONP_FIELD' } elseif ($EvidenceSlice.SourceFormat -ceq 'XLSX') { 'SCOPED_XLSX_CELL' } else { 'SCOPED_HTML_CELL' }
         $claims = @()
         foreach ($field in $detailMap.Keys) {
             if (-not $EvidenceSlice.StructuredFields.Contains($field) -or -not $EvidenceSlice.FieldReferences.Contains($field)) { continue }

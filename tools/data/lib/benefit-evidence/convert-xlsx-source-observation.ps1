@@ -4,11 +4,12 @@ $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot '../benefit-evidence-location-contracts.ps1')
 
 function ConvertTo-BenefitXlsxObservation {
-    param([Parameter(Mandatory)]$Document)
+    param([Parameter(Mandatory)]$Document, [AllowNull()]$Snapshot=$null, [AllowNull()]$XlsxValidationIndex=$null)
     Assert-BenefitSourceDocument $Document
     if ($Document.FetchStatus -cne 'COMPLETE' -or $Document.SourceFormat -cne 'XLSX') { throw 'XLSX observation requires a successfully fetched XLSX document' }
-    $snapshot=New-BenefitSourceSnapshot -SourceUrl $Document.Url -SourceFormat XLSX -Text '' -Bytes $Document.Bytes -ObservedAt $Document.ObservedAt
-    $index=New-BenefitXlsxValidationIndex -Snapshot $snapshot
+    if ($null -eq $Snapshot) { $snapshot=New-BenefitSourceSnapshot -SourceUrl $Document.Url -SourceFormat XLSX -Text '' -Bytes $Document.Bytes -ObservedAt $Document.ObservedAt }
+    Assert-ScopeSnapshot $snapshot
+    if ($null -eq $XlsxValidationIndex) { $index=New-BenefitXlsxValidationIndex -Snapshot $snapshot } else { $index=$XlsxValidationIndex; Assert-ScopeXlsxValidationIndexBinding -Snapshot $snapshot -XlsxValidationIndex $index }
     $units = [Collections.Generic.List[object]]::new()
     $diagnostics = [Collections.Generic.List[object]]::new()
     $map = Get-BenefitScopedHeaderMap
@@ -78,7 +79,7 @@ function ConvertTo-BenefitXlsxObservation {
                     continue
                 }
                 if ($rowIsUsable -and $fields.Contains('BusinessName')) {
-                    $units.Add((New-BenefitXlsxSourceContentUnit -Snapshot $snapshot -XlsxValidationIndex $index -SheetName $sheet.Name -SheetIndex $sheet.Index -HeaderRowNumber $header.Number -RowNumber $row.Number -StructuredFields $fields -FieldReferences $references -SnapshotAlreadyValidated))
+                    $units.Add((New-InternalBenefitXlsxSourceContentUnit -Snapshot $snapshot -XlsxValidationIndex $index -SheetName $sheet.Name -SheetIndex $sheet.Index -HeaderRowNumber $header.Number -RowNumber $row.Number -StructuredFields $fields -FieldReferences $references))
                 }
             }
         }

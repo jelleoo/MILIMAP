@@ -64,8 +64,7 @@ function Find-BenefitBusinessEvidence {
     if ($null -eq $XlsxValidationIndex -and [string]$Observation.SourceFormat -ceq 'XLSX' -and $Observation.PSObject.Properties.Name -contains 'XlsxValidationIndex') { $XlsxValidationIndex = $Observation.XlsxValidationIndex }
     $htmlValidationIndex = if ([string]$Observation.SourceFormat -ceq 'HTML') { New-ScopeHtmlValidationIndex -Snapshot $Observation.Snapshot } else { $null }
     $htmlTokens = if ($null -eq $htmlValidationIndex) { $null } else { @($htmlValidationIndex.Tokens) }
-    $xlsxSnapshotAlreadyValidated = ([string]$Observation.SourceFormat -ceq 'XLSX' -and $null -ne $XlsxValidationIndex)
-    Assert-ScopeObservation -Observation $Observation -HtmlTokens $htmlTokens -HtmlValidationIndex $htmlValidationIndex -XlsxValidationIndex $XlsxValidationIndex -SnapshotAlreadyValidated:$xlsxSnapshotAlreadyValidated
+    Assert-ScopeObservation -Observation $Observation -HtmlTokens $htmlTokens -HtmlValidationIndex $htmlValidationIndex -XlsxValidationIndex $XlsxValidationIndex
     Assert-NormalizedBusiness $Business
     if ([int]$Observation.SourceRowNumber -ne [int]$Business.SourceRowNumber) { throw 'Locator inputs must preserve one SourceRowNumber' }
     if ($Observation.AdapterStatus -cne 'COMPLETE') {
@@ -87,7 +86,11 @@ function Find-BenefitBusinessEvidence {
 
     if ($strong.Count -eq 1 -and $unexcluded.Count -eq 1) {
         $selected = $strong[0]
-        $slice = New-RelevantBenefitEvidenceSlice -Observation $Observation -Unit $selected.Unit -IdentityEvidence $selected.Evidence -HtmlTokens $htmlTokens -HtmlValidationIndex $htmlValidationIndex -XlsxValidationIndex $XlsxValidationIndex -SnapshotAlreadyValidated:$xlsxSnapshotAlreadyValidated
+        $slice = if ($Observation.SourceFormat -ceq 'XLSX') {
+            New-InternalRelevantBenefitXlsxSlice -Observation $Observation -Unit $selected.Unit -IdentityEvidence $selected.Evidence -XlsxValidationIndex $XlsxValidationIndex
+        } else {
+            New-RelevantBenefitEvidenceSlice -Observation $Observation -Unit $selected.Unit -IdentityEvidence $selected.Evidence -HtmlTokens $htmlTokens -HtmlValidationIndex $htmlValidationIndex -XlsxValidationIndex $XlsxValidationIndex
+        }
         return New-BenefitEvidenceLocationResult -SourceRowNumber $Observation.SourceRowNumber -OperationalStatus COMPLETE -Status LOCATED -Slices @($slice) -CandidateReferences $references -Diagnostics $diagnostics
     }
     if ($named.Count -gt 0) {

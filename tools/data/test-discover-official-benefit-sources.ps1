@@ -4,6 +4,7 @@ $contractPath = Join-Path $PSScriptRoot 'lib/benefit-verification-contracts.ps1'
 $sourcePath = Join-Path $PSScriptRoot 'lib/benefit-source/discover-official-benefit-sources.ps1'
 . $contractPath
 if (Test-Path -LiteralPath $sourcePath) { . $sourcePath }
+. (Join-Path $PSScriptRoot 'testdata/benefit-evidence-xlsx/test-support.ps1')
 
 function Assert-Equal {
     param([AllowNull()]$Actual, [AllowNull()]$Expected, [Parameter(Mandatory)][string]$Message)
@@ -92,5 +93,11 @@ foreach ($formatCase in $formatCases) {
     Assert-Equal $document.FetchStatus 'COMPLETE' "Fetch must complete for $($formatCase.Expected)"
     Assert-Equal $document.SourceFormat $formatCase.Expected "Source format must detect $($formatCase.Expected)"
 }
+
+$ambiguousBinaryCandidate = New-BenefitSourceCandidate -SourceRowNumber 2 -Url 'https://city.example.go.kr/download' -SourceKind 'PUBLIC_OFFICIAL' -SourceLabel 'fixture' -DiscoveryMethod 'TEST'
+$validatedBinaryXlsx = Get-BenefitSourceDocument -Candidate $ambiguousBinaryCandidate -RequestInvoker { param($Uri) [pscustomobject]@{ StatusCode=200; ContentType='application/octer-stream; charset=UTF-8'; Text=''; Bytes=(New-XlsxTestBytes) } }
+Assert-Equal $validatedBinaryXlsx.SourceFormat XLSX 'An extensionless ambiguous binary is XLSX only when its package is safely recognizable'
+$arbitraryPk = Get-BenefitSourceDocument -Candidate $ambiguousBinaryCandidate -RequestInvoker { param($Uri) [pscustomobject]@{ StatusCode=200; ContentType='application/octer-stream'; Text=''; Bytes=[byte[]](0x50,0x4b,0x03,0x04,0x00) } }
+Assert-Equal $arbitraryPk.SourceFormat UNSUPPORTED 'An arbitrary PK-prefixed binary is not an XLSX document'
 
 Write-Host 'Official benefit source boundary tests passed.'

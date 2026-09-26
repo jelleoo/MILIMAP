@@ -4,6 +4,7 @@ $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot '../benefit-source/discover-official-benefit-sources.ps1')
 . (Join-Path $PSScriptRoot 'convert-html-source-observation.ps1')
 . (Join-Path $PSScriptRoot 'convert-mma-jsonp-source-observation.ps1')
+. (Join-Path $PSScriptRoot 'convert-xlsx-source-observation.ps1')
 
 function New-BenefitSourceRunContext {
     $payloadCache = [Collections.Generic.Dictionary[string,object]]::new([StringComparer]::Ordinal)
@@ -184,4 +185,33 @@ function Get-BenefitRunHtmlObservation {
     }
     [void]$Context.Attempts.Add([pscustomobject][ordered]@{Stage='PARSE';Key=$key;CacheHit=$cacheHit;Status=$template.AdapterStatus})
     return New-BenefitSourceObservation -SourceRowNumber $Document.SourceRowNumber -Snapshot $snapshot -AdapterId $adapterId -AdapterVersion $adapterVersion -AdapterStatus $template.AdapterStatus -ContentUnits $units -Diagnostics @($template.Diagnostics) -HtmlTokens $htmlTokens -HtmlValidationIndex $htmlValidationIndex
+}
+
+function Get-BenefitRunXlsxObservation {
+    param([Parameter(Mandatory)]$Context, [Parameter(Mandatory)]$Document)
+    Assert-BenefitSourceRunContext $Context; Assert-BenefitSourceDocument $Document
+    if ($Document.FetchStatus -cne 'COMPLETE' -or $Document.SourceFormat -cne 'XLSX') { throw 'XLSX observation requires a successful XLSX document' }
+    $payload = $Context.PayloadCache[[string]$Document.Url]
+    if ($null -eq $payload) { throw 'XLSX observation requires a run-context payload' }
+    if ($payload.PSObject.Properties.Name -notcontains 'XlsxSnapshot') {
+        $payload | Add-Member -NotePropertyName XlsxSnapshot -NotePropertyValue (New-BenefitSourceSnapshot -SourceUrl $Document.Url -SourceFormat XLSX -Text '' -Bytes $Document.Bytes -ObservedAt $Document.ObservedAt)
+    }
+    $snapshot=$payload.XlsxSnapshot; $adapterId='XLSX_GENERIC'; $key="$($snapshot.SnapshotId)|$adapterId|1"
+    # Use the exact byte array which was validated to create the cached
+    # snapshot.  Later scoped stages can prove this identity by reference and
+    # reuse its index without rehashing a copied workbook.
+    $Document.Bytes = $snapshot.Bytes
+    if ($Document.PSObject.Properties.Name -notcontains 'ValidatedXlsxSnapshot') {
+        $Document | Add-Member -NotePropertyName ValidatedXlsxSnapshot -NotePropertyValue $snapshot
+    }
+    if ($Context.TemplateCache.ContainsKey($key)) { $Context.Metrics.AdapterReuseCount++; $template=$Context.TemplateCache[$key]; $cacheHit=$true }
+    else {
+        $template=ConvertTo-BenefitXlsxObservation -Document $Document -Snapshot $snapshot
+        Set-InternalBenefitXlsxRunContextTrust -Snapshot $snapshot -XlsxValidationIndex $template.XlsxValidationIndex
+        $Context.TemplateCache.Add($key,$template); $Context.Metrics.AdapterParseCount++; $cacheHit=$false
+    }
+    [void]$Context.Attempts.Add([pscustomobject][ordered]@{Stage='PARSE';Key=$key;CacheHit=$cacheHit;Status=$template.AdapterStatus})
+    $observation=New-BenefitSourceObservation -SourceRowNumber $Document.SourceRowNumber -Snapshot $snapshot -AdapterId $template.AdapterId -AdapterVersion $template.AdapterVersion -AdapterStatus $template.AdapterStatus -ContentUnits $template.ContentUnits -Diagnostics $template.Diagnostics -XlsxValidationIndex $template.XlsxValidationIndex
+    $observation | Add-Member -NotePropertyName XlsxValidationIndex -NotePropertyValue $template.XlsxValidationIndex
+    return $observation
 }

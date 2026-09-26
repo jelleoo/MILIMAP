@@ -1,7 +1,10 @@
 $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'testdata/benefit-evidence-location/test-support.ps1')
+. (Join-Path $PSScriptRoot 'testdata/benefit-evidence-xlsx/test-support.ps1')
 . (Join-Path $PSScriptRoot 'lib/benefit-source/discover-official-benefit-sources.ps1')
 . (Join-Path $PSScriptRoot 'lib/benefit-evidence/convert-html-source-observation.ps1')
+. (Join-Path $PSScriptRoot 'lib/benefit-evidence/convert-xlsx-source-observation.ps1')
+. (Join-Path $PSScriptRoot 'lib/benefit-evidence/find-business-evidence-slice.ps1')
 
 $path = Join-Path $PSScriptRoot 'lib/benefit-evidence/benefit-source-run-context.ps1'
 if (-not (Test-Path -LiteralPath $path)) { throw 'Source run context is missing' }
@@ -143,5 +146,44 @@ try {
 }
 Assert-ScopeEqual $tokenCounter.Count 1 'Parsed HTML token stream must be reused for all rows sharing one snapshot'
 Assert-ScopeEqual $fragmentCounter.Count 0 'Parsed HTML element spans must be reused for all rows sharing one snapshot'
+
+$xlsxBytes = New-XlsxTestBytes
+$differentXlsxBytes = New-XlsxTestBytes -Name '다른 가게'
+$xlsxFetchCounter = [pscustomobject]@{ Count=0 }
+$xlsxHttp = { param($Uri) $xlsxFetchCounter.Count++; [byte[]]$bytes = if ($Uri.AbsolutePath -eq '/attachment-2') { $differentXlsxBytes } else { $xlsxBytes }; [pscustomobject]@{StatusCode=200;ContentType='application/octer-stream';Text='';Bytes=$bytes} }.GetNewClosure()
+$xlsxContext = New-BenefitSourceRunContext
+$xlsxDocument2 = Get-BenefitRunSourceDocument -Context $xlsxContext -Candidate (New-RunCandidate -RowNumber 2 -Url 'https://city.example.go.kr/attachment') -RequestInvoker $xlsxHttp
+$xlsxDocument3 = Get-BenefitRunSourceDocument -Context $xlsxContext -Candidate (New-RunCandidate -RowNumber 3 -Url 'https://city.example.go.kr/attachment') -RequestInvoker $xlsxHttp
+$script:xlsxHashCount = 0
+$script:originalXlsxHash = (Get-Item Function:Get-BenefitEvidenceByteHash).ScriptBlock
+function Get-BenefitEvidenceByteHash { param([Parameter(Mandatory)][byte[]]$Bytes); $script:xlsxHashCount++; & $script:originalXlsxHash -Bytes $Bytes }
+try {
+    $xlsxObservation2 = Get-BenefitRunXlsxObservation -Context $xlsxContext -Document $xlsxDocument2
+    $firstXlsxHashCount = $script:xlsxHashCount
+    $xlsxObservation3 = Get-BenefitRunXlsxObservation -Context $xlsxContext -Document $xlsxDocument3
+} finally { Set-Item Function:Get-BenefitEvidenceByteHash -Value $script:originalXlsxHash; Remove-Variable -Scope Script -Name originalXlsxHash -ErrorAction SilentlyContinue }
+Assert-ScopeEqual $xlsxFetchCounter.Count 1 'Same XLSX attachment fetches once'
+Assert-ScopeEqual $xlsxContext.Metrics.ExternalFetchCount 1 'XLSX external fetch metric counts once'
+Assert-ScopeEqual $xlsxContext.Metrics.FetchCacheHits 1 'Second XLSX business hits payload cache'
+Assert-ScopeEqual $xlsxContext.Metrics.AdapterParseCount 1 'XLSX package/index parses once'
+Assert-ScopeEqual $xlsxContext.Metrics.AdapterReuseCount 1 'Second XLSX business reuses cached template'
+Assert-ScopeTrue ($firstXlsxHashCount -gt 0) 'First XLSX business establishes the snapshot hash before caching'
+Assert-ScopeEqual $script:xlsxHashCount $firstXlsxHashCount 'Second XLSX business does not hash the workbook'
+Assert-ScopeTrue ([object]::ReferenceEquals($xlsxObservation2.XlsxValidationIndex, $xlsxObservation3.XlsxValidationIndex)) 'Both XLSX wrappers reuse the same validation index'
+
+$differentXlsxDocument = Get-BenefitRunSourceDocument -Context $xlsxContext -Candidate (New-RunCandidate -RowNumber 4 -Url 'https://city.example.go.kr/attachment-2') -RequestInvoker $xlsxHttp
+$differentXlsxObservation = Get-BenefitRunXlsxObservation -Context $xlsxContext -Document $differentXlsxDocument
+Assert-ScopeEqual $xlsxContext.Metrics.AdapterParseCount 2 'Different XLSX snapshots cannot reuse an old template/index'
+Assert-ScopeTrue (-not [object]::ReferenceEquals($xlsxObservation2.XlsxValidationIndex, $differentXlsxObservation.XlsxValidationIndex)) 'Different XLSX snapshots retain distinct validation indexes'
+
+$partialXlsxDocument = New-BenefitSourceDocument -SourceRowNumber 5 -Url 'https://city.example.go.kr/attachment-partial' -SourceFormat XLSX -FetchStatus COMPLETE -ContentType 'application/octer-stream' -Text '' -Bytes (New-XlsxTestBytes -FormulaBenefit) -ObservedAt '2026-09-26T00:00:00Z'
+$partialPayload = [pscustomobject]@{Url=$partialXlsxDocument.Url;SourceFormat='XLSX';FetchStatus='COMPLETE';ContentType=$partialXlsxDocument.ContentType;Text='';Bytes=$partialXlsxDocument.Bytes;ObservedAt=$partialXlsxDocument.ObservedAt;ReasonCodes=@()}
+$xlsxContext.PayloadCache.Add($partialXlsxDocument.Url,$partialPayload)
+$partialXlsxObservation = Get-BenefitRunXlsxObservation -Context $xlsxContext -Document $partialXlsxDocument
+$partialBusiness = New-NormalizedBusiness -SourceRowNumber 5 -OriginalName '가마골 백숙' -NormalizedName '가마골백숙' -AddressParseStatus 'UNPARSED'
+$partialLocation = Find-BenefitBusinessEvidence -Observation $partialXlsxObservation -Business $partialBusiness
+Assert-ScopeEqual $partialXlsxObservation.AdapterStatus PARTIAL 'Partial XLSX observation remains partial in run context'
+Assert-ScopeEqual $partialLocation.OperationalStatus PARTIAL 'Partial XLSX location remains operationally partial'
+Assert-ScopeTrue ($null -eq $partialLocation.Status) 'Partial XLSX cannot claim semantic NOT_FOUND'
 
 Write-Host 'Benefit source run context tests passed.'

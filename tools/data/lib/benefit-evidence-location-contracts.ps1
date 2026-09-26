@@ -47,8 +47,8 @@ function Test-BenefitXlsxCellInMergedRange {
     return $false
 }
 function New-BenefitXlsxValidationIndex {
-    param([Parameter(Mandatory)]$Snapshot)
-    Assert-ScopeSnapshot $Snapshot
+    param([Parameter(Mandatory)]$Snapshot, [switch]$SnapshotAlreadyValidated)
+    if (-not $SnapshotAlreadyValidated) { Assert-ScopeSnapshot $Snapshot }
     if ($Snapshot.SourceFormat -cne 'XLSX' -or $Snapshot.Bytes -isnot [byte[]]) { throw 'XLSX validation index requires an XLSX byte snapshot' }
     $stream = [IO.MemoryStream]::new($Snapshot.Bytes, $false)
     try {
@@ -661,8 +661,8 @@ function New-BenefitSourceObservation {
     param([int]$SourceRowNumber, [Parameter(Mandatory)]$Snapshot, [Parameter(Mandatory)][string]$AdapterId,
         [Parameter(Mandatory)][string]$AdapterVersion, [Parameter(Mandatory)][string]$AdapterStatus,
         [AllowEmptyCollection()][object[]]$ContentUnits=@(), [AllowEmptyCollection()][object[]]$Diagnostics=@(),
-        [AllowNull()][object[]]$HtmlTokens=$null, [AllowNull()]$HtmlValidationIndex=$null, [AllowNull()]$XlsxValidationIndex=$null)
-    Assert-ScopeSnapshot $Snapshot
+        [AllowNull()][object[]]$HtmlTokens=$null, [AllowNull()]$HtmlValidationIndex=$null, [AllowNull()]$XlsxValidationIndex=$null, [switch]$SnapshotAlreadyValidated)
+    if (-not ($Snapshot.SourceFormat -ceq 'XLSX' -and $SnapshotAlreadyValidated)) { Assert-ScopeSnapshot $Snapshot }
     $result = [pscustomobject][ordered]@{
         ContractType='SourceObservation'; ContractVersion=1; SourceRowNumber=$SourceRowNumber
         SnapshotId=$Snapshot.SnapshotId; SourceUrl=$Snapshot.SourceUrl; SourceFormat=$Snapshot.SourceFormat; ObservedAt=$Snapshot.ObservedAt
@@ -778,10 +778,23 @@ function Assert-RelevantBenefitEvidenceSlice {
     param([AllowNull()]$Slice, [Parameter(Mandatory)]$Document, [int]$SourceRowNumber, [AllowNull()]$XlsxValidationIndex=$null)
     Assert-BenefitSourceDocument $Document
     if ($Document.SourceRowNumber -ne $SourceRowNumber -or $Document.FetchStatus -cne 'COMPLETE') { throw 'Slice requires the original successful source row document' }
-    $snapshotParameters = @{ SourceUrl=$Document.Url; SourceFormat=$Document.SourceFormat; Text=$Document.Text; ObservedAt=$Document.ObservedAt }
-    if ($Document.SourceFormat -ceq 'XLSX') { $snapshotParameters.Text = ''; $snapshotParameters.Bytes = $Document.Bytes }
-    $snapshot = New-BenefitSourceSnapshot @snapshotParameters
-    $xlsxSnapshotAlreadyValidated = ($snapshot.SourceFormat -ceq 'XLSX' -and $null -ne $XlsxValidationIndex)
+    if ($Document.SourceFormat -ceq 'XLSX' -and $null -ne $XlsxValidationIndex -and
+        $Document.PSObject.Properties.Name -contains 'ValidatedXlsxSnapshot') {
+        $snapshot = $Document.ValidatedXlsxSnapshot
+        Assert-ScopeObject $snapshot 'BenefitSourceSnapshot' @('SnapshotId','SourceUrl','SourceFormat','Text','ObservedAt','ContentHash','Bytes')
+        if ($snapshot.SourceFormat -cne 'XLSX' -or $snapshot.Text -cne '' -or
+            $snapshot.SourceUrl -cne $Document.Url -or $snapshot.ObservedAt -cne $Document.ObservedAt -or
+            $snapshot.Bytes -isnot [byte[]] -or -not [object]::ReferenceEquals($snapshot.Bytes, $Document.Bytes)) {
+            throw 'Validated XLSX snapshot does not belong to the source document'
+        }
+        Assert-ScopeXlsxValidationIndexBinding -Snapshot $snapshot -XlsxValidationIndex $XlsxValidationIndex
+        $xlsxSnapshotAlreadyValidated = $true
+    } else {
+        $snapshotParameters = @{ SourceUrl=$Document.Url; SourceFormat=$Document.SourceFormat; Text=$Document.Text; ObservedAt=$Document.ObservedAt }
+        if ($Document.SourceFormat -ceq 'XLSX') { $snapshotParameters.Text = ''; $snapshotParameters.Bytes = $Document.Bytes }
+        $snapshot = New-BenefitSourceSnapshot @snapshotParameters
+        $xlsxSnapshotAlreadyValidated = ($snapshot.SourceFormat -ceq 'XLSX' -and $null -ne $XlsxValidationIndex)
+    }
     Assert-ScopeSliceAgainstSnapshot -Slice $Slice -Snapshot $snapshot -SourceRowNumber $SourceRowNumber -XlsxValidationIndex $XlsxValidationIndex -SnapshotAlreadyValidated:$xlsxSnapshotAlreadyValidated
 }
 function New-BenefitEvidenceLocationResult {

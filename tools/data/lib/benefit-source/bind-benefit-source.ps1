@@ -46,7 +46,7 @@ function Get-BenefitBindingAddressConflicts {
 }
 
 function Get-BenefitBusinessBinding {
-    param([Parameter(Mandatory)]$Source, [Parameter(Mandatory)]$Business, [AllowNull()][string]$CanonicalPhone='', [AllowNull()]$EvidenceSlice=$null)
+    param([Parameter(Mandatory)]$Source, [Parameter(Mandatory)]$Business, [AllowNull()][string]$CanonicalPhone='', [AllowNull()]$EvidenceSlice=$null, [AllowNull()]$XlsxValidationIndex=$null)
 
     Assert-QualifiedBenefitSource $Source
     Assert-NormalizedBusiness $Business
@@ -54,7 +54,7 @@ function Get-BenefitBusinessBinding {
 
     if ($PSBoundParameters.ContainsKey('EvidenceSlice')) {
         if ($null -eq $EvidenceSlice) { throw 'Explicit scoped evidence cannot be null' }
-        Assert-RelevantBenefitEvidenceSlice -Slice $EvidenceSlice -Document $Source.Document -SourceRowNumber $Business.SourceRowNumber
+        Assert-RelevantBenefitEvidenceSlice -Slice $EvidenceSlice -Document $Source.Document -SourceRowNumber $Business.SourceRowNumber -XlsxValidationIndex $XlsxValidationIndex
         $fields = $EvidenceSlice.StructuredFields
         $explicitName = if ($fields.Contains('BusinessName')) { [string]$fields['BusinessName'] } else { '' }
         $address = if ($fields.Contains('Address')) { [string]$fields['Address'] } else { '' }

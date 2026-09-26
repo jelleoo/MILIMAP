@@ -23,13 +23,30 @@ function Test-BenefitSafeHttpUri {
     return $true
 }
 
+function Test-BenefitXlsxBinaryPackage {
+    param([AllowNull()][byte[]]$Bytes)
+    if ($null -eq $Bytes -or $Bytes.Length -lt 4 -or $Bytes[0] -ne 0x50 -or $Bytes[1] -ne 0x4b -or $Bytes[2] -ne 0x03 -or $Bytes[3] -ne 0x04) { return $false }
+    try {
+        $stream = [IO.MemoryStream]::new($Bytes, $false)
+        try {
+            $archive = [IO.Compression.ZipArchive]::new($stream, [IO.Compression.ZipArchiveMode]::Read, $false)
+            try {
+                $names = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
+                foreach ($entry in $archive.Entries) { [void]$names.Add($entry.FullName) }
+                return $names.Contains('[Content_Types].xml') -and $names.Contains('xl/workbook.xml') -and $names.Contains('xl/_rels/workbook.xml.rels')
+            } finally { $archive.Dispose() }
+        } finally { $stream.Dispose() }
+    } catch { return $false }
+}
+
 function Get-BenefitSourceFormat {
-    param([Parameter(Mandatory)][string]$Url, [string]$ContentType='')
+    param([Parameter(Mandatory)][string]$Url, [string]$ContentType='', [AllowNull()][byte[]]$Bytes=$null)
     $mediaType = ($ContentType -split ';', 2)[0].Trim().ToLowerInvariant()
     if ($mediaType -in @('text/html', 'application/xhtml+xml')) { return 'HTML' }
     if ($mediaType -in @('text/csv', 'application/csv')) { return 'CSV' }
     if ($mediaType -eq 'application/pdf') { return 'PDF' }
     if ($mediaType -in @('application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'application/vnd.ms-excel')) { return 'XLSX' }
+    if ($mediaType -in @('application/octet-stream', 'application/octer-stream') -and (Test-BenefitXlsxBinaryPackage -Bytes $Bytes)) { return 'XLSX' }
     switch ([IO.Path]::GetExtension(([Uri]$Url).AbsolutePath).ToLowerInvariant()) {
         '.html' { return 'HTML' }; '.htm' { return 'HTML' }; '.csv' { return 'CSV' }; '.xlsx' { return 'XLSX' }; '.pdf' { return 'PDF' }; default { return 'UNSUPPORTED' }
     }
@@ -75,7 +92,7 @@ function Get-BenefitSourceDocument {
         $contentType = if ($response.PSObject.Properties.Name -contains 'ContentType') { [string]$response.ContentType } else { '' }
         $text = if ($response.PSObject.Properties.Name -contains 'Text') { [string]$response.Text } else { '' }
         $bytes = if ($response.PSObject.Properties.Name -contains 'Bytes') { $response.Bytes } else { $null }
-        return New-BenefitSourceDocument -SourceRowNumber $Candidate.SourceRowNumber -Url $Candidate.Url -SourceFormat (Get-BenefitSourceFormat -Url $Candidate.Url -ContentType $contentType) -FetchStatus 'COMPLETE' -ContentType $contentType -Text $text -Bytes $bytes -ObservedAt (Get-BenefitObservationTime)
+        return New-BenefitSourceDocument -SourceRowNumber $Candidate.SourceRowNumber -Url $Candidate.Url -SourceFormat (Get-BenefitSourceFormat -Url $Candidate.Url -ContentType $contentType -Bytes $bytes) -FetchStatus 'COMPLETE' -ContentType $contentType -Text $text -Bytes $bytes -ObservedAt (Get-BenefitObservationTime)
     } catch {
         return New-BenefitSourceDocument -SourceRowNumber $Candidate.SourceRowNumber -Url $Candidate.Url -SourceFormat 'UNSUPPORTED' -FetchStatus 'FAILED' -ObservedAt (Get-BenefitObservationTime) -ReasonCodes @('SOURCE_FETCH_FAILED')
     }

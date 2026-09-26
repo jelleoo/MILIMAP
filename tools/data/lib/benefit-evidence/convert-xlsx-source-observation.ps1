@@ -4,11 +4,11 @@ $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot '../benefit-evidence-location-contracts.ps1')
 
 function ConvertTo-BenefitXlsxObservation {
-    param([Parameter(Mandatory)]$Document)
+    param([Parameter(Mandatory)]$Document, [AllowNull()]$Snapshot=$null, [AllowNull()]$XlsxValidationIndex=$null)
     Assert-BenefitSourceDocument $Document
     if ($Document.FetchStatus -cne 'COMPLETE' -or $Document.SourceFormat -cne 'XLSX') { throw 'XLSX observation requires a successfully fetched XLSX document' }
-    $snapshot=New-BenefitSourceSnapshot -SourceUrl $Document.Url -SourceFormat XLSX -Text '' -Bytes $Document.Bytes -ObservedAt $Document.ObservedAt
-    $index=New-BenefitXlsxValidationIndex -Snapshot $snapshot
+    if ($null -eq $Snapshot) { $snapshot=New-BenefitSourceSnapshot -SourceUrl $Document.Url -SourceFormat XLSX -Text '' -Bytes $Document.Bytes -ObservedAt $Document.ObservedAt }
+    if ($null -eq $XlsxValidationIndex) { $index=New-BenefitXlsxValidationIndex -Snapshot $snapshot -SnapshotAlreadyValidated } else { $index=$XlsxValidationIndex; Assert-ScopeXlsxValidationIndexBinding -Snapshot $snapshot -XlsxValidationIndex $index }
     $units = [Collections.Generic.List[object]]::new()
     $diagnostics = [Collections.Generic.List[object]]::new()
     $map = Get-BenefitScopedHeaderMap
@@ -84,7 +84,7 @@ function ConvertTo-BenefitXlsxObservation {
         }
     }
     $adapterStatus = if ($diagnostics.Count -gt 0) { 'PARTIAL' } elseif (-not $identityHeaderSeen) { 'UNSUPPORTED' } else { 'COMPLETE' }
-    $observation = New-BenefitSourceObservation -SourceRowNumber $Document.SourceRowNumber -Snapshot $snapshot -AdapterId XLSX_GENERIC -AdapterVersion '1' -AdapterStatus $adapterStatus -ContentUnits @($units) -Diagnostics @($diagnostics) -XlsxValidationIndex $index
+    $observation = New-BenefitSourceObservation -SourceRowNumber $Document.SourceRowNumber -Snapshot $snapshot -AdapterId XLSX_GENERIC -AdapterVersion '1' -AdapterStatus $adapterStatus -ContentUnits @($units) -Diagnostics @($diagnostics) -XlsxValidationIndex $index -SnapshotAlreadyValidated
     $observation | Add-Member -NotePropertyName XlsxValidationIndex -NotePropertyValue $index
     return $observation
 }

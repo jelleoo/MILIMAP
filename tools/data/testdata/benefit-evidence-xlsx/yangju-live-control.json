@@ -1,0 +1,58 @@
+{
+  "CheckedAt": "2026-09-26T08:18:01.0801886+00:00",
+  "SourceUrl": "https://www.yangju.go.kr/health/downloadBbsFile.do?key=2716&bbsNo=81&atchmnflNo=200411",
+  "HttpStatus": 200,
+  "ContentType": "application/octer-stream; charset=UTF-8",
+  "FinalUrl": "https://www.yangju.go.kr/health/downloadBbsFile.do?key=2716&bbsNo=81&atchmnflNo=200411",
+  "WorkbookByteSize": 19032,
+  "SnapshotId": "dae6602d9607638bb91c90d3452843cbaf179f62aeb82093321c548294765d73",
+  "ContentHash": "a2735fd00f7bcc464e671f2f927ef5da4218e1c465c4538727eb816b80eb9ccb",
+  "Timings": {
+    "FetchMilliseconds": 154.1255,
+    "ParseIndexMilliseconds": 529.5192,
+    "FirstScopedMilliseconds": 1357.4003,
+    "SecondScopedMilliseconds": 350.3772,
+    "FirstWorkbookHashes": 2,
+    "SecondBusinessAdditionalWorkbookHashes": 0
+  },
+  "Metrics": {
+    "ExternalFetchCount": 1,
+    "FetchCacheHits": 1,
+    "AdapterParseCount": 1,
+    "AdapterReuseCount": 1,
+    "UniqueRequestKeys": 1,
+    "SourceFetchFailures": 0
+  },
+  "ProductionAction": "NONE",
+  "ProtectedPathChanges": [],
+  "PositiveControl": {
+    "FetchStatus": "COMPLETE",
+    "SourceFormat": "XLSX",
+    "OfficialityStatus": "VERIFIED_OFFICIAL",
+    "ObservationStatus": "COMPLETE",
+    "LocationOperationalStatus": "COMPLETE",
+    "LocationStatus": "LOCATED",
+    "BindingStatus": "STRONG",
+    "ExtractionStatus": "COMPLETE",
+    "ExtractionMethod": "SCOPED_XLSX_CELL",
+    "ValidationStatus": "VALIDATED",
+    "SheetName": "음식점",
+    "SheetIndex": 1,
+    "RowNumber": 22,
+    "BenefitCellReference": "XLSX_SHEET_1_ROW_22/BenefitDescription",
+    "BenefitValue": "만두한판 서비스 제공",
+    "ReasonCodes": []
+  },
+  "AbsenceControl": {
+    "ObservationStatus": "COMPLETE",
+    "LocationOperationalStatus": "COMPLETE",
+    "LocationStatus": "NOT_FOUND",
+    "ExtractionStatus": "FAILED",
+    "ClaimTypes": [],
+    "ReasonCodes": [
+      "BUSINESS_BINDING_AMBIGUOUS",
+      "SOURCE_NOT_FOUND"
+    ],
+    "ForbiddenInferences": []
+  }
+}

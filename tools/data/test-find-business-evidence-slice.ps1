@@ -156,6 +156,13 @@ Assert-ScopeEqual $xlsxNonCandidateFormula.Status LOCATED 'A non-candidate formu
 $xlsxNonCandidateUnsupportedDocument = New-BenefitSourceDocument -SourceRowNumber 2 -Url 'https://city.example.go.kr/non-candidate-unsupported.xlsx' -SourceFormat XLSX -FetchStatus COMPLETE -Text '' -Bytes (New-XlsxTestBytes -NonCandidateUnsupportedBenefit) -ObservedAt '2026-09-26T00:00:00Z'
 $xlsxNonCandidateUnsupported = Find-BenefitBusinessEvidence -Observation (ConvertTo-BenefitXlsxObservation -Document $xlsxNonCandidateUnsupportedDocument) -Business $xlsxBusiness -CanonicalPhone '031-861-4800'
 Assert-ScopeEqual $xlsxNonCandidateUnsupported.Status LOCATED 'A non-candidate unsupported row does not prevent the valid XLSX row from locating'
+foreach ($unsafeBusinessNameBytes in @((New-XlsxTestBytes -FormulaBusinessName), (New-XlsxTestBytes -UnsupportedBusinessName))) {
+    $unsafeBusinessNameDocument = New-BenefitSourceDocument -SourceRowNumber 2 -Url 'https://city.example.go.kr/unsafe-business-name.xlsx' -SourceFormat XLSX -FetchStatus COMPLETE -Text '' -Bytes $unsafeBusinessNameBytes -ObservedAt '2026-09-26T00:00:00Z'
+    $unsafeBusinessNameLocation = Find-BenefitBusinessEvidence -Observation (ConvertTo-BenefitXlsxObservation -Document $unsafeBusinessNameDocument) -Business $xlsxBusiness -CanonicalPhone '031-861-4800'
+    Assert-ScopeEqual $unsafeBusinessNameLocation.OperationalStatus PARTIAL 'An unsafe BusinessName cell makes location operationally partial'
+    Assert-ScopeTrue ($null -eq $unsafeBusinessNameLocation.Status) 'An unsafe BusinessName cell cannot claim a semantic location result'
+    Assert-ScopeTrue ($unsafeBusinessNameLocation.Status -ne 'NOT_FOUND') 'An unsafe BusinessName cell cannot become NOT_FOUND'
+}
 $xlsxDuplicateDocument = New-BenefitSourceDocument -SourceRowNumber 2 -Url 'https://city.example.go.kr/duplicates.xlsx' -SourceFormat XLSX -FetchStatus COMPLETE -Text '' -Bytes (New-XlsxTestBytes -DuplicateBusinessNameCell) -ObservedAt '2026-09-26T00:00:00Z'
 $xlsxDuplicate = Find-BenefitBusinessEvidence -Observation (ConvertTo-BenefitXlsxObservation -Document $xlsxDuplicateDocument) -Business $xlsxBusiness -CanonicalPhone '031-861-4800'
 Assert-ScopeEqual $xlsxDuplicate.Status AMBIGUOUS 'Duplicate XLSX name candidates cannot be selected by one strong row'

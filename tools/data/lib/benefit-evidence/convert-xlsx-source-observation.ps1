@@ -46,7 +46,12 @@ function ConvertTo-BenefitXlsxObservation {
                 $fields = [ordered]@{}
                 $references = [ordered]@{}
                 $businessValueCells = @($row.Cells.Values | Where-Object { $_.Column -ceq $businessHeaders[0].Cell.Column })
-                if ($businessValueCells.Count -ne 1 -or -not $businessValueCells[0].IsSupported -or $businessValueCells[0].HasFormula -or [string]::IsNullOrWhiteSpace($businessValueCells[0].Value)) { continue }
+                if ($businessValueCells.Count -eq 0) { continue }
+                if ($businessValueCells.Count -ne 1 -or -not $businessValueCells[0].IsSupported -or $businessValueCells[0].HasFormula) {
+                    $diagnostics.Add([pscustomobject][ordered]@{ Code='XLSX_ROW_UNUSABLE'; Stage='XLSX_PARSER'; EvidenceReference="XLSX_SHEET_$($sheet.Index)_ROW_$($row.Number)"; Detail='Unsupported or formula-backed BusinessName source cell' })
+                    continue
+                }
+                if ([string]::IsNullOrWhiteSpace($businessValueCells[0].Value)) { continue }
                 $rowIsUsable = $true
                 foreach ($column in @($headers.Keys)) {
                     $headerField = $headers[$column]

@@ -58,6 +58,14 @@ Assert-ScopeEqual $formulaConverted.AdapterStatus PARTIAL 'A selected formula ce
 Assert-ScopeEqual $formulaConverted.ContentUnits.Count 0 'A formula-backed semantic field cannot yield a candidate row'
 Assert-ScopeTrue (@($formulaConverted.Diagnostics | Where-Object { $_.Code -eq 'XLSX_ROW_UNUSABLE' }).Count -eq 1) 'A selected formula row remains auditable as partial parsing'
 
+foreach ($unsafeBusinessNameBytes in @((New-XlsxTestBytes -FormulaBusinessName), (New-XlsxTestBytes -UnsupportedBusinessName))) {
+    $unsafeBusinessNameDocument = New-BenefitSourceDocument -SourceRowNumber 2 -Url 'https://city.example.go.kr/unsafe-business-name.xlsx' -SourceFormat XLSX -FetchStatus COMPLETE -Text '' -Bytes $unsafeBusinessNameBytes -ObservedAt '2026-09-26T00:00:00Z'
+    $unsafeBusinessNameConverted = ConvertTo-BenefitXlsxObservation -Document $unsafeBusinessNameDocument
+    Assert-ScopeEqual $unsafeBusinessNameConverted.AdapterStatus PARTIAL 'A physically present but unsafe BusinessName cell blocks the observation'
+    Assert-ScopeEqual $unsafeBusinessNameConverted.ContentUnits.Count 0 'An unsafe BusinessName cell cannot yield a candidate unit'
+    Assert-ScopeTrue (@($unsafeBusinessNameConverted.Diagnostics | Where-Object { $_.Code -eq 'XLSX_ROW_UNUSABLE' }).Count -eq 1) 'An unsafe BusinessName cell remains auditable as a blocking row'
+}
+
 foreach ($cellType in @('inlineStr','str','n')) {
     $typedDocument = New-BenefitSourceDocument -SourceRowNumber 2 -Url "https://city.example.go.kr/$cellType.xlsx" -SourceFormat XLSX -FetchStatus COMPLETE -Text '' -Bytes (New-XlsxTestBytes -BenefitCellType $cellType) -ObservedAt '2026-09-26T00:00:00Z'
     $typedObservation = ConvertTo-BenefitXlsxObservation -Document $typedDocument

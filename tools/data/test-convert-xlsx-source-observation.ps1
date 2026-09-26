@@ -57,9 +57,18 @@ Assert-ScopeThrows { New-BenefitXlsxSourceContentUnit -Snapshot $missingBenefitC
 
 $unrelatedUnsupportedDocument = New-BenefitSourceDocument -SourceRowNumber 2 -Url 'https://city.example.go.kr/unrelated.xlsx' -SourceFormat XLSX -FetchStatus COMPLETE -Text '' -Bytes (New-XlsxTestBytes -UnrelatedUnsupportedRow) -ObservedAt '2026-09-26T00:00:00Z'
 $unrelatedUnsupportedConverted = ConvertTo-BenefitXlsxObservation -Document $unrelatedUnsupportedDocument
-Assert-ScopeEqual $unrelatedUnsupportedConverted.AdapterStatus PARTIAL 'An unrelated unsupported XLSX row is isolated as partial parsing'
+Assert-ScopeEqual $unrelatedUnsupportedConverted.AdapterStatus COMPLETE 'An unrelated unsupported XLSX row cannot poison a valid candidate observation'
 Assert-ScopeEqual $unrelatedUnsupportedConverted.ContentUnits.Count 1 'An unrelated unusable row cannot erase a valid physical row'
-Assert-ScopeTrue (@($unrelatedUnsupportedConverted.Diagnostics | Where-Object { $_.Code -eq 'XLSX_ROW_UNUSABLE' -and $_.EvidenceReference -eq 'XLSX_SHEET_1_ROW_24' }).Count -eq 1) 'An unrelated unusable row retains its physical diagnostic reference'
+
+$unmappedUnsupportedDocument = New-BenefitSourceDocument -SourceRowNumber 2 -Url 'https://city.example.go.kr/unmapped-unsupported.xlsx' -SourceFormat XLSX -FetchStatus COMPLETE -Text '' -Bytes (New-XlsxTestBytes -UnmappedUnsupportedCell) -ObservedAt '2026-09-26T00:00:00Z'
+$unmappedUnsupportedConverted = ConvertTo-BenefitXlsxObservation -Document $unmappedUnsupportedDocument
+Assert-ScopeEqual $unmappedUnsupportedConverted.AdapterStatus COMPLETE 'An unsupported unmapped cell in a valid business row does not poison the observation'
+Assert-ScopeEqual $unmappedUnsupportedConverted.ContentUnits.Count 1 'An unsupported unmapped cell does not discard the valid XLSX row'
+
+$mergedHeaderDocument = New-BenefitSourceDocument -SourceRowNumber 2 -Url 'https://city.example.go.kr/merged-header.xlsx' -SourceFormat XLSX -FetchStatus COMPLETE -Text '' -Bytes (New-XlsxTestBytes -MergedBusinessHeader) -ObservedAt '2026-09-26T00:00:00Z'
+$mergedHeaderConverted = ConvertTo-BenefitXlsxObservation -Document $mergedHeaderDocument
+Assert-ScopeEqual $mergedHeaderConverted.AdapterStatus PARTIAL 'A mapped merged header fails closed'
+Assert-ScopeEqual $mergedHeaderConverted.ContentUnits.Count 0 'A mapped merged header cannot yield candidate rows'
 
 $duplicateHeaderDocument = New-BenefitSourceDocument -SourceRowNumber 2 -Url 'https://city.example.go.kr/duplicate-header.xlsx' -SourceFormat XLSX -FetchStatus COMPLETE -Text '' -Bytes (New-XlsxTestBytes -DuplicateBenefitHeader) -ObservedAt '2026-09-26T00:00:00Z'
 $duplicateHeaderConverted = ConvertTo-BenefitXlsxObservation -Document $duplicateHeaderDocument
@@ -75,6 +84,7 @@ foreach ($unsafePackage in @(
     (New-XlsxTestBytes -DuplicateRelationshipId),
     (New-XlsxTestBytes -DuplicateWorksheetTarget),
     (New-XlsxTestBytes -ExternalRelationship),
+    (New-XlsxTestBytes -WrongRelationshipType),
     (New-XlsxTestBytes -WorkbookDtd),
     (New-XlsxTestBytes -UnsafeArchivePath),
     (New-XlsxTestBytes -DuplicateWorkbookEntry),
@@ -91,6 +101,19 @@ foreach ($unsafePackage in @(
 
 $unit = $converted.ContentUnits[0]
 Assert-ScopeXlsxUnit -Unit $unit -Snapshot $converted.Snapshot -XlsxValidationIndex $converted.XlsxValidationIndex
+
+foreach ($mutation in @(
+    @{ Row=2; Cell='B2'; Property='IsSupported'; Value=$false; Message='An unsupported selected header must be rejected by provenance validation' },
+    @{ Row=2; Cell='B2'; Property='HasFormula'; Value=$true; Message='A formula-backed selected header must be rejected by provenance validation' },
+    @{ Row=22; Cell='B22'; Property='IsSupported'; Value=$false; Message='An unsupported selected value cell must be rejected by provenance validation' },
+    @{ Row=22; Cell='B22'; Property='HasFormula'; Value=$true; Message='A formula-backed selected value cell must be rejected by provenance validation' }
+)) {
+    $forgedValidationIndex = Copy-ScopeContractData $converted.XlsxValidationIndex
+    $forgedSheet = $forgedValidationIndex.Sheets[0]
+    $forgedRow = @($forgedSheet.Rows | Where-Object { $_.Number -eq $mutation.Row })[0]
+    $forgedRow.Cells[$mutation.Cell].$($mutation.Property) = $mutation.Value
+    Assert-ScopeThrows { Assert-ScopeXlsxUnit -Unit $unit -Snapshot $converted.Snapshot -XlsxValidationIndex $forgedValidationIndex } $mutation.Message
+}
 
 function New-XlsxUnitForgery {
     param($Source)

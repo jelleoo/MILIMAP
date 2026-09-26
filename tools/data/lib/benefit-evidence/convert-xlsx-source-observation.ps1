@@ -20,7 +20,8 @@ function ConvertTo-BenefitXlsxObservation {
             $headerIsUsable = $true
             foreach ($cell in @($header.Cells.Values)) {
                 if ($map.ContainsKey($cell.Value)) {
-                    if (-not $cell.IsSupported -or $cell.HasFormula -or -not $mappedFields.Add($map[$cell.Value])) {
+                    if ($map[$cell.Value] -ceq 'BusinessName') { $identityHeaderSeen = $true }
+                    if (-not $cell.IsSupported -or $cell.HasFormula -or (Test-BenefitXlsxCellInMergedRange -CellReference $cell.Reference -MergedRanges $sheet.MergedRanges) -or -not $mappedFields.Add($map[$cell.Value])) {
                         $headerIsUsable = $false
                         break
                     }
@@ -30,8 +31,12 @@ function ConvertTo-BenefitXlsxObservation {
                     }
                 }
             }
-            if ($headers.Count -eq 0) { continue }
-            if (@($headers.Values | Where-Object { $_.Field -ceq 'BusinessName' }).Count -gt 0) { $identityHeaderSeen = $true }
+            if ($headers.Count -eq 0) {
+                if (-not $headerIsUsable) {
+                    $diagnostics.Add([pscustomobject][ordered]@{ Code='XLSX_ROW_UNUSABLE'; Stage='XLSX_PARSER'; EvidenceReference="XLSX_SHEET_$($sheet.Index)_ROW_$($header.Number)"; Detail='Ambiguous or unsupported semantic header mapping' })
+                }
+                continue
+            }
             if (-not $headerIsUsable) {
                 $diagnostics.Add([pscustomobject][ordered]@{ Code='XLSX_ROW_UNUSABLE'; Stage='XLSX_PARSER'; EvidenceReference="XLSX_SHEET_$($sheet.Index)_ROW_$($header.Number)"; Detail='Ambiguous or unsupported semantic header mapping' })
                 continue
@@ -40,12 +45,12 @@ function ConvertTo-BenefitXlsxObservation {
             foreach ($row in @($sheet.Rows | Where-Object { $_.Number -gt $header.Number })) {
                 $fields = [ordered]@{}
                 $references = [ordered]@{}
-                $rowIsUsable = @($row.Cells.Values | Where-Object { -not $_.IsSupported -or $_.HasFormula }).Count -eq 0
+                $rowIsUsable = $true
                 foreach ($column in @($headers.Keys)) {
                     $headerField = $headers[$column]
                     $valueCells = @($row.Cells.Values | Where-Object { $_.Column -ceq $column })
                     if ($valueCells.Count -eq 0) { continue }
-                    if ($valueCells.Count -ne 1 -or $valueCells[0].HasFormula) {
+                    if ($valueCells.Count -ne 1 -or -not $valueCells[0].IsSupported -or $valueCells[0].HasFormula) {
                         $rowIsUsable = $false
                         break
                     }

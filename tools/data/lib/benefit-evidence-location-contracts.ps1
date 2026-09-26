@@ -17,6 +17,7 @@ function Get-BenefitEvidenceByteHash {
     finally { $sha.Dispose() }
 }
 $script:XlsxValidationLimits = [pscustomobject]@{ MaxEntries=256; MaxEntryBytes=8MB; MaxTotalBytes=32MB }
+$script:XlsxWorksheetRelationshipType = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet'
 function Read-BenefitXlsxXml {
     param([Parameter(Mandatory)]$Entry)
     $settings=[Xml.XmlReaderSettings]::new(); $settings.DtdProcessing=[Xml.DtdProcessing]::Prohibit; $settings.XmlResolver=$null
@@ -27,6 +28,23 @@ function Get-BenefitXlsxColumn {
     param([Parameter(Mandatory)][string]$Reference)
     if ($Reference -cnotmatch '^([A-Z]+)([1-9]\d*)$') { throw 'Invalid XLSX cell reference' }
     return $Matches[1]
+}
+function Convert-BenefitXlsxColumnNumber {
+    param([Parameter(Mandatory)][string]$Column)
+    if ($Column -cnotmatch '^[A-Z]+$') { throw 'Invalid XLSX column' }
+    $value = 0
+    foreach ($character in $Column.ToCharArray()) { $value = ($value * 26) + ([int][char]$character - [int][char]'A' + 1) }
+    return $value
+}
+function Test-BenefitXlsxCellInMergedRange {
+    param([Parameter(Mandatory)][string]$CellReference, [AllowEmptyCollection()][object[]]$MergedRanges=@())
+    if ($CellReference -cnotmatch '^([A-Z]+)([1-9]\d*)$') { throw 'Invalid XLSX cell reference' }
+    $column = Convert-BenefitXlsxColumnNumber $Matches[1]
+    $row = [int]$Matches[2]
+    foreach ($range in $MergedRanges) {
+        if ($column -ge $range.StartColumn -and $column -le $range.EndColumn -and $row -ge $range.StartRow -and $row -le $range.EndRow) { return $true }
+    }
+    return $false
 }
 function New-BenefitXlsxValidationIndex {
     param([Parameter(Mandatory)]$Snapshot)
@@ -58,20 +76,29 @@ function New-BenefitXlsxValidationIndex {
                 $sheets.Add([pscustomobject]@{Name=$sheetName;Index=$i;RelationshipId=$relationshipId})
             }
             $rels=Read-BenefitXlsxXml $entries['xl/_rels/workbook.xml.rels']; $rn=[Xml.XmlNamespaceManager]::new($rels.NameTable); $rn.AddNamespace('r','http://schemas.openxmlformats.org/package/2006/relationships')
-            $targets=[Collections.Generic.Dictionary[string,string]]::new([StringComparer]::Ordinal);$worksheetTargets=[Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
+            $targets=[Collections.Generic.Dictionary[string,string]]::new([StringComparer]::Ordinal);$relationshipTypes=[Collections.Generic.Dictionary[string,string]]::new([StringComparer]::Ordinal);$worksheetTargets=[Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
             foreach($rel in @($rels.SelectNodes('/r:Relationships/r:Relationship',$rn))) {
                 if($rel.GetAttribute('TargetMode') -ceq 'External'){throw 'External XLSX relationship'}
-                $relationshipId=$rel.GetAttribute('Id');$target=$rel.GetAttribute('Target')
-                if([string]::IsNullOrWhiteSpace($relationshipId) -or [string]::IsNullOrWhiteSpace($target) -or $target -match '(^|/|\\)\.\.(/|\\|$)' -or $target.StartsWith('/') -or $target.Contains('\\')){throw 'Unsafe XLSX relationship target'}
+                $relationshipId=$rel.GetAttribute('Id');$target=$rel.GetAttribute('Target');$relationshipType=$rel.GetAttribute('Type')
+                if([string]::IsNullOrWhiteSpace($relationshipId) -or [string]::IsNullOrWhiteSpace($target) -or [string]::IsNullOrWhiteSpace($relationshipType) -or $target -match '(^|/|\\)\.\.(/|\\|$)' -or $target.StartsWith('/') -or $target.Contains('\\')){throw 'Unsafe XLSX relationship target'}
                 $packageTarget='xl/'+$target
                 if(-not $targets.TryAdd($relationshipId,$packageTarget)){throw 'Duplicate XLSX relationship identifier'}
+                if(-not $relationshipTypes.TryAdd($relationshipId,$relationshipType)){throw 'Duplicate XLSX relationship identifier'}
                 if($sheetRelationshipIds.Contains($relationshipId) -and -not $worksheetTargets.Add($packageTarget)){throw 'Duplicate selected XLSX worksheet part'}
             }
             $shared=@(); if($entries.ContainsKey('xl/sharedStrings.xml')) { $sd=Read-BenefitXlsxXml $entries['xl/sharedStrings.xml']; $sn=[Xml.XmlNamespaceManager]::new($sd.NameTable);$sn.AddNamespace('x','http://schemas.openxmlformats.org/spreadsheetml/2006/main');$shared=@($sd.SelectNodes('/x:sst/x:si',$sn)|ForEach-Object{ ($_.SelectNodes('.//x:t',$sn)|ForEach-Object{$_.InnerText}) -join '' }) }
             foreach($sheet in $sheets) {
                 if(-not $targets.ContainsKey($sheet.RelationshipId) -or -not $entries.ContainsKey($targets[$sheet.RelationshipId])){throw 'Missing XLSX worksheet part'}
+                if($relationshipTypes[$sheet.RelationshipId] -cne $script:XlsxWorksheetRelationshipType){throw 'Workbook sheet relationship must target an OOXML worksheet'}
                 $sheet | Add-Member -NotePropertyName Part -NotePropertyValue $targets[$sheet.RelationshipId]
-                $wd=Read-BenefitXlsxXml $entries[$sheet.Part];$wn=[Xml.XmlNamespaceManager]::new($wd.NameTable);$wn.AddNamespace('x','http://schemas.openxmlformats.org/spreadsheetml/2006/main');$rows=[Collections.Generic.List[object]]::new();$rowNumbers=[Collections.Generic.HashSet[int]]::new()
+                $wd=Read-BenefitXlsxXml $entries[$sheet.Part];$wn=[Xml.XmlNamespaceManager]::new($wd.NameTable);$wn.AddNamespace('x','http://schemas.openxmlformats.org/spreadsheetml/2006/main');$mergedRanges=[Collections.Generic.List[object]]::new();$mergeReferences=[Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal);$rows=[Collections.Generic.List[object]]::new();$rowNumbers=[Collections.Generic.HashSet[int]]::new()
+                foreach($mergeCell in @($wd.SelectNodes('/x:worksheet/x:mergeCells/x:mergeCell',$wn))) {
+                    $mergeReference=$mergeCell.GetAttribute('ref')
+                    if($mergeReference -cnotmatch '^([A-Z]+)([1-9]\d*):([A-Z]+)([1-9]\d*)$' -or -not $mergeReferences.Add($mergeReference)){throw 'Invalid or duplicate XLSX merged range'}
+                    $startColumn=Convert-BenefitXlsxColumnNumber $Matches[1];$startRow=[int]$Matches[2];$endColumn=Convert-BenefitXlsxColumnNumber $Matches[3];$endRow=[int]$Matches[4]
+                    if($startColumn -gt $endColumn -or $startRow -gt $endRow -or ($startColumn -eq $endColumn -and $startRow -eq $endRow)){throw 'Invalid XLSX merged range'}
+                    $mergedRanges.Add([pscustomobject]@{ Reference=$mergeReference; StartColumn=$startColumn; StartRow=$startRow; EndColumn=$endColumn; EndRow=$endRow })
+                }
                 foreach($row in @($wd.SelectNodes('/x:worksheet/x:sheetData/x:row',$wn))) {
                     $cells=@{}; $number=[int]$row.GetAttribute('r')
                     if($number -lt 1 -or -not $rowNumbers.Add($number)){throw 'Invalid or duplicate XLSX row'}
@@ -93,6 +120,7 @@ function New-BenefitXlsxValidationIndex {
                     $rows.Add([pscustomobject]@{Number=$number;Cells=$cells})
                 }
                 $sheet | Add-Member -NotePropertyName Rows -NotePropertyValue @($rows)
+                $sheet | Add-Member -NotePropertyName MergedRanges -NotePropertyValue @($mergedRanges)
             }
         } finally { $archive.Dispose() }
     } finally { $stream.Dispose() }
@@ -524,9 +552,9 @@ function Assert-ScopeXlsxUnit {
     }
     if($Snapshot.SourceFormat -cne 'XLSX' -or $Unit.UnitType -cne 'XLSX_ROW' -or $Unit.SnapshotId -cne $Snapshot.SnapshotId -or $XlsxValidationIndex.SnapshotId -cne $Snapshot.SnapshotId -or $XlsxValidationIndex.ContentHash -cne $Snapshot.ContentHash){throw 'XLSX unit snapshot mismatch'}
     if($Unit.UnitReference -cne "XLSX_SHEET_$($Unit.SheetIndex)_ROW_$($Unit.RowNumber)" -or [int]$Unit.SheetIndex -lt 1 -or [int]$Unit.HeaderRowNumber -lt 1 -or [int]$Unit.RowNumber -le [int]$Unit.HeaderRowNumber){throw 'Invalid XLSX physical reference'}
-    $s=@($XlsxValidationIndex.Sheets|Where-Object{$_.Name -ceq $Unit.SheetName -and $_.Index -eq $Unit.SheetIndex});if($s.Count -ne 1){throw 'XLSX sheet identity mismatch'};$header=@($s[0].Rows|Where-Object{$_.Number -eq $Unit.HeaderRowNumber});$row=@($s[0].Rows|Where-Object{$_.Number -eq $Unit.RowNumber});if($header.Count -ne 1 -or $row.Count -ne 1){throw 'XLSX row missing'}
+    $s=@($XlsxValidationIndex.Sheets|Where-Object{$_.Name -ceq $Unit.SheetName -and $_.Index -eq $Unit.SheetIndex});if($s.Count -ne 1 -or $s[0].PSObject.Properties.Name -notcontains 'MergedRanges'){throw 'XLSX sheet identity mismatch'};$header=@($s[0].Rows|Where-Object{$_.Number -eq $Unit.HeaderRowNumber});$row=@($s[0].Rows|Where-Object{$_.Number -eq $Unit.RowNumber});if($header.Count -ne 1 -or $row.Count -ne 1){throw 'XLSX row missing'}
     if($Unit.StructuredFields -isnot [Collections.IDictionary] -or $Unit.FieldReferences -isnot [Collections.IDictionary] -or $Unit.StructuredFields.Count -ne $Unit.FieldReferences.Count){throw 'XLSX fields mismatch'};$map=Get-BenefitScopedHeaderMap
-    foreach($key in $Unit.StructuredFields.Keys){if(-not $Unit.FieldReferences.Contains($key)){throw 'Missing XLSX field reference'};$f=$Unit.FieldReferences[$key];foreach($p in @('FieldReference','HeaderCellReference','OriginalHeader','CellReference','CellType','RawValue')){if($f.PSObject.Properties.Name -notcontains $p){throw 'Incomplete XLSX field reference'}};$hc=$header[0].Cells[$f.HeaderCellReference];$vc=$row[0].Cells[$f.CellReference];if($null -eq $hc -or $null -eq $vc -or $hc.Column -cne $vc.Column -or $vc.Row -ne $Unit.RowNumber -or $hc.Row -ne $Unit.HeaderRowNumber -or $vc.HasFormula -or $f.CellType -cne $vc.CellType -or $f.RawValue -cne $vc.RawValue -or $f.OriginalHeader -cne $hc.Value -or -not $map.ContainsKey($hc.Value) -or $map[$hc.Value] -cne $key -or $Unit.StructuredFields[$key] -cne $vc.Value -or $f.FieldReference -cne ($Unit.UnitReference+'/'+$key)){throw 'XLSX field provenance mismatch'}}
+    foreach($key in $Unit.StructuredFields.Keys){if(-not $Unit.FieldReferences.Contains($key)){throw 'Missing XLSX field reference'};$f=$Unit.FieldReferences[$key];foreach($p in @('FieldReference','HeaderCellReference','OriginalHeader','CellReference','CellType','RawValue')){if($f.PSObject.Properties.Name -notcontains $p){throw 'Incomplete XLSX field reference'}};$hc=$header[0].Cells[$f.HeaderCellReference];$vc=$row[0].Cells[$f.CellReference];if($null -eq $hc -or $null -eq $vc -or -not $hc.IsSupported -or -not $vc.IsSupported -or $hc.HasFormula -or $vc.HasFormula -or (Test-BenefitXlsxCellInMergedRange -CellReference $hc.Reference -MergedRanges $s[0].MergedRanges) -or $hc.Column -cne $vc.Column -or $vc.Row -ne $Unit.RowNumber -or $hc.Row -ne $Unit.HeaderRowNumber -or $f.CellType -cne $vc.CellType -or $f.RawValue -cne $vc.RawValue -or $f.OriginalHeader -cne $hc.Value -or -not $map.ContainsKey($hc.Value) -or $map[$hc.Value] -cne $key -or $Unit.StructuredFields[$key] -cne $vc.Value -or $f.FieldReference -cne ($Unit.UnitReference+'/'+$key)){throw 'XLSX field provenance mismatch'}}
 }
 function New-BenefitXlsxSourceContentUnit {
     param([Parameter(Mandatory)]$Snapshot,[Parameter(Mandatory)]$XlsxValidationIndex,[string]$SheetName,[int]$SheetIndex,[int]$HeaderRowNumber,[int]$RowNumber,[Parameter(Mandatory)][Collections.IDictionary]$StructuredFields,[Parameter(Mandatory)][Collections.IDictionary]$FieldReferences)

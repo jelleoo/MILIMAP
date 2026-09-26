@@ -138,12 +138,14 @@ function Test-BenefitHistoryAbsenceEligible {
 
     $diagnostics=@($EvidenceDiagnostics | Where-Object { $null -ne $_ })
     if($diagnostics.Count -eq 0){ return $false }
-    if(@($diagnostics | Where-Object { [string](Get-BenefitHistoryProperty $_ 'FetchStatus') -cne 'COMPLETE' }).Count -gt 0){ return $false }
 
-    $located=@($diagnostics | Where-Object { -not [string]::IsNullOrWhiteSpace([string](Get-BenefitHistoryProperty $_ 'LocationOperationalStatus')) })
-    if($located.Count -eq 0){ return $false }
-    if(@($located | Where-Object { [string](Get-BenefitHistoryProperty $_ 'LocationOperationalStatus') -cne 'COMPLETE' }).Count -gt 0){ return $false }
-    if(@($located | Where-Object { [string](Get-BenefitHistoryProperty $_ 'LocationStatus') -cne 'NOT_FOUND' }).Count -gt 0){ return $false }
+    foreach($diagnostic in $diagnostics){
+        if([string](Get-BenefitHistoryProperty $diagnostic 'FetchStatus') -cne 'COMPLETE'){ return $false }
+        if([string](Get-BenefitHistoryProperty $diagnostic 'OfficialityStatus') -cne 'VERIFIED_OFFICIAL'){ return $false }
+        if([string](Get-BenefitHistoryProperty $diagnostic 'AdapterStatus') -cne 'COMPLETE'){ return $false }
+        if([string](Get-BenefitHistoryProperty $diagnostic 'LocationOperationalStatus') -cne 'COMPLETE'){ return $false }
+        if([string](Get-BenefitHistoryProperty $diagnostic 'LocationStatus') -cne 'NOT_FOUND'){ return $false }
+    }
     return $true
 }
 

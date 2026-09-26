@@ -5,7 +5,7 @@ $ErrorActionPreference = 'Stop'
 
 function ConvertTo-HistoryJsonString {
     param([Parameter(Mandatory)][AllowEmptyString()][string]$Value)
-    return [System.Text.Json.JsonSerializer]::Serialize([string]$Value)
+    return ConvertTo-Json -InputObject ([string]$Value) -Compress
 }
 
 function ConvertTo-HistoryCanonicalNode {

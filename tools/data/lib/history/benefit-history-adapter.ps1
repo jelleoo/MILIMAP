@@ -149,6 +149,23 @@ function Test-BenefitHistoryAbsenceEligible {
     return $true
 }
 
+function Get-BenefitHistoryBusinessPresence {
+    param([AllowNull()][object[]]$EvidenceDiagnostics=@())
+
+    if(Test-BenefitHistoryAbsenceEligible -EvidenceDiagnostics $EvidenceDiagnostics){ return 'ABSENT' }
+
+    foreach($diagnostic in @($EvidenceDiagnostics | Where-Object { $null -ne $_ })){
+        if([string](Get-BenefitHistoryProperty $diagnostic 'FetchStatus') -cne 'COMPLETE'){ continue }
+        if([string](Get-BenefitHistoryProperty $diagnostic 'OfficialityStatus') -cne 'VERIFIED_OFFICIAL'){ continue }
+        if([string](Get-BenefitHistoryProperty $diagnostic 'AdapterStatus') -cne 'COMPLETE'){ continue }
+        if([string](Get-BenefitHistoryProperty $diagnostic 'LocationOperationalStatus') -cne 'COMPLETE'){ continue }
+        if([string](Get-BenefitHistoryProperty $diagnostic 'LocationStatus') -cne 'LOCATED'){ continue }
+        if([string](Get-BenefitHistoryProperty $diagnostic 'BusinessBindingStatus') -cne 'STRONG'){ continue }
+        return 'PRESENT'
+    }
+    return 'UNKNOWN'
+}
+
 function ConvertTo-BenefitHistorySemanticProjection {
     param(
         [Parameter(Mandatory)]$Result,
@@ -177,6 +194,7 @@ function ConvertTo-BenefitHistorySemanticProjection {
         ProjectionVersion=1
         BenefitState=[string]$Result.BenefitState
         ReviewClass=[string]$Result.ReviewClass
+        BusinessPresence=Get-BenefitHistoryBusinessPresence -EvidenceDiagnostics $EvidenceDiagnostics
         AbsenceEligible=[bool](Test-BenefitHistoryAbsenceEligible -EvidenceDiagnostics $EvidenceDiagnostics)
         Claims=@($claims)
         MaterialReasonCodes=@($resultReasons)
@@ -410,9 +428,9 @@ function Resolve-BenefitHistoryDomainChange {
     $previousProjection=Read-BenefitHistorySemanticProjection -Store $Store -Observation $Previous
     $currentProjection=Read-BenefitHistorySemanticProjection -Store $Store -Observation $Current
 
-    $previousAbsent=[bool]$previousProjection.AbsenceEligible
+    $previousPresence=[string]$previousProjection.BusinessPresence
     $currentAbsent=[bool]$currentProjection.AbsenceEligible
-    if($currentAbsent -and -not $previousAbsent){
+    if($currentAbsent -and $previousPresence -ceq 'PRESENT'){
         return [pscustomobject][ordered]@{
             ChangeCandidates=@('BENEFIT_ABSENCE_SUSPECTED')
             ReasonCodes=@('COMPLETE_BUSINESS_NOT_FOUND')

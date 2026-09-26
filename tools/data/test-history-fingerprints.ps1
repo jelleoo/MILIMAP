@@ -47,14 +47,14 @@ foreach($name in @('InputFingerprint','EvidenceFingerprint','SemanticFingerprint
 }
 
 function New-TestObservation {
-    param([string]$Input='1',[string]$Evidence='2',[string]$Semantic='3',[string]$Execution='4')
-    New-HistoryObservation -ObservationId ('obs-' + [Guid]::NewGuid().ToString('N')) -RunId 'run-test' -BusinessId 'biz-0123456789abcdef0123456789abcdef' -Domain 'LOCATION' -ObservedAt '2026-09-26T00:00:00Z' -OperationalStatus 'COMPLETE' -Comparable $true -InputFingerprint ($Input*64) -EvidenceFingerprint ($Evidence*64) -SemanticFingerprint ($Semantic*64) -ExecutionFingerprint ($Execution*64)
+    param([string]$InputValue='1',[string]$EvidenceValue='2',[string]$SemanticValue='3',[string]$ExecutionValue='4')
+    New-HistoryObservation -ObservationId ('obs-' + [Guid]::NewGuid().ToString('N')) -RunId 'run-test' -BusinessId 'biz-0123456789abcdef0123456789abcdef' -Domain 'LOCATION' -ObservedAt '2026-09-26T00:00:00Z' -OperationalStatus 'COMPLETE' -Comparable $true -InputFingerprint ($InputValue*64) -EvidenceFingerprint ($EvidenceValue*64) -SemanticFingerprint ($SemanticValue*64) -ExecutionFingerprint ($ExecutionValue*64)
 }
 $base = New-TestObservation
-Assert-Equal ((Get-HistoryDeltaDimensions -Previous $base -Current (New-TestObservation -Input 'a')) -join ',') 'INPUT' 'Input change must map to INPUT delta'
-Assert-Equal ((Get-HistoryDeltaDimensions -Previous $base -Current (New-TestObservation -Evidence 'a')) -join ',') 'EVIDENCE' 'Evidence change must map to EVIDENCE delta'
-Assert-Equal ((Get-HistoryDeltaDimensions -Previous $base -Current (New-TestObservation -Semantic 'a')) -join ',') 'SEMANTIC' 'Semantic change must map to SEMANTIC delta'
-Assert-Equal ((Get-HistoryDeltaDimensions -Previous $base -Current (New-TestObservation -Execution 'a')) -join ',') 'EXECUTION' 'Execution change must map to EXECUTION delta'
+Assert-Equal ((Get-HistoryDeltaDimensions -Previous $base -Current (New-TestObservation -InputValue 'a')) -join ',') 'INPUT' 'Input change must map to INPUT delta'
+Assert-Equal ((Get-HistoryDeltaDimensions -Previous $base -Current (New-TestObservation -EvidenceValue 'a')) -join ',') 'EVIDENCE' 'Evidence change must map to EVIDENCE delta'
+Assert-Equal ((Get-HistoryDeltaDimensions -Previous $base -Current (New-TestObservation -SemanticValue 'a')) -join ',') 'SEMANTIC' 'Semantic change must map to SEMANTIC delta'
+Assert-Equal ((Get-HistoryDeltaDimensions -Previous $base -Current (New-TestObservation -ExecutionValue 'a')) -join ',') 'EXECUTION' 'Execution change must map to EXECUTION delta'
 Assert-Equal @((Get-HistoryDeltaDimensions -Previous $base -Current $base)).Count 0 'Identical fingerprints have no deltas'
 
 Assert-Throws { ConvertTo-HistoryCanonicalJson ([IO.FileInfo]::new('x')) } 'Opaque unsupported types must fail closed'

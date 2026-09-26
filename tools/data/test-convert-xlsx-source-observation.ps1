@@ -29,6 +29,29 @@ Assert-ScopeThrows { Assert-RelevantBenefitEvidenceSlice -Slice $forgedSlice -Do
 $otherDocument = New-BenefitSourceDocument -SourceRowNumber 2 -Url 'https://city.example.go.kr/other.xlsx' -SourceFormat XLSX -FetchStatus COMPLETE -Text '' -Bytes (New-XlsxTestBytes -Name '다른 가게') -ObservedAt '2026-09-26T00:00:00Z'
 Assert-ScopeThrows { Assert-RelevantBenefitEvidenceSlice -Slice $slice -Document $otherDocument -SourceRowNumber 2 -XlsxValidationIndex $converted.XlsxValidationIndex } 'A slice cannot reuse a validated XLSX index from another snapshot'
 
+$multiRowDocument = New-BenefitSourceDocument -SourceRowNumber 2 -Url 'https://city.example.go.kr/multi-row.xlsx' -SourceFormat XLSX -FetchStatus COMPLETE -Text '' -Bytes (New-XlsxTestBytes -DuplicateBusinessNameCell) -ObservedAt '2026-09-26T00:00:00Z'
+$multiRowObservation = ConvertTo-BenefitXlsxObservation -Document $multiRowDocument
+$script:byteHashCallCount = 0
+$script:originalByteHash = (Get-Item Function:Get-BenefitEvidenceByteHash).ScriptBlock
+function Get-BenefitEvidenceByteHash {
+    param([Parameter(Mandatory)][byte[]]$Bytes)
+    $script:byteHashCallCount++
+    return & $script:originalByteHash -Bytes $Bytes
+}
+try {
+    Assert-ScopeUnit -Unit $multiRowObservation.ContentUnits[0] -Snapshot $multiRowObservation.Snapshot -XlsxValidationIndex $multiRowObservation.XlsxValidationIndex
+    Assert-ScopeEqual $script:byteHashCallCount 1 'Standalone XLSX unit validation hashes its snapshot once'
+    Write-Host "XLSX standalone-unit byte-hash calls: $script:byteHashCallCount"
+
+    $script:byteHashCallCount = 0
+    Assert-ScopeObservation -Observation $multiRowObservation -XlsxValidationIndex $multiRowObservation.XlsxValidationIndex
+    Assert-ScopeEqual $script:byteHashCallCount 1 'Observation validation hashes an XLSX snapshot once regardless of ContentUnit count'
+    Write-Host "XLSX observation byte-hash calls: $script:byteHashCallCount"
+} finally {
+    Set-Item Function:Get-BenefitEvidenceByteHash -Value $script:originalByteHash
+    Remove-Variable -Scope Script -Name originalByteHash -ErrorAction SilentlyContinue
+}
+
 $formulaDocument = New-BenefitSourceDocument -SourceRowNumber 2 -Url 'https://city.example.go.kr/formula.xlsx' -SourceFormat XLSX -FetchStatus COMPLETE -Text '' -Bytes (New-XlsxTestBytes -FormulaBenefit) -ObservedAt '2026-09-26T00:00:00Z'
 $formulaConverted = ConvertTo-BenefitXlsxObservation -Document $formulaDocument
 Assert-ScopeEqual $formulaConverted.AdapterStatus PARTIAL 'A selected formula cell makes the affected XLSX row unusable'
@@ -65,6 +88,13 @@ $unmappedUnsupportedConverted = ConvertTo-BenefitXlsxObservation -Document $unma
 Assert-ScopeEqual $unmappedUnsupportedConverted.AdapterStatus COMPLETE 'An unsupported unmapped cell in a valid business row does not poison the observation'
 Assert-ScopeEqual $unmappedUnsupportedConverted.ContentUnits.Count 1 'An unsupported unmapped cell does not discard the valid XLSX row'
 
+foreach ($nonCandidateBytes in @((New-XlsxTestBytes -NonCandidateFormulaBenefit), (New-XlsxTestBytes -NonCandidateUnsupportedBenefit))) {
+    $nonCandidateDocument = New-BenefitSourceDocument -SourceRowNumber 2 -Url 'https://city.example.go.kr/non-candidate.xlsx' -SourceFormat XLSX -FetchStatus COMPLETE -Text '' -Bytes $nonCandidateBytes -ObservedAt '2026-09-26T00:00:00Z'
+    $nonCandidateConverted = ConvertTo-BenefitXlsxObservation -Document $nonCandidateDocument
+    Assert-ScopeEqual $nonCandidateConverted.AdapterStatus COMPLETE 'A non-candidate row with unsupported mapped benefit data cannot poison a valid observation'
+    Assert-ScopeEqual $nonCandidateConverted.ContentUnits.Count 1 'A non-candidate row cannot discard the valid identity row'
+}
+
 $mergedHeaderDocument = New-BenefitSourceDocument -SourceRowNumber 2 -Url 'https://city.example.go.kr/merged-header.xlsx' -SourceFormat XLSX -FetchStatus COMPLETE -Text '' -Bytes (New-XlsxTestBytes -MergedBusinessHeader) -ObservedAt '2026-09-26T00:00:00Z'
 $mergedHeaderConverted = ConvertTo-BenefitXlsxObservation -Document $mergedHeaderDocument
 Assert-ScopeEqual $mergedHeaderConverted.AdapterStatus PARTIAL 'A mapped merged header fails closed'
@@ -86,6 +116,8 @@ foreach ($unsafePackage in @(
     (New-XlsxTestBytes -ExternalRelationship),
     (New-XlsxTestBytes -WrongRelationshipType),
     (New-XlsxTestBytes -WorkbookDtd),
+    (New-XlsxTestBytes -MalformedContentTypes),
+    (New-XlsxTestBytes -ContentTypesDtd),
     (New-XlsxTestBytes -UnsafeArchivePath),
     (New-XlsxTestBytes -DuplicateWorkbookEntry),
     (New-XlsxTestBytes -DuplicateCell),

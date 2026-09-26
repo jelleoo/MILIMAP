@@ -65,6 +65,7 @@ function New-BenefitXlsxValidationIndex {
                 if ($total -gt $script:XlsxValidationLimits.MaxTotalBytes) { throw 'XLSX archive total exceeds limit' }
             }
             foreach($required in @('[Content_Types].xml','xl/workbook.xml','xl/_rels/workbook.xml.rels')) { if(-not $entries.ContainsKey($required)){throw "Missing XLSX package part: $required"} }
+            $null = Read-BenefitXlsxXml $entries['[Content_Types].xml']
             $settings=[Xml.XmlReaderSettings]::new(); $settings.DtdProcessing=[Xml.DtdProcessing]::Prohibit; $settings.XmlResolver=$null
             $reader=[Xml.XmlReader]::Create($entries['xl/workbook.xml'].Open(),$settings)
             try { $doc=[Xml.XmlDocument]::new(); $doc.XmlResolver=$null; $doc.Load($reader) } finally { $reader.Dispose() }
@@ -544,30 +545,44 @@ function Assert-ScopeJsonpUnit {
     Assert-ScopeSnapshot $Snapshot
     Assert-ScopeJsonpUnitCore -Unit $Unit -Snapshot $Snapshot
 }
+function Assert-ScopeXlsxValidationIndexBinding {
+    param([Parameter(Mandatory)]$Snapshot, [Parameter(Mandatory)]$XlsxValidationIndex)
+    foreach ($property in @('SnapshotId','ContentHash','Sheets')) {
+        if ($XlsxValidationIndex.PSObject.Properties.Name -notcontains $property) { throw 'XLSX validation index is incomplete' }
+    }
+    if ($XlsxValidationIndex.SnapshotId -cne $Snapshot.SnapshotId -or $XlsxValidationIndex.ContentHash -cne $Snapshot.ContentHash) { throw 'XLSX validation index must belong to the original snapshot' }
+}
 function Assert-ScopeXlsxUnit {
-    param([Parameter(Mandatory)]$Unit,[Parameter(Mandatory)]$Snapshot,[Parameter(Mandatory)]$XlsxValidationIndex)
+    param([Parameter(Mandatory)]$Unit,[Parameter(Mandatory)]$Snapshot,[Parameter(Mandatory)]$XlsxValidationIndex,[switch]$SnapshotAlreadyValidated)
+    if (-not $SnapshotAlreadyValidated) { Assert-ScopeSnapshot $Snapshot }
+    Assert-ScopeXlsxValidationIndexBinding -Snapshot $Snapshot -XlsxValidationIndex $XlsxValidationIndex
     Assert-ScopeObject $Unit 'SourceContentUnit' @('SnapshotId','UnitType','UnitReference','SheetName','SheetIndex','HeaderRowNumber','RowNumber','StructuredFields','FieldReferences')
     foreach ($forbiddenRawProperty in @('RawStart','RawLength','RawFragment','RawEvidenceText','TableStart','TableLength')) {
         if ($Unit.PSObject.Properties.Name -contains $forbiddenRawProperty) { throw 'XLSX units must not carry synthetic raw-span provenance' }
     }
-    if($Snapshot.SourceFormat -cne 'XLSX' -or $Unit.UnitType -cne 'XLSX_ROW' -or $Unit.SnapshotId -cne $Snapshot.SnapshotId -or $XlsxValidationIndex.SnapshotId -cne $Snapshot.SnapshotId -or $XlsxValidationIndex.ContentHash -cne $Snapshot.ContentHash){throw 'XLSX unit snapshot mismatch'}
+    if($Snapshot.SourceFormat -cne 'XLSX' -or $Unit.UnitType -cne 'XLSX_ROW' -or $Unit.SnapshotId -cne $Snapshot.SnapshotId){throw 'XLSX unit snapshot mismatch'}
     if($Unit.UnitReference -cne "XLSX_SHEET_$($Unit.SheetIndex)_ROW_$($Unit.RowNumber)" -or [int]$Unit.SheetIndex -lt 1 -or [int]$Unit.HeaderRowNumber -lt 1 -or [int]$Unit.RowNumber -le [int]$Unit.HeaderRowNumber){throw 'Invalid XLSX physical reference'}
     $s=@($XlsxValidationIndex.Sheets|Where-Object{$_.Name -ceq $Unit.SheetName -and $_.Index -eq $Unit.SheetIndex});if($s.Count -ne 1 -or $s[0].PSObject.Properties.Name -notcontains 'MergedRanges'){throw 'XLSX sheet identity mismatch'};$header=@($s[0].Rows|Where-Object{$_.Number -eq $Unit.HeaderRowNumber});$row=@($s[0].Rows|Where-Object{$_.Number -eq $Unit.RowNumber});if($header.Count -ne 1 -or $row.Count -ne 1){throw 'XLSX row missing'}
     if($Unit.StructuredFields -isnot [Collections.IDictionary] -or $Unit.FieldReferences -isnot [Collections.IDictionary] -or $Unit.StructuredFields.Count -ne $Unit.FieldReferences.Count){throw 'XLSX fields mismatch'};$map=Get-BenefitScopedHeaderMap
     foreach($key in $Unit.StructuredFields.Keys){if(-not $Unit.FieldReferences.Contains($key)){throw 'Missing XLSX field reference'};$f=$Unit.FieldReferences[$key];foreach($p in @('FieldReference','HeaderCellReference','OriginalHeader','CellReference','CellType','RawValue')){if($f.PSObject.Properties.Name -notcontains $p){throw 'Incomplete XLSX field reference'}};$hc=$header[0].Cells[$f.HeaderCellReference];$vc=$row[0].Cells[$f.CellReference];if($null -eq $hc -or $null -eq $vc -or -not $hc.IsSupported -or -not $vc.IsSupported -or $hc.HasFormula -or $vc.HasFormula -or (Test-BenefitXlsxCellInMergedRange -CellReference $hc.Reference -MergedRanges $s[0].MergedRanges) -or $hc.Column -cne $vc.Column -or $vc.Row -ne $Unit.RowNumber -or $hc.Row -ne $Unit.HeaderRowNumber -or $f.CellType -cne $vc.CellType -or $f.RawValue -cne $vc.RawValue -or $f.OriginalHeader -cne $hc.Value -or -not $map.ContainsKey($hc.Value) -or $map[$hc.Value] -cne $key -or $Unit.StructuredFields[$key] -cne $vc.Value -or $f.FieldReference -cne ($Unit.UnitReference+'/'+$key)){throw 'XLSX field provenance mismatch'}}
 }
 function New-BenefitXlsxSourceContentUnit {
-    param([Parameter(Mandatory)]$Snapshot,[Parameter(Mandatory)]$XlsxValidationIndex,[string]$SheetName,[int]$SheetIndex,[int]$HeaderRowNumber,[int]$RowNumber,[Parameter(Mandatory)][Collections.IDictionary]$StructuredFields,[Parameter(Mandatory)][Collections.IDictionary]$FieldReferences)
+    param([Parameter(Mandatory)]$Snapshot,[Parameter(Mandatory)]$XlsxValidationIndex,[string]$SheetName,[int]$SheetIndex,[int]$HeaderRowNumber,[int]$RowNumber,[Parameter(Mandatory)][Collections.IDictionary]$StructuredFields,[Parameter(Mandatory)][Collections.IDictionary]$FieldReferences,[switch]$SnapshotAlreadyValidated)
     $unit=[pscustomobject][ordered]@{ContractType='SourceContentUnit';ContractVersion=1;SnapshotId=$Snapshot.SnapshotId;UnitType='XLSX_ROW';UnitReference="XLSX_SHEET_${SheetIndex}_ROW_${RowNumber}";SheetName=$SheetName;SheetIndex=$SheetIndex;HeaderRowNumber=$HeaderRowNumber;RowNumber=$RowNumber;StructuredFields=(Copy-ScopeContractData $StructuredFields);FieldReferences=(Copy-ScopeContractData $FieldReferences)}
-    Assert-ScopeXlsxUnit -Unit $unit -Snapshot $Snapshot -XlsxValidationIndex $XlsxValidationIndex;return $unit
+    Assert-ScopeXlsxUnit -Unit $unit -Snapshot $Snapshot -XlsxValidationIndex $XlsxValidationIndex -SnapshotAlreadyValidated:$SnapshotAlreadyValidated;return $unit
 }
 function Assert-ScopeUnit {
-    param([AllowNull()]$Unit, [Parameter(Mandatory)]$Snapshot, [AllowNull()][object[]]$HtmlTokens=$null, [AllowNull()]$HtmlValidationIndex=$null,[AllowNull()]$XlsxValidationIndex=$null)
+    param([AllowNull()]$Unit, [Parameter(Mandatory)]$Snapshot, [AllowNull()][object[]]$HtmlTokens=$null, [AllowNull()]$HtmlValidationIndex=$null,[AllowNull()]$XlsxValidationIndex=$null,[switch]$SnapshotAlreadyValidated)
+    if ($Snapshot.SourceFormat -ceq 'XLSX') {
+        if ($null -eq $XlsxValidationIndex) { throw 'XLSX validation index is required' }
+        if (-not $SnapshotAlreadyValidated) { Assert-ScopeSnapshot $Snapshot }
+        Assert-ScopeXlsxUnit -Unit $Unit -Snapshot $Snapshot -XlsxValidationIndex $XlsxValidationIndex -SnapshotAlreadyValidated
+        return
+    }
     if ($null -ne $HtmlValidationIndex) { Assert-ScopeHtmlValidationIndex -HtmlValidationIndex $HtmlValidationIndex -Snapshot $Snapshot }
     else { Assert-ScopeSnapshot $Snapshot }
     if ($Snapshot.SourceFormat -ceq 'HTML') { Assert-ScopeHtmlUnit -Unit $Unit -Snapshot $Snapshot -HtmlTokens $HtmlTokens -HtmlValidationIndex $HtmlValidationIndex; return }
     if ($Snapshot.SourceFormat -ceq 'JSONP') { Assert-ScopeJsonpUnit $Unit $Snapshot; return }
-    if ($Snapshot.SourceFormat -ceq 'XLSX') { if($null -eq $XlsxValidationIndex){throw 'XLSX validation index is required'};Assert-ScopeXlsxUnit -Unit $Unit -Snapshot $Snapshot -XlsxValidationIndex $XlsxValidationIndex;return }
     throw 'Unsupported scoped source format'
 }
 function New-BenefitSourceContentUnit {
@@ -616,10 +631,11 @@ function Assert-ScopeDiagnostics {
     }
 }
 function Assert-ScopeObservation {
-    param([AllowNull()]$Observation, [AllowNull()][object[]]$HtmlTokens=$null, [AllowNull()]$HtmlValidationIndex=$null, [AllowNull()]$XlsxValidationIndex=$null)
+    param([AllowNull()]$Observation, [AllowNull()][object[]]$HtmlTokens=$null, [AllowNull()]$HtmlValidationIndex=$null, [AllowNull()]$XlsxValidationIndex=$null, [switch]$SnapshotAlreadyValidated)
     Assert-ScopeObject $Observation 'SourceObservation' @('SourceRowNumber','SnapshotId','SourceUrl','SourceFormat','ObservedAt','Snapshot','AdapterId','AdapterVersion','AdapterStatus','ContentUnits','Diagnostics')
     Assert-BenefitSourceRowNumber $Observation.SourceRowNumber
-    Assert-ScopeSnapshot $Observation.Snapshot
+    if ($Observation.SourceFormat -ceq 'XLSX' -and $SnapshotAlreadyValidated) { Assert-ScopeXlsxValidationIndexBinding -Snapshot $Observation.Snapshot -XlsxValidationIndex $XlsxValidationIndex }
+    else { Assert-ScopeSnapshot $Observation.Snapshot }
     foreach ($key in @('SnapshotId','SourceUrl','SourceFormat','ObservedAt')) {
         if ($Observation.$key -cne $Observation.Snapshot.$key) { throw 'Observation must preserve snapshot identity' }
     }
@@ -632,6 +648,8 @@ function Assert-ScopeObservation {
     foreach ($unit in $Observation.ContentUnits) {
         if ($Observation.SourceFormat -ceq 'JSONP') {
             Assert-ScopeJsonpUnitCore -Unit $unit -Snapshot $Observation.Snapshot
+        } elseif ($Observation.SourceFormat -ceq 'XLSX') {
+            Assert-ScopeXlsxUnit -Unit $unit -Snapshot $Observation.Snapshot -XlsxValidationIndex $XlsxValidationIndex -SnapshotAlreadyValidated
         } else {
             Assert-ScopeUnit -Unit $unit -Snapshot $Observation.Snapshot -HtmlTokens $HtmlTokens -HtmlValidationIndex $HtmlValidationIndex -XlsxValidationIndex $XlsxValidationIndex
         }
@@ -651,7 +669,8 @@ function New-BenefitSourceObservation {
         Snapshot=(Copy-ScopeContractData $Snapshot); AdapterId=$AdapterId; AdapterVersion=$AdapterVersion; AdapterStatus=$AdapterStatus
         ContentUnits=(Copy-ScopeContractData $ContentUnits); Diagnostics=(Copy-ScopeContractData $Diagnostics)
     }
-    Assert-ScopeObservation -Observation $result -HtmlTokens $HtmlTokens -HtmlValidationIndex $HtmlValidationIndex -XlsxValidationIndex $XlsxValidationIndex
+    $xlsxSnapshotAlreadyValidated = ($Snapshot.SourceFormat -ceq 'XLSX' -and $null -ne $XlsxValidationIndex)
+    Assert-ScopeObservation -Observation $result -HtmlTokens $HtmlTokens -HtmlValidationIndex $HtmlValidationIndex -XlsxValidationIndex $XlsxValidationIndex -SnapshotAlreadyValidated:$xlsxSnapshotAlreadyValidated
     return $result
 }
 function Assert-ScopeSliceShape {
@@ -679,9 +698,10 @@ function Assert-ScopeSliceShape {
     foreach ($signal in $Slice.IdentityEvidence) { Assert-ScopeText $signal 'IdentityEvidence signal' }
 }
 function Assert-ScopeSliceAgainstSnapshot {
-    param([AllowNull()]$Slice, [Parameter(Mandatory)]$Snapshot, [int]$SourceRowNumber, [AllowNull()][object[]]$HtmlTokens=$null, [AllowNull()]$HtmlValidationIndex=$null, [AllowNull()]$XlsxValidationIndex=$null)
+    param([AllowNull()]$Slice, [Parameter(Mandatory)]$Snapshot, [int]$SourceRowNumber, [AllowNull()][object[]]$HtmlTokens=$null, [AllowNull()]$HtmlValidationIndex=$null, [AllowNull()]$XlsxValidationIndex=$null, [switch]$SnapshotAlreadyValidated)
     Assert-ScopeSliceShape $Slice $SourceRowNumber
-    Assert-ScopeSnapshot $Snapshot
+    if ($Snapshot.SourceFormat -ceq 'XLSX' -and $SnapshotAlreadyValidated) { Assert-ScopeXlsxValidationIndexBinding -Snapshot $Snapshot -XlsxValidationIndex $XlsxValidationIndex }
+    else { Assert-ScopeSnapshot $Snapshot }
     foreach ($key in @('SnapshotId','ContentHash','SourceUrl','SourceFormat','ObservedAt')) {
         if ($Slice.$key -cne $Snapshot.$key) { throw 'Slice must preserve original source snapshot' }
     }
@@ -706,13 +726,14 @@ function Assert-ScopeSliceAgainstSnapshot {
             StructuredFields=$Slice.StructuredFields; FieldReferences=$Slice.FieldReferences
         }
     } else { throw 'Unsupported slice source format' }
-    Assert-ScopeUnit -Unit $unit -Snapshot $Snapshot -HtmlTokens $HtmlTokens -HtmlValidationIndex $HtmlValidationIndex -XlsxValidationIndex $XlsxValidationIndex
+    Assert-ScopeUnit -Unit $unit -Snapshot $Snapshot -HtmlTokens $HtmlTokens -HtmlValidationIndex $HtmlValidationIndex -XlsxValidationIndex $XlsxValidationIndex -SnapshotAlreadyValidated
 }
 function New-RelevantBenefitEvidenceSlice {
-    param([Parameter(Mandatory)]$Observation, [Parameter(Mandatory)]$Unit, [AllowEmptyCollection()][object[]]$IdentityEvidence=@(), [AllowNull()][object[]]$HtmlTokens=$null, [AllowNull()]$HtmlValidationIndex=$null, [AllowNull()]$XlsxValidationIndex=$null)
-    Assert-ScopeObservation -Observation $Observation -HtmlTokens $HtmlTokens -HtmlValidationIndex $HtmlValidationIndex -XlsxValidationIndex $XlsxValidationIndex
+    param([Parameter(Mandatory)]$Observation, [Parameter(Mandatory)]$Unit, [AllowEmptyCollection()][object[]]$IdentityEvidence=@(), [AllowNull()][object[]]$HtmlTokens=$null, [AllowNull()]$HtmlValidationIndex=$null, [AllowNull()]$XlsxValidationIndex=$null, [switch]$SnapshotAlreadyValidated)
+    $xlsxSnapshotAlreadyValidated = ($Observation.SourceFormat -ceq 'XLSX' -and $SnapshotAlreadyValidated)
+    Assert-ScopeObservation -Observation $Observation -HtmlTokens $HtmlTokens -HtmlValidationIndex $HtmlValidationIndex -XlsxValidationIndex $XlsxValidationIndex -SnapshotAlreadyValidated:$xlsxSnapshotAlreadyValidated
     if ($Observation.AdapterStatus -cne 'COMPLETE') { throw 'Only a complete observation can yield a usable slice' }
-    Assert-ScopeUnit -Unit $Unit -Snapshot $Observation.Snapshot -HtmlTokens $HtmlTokens -HtmlValidationIndex $HtmlValidationIndex -XlsxValidationIndex $XlsxValidationIndex
+    Assert-ScopeUnit -Unit $Unit -Snapshot $Observation.Snapshot -HtmlTokens $HtmlTokens -HtmlValidationIndex $HtmlValidationIndex -XlsxValidationIndex $XlsxValidationIndex -SnapshotAlreadyValidated
     $members = @($Observation.ContentUnits | Where-Object { $_.UnitReference -ceq $Unit.UnitReference })
     if ($members.Count -ne 1 -or
         (ConvertTo-Json -InputObject $members[0] -Depth 20 -Compress) -cne (ConvertTo-Json -InputObject $Unit -Depth 20 -Compress)) {
@@ -750,7 +771,7 @@ function New-RelevantBenefitEvidenceSlice {
             IdentityEvidence=(Copy-ScopeContractData $IdentityEvidence)
         }
     } else { throw 'Unsupported scoped source format' }
-    Assert-ScopeSliceAgainstSnapshot -Slice $result -Snapshot $Observation.Snapshot -SourceRowNumber $Observation.SourceRowNumber -HtmlTokens $HtmlTokens -HtmlValidationIndex $HtmlValidationIndex -XlsxValidationIndex $XlsxValidationIndex
+    Assert-ScopeSliceAgainstSnapshot -Slice $result -Snapshot $Observation.Snapshot -SourceRowNumber $Observation.SourceRowNumber -HtmlTokens $HtmlTokens -HtmlValidationIndex $HtmlValidationIndex -XlsxValidationIndex $XlsxValidationIndex -SnapshotAlreadyValidated:$xlsxSnapshotAlreadyValidated
     return $result
 }
 function Assert-RelevantBenefitEvidenceSlice {
@@ -760,7 +781,8 @@ function Assert-RelevantBenefitEvidenceSlice {
     $snapshotParameters = @{ SourceUrl=$Document.Url; SourceFormat=$Document.SourceFormat; Text=$Document.Text; ObservedAt=$Document.ObservedAt }
     if ($Document.SourceFormat -ceq 'XLSX') { $snapshotParameters.Text = ''; $snapshotParameters.Bytes = $Document.Bytes }
     $snapshot = New-BenefitSourceSnapshot @snapshotParameters
-    Assert-ScopeSliceAgainstSnapshot -Slice $Slice -Snapshot $snapshot -SourceRowNumber $SourceRowNumber -XlsxValidationIndex $XlsxValidationIndex
+    $xlsxSnapshotAlreadyValidated = ($snapshot.SourceFormat -ceq 'XLSX' -and $null -ne $XlsxValidationIndex)
+    Assert-ScopeSliceAgainstSnapshot -Slice $Slice -Snapshot $snapshot -SourceRowNumber $SourceRowNumber -XlsxValidationIndex $XlsxValidationIndex -SnapshotAlreadyValidated:$xlsxSnapshotAlreadyValidated
 }
 function New-BenefitEvidenceLocationResult {
     param([int]$SourceRowNumber, [Parameter(Mandatory)][string]$OperationalStatus, [AllowNull()]$Status=$null,

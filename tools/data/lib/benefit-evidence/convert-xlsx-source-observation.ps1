@@ -18,9 +18,10 @@ function ConvertTo-BenefitXlsxObservation {
             $headers = @{}
             $mappedFields = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
             $headerIsUsable = $true
+            $businessHeaderSeen = @($header.Cells.Values | Where-Object { $map.ContainsKey($_.Value) -and $map[$_.Value] -ceq 'BusinessName' }).Count -gt 0
+            if ($businessHeaderSeen) { $identityHeaderSeen = $true }
             foreach ($cell in @($header.Cells.Values)) {
                 if ($map.ContainsKey($cell.Value)) {
-                    if ($map[$cell.Value] -ceq 'BusinessName') { $identityHeaderSeen = $true }
                     if (-not $cell.IsSupported -or $cell.HasFormula -or (Test-BenefitXlsxCellInMergedRange -CellReference $cell.Reference -MergedRanges $sheet.MergedRanges) -or -not $mappedFields.Add($map[$cell.Value])) {
                         $headerIsUsable = $false
                         break
@@ -31,20 +32,21 @@ function ConvertTo-BenefitXlsxObservation {
                     }
                 }
             }
-            if ($headers.Count -eq 0) {
-                if (-not $headerIsUsable) {
-                    $diagnostics.Add([pscustomobject][ordered]@{ Code='XLSX_ROW_UNUSABLE'; Stage='XLSX_PARSER'; EvidenceReference="XLSX_SHEET_$($sheet.Index)_ROW_$($header.Number)"; Detail='Ambiguous or unsupported semantic header mapping' })
-                }
-                continue
-            }
-            if (-not $headerIsUsable) {
+            if (-not $headerIsUsable -and $businessHeaderSeen) {
                 $diagnostics.Add([pscustomobject][ordered]@{ Code='XLSX_ROW_UNUSABLE'; Stage='XLSX_PARSER'; EvidenceReference="XLSX_SHEET_$($sheet.Index)_ROW_$($header.Number)"; Detail='Ambiguous or unsupported semantic header mapping' })
                 continue
             }
+            if ($headers.Count -eq 0) {
+                continue
+            }
+            $businessHeaders = @($headers.Values | Where-Object { $_.Field -ceq 'BusinessName' })
+            if ($businessHeaders.Count -ne 1) { continue }
 
             foreach ($row in @($sheet.Rows | Where-Object { $_.Number -gt $header.Number })) {
                 $fields = [ordered]@{}
                 $references = [ordered]@{}
+                $businessValueCells = @($row.Cells.Values | Where-Object { $_.Column -ceq $businessHeaders[0].Cell.Column })
+                if ($businessValueCells.Count -ne 1 -or -not $businessValueCells[0].IsSupported -or $businessValueCells[0].HasFormula -or [string]::IsNullOrWhiteSpace($businessValueCells[0].Value)) { continue }
                 $rowIsUsable = $true
                 foreach ($column in @($headers.Keys)) {
                     $headerField = $headers[$column]
@@ -71,7 +73,7 @@ function ConvertTo-BenefitXlsxObservation {
                     continue
                 }
                 if ($rowIsUsable -and $fields.Contains('BusinessName')) {
-                    $units.Add((New-BenefitXlsxSourceContentUnit -Snapshot $snapshot -XlsxValidationIndex $index -SheetName $sheet.Name -SheetIndex $sheet.Index -HeaderRowNumber $header.Number -RowNumber $row.Number -StructuredFields $fields -FieldReferences $references))
+                    $units.Add((New-BenefitXlsxSourceContentUnit -Snapshot $snapshot -XlsxValidationIndex $index -SheetName $sheet.Name -SheetIndex $sheet.Index -HeaderRowNumber $header.Number -RowNumber $row.Number -StructuredFields $fields -FieldReferences $references -SnapshotAlreadyValidated))
                 }
             }
         }

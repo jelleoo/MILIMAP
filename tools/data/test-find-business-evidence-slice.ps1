@@ -125,6 +125,22 @@ $xlsxLocated = Find-BenefitBusinessEvidence -Observation $xlsxConverted -Busines
 Assert-ScopeEqual $xlsxLocated.Status LOCATED 'XLSX rows reuse the deterministic identity matcher'
 Assert-ScopeEqual $xlsxLocated.Slices[0].EvidenceReference XLSX_SHEET_1_ROW_22 'XLSX locator preserves the physical row reference'
 Assert-ScopeEqual $xlsxLocated.Slices[0].FieldReferences.BenefitDescription.CellReference F22 'XLSX locator preserves benefit-cell provenance'
+$script:locatorByteHashCallCount = 0
+$script:originalLocatorByteHash = (Get-Item Function:Get-BenefitEvidenceByteHash).ScriptBlock
+function Get-BenefitEvidenceByteHash {
+    param([Parameter(Mandatory)][byte[]]$Bytes)
+    $script:locatorByteHashCallCount++
+    return & $script:originalLocatorByteHash -Bytes $Bytes
+}
+try {
+    $xlsxLocatedWithValidatedIndex = Find-BenefitBusinessEvidence -Observation $xlsxConverted -Business $xlsxBusiness -CanonicalPhone '031-861-4800' -XlsxValidationIndex $xlsxConverted.XlsxValidationIndex
+    Assert-ScopeEqual $xlsxLocatedWithValidatedIndex.Status LOCATED 'A supplied validated XLSX index preserves locator behavior'
+    Assert-ScopeEqual $script:locatorByteHashCallCount 0 'A locator with a validated XLSX index performs no full-byte hash'
+    Write-Host "XLSX locator byte-hash calls: $script:locatorByteHashCallCount"
+} finally {
+    Set-Item Function:Get-BenefitEvidenceByteHash -Value $script:originalLocatorByteHash
+    Remove-Variable -Scope Script -Name originalLocatorByteHash -ErrorAction SilentlyContinue
+}
 $xlsxLocatedWithAttachedIndex = Find-BenefitBusinessEvidence -Observation $xlsxConverted -Business $xlsxBusiness -CanonicalPhone '031-861-4800'
 Assert-ScopeEqual $xlsxLocatedWithAttachedIndex.Status LOCATED 'XLSX locator reuses its attached snapshot-bound validation index without a reparse'
 $xlsxIrrelevantUnsupportedDocument = New-BenefitSourceDocument -SourceRowNumber 2 -Url 'https://city.example.go.kr/irrelevant-unsupported.xlsx' -SourceFormat XLSX -FetchStatus COMPLETE -Text '' -Bytes (New-XlsxTestBytes -UnrelatedUnsupportedRow) -ObservedAt '2026-09-26T00:00:00Z'
@@ -134,6 +150,12 @@ Assert-ScopeEqual $xlsxIrrelevantUnsupported.Status LOCATED 'An isolated irrelev
 $xlsxUnmappedUnsupportedDocument = New-BenefitSourceDocument -SourceRowNumber 2 -Url 'https://city.example.go.kr/unmapped-unsupported.xlsx' -SourceFormat XLSX -FetchStatus COMPLETE -Text '' -Bytes (New-XlsxTestBytes -UnmappedUnsupportedCell) -ObservedAt '2026-09-26T00:00:00Z'
 $xlsxUnmappedUnsupported = Find-BenefitBusinessEvidence -Observation (ConvertTo-BenefitXlsxObservation -Document $xlsxUnmappedUnsupportedDocument) -Business $xlsxBusiness -CanonicalPhone '031-861-4800'
 Assert-ScopeEqual $xlsxUnmappedUnsupported.Status LOCATED 'An unsupported unmapped cell does not prevent the valid XLSX row from locating'
+$xlsxNonCandidateFormulaDocument = New-BenefitSourceDocument -SourceRowNumber 2 -Url 'https://city.example.go.kr/non-candidate-formula.xlsx' -SourceFormat XLSX -FetchStatus COMPLETE -Text '' -Bytes (New-XlsxTestBytes -NonCandidateFormulaBenefit) -ObservedAt '2026-09-26T00:00:00Z'
+$xlsxNonCandidateFormula = Find-BenefitBusinessEvidence -Observation (ConvertTo-BenefitXlsxObservation -Document $xlsxNonCandidateFormulaDocument) -Business $xlsxBusiness -CanonicalPhone '031-861-4800'
+Assert-ScopeEqual $xlsxNonCandidateFormula.Status LOCATED 'A non-candidate formula row does not prevent the valid XLSX row from locating'
+$xlsxNonCandidateUnsupportedDocument = New-BenefitSourceDocument -SourceRowNumber 2 -Url 'https://city.example.go.kr/non-candidate-unsupported.xlsx' -SourceFormat XLSX -FetchStatus COMPLETE -Text '' -Bytes (New-XlsxTestBytes -NonCandidateUnsupportedBenefit) -ObservedAt '2026-09-26T00:00:00Z'
+$xlsxNonCandidateUnsupported = Find-BenefitBusinessEvidence -Observation (ConvertTo-BenefitXlsxObservation -Document $xlsxNonCandidateUnsupportedDocument) -Business $xlsxBusiness -CanonicalPhone '031-861-4800'
+Assert-ScopeEqual $xlsxNonCandidateUnsupported.Status LOCATED 'A non-candidate unsupported row does not prevent the valid XLSX row from locating'
 $xlsxDuplicateDocument = New-BenefitSourceDocument -SourceRowNumber 2 -Url 'https://city.example.go.kr/duplicates.xlsx' -SourceFormat XLSX -FetchStatus COMPLETE -Text '' -Bytes (New-XlsxTestBytes -DuplicateBusinessNameCell) -ObservedAt '2026-09-26T00:00:00Z'
 $xlsxDuplicate = Find-BenefitBusinessEvidence -Observation (ConvertTo-BenefitXlsxObservation -Document $xlsxDuplicateDocument) -Business $xlsxBusiness -CanonicalPhone '031-861-4800'
 Assert-ScopeEqual $xlsxDuplicate.Status AMBIGUOUS 'Duplicate XLSX name candidates cannot be selected by one strong row'

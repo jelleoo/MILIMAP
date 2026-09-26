@@ -11,6 +11,7 @@ $dataLibRoot = Split-Path -Parent $historyRoot
 . (Join-Path $historyRoot 'history-store.ps1')
 . (Join-Path $historyRoot 'commit-history-run.ps1')
 . (Join-Path $historyRoot 'benefit-history-adapter.ps1')
+. (Join-Path $dataLibRoot 'benefit-evidence/benefit-source-run-context.ps1')
 
 function Get-BenefitIncrementalCapability {
     param(
@@ -279,4 +280,24 @@ function New-BenefitIncrementalReusePackage {
         PreparedArtifacts = @($auditArtifact.PreparedArtifact)
         ReuseDecisionArtifact = [pscustomobject][ordered]@{ Reference = $auditArtifact.Reference; Projection = $auditProjection }
     }
+}
+
+function Invoke-BenefitIncrementalPostFetch {
+    param(
+        [Parameter(Mandatory)]$Store,[Parameter(Mandatory)][string]$RunId,[Parameter(Mandatory)][string]$ObservedAt,[Parameter(Mandatory)][string]$RepositoryRevision,
+        [Parameter(Mandatory)][string]$BusinessId,[Parameter(Mandatory)]$Benefit,[Parameter(Mandatory)]$BusinessIdentity,[string]$CanonicalPhone='',
+        [Parameter(Mandatory)]$Candidate,[Parameter(Mandatory)]$RunContext,[AllowNull()][scriptblock]$RequestInvoker=$null,[Parameter(Mandatory)][scriptblock]$RepositoryStateProvider
+    )
+    $document=Get-BenefitRunSourceDocument -Context $RunContext -Candidate $Candidate -RequestInvoker $RequestInvoker
+    $snapshot=$null
+    if($document.FetchStatus -ceq 'COMPLETE' -and $document.SourceFormat -in @('HTML','XLSX')){$snapshot=Get-BenefitRunSourceSnapshot -Context $RunContext -Document $document}
+    $input=ConvertTo-BenefitHistoryInputProjection -BusinessId $BusinessId -Benefit $Benefit -BusinessIdentity $BusinessIdentity -CanonicalPhone $CanonicalPhone
+    $execution=ConvertTo-BenefitHistoryExecutionProjection -RepositoryRevision $RepositoryRevision
+    $decision=Get-BenefitIncrementalReuseDecision -Store $Store -BusinessId $BusinessId -Candidate $Candidate -Document $document -CurrentSnapshot $snapshot -CurrentInputFingerprint (Get-HistoryFingerprint -Projection $input -SchemaVersion $script:FingerprintSchemaVersion) -CurrentExecutionFingerprint (Get-HistoryFingerprint -Projection $execution -SchemaVersion $script:FingerprintSchemaVersion) -RepositoryStateProvider $RepositoryStateProvider
+    if(-not $decision.ReuseApplied){throw 'Task 5 orchestration currently supports only the eligible reuse path'}
+    $package=New-BenefitIncrementalReusePackage -Store $Store -RunId $RunId -ObservedAt $ObservedAt -Decision $decision
+    $manifest=New-HistoryRunManifest -RunId $RunId -StartedAt $ObservedAt -RepositoryRevision $RepositoryRevision -RequestedBusinessIds @($BusinessId) -CompletedBusinessIds @($BusinessId) -FailedBusinessIds @() -ExecutionStatus COMPLETE -RunCommitStatus PREPARED
+    $prepared=Prepare-HistoryRun -Store $Store -RunManifest $manifest -Artifacts $package.PreparedArtifacts -Observations @($package.Observation) -Comparisons @()
+    $commit=Commit-HistoryRun -Store $Store -PreparedRun $prepared -ExpectedBaselines @{ (($BusinessId+'|BENEFIT'))=[string]$decision.Baseline.Observation.ObservationId }
+    return [pscustomobject][ordered]@{ReuseDecision=$decision;Observation=$package.Observation;Commit=$commit;Metrics=[pscustomobject]@{ExternalFetchCount=$RunContext.Metrics.ExternalFetchCount;AvoidedParseCount=1;AvoidedExtractionCount=1;AvoidedEvaluationCount=1}}
 }

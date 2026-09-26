@@ -87,6 +87,20 @@ try {
     Assert-Equal $reusePackage.Observation.SemanticFingerprint $baselinePackage.Observation.SemanticFingerprint 'Reuse preserves the validated prior semantic fingerprint'
     Assert-Equal @($reusePackage.Observation.ArtifactReferences | Where-Object Kind -eq 'BENEFIT_REUSE_DECISION').Count 1 'Reuse attaches one adapter-owned audit artifact'
     Assert-Equal $reusePackage.ReuseDecisionArtifact.Projection.ProcessingMode 'REUSED_IDENTICAL_EVIDENCE' 'Reuse audit records deterministic processing mode outside HistoryObservation'
+
+    $orchestrationContext=New-BenefitSourceRunContext
+    $orchestrationFetch=[pscustomobject]@{ Count=0 }
+    $orchestrationHttp={ param($Uri) $orchestrationFetch.Count++; [pscustomobject]@{StatusCode=200;ContentType='text/html';Text=$htmlDocument.Text;Bytes=$null} }.GetNewClosure()
+    $orchestrationBusiness=New-NormalizedBusiness -SourceRowNumber 2 -OriginalName '테스트 식당' -NormalizedName '테스트식당' -BaseName '테스트 식당' -OriginalRoadAddress '경기도 양주시 테스트로 10' -PreferredAddress '경기도 양주시 테스트로 10' -Province '경기도' -City '양주시' -RoadName '테스트로' -BuildingMain '10' -AddressParseStatus COMPLETE
+    $orchestrationBenefit=New-CanonicalBenefitRecord -SourceRowNumber 2 -BusinessName '테스트 식당' -BenefitDescription '10% 할인' -EligibleTarget '현역 장병' -UsageCondition '평일' -VerificationMethod '군인증' -ExistingSourceType '지자체 공식 자료' -ExistingSourceUrl 'https://city.example.go.kr/benefit' -ExistingVerifiedOn '2026-09-26'
+    $orchestrationResult=Invoke-BenefitIncrementalPostFetch -Store $incrementalStore -RunId 'run-33333333333333333333333333333333' -ObservedAt '2026-09-27T00:00:00Z' -RepositoryRevision ('a'*40) -BusinessId $baselinePackage.Observation.BusinessId -Benefit $orchestrationBenefit -BusinessIdentity $orchestrationBusiness -Candidate $htmlCandidate -RunContext $orchestrationContext -RequestInvoker $orchestrationHttp -RepositoryStateProvider { [pscustomobject]@{IsClean=$true} }
+    Assert-Equal $orchestrationFetch.Count 1 'Identical HTML reuse still performs the current external fetch exactly once'
+    Assert-True $orchestrationResult.ReuseDecision.ReuseApplied 'Identical indexed HTML baseline applies reuse'
+    Assert-Equal $orchestrationResult.Metrics.AvoidedParseCount 1 'Reuse avoids downstream parse'
+    Assert-Equal $orchestrationResult.Metrics.AvoidedExtractionCount 1 'Reuse avoids downstream extraction'
+    Assert-Equal $orchestrationResult.Metrics.AvoidedEvaluationCount 1 'Reuse avoids downstream evaluation'
+    Assert-Equal $orchestrationResult.Observation.EvidenceFingerprint $baselinePackage.Observation.EvidenceFingerprint 'Reuse retains the prior evidence fingerprint'
+    Assert-Equal @($orchestrationResult.Observation.ArtifactReferences | Where-Object Kind -eq 'BENEFIT_REUSE_DECISION').Count 1 'Reuse persists its audit artifact'
 } finally { if(Test-Path -LiteralPath $incrementalRoot){ Remove-Item -LiteralPath $incrementalRoot -Recurse -Force } }
 
 Write-Host 'Benefit incremental checkpoint tests passed.'

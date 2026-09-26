@@ -457,8 +457,8 @@ function Compare-BenefitHistoryObservations {
     }
 
     $resolved=Resolve-BenefitHistoryDomainChange -Store $Store -Previous $Previous -Current $Current
-    $gate.ChangeCandidates=@($resolved.ChangeCandidates)
-    $gate.ReasonCodes=@($resolved.ReasonCodes)
+    $gate.ChangeCandidates=@($resolved.ChangeCandidates | Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_) })
+    $gate.ReasonCodes=@($resolved.ReasonCodes | Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_) })
     Assert-ObservationComparison $gate
     return $gate
 }

@@ -11,6 +11,7 @@ $ErrorActionPreference = 'Stop'
 function Assert-True { param([bool]$Condition,[string]$Message); if(-not $Condition){ throw $Message } }
 function Assert-Equal { param($Actual,$Expected,[string]$Message); if($Actual -cne $Expected){ throw "$Message (expected: $Expected, actual: $Actual)" } }
 function Assert-NotEqual { param($Actual,$Expected,[string]$Message); if($Actual -ceq $Expected){ throw $Message } }
+function Assert-Throws { param([scriptblock]$Action,[string]$Message); $threw=$false; try{ & $Action }catch{ $threw=$true }; if(-not $threw){ throw $Message } }
 
 $businessId='biz-0123456789abcdef0123456789abcdef'
 $runId='run-0123456789abcdef0123456789abcdef'
@@ -167,6 +168,35 @@ try {
 
     $semanticProjection=Read-BenefitHistorySemanticProjection -Store $store -Observation $materialChange.Observation
     Assert-Equal $semanticProjection.ProjectionType 'BenefitHistorySemantic' 'Persisted semantic projection must be readable and typed'
+
+
+    $diagA=New-TestDiagnostic -Hash ('1'*64)
+    $diagB=New-TestDiagnostic -Hash ('2'*64)
+    $evidenceAB=ConvertTo-BenefitHistoryEvidenceProjection -EvidenceDiagnostics @($diagA,$diagB)
+    $evidenceBA=ConvertTo-BenefitHistoryEvidenceProjection -EvidenceDiagnostics @($diagB,$diagA)
+    $evidenceFpAB=Get-HistoryFingerprint -Projection $evidenceAB -SchemaVersion 1 -OrderInsensitivePaths @('Sources','Sources[].CandidateReferences')
+    $evidenceFpBA=Get-HistoryFingerprint -Projection $evidenceBA -SchemaVersion 1 -OrderInsensitivePaths @('Sources','Sources[].CandidateReferences')
+    Assert-Equal $evidenceFpAB $evidenceFpBA 'Source enumeration order must not affect evidence fingerprint'
+
+    $mixedAbsence=Test-BenefitHistoryAbsenceEligible -EvidenceDiagnostics @(
+        (New-TestDiagnostic -Hash ('3'*64) -LocationStatus 'NOT_FOUND'),
+        (New-TestDiagnostic -Hash ('4'*64) -LocationStatus 'LOCATED')
+    )
+    Assert-True (-not $mixedAbsence) 'Mixed LOCATED/NOT_FOUND sources must never become absence'
+
+    $ambiguousClaimA=New-TestClaim -Value '20% 할인' -Result 'CHANGED' -Reasons @('MATERIAL_CHANGE')
+    $ambiguousClaimB=New-TestClaim -Value '30% 할인' -Result 'CHANGED' -Reasons @('MATERIAL_CHANGE')
+    $ambiguous=New-TestPackage -Store $store -RunIdValue 'run-88888888888888888888888888888888' -EvidenceHash ('6'*64) -Claims @($ambiguousClaimA,$ambiguousClaimB) -State 'CHANGED'
+    Publish-TestPackageArtifacts -Store $store -Package $ambiguous
+    $ambiguousComparison=Compare-BenefitHistoryObservations -Store $store -Previous $previous.Observation -Current $ambiguous.Observation
+    Assert-Equal @($ambiguousComparison.ChangeCandidates).Count 0 'Multi-claim ambiguity must not create a benefit change candidate'
+
+    $tamperPackage=New-TestPackage -Store $store -RunIdValue 'run-99999999999999999999999999999999' -EvidenceHash ('7'*64)
+    Publish-TestPackageArtifacts -Store $store -Package $tamperPackage
+    $semanticRef=@($tamperPackage.Observation.ArtifactReferences | Where-Object Kind -eq 'BENEFIT_SEMANTIC_PROJECTION')[0]
+    $semanticPath=Join-Path $store.Root $semanticRef.RelativePath
+    Set-Content -LiteralPath $semanticPath -Value '{"ProjectionType":"BenefitHistorySemantic","ProjectionVersion":1,"tampered":true}' -Encoding utf8 -NoNewline
+    Assert-Throws { Read-BenefitHistorySemanticProjection -Store $store -Observation $tamperPackage.Observation } 'Tampered semantic projection must fail closed'
 } finally {
     Remove-Item -LiteralPath $root -Recurse -Force -ErrorAction SilentlyContinue
 }

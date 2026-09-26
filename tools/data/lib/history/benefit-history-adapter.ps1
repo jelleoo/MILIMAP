@@ -166,6 +166,29 @@ function Get-BenefitHistoryBusinessPresence {
     return 'UNKNOWN'
 }
 
+function Test-BenefitHistoryClaimBusinessBound {
+    param(
+        [Parameter(Mandatory)]$Claim,
+        [AllowNull()][object[]]$EvidenceDiagnostics=@()
+    )
+
+    Assert-BenefitClaimVerification $Claim
+    if($null -eq $Claim.ValidatedClaim){ return $false }
+    if([string]$Claim.ValidatedClaim.ValidationStatus -cne 'VALIDATED'){ return $false }
+
+    $sourceUrl=[string]$Claim.ValidatedClaim.SourceUrl
+    if([string]::IsNullOrWhiteSpace($sourceUrl)){ return $false }
+
+    foreach($diagnostic in @($EvidenceDiagnostics | Where-Object { $null -ne $_ })){
+        $diagnosticUrl=[string](Get-BenefitHistoryProperty $diagnostic 'Url')
+        if(-not [string]::Equals($diagnosticUrl,$sourceUrl,[StringComparison]::OrdinalIgnoreCase)){ continue }
+        if([string](Get-BenefitHistoryProperty $diagnostic 'OfficialityStatus') -cne 'VERIFIED_OFFICIAL'){ continue }
+        if([string](Get-BenefitHistoryProperty $diagnostic 'BusinessBindingStatus') -cne 'STRONG'){ continue }
+        return $true
+    }
+    return $false
+}
+
 function ConvertTo-BenefitHistorySemanticProjection {
     param(
         [Parameter(Mandatory)]$Result,
@@ -184,6 +207,7 @@ function ConvertTo-BenefitHistorySemanticProjection {
             SemanticValue=Get-BenefitHistorySemanticValue -Claim $claim
             ClaimResult=[string]$claim.Result
             ValidationStatus=$validationStatus
+            BusinessBound=[bool](Test-BenefitHistoryClaimBusinessBound -Claim $claim -EvidenceDiagnostics $EvidenceDiagnostics)
             MaterialReasonCodes=@($materialReasons)
         })
     }
@@ -381,6 +405,7 @@ function Get-BenefitHistoryComparableClaimsByType {
     $result=@{}
     foreach($claim in @($Projection.Claims)){
         if([string]$claim.ValidationStatus -cne 'VALIDATED'){ continue }
+        if(-not [bool](Get-BenefitHistoryProperty -Object $claim -Name 'BusinessBound' -Default $false)){ continue }
         $type=[string]$claim.ClaimType
         if([string]::IsNullOrWhiteSpace($type)){ continue }
         if(-not $result.ContainsKey($type)){ $result[$type]=[Collections.Generic.List[object]]::new() }

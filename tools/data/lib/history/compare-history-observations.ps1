@@ -40,9 +40,14 @@ function Compare-HistoryObservations {
 
     $deltas = @(Get-HistoryDeltaDimensions -Previous $Previous -Current $Current)
 
-    if (-not [bool]$Current.Comparable -or [string]$Current.OperationalStatus -ne 'COMPLETE') {
+    if ([string]$Current.OperationalStatus -ne 'COMPLETE') {
         $reasons = @($Current.NonComparableReasons)
         return New-ObservationComparison -ComparisonId $comparisonId -RunId $Current.RunId -BusinessId $Current.BusinessId -Domain $Current.Domain -PreviousObservationId $Previous.ObservationId -CurrentObservationId $Current.ObservationId -ComparisonStatus 'UNAVAILABLE' -DeltaDimensions $deltas -ComparatorVersion 1 -ChangeCandidates @('OPERATIONAL_FAILURE','COMPARISON_UNAVAILABLE') -ReasonCodes $reasons
+    }
+
+    if (-not [bool]$Current.Comparable) {
+        $reasons = @($Current.NonComparableReasons)
+        return New-ObservationComparison -ComparisonId $comparisonId -RunId $Current.RunId -BusinessId $Current.BusinessId -Domain $Current.Domain -PreviousObservationId $Previous.ObservationId -CurrentObservationId $Current.ObservationId -ComparisonStatus 'UNAVAILABLE' -DeltaDimensions $deltas -ComparatorVersion 1 -ChangeCandidates @('COMPARISON_UNAVAILABLE') -ReasonCodes $reasons
     }
 
     if (-not [bool]$Previous.Comparable -or [string]$Previous.OperationalStatus -ne 'COMPLETE') {

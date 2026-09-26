@@ -444,11 +444,18 @@ function Compare-BenefitHistoryObservations {
         if([string]$Previous.Domain -cne 'BENEFIT'){ throw 'Benefit history comparison requires BENEFIT previous observation' }
     }
 
-    $historyStore=$Store
-    $resolver={
+    $gateResolver={
         param($PreviousObservation,$CurrentObservation)
-        Resolve-BenefitHistoryDomainChange -Store $historyStore -Previous $PreviousObservation -Current $CurrentObservation
-    }.GetNewClosure()
+        [pscustomobject][ordered]@{
+            ChangeCandidates=@('BENEFIT_DOMAIN_RESOLUTION_REQUIRED')
+            ReasonCodes=@()
+        }
+    }
+    $gate=Compare-HistoryObservations -Previous $Previous -Current $Current -DomainChangeResolver $gateResolver
+    if(@($gate.ChangeCandidates) -notcontains 'BENEFIT_DOMAIN_RESOLUTION_REQUIRED'){
+        return $gate
+    }
 
-    return Compare-HistoryObservations -Previous $Previous -Current $Current -DomainChangeResolver $resolver
+    $resolved=Resolve-BenefitHistoryDomainChange -Store $Store -Previous $Previous -Current $Current
+    return New-ObservationComparison -ComparisonId $gate.ComparisonId -RunId $gate.RunId -BusinessId $gate.BusinessId -Domain $gate.Domain -PreviousObservationId $gate.PreviousObservationId -CurrentObservationId $gate.CurrentObservationId -ComparisonStatus $gate.ComparisonStatus -DeltaDimensions @($gate.DeltaDimensions) -ComparatorVersion $gate.ComparatorVersion -ChangeCandidates @($resolved.ChangeCandidates) -ReasonCodes @($resolved.ReasonCodes)
 }

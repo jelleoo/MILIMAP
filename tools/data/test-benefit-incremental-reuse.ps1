@@ -78,6 +78,12 @@ try {
     Assert-True (-not (Get-BenefitIncrementalReuseDecision -Store $incrementalStore -BusinessId $baselinePackage.Observation.BusinessId -Candidate $htmlCandidate -Document $htmlDocumentChanged -CurrentInputFingerprint $baselinePackage.Observation.InputFingerprint -CurrentExecutionFingerprint $baselinePackage.Observation.ExecutionFingerprint -RepositoryStateProvider { [pscustomobject]@{IsClean=$true} }).ReuseApplied) 'Payload change rejects reuse'
     Assert-True (-not (Get-BenefitIncrementalReuseDecision -Store $incrementalStore -BusinessId $baselinePackage.Observation.BusinessId -Candidate $htmlCandidate -Document $htmlDocument -CurrentInputFingerprint $baselinePackage.Observation.InputFingerprint -CurrentExecutionFingerprint $baselinePackage.Observation.ExecutionFingerprint -RepositoryStateProvider { [pscustomobject]@{IsClean=$false} }).ReuseApplied) 'Dirty repository rejects reuse'
     Assert-True (-not (Get-BenefitIncrementalReuseDecision -Store $incrementalStore -BusinessId $baselinePackage.Observation.BusinessId -Candidate $mmaCandidate -Document $mmaDocument -CurrentInputFingerprint $baselinePackage.Observation.InputFingerprint -CurrentExecutionFingerprint $baselinePackage.Observation.ExecutionFingerprint -RepositoryStateProvider { [pscustomobject]@{IsClean=$true} }).ReuseApplied) 'MMA remains capability NONE'
+    $reusePackage=New-BenefitIncrementalReusePackage -Store $incrementalStore -RunId 'run-22222222222222222222222222222222' -ObservedAt '2026-09-27T00:00:00Z' -Decision $eligible
+    Assert-True ($reusePackage.Observation.ObservationId -ne $baselinePackage.Observation.ObservationId) 'Reuse creates a new observation identity'
+    Assert-Equal $reusePackage.Observation.EvidenceFingerprint $baselinePackage.Observation.EvidenceFingerprint 'Reuse preserves the validated prior evidence fingerprint'
+    Assert-Equal $reusePackage.Observation.SemanticFingerprint $baselinePackage.Observation.SemanticFingerprint 'Reuse preserves the validated prior semantic fingerprint'
+    Assert-Equal @($reusePackage.Observation.ArtifactReferences | Where-Object Kind -eq 'BENEFIT_REUSE_DECISION').Count 1 'Reuse attaches one adapter-owned audit artifact'
+    Assert-Equal $reusePackage.ReuseDecisionArtifact.Projection.ProcessingMode 'REUSED_IDENTICAL_EVIDENCE' 'Reuse audit records deterministic processing mode outside HistoryObservation'
 } finally { if(Test-Path -LiteralPath $incrementalRoot){ Remove-Item -LiteralPath $incrementalRoot -Recurse -Force } }
 
 Write-Host 'Benefit incremental checkpoint tests passed.'

@@ -228,3 +228,47 @@ function Get-BenefitIncrementalReuseDecision {
     }
     return New-BenefitIncrementalReuseDecision -ReuseApplied $true -Capability $capability -Baseline $baseline -PreviousPayloadCheckpoint $previousCheckpoint -CurrentPayloadCheckpoint $currentCheckpoint -InputMatch $true -ExecutionMatch $true -PayloadMatch $true -RepositoryClean $true -ReasonCodes @('REUSE_ELIGIBLE')
 }
+
+function New-BenefitIncrementalReusePackage {
+    param(
+        [Parameter(Mandatory)]$Store,
+        [Parameter(Mandatory)][string]$RunId,
+        [Parameter(Mandatory)][string]$ObservedAt,
+        [Parameter(Mandatory)]$Decision
+    )
+
+    Assert-HistoryToken -Value $RunId -Name 'run id'
+    Assert-HistoryTimestamp -Value $ObservedAt -Name 'ObservedAt'
+    if (-not [bool]$Decision.ReuseApplied -or $null -eq $Decision.Baseline) { throw 'Reuse package requires an eligible reuse decision' }
+    $previous = $Decision.Baseline.Observation
+    Assert-HistoryObservation $previous
+    Assert-HistoryObservationIsCommitted -Store $Store -Observation $previous
+
+    $auditProjection = [pscustomobject][ordered]@{
+        ContractType = 'BenefitReuseDecision'
+        ContractVersion = 1
+        ProcessingMode = 'REUSED_IDENTICAL_EVIDENCE'
+        ReusedFromObservationId = [string]$previous.ObservationId
+        Capability = [string]$Decision.Capability
+        PreviousPayloadCheckpoint = $Decision.PreviousPayloadCheckpoint
+        CurrentPayloadCheckpoint = $Decision.CurrentPayloadCheckpoint
+        InputMatch = [bool]$Decision.InputMatch
+        ExecutionMatch = [bool]$Decision.ExecutionMatch
+        PayloadMatch = [bool]$Decision.PayloadMatch
+        RepositoryClean = [bool]$Decision.RepositoryClean
+        PreviousComparable = [bool]$Decision.PreviousComparable
+        ReuseApplied = $true
+        ReasonCodes = @($Decision.ReasonCodes)
+    }
+    $auditArtifact = New-BenefitHistoryProjectionArtifact -Store $Store -Kind 'BENEFIT_REUSE_DECISION' -Projection $auditProjection
+    $identity = $RunId + '|' + $previous.BusinessId + '|BENEFIT|REUSED|' + $previous.ObservationId + '|' + $ObservedAt
+    $observationId = 'obs-' + (Get-HistorySha256 -Text $identity).Substring(0,32)
+    $references = @($previous.ArtifactReferences) + @($auditArtifact.Reference)
+    $observation = New-HistoryObservation -ObservationId $observationId -RunId $RunId -BusinessId $previous.BusinessId -Domain BENEFIT -ObservedAt $ObservedAt -OperationalStatus COMPLETE -Comparable $true -InputFingerprint $previous.InputFingerprint -EvidenceFingerprint $previous.EvidenceFingerprint -SemanticFingerprint $previous.SemanticFingerprint -ExecutionFingerprint $previous.ExecutionFingerprint -ArtifactReferences $references -SemanticResultReference $previous.SemanticResultReference -NonComparableReasons @()
+
+    return [pscustomobject][ordered]@{
+        Observation = $observation
+        PreparedArtifacts = @($auditArtifact.PreparedArtifact)
+        ReuseDecisionArtifact = [pscustomobject][ordered]@{ Reference = $auditArtifact.Reference; Projection = $auditProjection }
+    }
+}

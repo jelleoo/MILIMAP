@@ -457,9 +457,8 @@ function Compare-BenefitHistoryObservations {
     }
 
     $resolved=Resolve-BenefitHistoryDomainChange -Store $Store -Previous $Previous -Current $Current
-    $result=$gate.PSObject.Copy()
-    $result.ChangeCandidates=@($resolved.ChangeCandidates)
-    $result.ReasonCodes=@($resolved.ReasonCodes)
-    Assert-ObservationComparison $result
-    return $result
+    $gate.ChangeCandidates=@($resolved.ChangeCandidates)
+    $gate.ReasonCodes=@($resolved.ReasonCodes)
+    Assert-ObservationComparison $gate
+    return $gate
 }

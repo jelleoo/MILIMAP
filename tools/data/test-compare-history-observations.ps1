@@ -42,6 +42,13 @@ Assert-True (@($failure.ChangeCandidates) -contains 'COMPARISON_UNAVAILABLE') 'F
 Assert-Equal $failure.ComparisonStatus 'UNAVAILABLE' 'Operational failure must make comparison unavailable'
 Assert-Equal $called 0 'Operational failure must not call domain resolver'
 
+$completeNonComparable = New-TestObservation -ObservationId 'obs-noncomparable' -OperationalStatus 'COMPLETE' -Comparable $false
+$nonComparable = Compare-HistoryObservations -Previous $current -Current $completeNonComparable -DomainChangeResolver $resolver
+Assert-Equal $nonComparable.ComparisonStatus 'UNAVAILABLE' 'Complete non-comparable observation must make comparison unavailable'
+Assert-Equal @($nonComparable.ChangeCandidates).Count 1 'Complete non-comparable observation must emit one comparison candidate'
+Assert-Equal $nonComparable.ChangeCandidates[0] 'COMPARISON_UNAVAILABLE' 'Complete non-comparable observation is not an operational failure'
+Assert-Equal $called 0 'Complete non-comparable observation must not call domain resolver'
+
 $inputChanged = New-TestObservation -ObservationId 'obs-input' -InputValue 'a' -Semantic 'b'
 $inputComparison = Compare-HistoryObservations -Previous $current -Current $inputChanged -DomainChangeResolver $resolver
 Assert-Equal $inputComparison.ChangeCandidates[0] 'CANONICAL_INPUT_CHANGED' 'Input delta must take precedence over semantic/domain change'

@@ -77,6 +77,14 @@ try {
     $resultB=Commit-HistoryRun -Store $store -PreparedRun $preparedB -ExpectedBaselines @{ (Get-Key)='obs-0010' }
     Assert-Equal $resultB.Code 'COMMITTED' 'Second run with current baseline must commit'
 
+    $staleLinkRun=New-HistoryRunId
+    $staleLinkCurrent=New-TestObservation -Id 'obs-stale-link-current' -RunId $staleLinkRun -ObservedAt '2026-09-26T00:02:30Z'
+    $staleLinkComparison=New-ObservationComparison -ComparisonId 'cmp-stale-link' -RunId $staleLinkRun -BusinessId $businessId -Domain 'BENEFIT' -PreviousObservationId 'obs-0010' -CurrentObservationId 'obs-stale-link-current' -ComparisonStatus 'COMPLETE' -DeltaDimensions @('SEMANTIC') -ComparatorVersion 1 -ChangeCandidates @('BENEFIT_CHANGE_SUSPECTED') -ReasonCodes @()
+    $staleLinkPrepared=Prepare-HistoryRun -Store $store -RunManifest (New-TestManifest -RunId $staleLinkRun) -Artifacts @() -Observations @($staleLinkCurrent) -Comparisons @($staleLinkComparison)
+    $staleLinkResult=Commit-HistoryRun -Store $store -PreparedRun $staleLinkPrepared -ExpectedBaselines @{ (Get-Key)='obs-0011' }
+    Assert-Equal $staleLinkResult.Code 'ABORTED' 'Comparison previous observation must match the expected comparable baseline'
+    Assert-Equal (Get-HistoryLatestEntry -Store $store -BusinessId $businessId -Domain 'BENEFIT' -ComparableOnly).LatestComparableObservationId 'obs-0011' 'Stale comparison linkage must not advance baseline'
+
     $runStale=New-HistoryRunId
     $preparedStale=Prepare-One -Store $store -RunId $runStale -ObservationId 'obs-0012' -ObservedAt '2026-09-26T00:03:00Z'
     $stale=Commit-HistoryRun -Store $store -PreparedRun $preparedStale -ExpectedBaselines @{ (Get-Key)='obs-0010' }

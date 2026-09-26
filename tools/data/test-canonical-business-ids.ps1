@@ -2,7 +2,8 @@ $ErrorActionPreference = 'Stop'
 
 . (Join-Path $PSScriptRoot 'lib/identity/canonical-business-id.ps1')
 
-$canonicalPath = Join-Path (Split-Path $PSScriptRoot -Parent) 'data/canonical/capital-area-military-benefits.csv'
+$repoRoot = Split-Path (Split-Path $PSScriptRoot -Parent) -Parent
+$canonicalPath = Join-Path $repoRoot 'data/canonical/capital-area-military-benefits.csv'
 $rows = @(Import-Csv -LiteralPath $canonicalPath -Encoding utf8)
 
 if ($rows.Count -ne 496) {

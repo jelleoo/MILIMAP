@@ -38,7 +38,7 @@ try {
     Assert-Equal $summary.AssignedCount $before.Count 'All missing IDs must be assigned'
     Assert-Equal $summary.PreservedCount 0 'No IDs are preserved in an unmigrated file'
     Assert-True ([bool]$summary.Validated) 'Migration summary must confirm validation'
-    Assert-Equal $after[0].PSObject.Properties[0].Name 'businessId' 'businessId must be the first column'
+    Assert-Equal @($after[0].PSObject.Properties)[0].Name 'businessId' 'businessId must be the first column'
 
     for ($i = 0; $i -lt $before.Count; $i++) {
         Assert-True ([string]$after[$i].businessId -cmatch '^biz-[0-9a-f]{32}$') 'Each row must receive a valid ID'

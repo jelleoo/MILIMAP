@@ -29,6 +29,7 @@ function Assert-HistoryTimestamp {
 function Assert-HistoryArtifactReference {
     param([Parameter(Mandatory)]$Value)
     if ($null -eq $Value) { throw 'Artifact reference is required' }
+    if ([string]$Value.ContractType -cne 'HistoryArtifactReference') { throw 'Invalid artifact reference ContractType' }
     if ([int]$Value.ContractVersion -ne 1) { throw 'Unsupported artifact reference version' }
     Assert-HistoryToken -Value ([string]$Value.Kind) -Name 'artifact kind'
     Assert-HistoryHash -Value ([string]$Value.ContentHash) -Name 'content hash'
@@ -54,6 +55,7 @@ function New-HistoryArtifactReference {
 
 function Assert-HistoryObservation {
     param([Parameter(Mandatory)]$Value)
+    if ([string]$Value.ContractType -cne 'HistoryObservation') { throw 'Invalid history observation ContractType' }
     if ([int]$Value.HistoryContractVersion -ne 1) { throw 'Unsupported history observation version' }
     Assert-HistoryToken -Value ([string]$Value.ObservationId) -Name 'observation id'
     Assert-HistoryToken -Value ([string]$Value.RunId) -Name 'run id'
@@ -116,7 +118,8 @@ function New-HistoryObservation {
 
 function Assert-ObservationComparison {
     param([Parameter(Mandatory)]$Value)
-    if ([int]$Value.HistoryContractVersion -ne 1 -or [int]$Value.ComparatorVersion -lt 1) { throw 'Unsupported comparison version' }
+    if ([string]$Value.ContractType -cne 'ObservationComparison') { throw 'Invalid observation comparison ContractType' }
+    if ([int]$Value.HistoryContractVersion -ne 1 -or [int]$Value.ComparatorVersion -ne 1) { throw 'Unsupported comparison version' }
     Assert-HistoryToken -Value ([string]$Value.ComparisonId) -Name 'comparison id'
     Assert-HistoryToken -Value ([string]$Value.RunId) -Name 'run id'
     Assert-HistoryBusinessId -Value ([string]$Value.BusinessId)
@@ -169,6 +172,7 @@ function New-ObservationComparison {
 
 function Assert-HistoryRunManifest {
     param([Parameter(Mandatory)]$Value)
+    if ([string]$Value.ContractType -cne 'HistoryRunManifest') { throw 'Invalid history run manifest ContractType' }
     Assert-HistoryToken -Value ([string]$Value.RunId) -Name 'run id'
     Assert-HistoryTimestamp -Value ([string]$Value.StartedAt) -Name 'StartedAt'
     if ([string]$Value.RunCommitStatus -cnotin @('PREPARED','COMMITTED','ABORTED')) { throw 'Invalid run commit status' }
@@ -224,6 +228,8 @@ function New-HistoryRunManifest {
 
 function Assert-HistoryIndexEntry {
     param([Parameter(Mandatory)]$Value)
+    if ([string]$Value.ContractType -cne 'HistoryIndexEntry') { throw 'Invalid history index ContractType' }
+    if ([int]$Value.ContractVersion -ne 1) { throw 'Unsupported history index version' }
     Assert-HistoryBusinessId -Value ([string]$Value.BusinessId)
     if ([string]$Value.Domain -cnotin @('LOCATION','BENEFIT')) { throw 'Invalid history domain' }
     if (-not [string]::IsNullOrWhiteSpace([string]$Value.LatestObservationId)) { Assert-HistoryToken -Value ([string]$Value.LatestObservationId) -Name 'latest observation id' }

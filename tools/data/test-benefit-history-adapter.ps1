@@ -34,11 +34,11 @@ function New-TestResult {
     New-BenefitVerificationResult -SourceRowNumber 2 -BusinessIdentity (New-TestBusiness) -BenefitState $State -ReviewClass $Review -ReasonCodes @() -ClaimResults $Claims -Evidence @() -Warnings @() -ProductionAction 'NONE'
 }
 function New-TestDiagnostic {
-    param([string]$Hash=('a'*64),[string]$ObservedAt='2026-09-26T00:00:00Z',[string]$LocationStatus='LOCATED',[string]$LocationOperationalStatus='COMPLETE',[string]$ExtractionStatus='COMPLETE')
+    param([string]$Hash=('a'*64),[string]$ObservedAt='2026-09-26T00:00:00Z',[string]$LocationStatus='LOCATED',[string]$LocationOperationalStatus='COMPLETE',[string]$ExtractionStatus='COMPLETE',[string]$FetchStatus='COMPLETE')
     [pscustomobject][ordered]@{
         Url='https://city.example.go.kr/benefit'
         SourceFormat='HTML'
-        FetchStatus='COMPLETE'
+        FetchStatus=$FetchStatus
         ContentHash=$Hash
         ObservedAt=$ObservedAt
         AdapterId='HTML_GENERIC'
@@ -62,16 +62,28 @@ function New-TestPackage {
         [string]$ObservedAt='2026-09-26T00:00:00Z',
         [string]$DiagnosticObservedAt='2026-09-26T00:00:00Z',
         [string]$Revision=$revision,
+        [string]$RunIdValue=$runId,
         [string]$DiscoveryStatus='COMPLETE',
         [string]$ExtractionStatus='COMPLETE',
-        [object[]]$Claims=@((New-TestClaim))
+        [string]$FetchStatus='COMPLETE',
+        [string]$LocationOperationalStatus='COMPLETE',
+        [string]$LocationStatus='LOCATED',
+        [string]$State='ACTIVE',
+        [string]$Review='GREEN',
+        [AllowEmptyCollection()][object[]]$Claims=@((New-TestClaim))
     )
     $business=New-TestBusiness -Name $BusinessName
     $benefit=New-TestBenefit -Description $BenefitDescription
-    $result=New-BenefitVerificationResult -SourceRowNumber 2 -BusinessIdentity $business -BenefitState 'ACTIVE' -ReviewClass 'GREEN' -ReasonCodes @() -ClaimResults $Claims -Evidence @() -Warnings @() -ProductionAction 'NONE'
-    $diagnostic=New-TestDiagnostic -Hash $EvidenceHash -ObservedAt $DiagnosticObservedAt -ExtractionStatus $ExtractionStatus
+    $result=New-BenefitVerificationResult -SourceRowNumber 2 -BusinessIdentity $business -BenefitState $State -ReviewClass $Review -ReasonCodes @() -ClaimResults $Claims -Evidence @() -Warnings @() -ProductionAction 'NONE'
+    $diagnostic=New-TestDiagnostic -Hash $EvidenceHash -ObservedAt $DiagnosticObservedAt -ExtractionStatus $ExtractionStatus -FetchStatus $FetchStatus -LocationOperationalStatus $LocationOperationalStatus -LocationStatus $LocationStatus
     $operational=[pscustomobject]@{DiscoveryStatus=$DiscoveryStatus;ExtractionStatus=$ExtractionStatus}
-    New-BenefitHistoryObservationPackage -Store $Store -RunId $runId -BusinessId $businessId -ObservedAt $ObservedAt -RepositoryRevision $Revision -Benefit $benefit -BusinessIdentity $business -CanonicalPhone '031-000-0000' -Result $result -EvidenceDiagnostics @($diagnostic) -OperationalStatus $operational
+    New-BenefitHistoryObservationPackage -Store $Store -RunId $RunIdValue -BusinessId $businessId -ObservedAt $ObservedAt -RepositoryRevision $Revision -Benefit $benefit -BusinessIdentity $business -CanonicalPhone '031-000-0000' -Result $result -EvidenceDiagnostics @($diagnostic) -OperationalStatus $operational
+}
+function Publish-TestPackageArtifacts {
+    param($Store,$Package)
+    foreach($artifact in @($Package.PreparedArtifacts)){
+        [void](Write-HistoryArtifact -Store $Store -ContentHash $artifact.ContentHash -Extension $artifact.Extension -Text $artifact.Text)
+    }
 }
 
 $root=Join-Path ([IO.Path]::GetTempPath()) ('milimap-benefit-history-' + [Guid]::NewGuid().ToString('N'))
@@ -113,6 +125,47 @@ try {
     $result=New-TestResult
     $noEvidenceIdentity=New-BenefitHistoryObservationPackage -Store $store -RunId $runId -BusinessId $businessId -ObservedAt '2026-09-26T00:00:00Z' -RepositoryRevision $revision -Benefit $benefit -BusinessIdentity $business -Result $result -EvidenceDiagnostics @($missingHashDiagnostic) -OperationalStatus ([pscustomobject]@{DiscoveryStatus='COMPLETE';ExtractionStatus='COMPLETE'})
     Assert-True (-not $noEvidenceIdentity.Observation.Comparable) 'Missing source ContentHash must fail closed for run-to-run comparison'
+
+
+    $previous=New-TestPackage -Store $store -RunIdValue 'run-11111111111111111111111111111111'
+    $evidenceOnly=New-TestPackage -Store $store -RunIdValue 'run-22222222222222222222222222222222' -EvidenceHash ('b'*64)
+    Publish-TestPackageArtifacts -Store $store -Package $previous
+    Publish-TestPackageArtifacts -Store $store -Package $evidenceOnly
+    $evidenceOnlyComparison=Compare-BenefitHistoryObservations -Store $store -Previous $previous.Observation -Current $evidenceOnly.Observation
+    Assert-Equal $evidenceOnlyComparison.ChangeCandidates[0] 'EVIDENCE_CHANGE_ONLY' 'Physical evidence-only change stays audit-only'
+
+    $inputOnly=New-TestPackage -Store $store -RunIdValue 'run-33333333333333333333333333333333' -BenefitDescription '20% 할인'
+    Publish-TestPackageArtifacts -Store $store -Package $inputOnly
+    $inputComparison=Compare-BenefitHistoryObservations -Store $store -Previous $previous.Observation -Current $inputOnly.Observation
+    Assert-Equal $inputComparison.ChangeCandidates[0] 'CANONICAL_INPUT_CHANGED' 'Canonical edit must not become external benefit change'
+
+    $executionOnly=New-TestPackage -Store $store -RunIdValue 'run-44444444444444444444444444444444' -Revision ('f'*40)
+    Publish-TestPackageArtifacts -Store $store -Package $executionOnly
+    $executionComparison=Compare-BenefitHistoryObservations -Store $store -Previous $previous.Observation -Current $executionOnly.Observation
+    Assert-Equal $executionComparison.ChangeCandidates[0] 'PROCESSOR_OUTPUT_CHANGED' 'Processor change must not become external benefit change'
+
+    $changedClaim=New-TestClaim -Value '20% 할인' -Result 'CHANGED' -Reasons @('MATERIAL_CHANGE')
+    $materialChange=New-TestPackage -Store $store -RunIdValue 'run-55555555555555555555555555555555' -EvidenceHash ('c'*64) -Claims @($changedClaim) -State 'CHANGED'
+    Publish-TestPackageArtifacts -Store $store -Package $materialChange
+    $materialComparison=Compare-BenefitHistoryObservations -Store $store -Previous $previous.Observation -Current $materialChange.Observation
+    Assert-Equal $materialComparison.ChangeCandidates[0] 'BENEFIT_CHANGE_SUSPECTED' 'Validated material semantic delta may create benefit change candidate'
+
+    $absence=New-TestPackage -Store $store -RunIdValue 'run-66666666666666666666666666666666' -EvidenceHash ('d'*64) -LocationStatus 'NOT_FOUND' -LocationOperationalStatus 'COMPLETE' -ExtractionStatus 'FAILED' -State 'NEEDS_VERIFICATION' -Review 'YELLOW' -Claims @()
+    Assert-True $absence.Observation.Comparable 'Complete business lookup NOT_FOUND is comparable as an absence observation'
+    Publish-TestPackageArtifacts -Store $store -Package $absence
+    $absenceComparison=Compare-BenefitHistoryObservations -Store $store -Previous $previous.Observation -Current $absence.Observation
+    Assert-Equal $absenceComparison.ChangeCandidates[0] 'BENEFIT_ABSENCE_SUSPECTED' 'Complete explicit NOT_FOUND may create absence candidate'
+    Assert-True (@($absenceComparison.ChangeCandidates) -notcontains 'ENDED') 'Absence candidate must never imply ENDED'
+
+    $failedNotFound=New-TestPackage -Store $store -RunIdValue 'run-77777777777777777777777777777777' -EvidenceHash ('e'*64) -FetchStatus 'FAILED' -LocationStatus 'NOT_FOUND' -LocationOperationalStatus 'PARTIAL' -DiscoveryStatus 'PARTIAL' -ExtractionStatus 'FAILED' -State 'NEEDS_VERIFICATION' -Review 'YELLOW' -Claims @()
+    Assert-True (-not $failedNotFound.Observation.Comparable) 'Partial/failed NOT_FOUND must not be comparable'
+    Publish-TestPackageArtifacts -Store $store -Package $failedNotFound
+    $failedComparison=Compare-BenefitHistoryObservations -Store $store -Previous $previous.Observation -Current $failedNotFound.Observation
+    Assert-True (@($failedComparison.ChangeCandidates) -contains 'OPERATIONAL_FAILURE') 'Operational failure stays operational'
+    Assert-True (@($failedComparison.ChangeCandidates) -notcontains 'BENEFIT_ABSENCE_SUSPECTED') 'Operational failure must never become absence'
+
+    $semanticProjection=Read-BenefitHistorySemanticProjection -Store $store -Observation $materialChange.Observation
+    Assert-Equal $semanticProjection.ProjectionType 'BenefitHistorySemantic' 'Persisted semantic projection must be readable and typed'
 } finally {
     Remove-Item -LiteralPath $root -Recurse -Force -ErrorAction SilentlyContinue
 }

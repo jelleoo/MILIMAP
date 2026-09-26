@@ -457,5 +457,9 @@ function Compare-BenefitHistoryObservations {
     }
 
     $resolved=Resolve-BenefitHistoryDomainChange -Store $Store -Previous $Previous -Current $Current
-    return New-ObservationComparison -ComparisonId $gate.ComparisonId -RunId $gate.RunId -BusinessId $gate.BusinessId -Domain $gate.Domain -PreviousObservationId $gate.PreviousObservationId -CurrentObservationId $gate.CurrentObservationId -ComparisonStatus $gate.ComparisonStatus -DeltaDimensions @($gate.DeltaDimensions) -ComparatorVersion $gate.ComparatorVersion -ChangeCandidates @($resolved.ChangeCandidates) -ReasonCodes @($resolved.ReasonCodes)
+    $result=$gate.PSObject.Copy()
+    $result.ChangeCandidates=@($resolved.ChangeCandidates)
+    $result.ReasonCodes=@($resolved.ReasonCodes)
+    Assert-ObservationComparison $result
+    return $result
 }

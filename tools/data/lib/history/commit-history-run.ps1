@@ -55,6 +55,9 @@ function Prepare-HistoryRun {
     Assert-HistoryToken -Value $runId -Name 'run id'
     if($runId.Contains('/') -or $runId.Contains('\') -or $runId.Contains('..')){ throw 'Run id cannot contain path traversal' }
 
+    $terminalRunDirectory=Assert-HistoryStorePathWithinRoot -Store $Store -Path (Join-Path $Store.RunsRoot $runId)
+    if(Test-Path -LiteralPath $terminalRunDirectory){ throw "History RunId already has terminal state: $runId" }
+
     $stageRoot=Assert-HistoryStorePathWithinRoot -Store $Store -Path (Join-Path $Store.TempRoot $runId)
     if(Test-Path -LiteralPath $stageRoot){ throw "Prepared run staging already exists: $runId" }
 
@@ -164,7 +167,7 @@ function Write-HistoryTerminalManifest {
     $tempPath=Assert-HistoryStorePathWithinRoot -Store $Store -Path (Join-Path $Store.TempRoot ('manifest-' + [Guid]::NewGuid().ToString('N') + '.tmp'))
     Write-HistoryPreparedJson -Store $Store -Path $tempPath -Value $manifest
     try {
-        [IO.File]::Move($tempPath,$finalPath,$true)
+        [IO.File]::Move($tempPath,$finalPath,$false)
     } finally {
         if(Test-Path -LiteralPath $tempPath){ Remove-Item -LiteralPath $tempPath -Force -ErrorAction SilentlyContinue }
     }

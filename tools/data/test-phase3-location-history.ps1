@@ -46,10 +46,15 @@ function New-TestRequestInvoker {
 
 $script:Trace=[Collections.Generic.List[string]]::new()
 $script:DiscoveryTransform=$null
+$script:PrepareCalls=0
+$script:CommitCalls=0
+$script:CommitBeforeHook=$null
 if(Test-Path -LiteralPath $runnerPath){
     $script:OriginalDiscovery=(Get-Command Invoke-PoiDiscovery).ScriptBlock
     $script:OriginalMatcher=(Get-Command Invoke-PoiMatchEvaluation).ScriptBlock
     $script:OriginalBaseline=(Get-Command Get-LocationIncrementalBaselineResolution).ScriptBlock
+    $script:OriginalPrepare=(Get-Command Prepare-HistoryRun).ScriptBlock
+    $script:OriginalCommit=(Get-Command Commit-HistoryRun).ScriptBlock
     function Invoke-PoiDiscovery {
         param($Business,[string]$ClientId,[string]$ClientSecret,[scriptblock]$RequestInvoker)
         $script:Trace.Add('DISCOVERY')
@@ -66,6 +71,26 @@ if(Test-Path -LiteralPath $runnerPath){
         param($Store,[string]$BusinessId)
         $script:Trace.Add('BASELINE')
         return & $script:OriginalBaseline -Store $Store -BusinessId $BusinessId
+    }
+    function Prepare-HistoryRun {
+        param($Store,$RunManifest,[object[]]$Artifacts=@(),[object[]]$Observations=@(),[object[]]$Comparisons=@())
+        $script:PrepareCalls++
+        return & $script:OriginalPrepare @PSBoundParameters
+    }
+    function Commit-HistoryRun {
+        param($Store,$PreparedRun,$ExpectedBaselines)
+        $script:CommitCalls++
+        if($null -ne $script:CommitBeforeHook){
+            $hook=$script:CommitBeforeHook
+            $script:CommitBeforeHook=$null
+            $beforeTrace=@($script:Trace)
+            try { & $hook $Store $PreparedRun $ExpectedBaselines }
+            finally {
+                $script:Trace.Clear()
+                foreach($event in $beforeTrace){$script:Trace.Add($event)}
+            }
+        }
+        return & $script:OriginalCommit @PSBoundParameters
     }
 }
 
@@ -98,6 +123,18 @@ function New-TestScenario {
     $initial=Invoke-TestRun -Store $scenarioStore -RunId 'run-scenario-baseline' -ObservedAt '2026-09-27T01:00:00Z' -Items $BaselineItems
     Assert-Equal $initial.Run.Commit.Code 'COMMITTED' "$Name baseline commits"
     return [pscustomobject]@{Store=$scenarioStore;Initial=$initial}
+}
+
+function Assert-StructuralStop {
+    param($Store,[string]$Name)
+    $runId='run-structural-' + $Name
+    $prepareBefore=$script:PrepareCalls
+    $commitBefore=$script:CommitCalls
+    Assert-Throws { Invoke-TestRun -Store $Store -RunId $runId -ObservedAt '2026-09-27T01:10:00Z' } "$Name structural corruption fails closed"
+    Assert-Sequence @($script:Trace) @('BASELINE') "$Name stops before discovery and matcher"
+    Assert-Equal $script:PrepareCalls $prepareBefore "$Name cannot prepare"
+    Assert-Equal $script:CommitCalls $commitBefore "$Name cannot commit"
+    Assert-True (-not (Test-Path -LiteralPath (Get-HistoryRunManifestPath -Store $Store -RunId $runId))) "$Name has no authoritative run"
 }
 
 $root=Join-Path ([IO.Path]::GetTempPath()) ('milimap-p3-6-task2-' + [guid]::NewGuid().ToString('N'))
@@ -157,6 +194,24 @@ try {
     Assert-Equal $second.Run.Metrics.AvoidedMatcherCount 1 'Second run avoids exactly one matcher'
     Assert-Equal $second.Run.Metrics.ExternalFetchCount $second.ProviderCalls 'Second run fetch metric reflects actual provider calls'
 
+    $third=Invoke-TestRun -Store $store -RunId 'run-location-third' -ObservedAt '2026-09-27T00:20:00Z'
+    Assert-Sequence $third.Trace @('BASELINE','DISCOVERY') 'Third run discovers once and skips matcher'
+    Assert-Equal $third.Run.Commit.Code 'COMMITTED' 'Third reuse observation commits'
+    Assert-Equal $third.Run.BaselineResolution.Observation.ObservationId $second.Run.Observation.ObservationId 'Third run uses second comparable observation'
+    $firstEvidence=@($first.Run.Observation.ArtifactReferences | Where-Object Kind -eq 'LOCATION_EVIDENCE_PROJECTION')[0]
+    $firstSemantic=@($first.Run.Observation.ArtifactReferences | Where-Object Kind -eq 'LOCATION_SEMANTIC_PROJECTION')[0]
+    $secondAudit=@($second.Run.Observation.ArtifactReferences | Where-Object Kind -eq 'LOCATION_REUSE_DECISION')[0]
+    foreach($reusedRun in @($second,$third)) {
+        Assert-Equal @($reusedRun.Run.Observation.ArtifactReferences).Count 3 'Each reuse has evidence, semantic and current audit only'
+        Assert-Equal @($reusedRun.Run.Observation.ArtifactReferences | Where-Object Kind -eq 'LOCATION_EVIDENCE_PROJECTION').Count 1 'Each reuse references evidence exactly once'
+        Assert-Equal @($reusedRun.Run.Observation.ArtifactReferences | Where-Object Kind -eq 'LOCATION_SEMANTIC_PROJECTION').Count 1 'Each reuse references semantic exactly once'
+        Assert-Equal @($reusedRun.Run.Observation.ArtifactReferences | Where-Object Kind -eq 'LOCATION_REUSE_DECISION').Count 1 'Each reuse references current audit exactly once'
+        Assert-Equal @($reusedRun.Run.Package.PreparedArtifacts).Count 1 'Each reuse stages only current audit'
+        Assert-Equal @($reusedRun.Run.Observation.ArtifactReferences | Where-Object Kind -eq 'LOCATION_EVIDENCE_PROJECTION')[0].ContentHash $firstEvidence.ContentHash 'Evidence artifact lineage is reused'
+        Assert-Equal @($reusedRun.Run.Observation.ArtifactReferences | Where-Object Kind -eq 'LOCATION_SEMANTIC_PROJECTION')[0].ContentHash $firstSemantic.ContentHash 'Semantic artifact lineage is reused'
+    }
+    Assert-Equal @($third.Run.Observation.ArtifactReferences | Where-Object { $_.ContentHash -ceq $secondAudit.ContentHash }).Count 0 'Third run does not inherit second audit reference'
+
     $otherItem=$item | ConvertTo-Json -Depth 20 | ConvertFrom-Json
     $otherItem.roadAddress='서울특별시 강남구 다른로 99'
     $otherItem.address='서울특별시 강남구 다른동 99'
@@ -207,6 +262,21 @@ try {
         Assert-Equal $dirty.Run.Observation.ExecutionFingerprint $dirty.Run.Package.Observation.ExecutionFingerprint "$mode recompute package is the observation"
     }
 
+    $dirtyChain=New-TestScenario -Name 'clean-dirty-clean'
+    $dirtyMiddle=Invoke-TestRun -Store $dirtyChain.Store -RunId 'run-dirty-middle' -ObservedAt '2026-09-27T01:10:00Z' -Clean $false
+    Assert-Equal $dirtyMiddle.RepositoryCalls 1 'Dirty middle run checks repository exactly once'
+    Assert-Sequence $dirtyMiddle.Trace @('BASELINE','DISCOVERY','MATCHER') 'Dirty middle run does not reuse clean baseline'
+    Assert-Equal $dirtyMiddle.Run.ReuseDecision.ReasonCodes[0] 'DIRTY_REPOSITORY' 'Dirty middle run rejects reuse'
+    Assert-Equal $dirtyMiddle.Run.Commit.Code 'COMMITTED' 'Dirty middle observation commits'
+    $cleanAfterDirty=Invoke-TestRun -Store $dirtyChain.Store -RunId 'run-clean-after-dirty' -ObservedAt '2026-09-27T01:20:00Z'
+    Assert-Equal $cleanAfterDirty.RepositoryCalls 1 'Clean run checks repository exactly once'
+    Assert-Equal $cleanAfterDirty.Run.BaselineResolution.Observation.ObservationId $dirtyMiddle.Run.Observation.ObservationId 'Clean run sees latest comparable dirty observation'
+    Assert-Equal $cleanAfterDirty.Run.ReuseDecision.ReasonCodes[0] 'EXECUTION_CHANGED' 'Dirty execution fingerprint cannot poison clean reuse'
+    Assert-Sequence $cleanAfterDirty.Trace @('BASELINE','DISCOVERY','MATCHER') 'Clean after dirty recomputes once'
+    $dirtyAgain=Invoke-TestRun -Store $dirtyChain.Store -RunId 'run-dirty-again' -ObservedAt '2026-09-27T01:30:00Z' -Clean $false
+    Assert-Equal $dirtyAgain.Run.ReuseDecision.ReasonCodes[0] 'DIRTY_REPOSITORY' 'Dirty-to-dirty remains ineligible'
+    Assert-Sequence $dirtyAgain.Trace @('BASELINE','DISCOVERY','MATCHER') 'Dirty-to-dirty also invokes matcher once'
+
     foreach($status in @('PARTIAL','FAILED')) {
         $statusScenario=New-TestScenario -Name ('discovery-' + $status.ToLowerInvariant())
         $incomplete=Invoke-TestRun -Store $statusScenario.Store -RunId ('run-discovery-' + $status.ToLowerInvariant()) -ObservedAt '2026-09-27T01:10:00Z' -FailureCall 1 -FailAll ($status -ceq 'FAILED')
@@ -219,6 +289,92 @@ try {
         Assert-Equal $incompleteManifest.ExecutionStatus $status "$status manifest status maps from observation"
         Assert-Equal @($incompleteManifest.CompletedBusinessIds).Count $(if($status -ceq 'FAILED'){0}else{1}) "$status manifest completed ids are mapped"
         Assert-Equal @($incompleteManifest.FailedBusinessIds).Count $(if($status -ceq 'FAILED'){1}else{0}) "$status manifest failed ids are mapped"
+    }
+
+    $comparableChain=New-TestScenario -Name 'latest-comparable-chain'
+    $partialMiddle=Invoke-TestRun -Store $comparableChain.Store -RunId 'run-partial-middle' -ObservedAt '2026-09-27T01:10:00Z' -FailureCall 1
+    Assert-Equal $partialMiddle.Run.Observation.OperationalStatus 'PARTIAL' 'Middle run is operationally partial'
+    Assert-Equal $partialMiddle.Run.Observation.Comparable $false 'Middle run is non-comparable'
+    Assert-Equal $partialMiddle.Run.Commit.Code 'COMMITTED' 'Partial middle run can be latest observation'
+    $middleIndex=Get-HistoryLatestEntry -Store $comparableChain.Store -BusinessId $businessId -Domain 'LOCATION'
+    Assert-Equal $middleIndex.LatestObservationId $partialMiddle.Run.Observation.ObservationId 'Latest observation advances to partial run'
+    Assert-Equal $middleIndex.LatestComparableObservationId $comparableChain.Initial.Run.Observation.ObservationId 'Latest comparable stays on first COMPLETE run'
+    $completeAfterPartial=Invoke-TestRun -Store $comparableChain.Store -RunId 'run-complete-after-partial' -ObservedAt '2026-09-27T01:20:00Z'
+    Assert-Equal $completeAfterPartial.Run.BaselineResolution.Observation.ObservationId $comparableChain.Initial.Run.Observation.ObservationId 'Third run uses first comparable observation, not partial latest'
+    Assert-Equal $completeAfterPartial.Run.Observation.OperationalStatus 'COMPLETE' 'Third run is complete'
+    Assert-Equal $completeAfterPartial.Run.Commit.Code 'COMMITTED' 'Third run commits against comparable baseline'
+
+    $missingIndexScenario=New-TestScenario -Name 'missing-derived-index'
+    $derivedIndexPath=Get-HistoryIndexPath -Store $missingIndexScenario.Store -BusinessId $businessId -Domain 'LOCATION'
+    Assert-True ($derivedIndexPath.StartsWith([IO.Path]::GetFullPath($missingIndexScenario.Store.Root),[StringComparison]::OrdinalIgnoreCase)) 'Only scenario-local derived index may be removed'
+    Remove-Item -LiteralPath $derivedIndexPath -Force
+    $missingIndex=Invoke-TestRun -Store $missingIndexScenario.Store -RunId 'run-missing-index' -ObservedAt '2026-09-27T01:10:00Z'
+    Assert-Equal $missingIndex.Run.BaselineResolution.Status 'NONE' 'Missing derived index appears as no baseline before discovery'
+    Assert-Sequence $missingIndex.Trace @('BASELINE','DISCOVERY','MATCHER') 'Missing index performs one discovery and matcher'
+    Assert-Equal $missingIndex.Run.Comparison.ChangeCandidates[0] 'BASELINE_ESTABLISHED' 'Staged comparison initially sees no indexed baseline'
+    Assert-Equal $missingIndex.Run.Commit.Code 'BASELINE_MOVED' 'Commit-time rebuild detects old comparable baseline'
+    Assert-Equal $missingIndex.Run.Commit.RetryRequired $true 'Missing-index CAS requests explicit retry'
+    Assert-Equal $missingIndex.Run.Metrics.ExternalFetchCount $missingIndex.ProviderCalls 'Missing-index run fetches only current discovery attempts'
+    Assert-Equal $missingIndex.Run.Metrics.RowsCompleted 0 'CAS failure is not a completed row'
+    Assert-Equal (Get-HistoryLatestEntry -Store $missingIndexScenario.Store -BusinessId $businessId -Domain 'LOCATION' -ComparableOnly).LatestComparableObservationId $missingIndexScenario.Initial.Run.Observation.ObservationId 'Rebuilt index retains old comparable baseline'
+    Assert-True (-not (Test-Path -LiteralPath (Get-HistoryObservationPath -Store $missingIndexScenario.Store -ObservationId $missingIndex.Run.Observation.ObservationId))) 'Stale observation is not published after index rebuild'
+    Assert-True (-not (Test-Path -LiteralPath (Get-HistoryComparisonPath -Store $missingIndexScenario.Store -ComparisonId $missingIndex.Run.Comparison.ComparisonId))) 'Stale establishment comparison is not published'
+
+    foreach($raceMode in @('reuse','recompute')) {
+        $raceScenario=New-TestScenario -Name ('baseline-moved-' + $raceMode)
+        $script:CompetingResult=$null
+        $script:CompetingRunId='run-competing-' + $raceMode
+        $script:CommitBeforeHook={
+            param($Store,$PreparedRun,$ExpectedBaselines)
+            $script:CompetingResult=Invoke-TestRun -Store $Store -RunId $script:CompetingRunId -ObservedAt '2026-09-27T01:11:00Z' -Items @($script:changedProviderItem)
+        }
+        $raceRunId='run-stale-' + $raceMode
+        $raceArgs=@{Store=$raceScenario.Store;RunId=$raceRunId;ObservedAt='2026-09-27T01:10:00Z'}
+        if($raceMode -ceq 'recompute'){$raceArgs.Revision='b'*40}
+        $race=Invoke-TestRun @raceArgs
+        Assert-Equal $script:CompetingResult.Run.Commit.Code 'COMMITTED' "$raceMode competing baseline commits between decision and CAS"
+        Assert-Equal $race.Run.Commit.Code 'BASELINE_MOVED' "$raceMode stale commit is rejected by existing CAS"
+        Assert-Equal $race.Run.Commit.RetryRequired $true "$raceMode CAS requires caller-controlled retry"
+        Assert-Equal $race.Run.Metrics.RowsCompleted 0 "$raceMode stale run is not completed"
+        Assert-Sequence $race.Trace $(if($raceMode -ceq 'reuse'){@('BASELINE','DISCOVERY')}else{@('BASELINE','DISCOVERY','MATCHER')}) "$raceMode current discovery and matcher counts do not repeat"
+        Assert-Equal $race.Run.Metrics.ExternalFetchCount $race.ProviderCalls "$raceMode current provider work is counted once"
+        Assert-Equal (Get-HistoryLatestEntry -Store $raceScenario.Store -BusinessId $businessId -Domain 'LOCATION' -ComparableOnly).LatestComparableObservationId $script:CompetingResult.Run.Observation.ObservationId "$raceMode competing baseline remains authoritative"
+        Assert-True (-not (Test-Path -LiteralPath (Get-HistoryObservationPath -Store $raceScenario.Store -ObservationId $race.Run.Observation.ObservationId))) "$raceMode stale observation is not published"
+        Assert-True (-not (Test-Path -LiteralPath (Get-HistoryComparisonPath -Store $raceScenario.Store -ComparisonId $race.Run.Comparison.ComparisonId))) "$raceMode stale comparison is not published"
+        Assert-True (-not (Test-Path -LiteralPath (Get-HistoryRunManifestPath -Store $raceScenario.Store -RunId $raceRunId))) "$raceMode stale run is not authoritative"
+        if($raceMode -ceq 'reuse'){
+            $auditRef=@($race.Run.Observation.ArtifactReferences | Where-Object Kind -eq 'LOCATION_REUSE_DECISION')[0]
+            Assert-True (-not (Test-Path -LiteralPath (Join-Path $raceScenario.Store.Root $auditRef.RelativePath))) 'Stale reuse audit artifact is not published'
+            Assert-Equal @($race.Run.Package.PreparedArtifacts).Count 1 'Reuse race stages only current audit'
+        }
+    }
+
+    foreach($lockMode in @('reuse','recompute')) {
+        $lockScenario=New-TestScenario -Name ('writer-locked-' + $lockMode)
+        $lockRunId='run-writer-locked-' + $lockMode
+        $lockPath=Join-Path $lockScenario.Store.Root '.writer-lock'
+        $heldLock=[IO.File]::Open($lockPath,[IO.FileMode]::OpenOrCreate,[IO.FileAccess]::ReadWrite,[IO.FileShare]::None)
+        $prepareBefore=$script:PrepareCalls
+        $commitBefore=$script:CommitCalls
+        try {
+            $lockArgs=@{Store=$lockScenario.Store;RunId=$lockRunId;ObservedAt='2026-09-27T01:10:00Z'}
+            if($lockMode -ceq 'recompute'){$lockArgs.Revision='b'*40}
+            $locked=Invoke-TestRun @lockArgs
+        } finally { $heldLock.Dispose() }
+        Assert-Sequence $locked.Trace $(if($lockMode -ceq 'reuse'){@('BASELINE','DISCOVERY')}else{@('BASELINE','DISCOVERY','MATCHER')}) "$lockMode expensive work occurs before locked commit"
+        Assert-Equal $locked.Run.Metrics.ExternalFetchCount $locked.ProviderCalls "$lockMode current provider work is counted once"
+        Assert-Equal $script:PrepareCalls ($prepareBefore+1) "$lockMode prepares exactly once"
+        Assert-Equal $script:CommitCalls ($commitBefore+1) "$lockMode attempts commit exactly once"
+        Assert-Equal $locked.Run.Commit.Code 'WRITER_LOCKED' "$lockMode sees existing writer lock"
+        Assert-Equal $locked.Run.Commit.RetryRequired $false "$lockMode writer lock does not schedule retry"
+        Assert-Equal $locked.Run.Metrics.RowsCompleted 0 "$lockMode locked run is not complete"
+        Assert-Equal (Get-HistoryLatestEntry -Store $lockScenario.Store -BusinessId $businessId -Domain 'LOCATION' -ComparableOnly).LatestComparableObservationId $lockScenario.Initial.Run.Observation.ObservationId "$lockMode baseline stays authoritative"
+        Assert-True (-not (Test-Path -LiteralPath (Get-HistoryObservationPath -Store $lockScenario.Store -ObservationId $locked.Run.Observation.ObservationId))) "$lockMode observation is not published"
+        Assert-True (-not (Test-Path -LiteralPath (Get-HistoryComparisonPath -Store $lockScenario.Store -ComparisonId $locked.Run.Comparison.ComparisonId))) "$lockMode comparison is not published"
+        if($lockMode -ceq 'reuse'){
+            $auditRef=@($locked.Run.Observation.ArtifactReferences | Where-Object Kind -eq 'LOCATION_REUSE_DECISION')[0]
+            Assert-True (-not (Test-Path -LiteralPath (Join-Path $lockScenario.Store.Root $auditRef.RelativePath))) 'Locked reuse audit artifact is not published'
+        }
     }
 
     $absenceScenario=New-TestScenario -Name 'complete-absence'
@@ -243,13 +399,53 @@ try {
     Assert-Equal $artifactInvalid.Run.Metrics.BaselineHits 1 'Artifact-invalid lineage still counts as baseline hit'
     Assert-Equal $artifactInvalid.Run.Metrics.ComparisonCandidates 0 'No comparison means no comparison candidates'
     Assert-Equal $artifactInvalid.Run.Commit.Code 'COMMITTED' "Current recompute can commit without comparison against corrupt baseline: $($artifactInvalid.Run.Commit.Reason)"
+    Assert-Equal (Get-HistoryLatestEntry -Store $artifactScenario.Store -BusinessId $businessId -Domain 'LOCATION' -ComparableOnly).LatestComparableObservationId $artifactInvalid.Run.Observation.ObservationId 'Valid recompute supersedes evidence-corrupt comparable baseline'
+    Assert-Equal (Get-Content -LiteralPath $oldEvidencePath -Raw -Encoding utf8).Trim() 'tampered evidence' 'Old evidence artifact is not repaired'
+
+    $semanticScenario=New-TestScenario -Name 'semantic-artifact-invalid'
+    $oldSemantic=@($semanticScenario.Initial.Run.Observation.ArtifactReferences | Where-Object Kind -eq 'LOCATION_SEMANTIC_PROJECTION')[0]
+    $oldSemanticPath=Join-Path $semanticScenario.Store.Root $oldSemantic.RelativePath
+    Set-Content -LiteralPath $oldSemanticPath -Value 'tampered semantic' -Encoding utf8
+    $semanticChangedRow=$row | ConvertTo-Json -Depth 20 | ConvertFrom-Json
+    $semanticChangedRow.업소명='다른 식당 본점'
+    $semanticInvalid=Invoke-TestRun -Store $semanticScenario.Store -RunId 'run-after-semantic-invalid' -ObservedAt '2026-09-27T01:10:00Z' -Row $semanticChangedRow
+    Assert-Equal $semanticInvalid.Run.BaselineResolution.Status 'ARTIFACT_INVALID' 'Semantic projection corruption does not invalidate committed lineage'
+    Assert-Equal $semanticInvalid.Run.BaselineResolution.ExpectedBaselineObservationId $semanticScenario.Initial.Run.Observation.ObservationId 'Semantic corruption preserves expected CAS baseline'
+    Assert-Sequence $semanticInvalid.Trace @('BASELINE','DISCOVERY','MATCHER') 'Semantic corruption recomputes after one discovery'
+    Assert-Equal $semanticInvalid.Run.Comparison $null 'Untrusted previous semantic cannot be compared'
+    Assert-Equal $semanticInvalid.Run.Commit.Code 'COMMITTED' 'Fresh semantic recompute commits'
+    Assert-Equal (Get-HistoryLatestEntry -Store $semanticScenario.Store -BusinessId $businessId -Domain 'LOCATION' -ComparableOnly).LatestComparableObservationId $semanticInvalid.Run.Observation.ObservationId 'Fresh semantic becomes latest comparable'
+    Assert-Equal (Get-Content -LiteralPath $oldSemanticPath -Raw -Encoding utf8).Trim() 'tampered semantic' 'Old semantic artifact is not repaired'
 
     $structuralScenario=New-TestScenario -Name 'structural-invalid'
     $indexPath=Get-HistoryIndexPath -Store $structuralScenario.Store -BusinessId $businessId -Domain 'LOCATION'
+    $originalIndex=Get-Content -LiteralPath $indexPath -Raw -Encoding utf8
     Set-Content -LiteralPath $indexPath -Value '{invalid-json' -Encoding utf8
-    Assert-Throws { Invoke-TestRun -Store $structuralScenario.Store -RunId 'run-after-structural-invalid' -ObservedAt '2026-09-27T01:10:00Z' } 'Structural index corruption stops before provider work'
-    Assert-Sequence @($script:Trace) @('BASELINE') 'Structural failure has no discovery or matcher invocation'
-    Assert-True (-not (Test-Path -LiteralPath (Get-HistoryRunManifestPath -Store $structuralScenario.Store -RunId 'run-after-structural-invalid'))) 'Structural failure creates no committed run'
+    Assert-StructuralStop -Store $structuralScenario.Store -Name 'malformed-index'
+    foreach($field in @('BusinessId','Domain')) {
+        $wrongIndex=$originalIndex | ConvertFrom-Json
+        if($field -ceq 'BusinessId'){$wrongIndex.BusinessId='biz-' + ('f'*32)}else{$wrongIndex.Domain='BENEFIT'}
+        $wrongIndex | ConvertTo-Json -Depth 30 -Compress | Set-Content -LiteralPath $indexPath -Encoding utf8 -NoNewline
+        Assert-StructuralStop -Store $structuralScenario.Store -Name ('index-' + $field.ToLowerInvariant())
+    }
+    $missingObservationIndex=$originalIndex | ConvertFrom-Json
+    $missingObservationIndex.LatestComparableObservationId='obs-missing'
+    $missingObservationIndex | ConvertTo-Json -Depth 30 -Compress | Set-Content -LiteralPath $indexPath -Encoding utf8 -NoNewline
+    Assert-StructuralStop -Store $structuralScenario.Store -Name 'indexed-observation-missing'
+    Set-Content -LiteralPath $indexPath -Value $originalIndex -Encoding utf8 -NoNewline
+    $observationPath=Get-HistoryObservationPath -Store $structuralScenario.Store -ObservationId $structuralScenario.Initial.Run.Observation.ObservationId
+    $originalObservation=Get-Content -LiteralPath $observationPath -Raw -Encoding utf8
+    $wrongObservation=$originalObservation | ConvertFrom-Json
+    $wrongObservation.BusinessId='biz-' + ('f'*32)
+    $wrongObservation | ConvertTo-Json -Depth 30 -Compress | Set-Content -LiteralPath $observationPath -Encoding utf8 -NoNewline
+    Assert-StructuralStop -Store $structuralScenario.Store -Name 'observation-identity'
+    Set-Content -LiteralPath $observationPath -Value $originalObservation -Encoding utf8 -NoNewline
+    $previousManifestPath=Get-HistoryRunManifestPath -Store $structuralScenario.Store -RunId $structuralScenario.Initial.Run.Observation.RunId
+    $previousManifest=Get-Content -LiteralPath $previousManifestPath -Raw -Encoding utf8
+    $uncommitted=$previousManifest | ConvertFrom-Json
+    $uncommitted.RunCommitStatus='ABORTED'
+    $uncommitted | ConvertTo-Json -Depth 30 -Compress | Set-Content -LiteralPath $previousManifestPath -Encoding utf8 -NoNewline
+    Assert-StructuralStop -Store $structuralScenario.Store -Name 'previous-not-committed'
 
     $badBusiness=$row | ConvertTo-Json -Depth 20 | ConvertFrom-Json
     $badBusiness.businessId='not-a-canonical-id'
@@ -295,4 +491,4 @@ try {
     if($safeRoot.StartsWith([IO.Path]::GetFullPath([IO.Path]::GetTempPath()),[StringComparison]::Ordinal) -and (Test-Path -LiteralPath $safeRoot)){Remove-Item -LiteralPath $safeRoot -Recurse -Force}
 }
 
-Write-Host 'Phase 3 Location history Task 2 tests passed.'
+Write-Host 'Phase 3 Location history Task 2/3 tests passed.'

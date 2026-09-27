@@ -333,20 +333,18 @@ try {
         $baseline=Get-BenefitIncrementalBaseline -Store $Store -BusinessId 'biz-0123456789abcdef0123456789abcdef'
         $state=[pscustomobject]@{Moved=$false;CompetingPackage=$null}
         $originalCommit=(Get-Item Function:Commit-HistoryRun).ScriptBlock
-        $competingBuilder={
-            $decision=New-BenefitIncrementalReuseDecision -ReuseApplied $true -Capability POST_FETCH -Baseline $baseline -InputMatch $true -ExecutionMatch $true -PayloadMatch $true -RepositoryClean $true -ReasonCodes @('TASK9_COMPETING')
-            $package=New-BenefitIncrementalReusePackage -Store $Store -RunId $CompetingRunId -ObservedAt $CompetingObservedAt -Decision $decision
-            $manifest=New-HistoryRunManifest -RunId $CompetingRunId -StartedAt $CompetingObservedAt -RepositoryRevision ('c'*40) -RequestedBusinessIds @($package.Observation.BusinessId) -CompletedBusinessIds @($package.Observation.BusinessId) -FailedBusinessIds @() -ExecutionStatus COMPLETE -RunCommitStatus PREPARED
-            $prepared=Prepare-HistoryRun -Store $Store -RunManifest $manifest -Artifacts $package.PreparedArtifacts -Observations @($package.Observation) -Comparisons @()
-            $commit=& $originalCommit -Store $Store -PreparedRun $prepared -ExpectedBaselines @{ (($package.Observation.BusinessId + '|BENEFIT'))=[string]$baseline.Observation.ObservationId }
-            Assert-Equal $commit.Code COMMITTED 'Task 9 competing baseline must commit before the stale attempt'
-            return $package
-        }.GetNewClosure()
+        $competingDecision=New-BenefitIncrementalReuseDecision -ReuseApplied $true -Capability POST_FETCH -Baseline $baseline -InputMatch $true -ExecutionMatch $true -PayloadMatch $true -RepositoryClean $true -ReasonCodes @('TASK9_COMPETING')
+        $competingPackage=New-BenefitIncrementalReusePackage -Store $Store -RunId $CompetingRunId -ObservedAt $CompetingObservedAt -Decision $competingDecision
+        $competingManifest=New-HistoryRunManifest -RunId $CompetingRunId -StartedAt $CompetingObservedAt -RepositoryRevision ('c'*40) -RequestedBusinessIds @($competingPackage.Observation.BusinessId) -CompletedBusinessIds @($competingPackage.Observation.BusinessId) -FailedBusinessIds @() -ExecutionStatus COMPLETE -RunCommitStatus PREPARED
+        $competingPrepared=Prepare-HistoryRun -Store $Store -RunManifest $competingManifest -Artifacts $competingPackage.PreparedArtifacts -Observations @($competingPackage.Observation) -Comparisons @()
+        $competingExpected=@{ (($competingPackage.Observation.BusinessId + '|BENEFIT'))=[string]$baseline.Observation.ObservationId }
         $interceptor={
             param($Store,$PreparedRun,$ExpectedBaselines,$FaultInjector=$null)
             if(-not $state.Moved){
                 $state.Moved=$true
-                $state.CompetingPackage=& $competingBuilder
+                $competingCommit=& $originalCommit -Store $Store -PreparedRun $competingPrepared -ExpectedBaselines $competingExpected
+                if([string]$competingCommit.Code -cne 'COMMITTED'){throw 'Task 9 competing baseline must commit before the stale attempt'}
+                $state.CompetingPackage=$competingPackage
             }
             return & $originalCommit @PSBoundParameters
         }.GetNewClosure()

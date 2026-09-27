@@ -62,7 +62,15 @@ function Find-BenefitBusinessEvidence {
     param([Parameter(Mandatory)]$Observation, [Parameter(Mandatory)]$Business, [AllowNull()][string]$CanonicalPhone='', [AllowNull()]$XlsxValidationIndex=$null)
     Assert-ScopeObject $Observation 'SourceObservation' @('SourceRowNumber','SnapshotId','SourceUrl','SourceFormat','ObservedAt','Snapshot','AdapterId','AdapterVersion','AdapterStatus','ContentUnits','Diagnostics')
     if ($null -eq $XlsxValidationIndex -and [string]$Observation.SourceFormat -ceq 'XLSX' -and $Observation.PSObject.Properties.Name -contains 'XlsxValidationIndex') { $XlsxValidationIndex = $Observation.XlsxValidationIndex }
-    $htmlValidationIndex = if ([string]$Observation.SourceFormat -ceq 'HTML') { New-ScopeHtmlValidationIndex -Snapshot $Observation.Snapshot } else { $null }
+    $htmlValidationIndex = $null
+    if ([string]$Observation.SourceFormat -ceq 'HTML') {
+        if ($Observation.PSObject.Properties.Name -contains 'HtmlValidationIndex' -and
+            (Test-InternalBenefitHtmlRunContextTrust -Snapshot $Observation.Snapshot -HtmlValidationIndex $Observation.HtmlValidationIndex)) {
+            $htmlValidationIndex = $Observation.HtmlValidationIndex
+        } else {
+            $htmlValidationIndex = New-ScopeHtmlValidationIndex -Snapshot $Observation.Snapshot
+        }
+    }
     $htmlTokens = if ($null -eq $htmlValidationIndex) { $null } else { @($htmlValidationIndex.Tokens) }
     Assert-ScopeObservation -Observation $Observation -HtmlTokens $htmlTokens -HtmlValidationIndex $htmlValidationIndex -XlsxValidationIndex $XlsxValidationIndex
     Assert-NormalizedBusiness $Business

@@ -11,7 +11,7 @@ $ErrorActionPreference = 'Stop'
 function Assert-True { param([bool]$Condition,[string]$Message); if(-not $Condition){ throw $Message } }
 function Assert-Equal { param($Actual,$Expected,[string]$Message); if($Actual -cne $Expected){ throw "$Message (expected: $Expected, actual: $Actual)" } }
 function Assert-NotEqual { param($Actual,$Expected,[string]$Message); if($Actual -ceq $Expected){ throw $Message } }
-function Assert-Throws { param([scriptblock]$Action,[string]$Message); $threw=$false; try{ & $Action }catch{ $threw=$true }; if(-not $threw){ throw $Message } }
+function Assert-Throws { param([scriptblock]$Action,[string]$Message); $threw=$false; try{ $null=& $Action }catch{ $threw=$true }; if(-not $threw){ throw $Message } }
 
 $businessId='biz-0123456789abcdef0123456789abcdef'
 $runId='run-0123456789abcdef0123456789abcdef'
@@ -153,6 +153,44 @@ try {
     Publish-TestPackageArtifacts -Store $store -Package $materialChange
     $materialComparison=Compare-BenefitHistoryObservations -Store $store -Previous $previous.Observation -Current $materialChange.Observation
     Assert-Equal $materialComparison.ChangeCandidates[0] 'BENEFIT_CHANGE_SUSPECTED' 'Validated material semantic delta may create benefit change candidate'
+
+    # A current recompute package has not been published before CAS.  Its
+    # validated semantic projection may be used only through the explicit
+    # staged-current seam; previous evidence remains store-backed.
+    $stagedChangedClaim=New-TestClaim -Value '30% 할인' -Result 'CHANGED' -Reasons @('MATERIAL_CHANGE')
+    $stagedCurrent=New-TestPackage -Store $store -RunIdValue 'run-56565656565656565656565656565656' -EvidenceHash ('f'*64) -Claims @($stagedChangedClaim) -State 'CHANGED'
+    $stagedSemanticReference=@($stagedCurrent.Observation.ArtifactReferences | Where-Object Kind -eq 'BENEFIT_SEMANTIC_PROJECTION')[0]
+    Assert-True (-not (Test-Path -LiteralPath (Join-Path $store.Root $stagedSemanticReference.RelativePath))) 'Current staged semantic artifact is not published before comparison/CAS'
+    $stagedComparison=Compare-BenefitHistoryObservations -Store $store -Previous $previous.Observation -Current $stagedCurrent.Observation -StagedCurrentSemanticProjection $stagedCurrent.SemanticProjection
+    Assert-Equal $stagedComparison.ChangeCandidates[0] 'BENEFIT_CHANGE_SUSPECTED' 'Validated staged current semantic projection supports comparison before CAS'
+
+    $tamperedStagedProjection=$stagedCurrent.SemanticProjection | ConvertTo-Json -Depth 30 | ConvertFrom-Json
+    $tamperedStagedProjection.BusinessPresence='ABSENT'
+    Assert-Throws { Compare-BenefitHistoryObservations -Store $store -Previous $previous.Observation -Current $stagedCurrent.Observation -StagedCurrentSemanticProjection $tamperedStagedProjection } 'Staged semantic fingerprint tampering must fail closed'
+
+    $wrongHashObservation=$stagedCurrent.Observation | ConvertTo-Json -Depth 30 | ConvertFrom-Json
+    (@($wrongHashObservation.ArtifactReferences | Where-Object Kind -eq 'BENEFIT_SEMANTIC_PROJECTION')[0]).ContentHash=('0'*64)
+    Assert-Throws { Compare-BenefitHistoryObservations -Store $store -Previous $previous.Observation -Current $wrongHashObservation -StagedCurrentSemanticProjection $stagedCurrent.SemanticProjection } 'Staged semantic artifact hash/reference mismatch must fail closed'
+
+    $wrongReferenceObservation=$stagedCurrent.Observation | ConvertTo-Json -Depth 30 | ConvertFrom-Json
+    $wrongReferenceObservation.SemanticResultReference='artifacts/sha256/not-the-semantic-reference.json'
+    Assert-Throws { Compare-BenefitHistoryObservations -Store $store -Previous $previous.Observation -Current $wrongReferenceObservation -StagedCurrentSemanticProjection $stagedCurrent.SemanticProjection } 'Staged semantic result reference mismatch must fail closed'
+
+    $wrongTypeProjection=$stagedCurrent.SemanticProjection | ConvertTo-Json -Depth 30 | ConvertFrom-Json
+    $wrongTypeProjection.ProjectionType='WrongBenefitHistorySemantic'
+    Assert-Throws { Compare-BenefitHistoryObservations -Store $store -Previous $previous.Observation -Current $stagedCurrent.Observation -StagedCurrentSemanticProjection $wrongTypeProjection } 'Wrong staged semantic projection type must fail closed'
+    $wrongVersionProjection=$stagedCurrent.SemanticProjection | ConvertTo-Json -Depth 30 | ConvertFrom-Json
+    $wrongVersionProjection.ProjectionVersion=2
+    Assert-Throws { Compare-BenefitHistoryObservations -Store $store -Previous $previous.Observation -Current $stagedCurrent.Observation -StagedCurrentSemanticProjection $wrongVersionProjection } 'Wrong staged semantic projection version must fail closed'
+
+    $storeBackedCurrent=New-TestPackage -Store $store -RunIdValue 'run-57575757575757575757575757575757' -EvidenceHash ('1'*64) -Claims @($changedClaim) -State 'CHANGED'
+    Publish-TestPackageArtifacts -Store $store -Package $storeBackedCurrent
+    $storeBackedComparison=Compare-BenefitHistoryObservations -Store $store -Previous $previous.Observation -Current $storeBackedCurrent.Observation
+    Assert-Equal $storeBackedComparison.ChangeCandidates[0] 'BENEFIT_CHANGE_SUSPECTED' 'No staged parameter retains existing store-backed comparison behavior'
+
+    $unpublishedPreviousClaim=New-TestClaim -Value '40% 할인' -Result 'CHANGED' -Reasons @('MATERIAL_CHANGE')
+    $unpublishedPrevious=New-TestPackage -Store $store -RunIdValue 'run-58585858585858585858585858585858' -Claims @($unpublishedPreviousClaim) -State 'CHANGED'
+    Assert-Throws { Compare-BenefitHistoryObservations -Store $store -Previous $unpublishedPrevious.Observation -Current $stagedCurrent.Observation -StagedCurrentSemanticProjection $stagedCurrent.SemanticProjection } 'Previous unpublished semantic artifact must remain rejected'
 
 
     $ambiguousBinding=New-TestPackage -Store $store -RunIdValue 'run-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb' -EvidenceHash ('9'*64) -Claims @($changedClaim) -State 'CHANGED' -BusinessBindingStatus 'AMBIGUOUS'

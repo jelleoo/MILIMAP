@@ -1,8 +1,11 @@
 $ErrorActionPreference = 'Stop'
 
 . (Join-Path $PSScriptRoot 'lib/history/history-contracts.ps1')
+. (Join-Path $PSScriptRoot 'lib/history/history-store.ps1')
 $projectionPath = Join-Path $PSScriptRoot 'lib/history/phase3-review-audit.ps1'
 if (Test-Path -LiteralPath $projectionPath) { . $projectionPath }
+$scannerPath = Join-Path $PSScriptRoot 'invoke-phase3-review-audit.ps1'
+if (Test-Path -LiteralPath $scannerPath) { . $scannerPath }
 
 function Assert-Equal {
     param($Actual,$Expected,[string]$Message)
@@ -14,6 +17,15 @@ function Assert-Throws {
     $threw = $false
     try { & $Action } catch { $threw = $true }
     if (-not $threw) { throw $Message }
+}
+
+function Assert-ThrowsMatching {
+    param([scriptblock]$Action,[string]$Pattern,[string]$Message)
+    try { & $Action } catch {
+        if ($_.Exception.Message -match $Pattern) { return }
+        throw "$Message (wrong failure: $($_.Exception.Message))"
+    }
+    throw "$Message (no failure)"
 }
 
 $routeCases = @(
@@ -128,4 +140,266 @@ Assert-Equal $summary.CandidateCounts.OPERATIONAL_FAILURE 1 'First operational c
 Assert-Equal $summary.CandidateCounts.COMPARISON_UNAVAILABLE 1 'Second operational candidate count'
 Assert-Equal $summary.CandidateCounts.Count 6 'Missing-comparison flag is not a History candidate'
 
-Write-Host 'Phase 3 review audit projection tests passed.'
+function New-AuditTestStore {
+    $root = Join-Path ([IO.Path]::GetTempPath()) ('milimap-phase3-audit-' + [Guid]::NewGuid().ToString('N'))
+    return New-HistoryStoreLayout -Root $root
+}
+
+function Write-AuditTestJson {
+    param([string]$Path,$Value)
+    New-Item -ItemType Directory -Force -Path (Split-Path -Parent $Path) | Out-Null
+    $Value | ConvertTo-Json -Depth 20 -Compress | Set-Content -LiteralPath $Path -Encoding utf8 -NoNewline
+}
+
+function Write-AuditTestManifest {
+    param($Store,[string]$RunId,[string]$Status='COMMITTED')
+    $completedAt = if ($Status -ceq 'COMMITTED') { '2026-09-27T10:01:00Z' } else { '' }
+    $manifest = New-HistoryRunManifest -RunId $RunId -StartedAt '2026-09-27T10:00:00Z' -CompletedAt $completedAt -RepositoryRevision ('a'*40) -ExecutionStatus 'COMPLETE' -RunCommitStatus $Status -RequestedBusinessIds @($businessId)
+    Write-AuditTestJson -Path (Get-HistoryRunManifestPath -Store $Store -RunId $RunId) -Value $manifest
+}
+
+function Write-AuditTestObservation {
+    param($Store,[string]$Id,[string]$RunId,[string]$Domain='LOCATION',[string]$BusinessId=$businessId,[object[]]$Artifacts=@())
+    $value = New-HistoryObservation -ObservationId $Id -RunId $RunId -BusinessId $BusinessId -Domain $Domain -ObservedAt '2026-09-27T10:00:00Z' -OperationalStatus 'COMPLETE' -Comparable $true -InputFingerprint ('1'*64) -EvidenceFingerprint ('2'*64) -SemanticFingerprint ('3'*64) -ExecutionFingerprint ('4'*64) -ArtifactReferences $Artifacts
+    Write-AuditTestJson -Path (Join-Path $Store.ObservationsRoot ($Id + '.json')) -Value $value
+    return $value
+}
+
+function Write-AuditTestComparison {
+    param($Store,[string]$Id,[string]$RunId,[string]$CurrentId,[string]$PreviousId='', [string]$Domain='LOCATION',[string]$BusinessId=$businessId)
+    $value = New-ObservationComparison -ComparisonId $Id -RunId $RunId -BusinessId $BusinessId -Domain $Domain -CurrentObservationId $CurrentId -PreviousObservationId $PreviousId -ComparisonStatus 'COMPLETE' -ChangeCandidates @('BASELINE_ESTABLISHED')
+    Write-AuditTestJson -Path (Join-Path $Store.ComparisonsRoot ($Id + '.json')) -Value $value
+    return $value
+}
+
+$auditStore = New-AuditTestStore
+try {
+    Write-AuditTestManifest -Store $auditStore -RunId 'run-committed'
+    Write-AuditTestManifest -Store $auditStore -RunId 'run-aborted' -Status 'ABORTED'
+    [void](Write-AuditTestObservation -Store $auditStore -Id 'obs-committed' -RunId 'run-committed')
+    [void](Write-AuditTestObservation -Store $auditStore -Id 'obs-aborted' -RunId 'run-aborted')
+    [void](Write-AuditTestObservation -Store $auditStore -Id 'obs-orphan' -RunId 'run-no-terminal')
+
+    $audit = Invoke-Phase3ReviewAudit -Store $auditStore
+    Assert-Equal @($audit.Items).Count 1 'Only COMMITTED observation produces a review item'
+    Assert-Equal $audit.Items[0].CurrentObservationId 'obs-committed' 'Committed observation is authoritative'
+    Assert-Equal $audit.Summary.CommittedRunCount 1 'Only COMMITTED run counted'
+    Assert-Equal $audit.Summary.CommittedObservationCount 1 'Only COMMITTED observation counted'
+    Assert-Equal $audit.Summary.IgnoredUncommittedRecordCount 2 'ABORTED and orphan physical records are ignored/countable'
+
+    New-Item -ItemType Directory -Path (Join-Path $auditStore.RunsRoot 'run-missing-manifest') | Out-Null
+    Assert-Throws { Invoke-Phase3ReviewAudit -Store $auditStore } 'Run directory without manifest must fail closed'
+} finally {
+    Remove-Item -LiteralPath $auditStore.Root -Recurse -Force -ErrorAction SilentlyContinue
+}
+
+$linkedStore = New-AuditTestStore
+try {
+    Write-AuditTestManifest -Store $linkedStore -RunId 'run-current'
+    Write-AuditTestManifest -Store $linkedStore -RunId 'run-previous'
+    [void](Write-AuditTestObservation -Store $linkedStore -Id 'obs-current' -RunId 'run-current')
+    [void](Write-AuditTestObservation -Store $linkedStore -Id 'obs-previous' -RunId 'run-previous')
+    [void](Write-AuditTestComparison -Store $linkedStore -Id 'cmp-linked' -RunId 'run-current' -CurrentId 'obs-current' -PreviousId 'obs-previous')
+    $linkedAudit = Invoke-Phase3ReviewAudit -Store $linkedStore
+    $linkedCurrent = @($linkedAudit.Items | Where-Object { $_.CurrentObservationId -ceq 'obs-current' })[0]
+    $linkedPrevious = @($linkedAudit.Items | Where-Object { $_.CurrentObservationId -ceq 'obs-previous' })[0]
+    Assert-Equal $linkedAudit.Summary.CommittedComparisonCount 1 'Committed comparison counted'
+    Assert-Equal $linkedCurrent.ReviewKey 'cmp-linked' 'Committed comparison joins current observation'
+    Assert-Equal $linkedCurrent.PreviousObservationId 'obs-previous' 'Previous lineage retained'
+    Assert-Equal $linkedPrevious.ReviewRoute 'AUDIT_VERIFICATION' 'Committed observation without comparison is retained'
+    Assert-Equal (@($linkedPrevious.AuditFlags) -join ',') 'COMPARISON_NOT_RECORDED' 'No comparison has audit-only flag'
+    Assert-Equal $linkedAudit.Summary.MissingComparisonCount 1 'Missing comparison is counted'
+
+    [void](Write-AuditTestComparison -Store $linkedStore -Id 'cmp-duplicate' -RunId 'run-current' -CurrentId 'obs-current')
+    Assert-ThrowsMatching { Invoke-Phase3ReviewAudit -Store $linkedStore } 'Duplicate.*comparison' 'Two committed comparisons for one current observation must fail'
+} finally {
+    Remove-Item -LiteralPath $linkedStore.Root -Recurse -Force -ErrorAction SilentlyContinue
+}
+
+$comparisonCases = @(
+    @{ Name='current missing'; CurrentId='obs-missing'; PreviousId=''; RunId='run-current'; Domain='LOCATION'; BusinessId=$businessId; Expected='Current observation.*missing' }
+    @{ Name='current business mismatch'; CurrentId='obs-current'; PreviousId=''; RunId='run-current'; Domain='LOCATION'; BusinessId='biz-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'; Expected='BusinessId.*mismatch' }
+    @{ Name='current domain mismatch'; CurrentId='obs-current'; PreviousId=''; RunId='run-current'; Domain='BENEFIT'; BusinessId=$businessId; Expected='Domain.*mismatch' }
+    @{ Name='current run mismatch'; CurrentId='obs-current'; PreviousId=''; RunId='run-other'; Domain='LOCATION'; BusinessId=$businessId; Expected='RunId.*mismatch' }
+    @{ Name='previous missing'; CurrentId='obs-current'; PreviousId='obs-missing'; RunId='run-current'; Domain='LOCATION'; BusinessId=$businessId; Expected='Previous observation.*missing' }
+    @{ Name='previous noncommitted'; CurrentId='obs-current'; PreviousId='obs-aborted'; RunId='run-current'; Domain='LOCATION'; BusinessId=$businessId; Expected='Previous observation.*committed' }
+)
+foreach ($case in $comparisonCases) {
+    $caseStore = New-AuditTestStore
+    try {
+        Write-AuditTestManifest -Store $caseStore -RunId 'run-current'
+        Write-AuditTestManifest -Store $caseStore -RunId 'run-other'
+        Write-AuditTestManifest -Store $caseStore -RunId 'run-aborted' -Status 'ABORTED'
+        [void](Write-AuditTestObservation -Store $caseStore -Id 'obs-current' -RunId 'run-current')
+        [void](Write-AuditTestObservation -Store $caseStore -Id 'obs-aborted' -RunId 'run-aborted')
+        [void](Write-AuditTestComparison -Store $caseStore -Id 'cmp-case' -RunId $case.RunId -CurrentId $case.CurrentId -PreviousId $case.PreviousId -Domain $case.Domain -BusinessId $case.BusinessId)
+        Assert-ThrowsMatching { Invoke-Phase3ReviewAudit -Store $caseStore } $case.Expected "Comparison $($case.Name) must fail"
+    } finally {
+        Remove-Item -LiteralPath $caseStore.Root -Recurse -Force -ErrorAction SilentlyContinue
+    }
+}
+
+$badComparisonStore = New-AuditTestStore
+try {
+    Write-AuditTestManifest -Store $badComparisonStore -RunId 'run-current'
+    [void](Write-AuditTestObservation -Store $badComparisonStore -Id 'obs-current' -RunId 'run-current')
+    $badPath = Join-Path $badComparisonStore.ComparisonsRoot 'cmp-bad.json'
+    Set-Content -LiteralPath $badPath -Value '{bad-json' -Encoding utf8 -NoNewline
+    Assert-ThrowsMatching { Invoke-Phase3ReviewAudit -Store $badComparisonStore } 'Malformed comparison JSON' 'Malformed comparison JSON must fail'
+    Remove-Item -LiteralPath $badPath
+    $misnamed = Write-AuditTestComparison -Store $badComparisonStore -Id 'cmp-actual' -RunId 'run-current' -CurrentId 'obs-current'
+    Move-Item -LiteralPath (Join-Path $badComparisonStore.ComparisonsRoot 'cmp-actual.json') -Destination (Join-Path $badComparisonStore.ComparisonsRoot 'cmp-wrong.json')
+    Assert-ThrowsMatching { Invoke-Phase3ReviewAudit -Store $badComparisonStore } 'Comparison filename identity mismatch' 'Comparison filename identity mismatch must fail'
+} finally {
+    Remove-Item -LiteralPath $badComparisonStore.Root -Recurse -Force -ErrorAction SilentlyContinue
+}
+
+$uncommittedStore = New-AuditTestStore
+try {
+    Write-AuditTestManifest -Store $uncommittedStore -RunId 'run-committed'
+    Write-AuditTestManifest -Store $uncommittedStore -RunId 'run-aborted' -Status 'ABORTED'
+    [void](Write-AuditTestObservation -Store $uncommittedStore -Id 'obs-current' -RunId 'run-committed')
+    [void](Write-AuditTestComparison -Store $uncommittedStore -Id 'cmp-aborted' -RunId 'run-aborted' -CurrentId 'obs-current')
+    [void](Write-AuditTestComparison -Store $uncommittedStore -Id 'cmp-orphan' -RunId 'run-orphan' -CurrentId 'obs-current')
+    $uncommittedAudit = Invoke-Phase3ReviewAudit -Store $uncommittedStore
+    Assert-Equal $uncommittedAudit.Summary.CommittedComparisonCount 0 'Non-COMMITTED comparisons are not authoritative'
+    Assert-Equal $uncommittedAudit.Summary.IgnoredUncommittedRecordCount 2 'ABORTED/orphan comparisons increment ignored count'
+    Assert-Equal $uncommittedAudit.Items[0].ReviewRoute 'AUDIT_VERIFICATION' 'No comparison is invented from non-COMMITTED records'
+
+    $bad = Join-Path $uncommittedStore.ComparisonsRoot 'cmp-bad.json'
+    Set-Content -LiteralPath $bad -Value '{broken' -Encoding utf8 -NoNewline
+    Assert-ThrowsMatching { Invoke-Phase3ReviewAudit -Store $uncommittedStore } 'Malformed comparison JSON' 'Malformed ABORTED comparison must fail before filtering'
+} finally {
+    Remove-Item -LiteralPath $uncommittedStore.Root -Recurse -Force -ErrorAction SilentlyContinue
+}
+
+$badObservationStore = New-AuditTestStore
+try {
+    Write-AuditTestManifest -Store $badObservationStore -RunId 'run-aborted' -Status 'ABORTED'
+    $bad = Join-Path $badObservationStore.ObservationsRoot 'obs-bad.json'
+    Set-Content -LiteralPath $bad -Value '{broken' -Encoding utf8 -NoNewline
+    Assert-ThrowsMatching { Invoke-Phase3ReviewAudit -Store $badObservationStore } 'Malformed observation JSON' 'Malformed ABORTED observation must fail before filtering'
+    Remove-Item -LiteralPath $bad
+    [void](Write-AuditTestObservation -Store $badObservationStore -Id 'obs-actual' -RunId 'run-aborted')
+    Move-Item -LiteralPath (Join-Path $badObservationStore.ObservationsRoot 'obs-actual.json') -Destination (Join-Path $badObservationStore.ObservationsRoot 'obs-wrong.json')
+    Assert-ThrowsMatching { Invoke-Phase3ReviewAudit -Store $badObservationStore } 'Observation filename identity mismatch' 'ABORTED observation filename must be checked before filtering'
+} finally {
+    Remove-Item -LiteralPath $badObservationStore.Root -Recurse -Force -ErrorAction SilentlyContinue
+}
+
+$badRunStore = New-AuditTestStore
+try {
+    $runPath = Join-Path $badRunStore.RunsRoot 'run-current'
+    New-Item -ItemType Directory -Path $runPath | Out-Null
+    Set-Content -LiteralPath (Join-Path $runPath 'manifest.json') -Value '{broken' -Encoding utf8 -NoNewline
+    Assert-ThrowsMatching { Invoke-Phase3ReviewAudit -Store $badRunStore } 'Malformed run manifest JSON' 'Malformed run manifest must fail'
+    Write-AuditTestManifest -Store $badRunStore -RunId 'run-current' -Status 'PREPARED'
+    Assert-ThrowsMatching { Invoke-Phase3ReviewAudit -Store $badRunStore } 'no terminal manifest' 'PREPARED run directory has no terminal authority'
+    $wrongManifest = New-HistoryRunManifest -RunId 'run-other' -StartedAt '2026-09-27T10:00:00Z' -CompletedAt '2026-09-27T10:01:00Z' -RepositoryRevision ('a'*40) -ExecutionStatus 'COMPLETE' -RunCommitStatus 'COMMITTED'
+    Write-AuditTestJson -Path (Join-Path $runPath 'manifest.json') -Value $wrongManifest
+    Assert-ThrowsMatching { Invoke-Phase3ReviewAudit -Store $badRunStore } 'Run manifest identity mismatch' 'Run directory/manifest identity mismatch must fail'
+} finally {
+    Remove-Item -LiteralPath $badRunStore.Root -Recurse -Force -ErrorAction SilentlyContinue
+}
+
+$artifactStore = New-AuditTestStore
+try {
+    Write-AuditTestManifest -Store $artifactStore -RunId 'run-current'
+    $hashA = Get-HistorySha256 -Text 'audit-artifact-A'
+    $hashB = Get-HistorySha256 -Text 'audit-artifact-B'
+    $referenceA = Write-HistoryArtifact -Store $artifactStore -ContentHash $hashA -Extension 'txt' -Text 'audit-artifact-A'
+    $referenceB = Write-HistoryArtifact -Store $artifactStore -ContentHash $hashB -Extension 'txt' -Text 'audit-artifact-B'
+    [void](Write-AuditTestObservation -Store $artifactStore -Id 'obs-a1' -RunId 'run-current' -Artifacts @($referenceA))
+    [void](Write-AuditTestObservation -Store $artifactStore -Id 'obs-a2' -RunId 'run-current' -Artifacts @($referenceA))
+    [void](Write-AuditTestObservation -Store $artifactStore -Id 'obs-b' -RunId 'run-current' -Artifacts @($referenceB))
+    [void](Write-AuditTestObservation -Store $artifactStore -Id 'obs-orphan' -RunId 'run-orphan' -Artifacts @((New-HistoryArtifactReference -Kind 'RAW_SOURCE_PAYLOAD' -ContentHash ('f'*64) -RelativePath 'artifacts/sha256/missing.txt')))
+
+    $script:originalAuditArtifactValidator = ${function:Assert-HistoryArtifactReferenceExists}
+    $script:auditPhysicalValidationCount = 0
+    function Assert-HistoryArtifactReferenceExists {
+        param($Store,$Reference)
+        $script:auditPhysicalValidationCount++
+        & $script:originalAuditArtifactValidator -Store $Store -Reference $Reference
+    }
+    try {
+        $artifactAudit = Invoke-Phase3ReviewAudit -Store $artifactStore
+    } finally {
+        Set-Item -Path function:Assert-HistoryArtifactReferenceExists -Value $script:originalAuditArtifactValidator
+    }
+    Assert-Equal $artifactAudit.Summary.UniqueArtifactReferenceCount 2 'Two distinct authoritative artifact references'
+    Assert-Equal $artifactAudit.Summary.UniqueArtifactsValidated 2 'Each distinct artifact physically validated once'
+    Assert-Equal $script:auditPhysicalValidationCount 2 'Shared artifact does not cause repeated physical validation'
+    Assert-Equal $artifactAudit.Summary.CommittedObservationCount 3 'Orphan artifact is not validated as authoritative'
+} finally {
+    Remove-Item -LiteralPath $artifactStore.Root -Recurse -Force -ErrorAction SilentlyContinue
+}
+
+$artifactFailures = @(
+    @{ Name='missing'; Hash=('f'*64); RelativePath='artifacts/sha256/missing.txt'; Expected='does not exist' }
+    @{ Name='hash mismatch'; Hash=('f'*64); RelativePath='artifacts/sha256/real.txt'; Expected='hash mismatch' }
+    @{ Name='path escape'; Hash=('f'*64); RelativePath='../outside.txt'; Expected='escapes store root' }
+)
+foreach ($case in $artifactFailures) {
+    $caseStore = New-AuditTestStore
+    try {
+        Write-AuditTestManifest -Store $caseStore -RunId 'run-current'
+        if ($case.Name -ceq 'hash mismatch') {
+            $realPath = Join-Path $caseStore.Root $case.RelativePath
+            New-Item -ItemType Directory -Force -Path (Split-Path -Parent $realPath) | Out-Null
+            Set-Content -LiteralPath $realPath -Value 'not the claimed hash' -Encoding utf8 -NoNewline
+        }
+        $badReference = New-HistoryArtifactReference -Kind 'RAW_SOURCE_PAYLOAD' -ContentHash $case.Hash -RelativePath $case.RelativePath
+        [void](Write-AuditTestObservation -Store $caseStore -Id 'obs-current' -RunId 'run-current' -Artifacts @($badReference))
+        Assert-ThrowsMatching { Invoke-Phase3ReviewAudit -Store $caseStore } $case.Expected "Authoritative artifact $($case.Name) must fail"
+    } finally {
+        Remove-Item -LiteralPath $caseStore.Root -Recurse -Force -ErrorAction SilentlyContinue
+    }
+}
+
+function Get-AuditTestFileInventory {
+    param($Store)
+    return @(
+        Get-ChildItem -LiteralPath $Store.Root -Recurse -File |
+            Sort-Object FullName |
+            ForEach-Object { $_.FullName + '|' + (Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash }
+    )
+}
+
+$readOnlyStore = New-AuditTestStore
+try {
+    Write-AuditTestManifest -Store $readOnlyStore -RunId 'run-current'
+    [void](Write-AuditTestObservation -Store $readOnlyStore -Id 'obs-current' -RunId 'run-current')
+    Assert-Equal @(Get-ChildItem -LiteralPath $readOnlyStore.IndexesRoot -File).Count 0 'Audit fixture has empty derived indexes'
+    $beforeFiles = @(Get-AuditTestFileInventory -Store $readOnlyStore)
+
+    $script:originalAuditLayout = ${function:New-HistoryStoreLayout}
+    $script:originalAuditRebuild = ${function:Rebuild-HistoryIndexes}
+    $script:auditRootPasses = @{ Runs=0; Observations=0; Comparisons=0 }
+    $script:auditPassStore = $readOnlyStore
+    function New-HistoryStoreLayout { throw 'Audit must not create store layout' }
+    function Rebuild-HistoryIndexes { throw 'Audit must not rebuild indexes' }
+    function Get-ChildItem {
+        param([string]$LiteralPath,[switch]$Directory,[switch]$File,[string]$Filter)
+        if ($LiteralPath -ceq $script:auditPassStore.RunsRoot) { $script:auditRootPasses.Runs++ }
+        if ($LiteralPath -ceq $script:auditPassStore.ObservationsRoot) { $script:auditRootPasses.Observations++ }
+        if ($LiteralPath -ceq $script:auditPassStore.ComparisonsRoot) { $script:auditRootPasses.Comparisons++ }
+        Microsoft.PowerShell.Management\Get-ChildItem @PSBoundParameters
+    }
+    try {
+        $readOnlyAudit = Invoke-Phase3ReviewAudit -Store $readOnlyStore
+    } finally {
+        Set-Item -Path function:New-HistoryStoreLayout -Value $script:originalAuditLayout
+        Set-Item -Path function:Rebuild-HistoryIndexes -Value $script:originalAuditRebuild
+        Remove-Item -Path function:Get-ChildItem
+    }
+    Assert-Equal $readOnlyAudit.Summary.ReviewItemCount 1 'Empty indexes do not block audit'
+    Assert-Equal $script:auditRootPasses.Runs 1 'Run inventory has one directory pass'
+    Assert-Equal $script:auditRootPasses.Observations 1 'Observation inventory has one file pass'
+    Assert-Equal $script:auditRootPasses.Comparisons 1 'Comparison inventory has one file pass'
+    $afterFiles = @(Get-AuditTestFileInventory -Store $readOnlyStore)
+    Assert-Equal ($afterFiles -join "`n") ($beforeFiles -join "`n") 'Audit leaves file inventory/content unchanged'
+} finally {
+    Remove-Item -LiteralPath $readOnlyStore.Root -Recurse -Force -ErrorAction SilentlyContinue
+}
+
+Write-Host 'Phase 3 review audit tests passed.'

@@ -95,8 +95,9 @@ function Compare-LocationHistoryObservations {
         Assert-HistoryObservation $Previous
         if([string]$Previous.Domain -cne 'LOCATION'){ throw 'Location history comparison requires LOCATION previous observation' }
     }
+    $validatedStagedCurrentSemanticProjection=$null
     if($null -ne $StagedCurrentSemanticProjection){
-        [void](Get-InternalStagedLocationHistorySemanticProjection -Current $Current -StagedCurrentSemanticProjection $StagedCurrentSemanticProjection)
+        $validatedStagedCurrentSemanticProjection=Get-InternalStagedLocationHistorySemanticProjection -Current $Current -StagedCurrentSemanticProjection $StagedCurrentSemanticProjection
     }
 
     $gateResolver={
@@ -115,7 +116,7 @@ function Compare-LocationHistoryObservations {
     $currentProjection=if($null -eq $StagedCurrentSemanticProjection){
         Read-LocationHistorySemanticProjection -Store $Store -Observation $Current
     } else {
-        Get-InternalStagedLocationHistorySemanticProjection -Current $Current -StagedCurrentSemanticProjection $StagedCurrentSemanticProjection
+        $validatedStagedCurrentSemanticProjection
     }
     $resolved=Resolve-LocationHistoryChange -PreviousProjection $previousProjection -CurrentProjection $currentProjection
     $gate.ChangeCandidates=@($resolved.ChangeCandidates)

@@ -122,6 +122,22 @@ try {
     Assert-Sequence $nameComparison.ChangeCandidates @('LOCATION_CHANGE_SUSPECTED') 'Selected normalized-name delta produces one Location candidate'
     Assert-Sequence $nameComparison.ReasonCodes @('LOCATION_NAME_CHANGED') 'Selected normalized-name delta has the name reason'
 
+    $stagedValidatorScript=(Get-Command Get-InternalStagedLocationHistorySemanticProjection -CommandType Function).ScriptBlock
+    $script:stagedValidatorCalls=0
+    function Get-InternalStagedLocationHistorySemanticProjection {
+        param([Parameter(Mandatory)]$Current,[Parameter(Mandatory)]$StagedCurrentSemanticProjection)
+        $script:stagedValidatorCalls++
+        return & $stagedValidatorScript @PSBoundParameters
+    }
+    try {
+        $singleValidationCurrent=New-TestLocationPackage -Store $store -RunId 'run-81818181818181818181818181818181' -ResultOverride $nameResult
+        $singleValidationComparison=Compare-LocationHistoryObservations -Store $store -Previous $previous.Observation -Current $singleValidationCurrent.Observation -StagedCurrentSemanticProjection $singleValidationCurrent.SemanticProjection
+        Assert-Sequence $singleValidationComparison.ChangeCandidates @('LOCATION_CHANGE_SUSPECTED') 'Single-validation staged comparison retains material Location result'
+        Assert-Equal $script:stagedValidatorCalls 1 'A staged semantic delta comparison validates/canonicalizes the current projection once'
+    } finally {
+        Set-Item -LiteralPath 'Function:\Get-InternalStagedLocationHistorySemanticProjection' -Value $stagedValidatorScript
+    }
+
     $addressResult=New-TestLocationResult -Overrides @{SelectedCandidate=(New-TestLocationCandidate -Overrides @{RoadAddress='경기도 양주시 다른로 10';LotAddress='경기도 양주시 다른동 10'})}
     $addressCurrent=New-TestLocationPackage -Store $store -RunId 'run-99999999999999999999999999999999' -ResultOverride $addressResult
     $addressComparison=Compare-LocationHistoryObservations -Store $store -Previous $previous.Observation -Current $addressCurrent.Observation -StagedCurrentSemanticProjection $addressCurrent.SemanticProjection

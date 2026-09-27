@@ -306,6 +306,56 @@ function New-BenefitIncrementalReusePackage {
     }
 }
 
+function Get-BenefitIncrementalPreparedArtifactState {
+    param([Parameter(Mandatory)]$Store,[Parameter(Mandatory)][object[]]$PreparedArtifacts)
+
+    $state=@{}
+    foreach($artifact in @($PreparedArtifacts)){
+        $key=([string]$artifact.ContentHash) + '|' + ([string]$artifact.Extension)
+        $state[$key]=Test-Path -LiteralPath (Get-HistoryArtifactPath -Store $Store -ContentHash ([string]$artifact.ContentHash) -Extension ([string]$artifact.Extension)) -PathType Leaf
+    }
+    return $state
+}
+
+function New-BenefitIncrementalRunMetrics {
+    param(
+        [Parameter(Mandatory)]$RunContext,
+        [Parameter(Mandatory)]$Decision,
+        [Parameter(Mandatory)][object[]]$PreparedArtifacts,
+        [Parameter(Mandatory)][hashtable]$PreparedArtifactState,
+        [Parameter(Mandatory)]$Commit,
+        [bool]$Recomputed
+    )
+
+    $artifactWrites=0
+    $artifactDedupHits=0
+    if([string]$Commit.Code -ceq 'COMMITTED'){
+        foreach($artifact in @($PreparedArtifacts)){
+            $key=([string]$artifact.ContentHash) + '|' + ([string]$artifact.Extension)
+            if([bool]$PreparedArtifactState[$key]){$artifactDedupHits++}else{$artifactWrites++}
+        }
+    }
+    $reuseApplied=[bool]$Decision.ReuseApplied
+    return [pscustomobject][ordered]@{
+        RowsRequested=1
+        RowsCompleted=$(if([string]$Commit.Code -ceq 'COMMITTED'){1}else{0})
+        BaselineHits=$(if($null -ne $Decision.Baseline){1}else{0})
+        BaselineMisses=$(if($null -ne $Decision.Baseline){0}else{1})
+        ReuseEligible=$(if($reuseApplied){1}else{0})
+        ReuseApplied=$(if($reuseApplied){1}else{0})
+        ReuseRejected=$(if($reuseApplied){0}else{1})
+        ExternalFetchCount=[int]$RunContext.Metrics.ExternalFetchCount
+        ParseCount=[int]$RunContext.Metrics.AdapterParseCount
+        ExtractionCount=$(if($Recomputed){1}else{0})
+        EvaluationCount=$(if($Recomputed){1}else{0})
+        AvoidedParseCount=$(if($reuseApplied){1}else{0})
+        AvoidedExtractionCount=$(if($reuseApplied){1}else{0})
+        AvoidedEvaluationCount=$(if($reuseApplied){1}else{0})
+        ArtifactWrites=$artifactWrites
+        ArtifactDedupHits=$artifactDedupHits
+    }
+}
+
 function Invoke-BenefitIncrementalPostFetch {
     param(
         [Parameter(Mandatory)]$Store,[Parameter(Mandatory)][string]$RunId,[Parameter(Mandatory)][string]$ObservedAt,[Parameter(Mandatory)][string]$RepositoryRevision,
@@ -344,15 +394,7 @@ function Invoke-BenefitIncrementalPostFetch {
     if($decision.ReuseApplied){
         $package=New-BenefitIncrementalReusePackage -Store $Store -RunId $RunId -ObservedAt $ObservedAt -Decision $decision
         $comparison=$null
-        $metrics=[pscustomobject][ordered]@{
-            ExternalFetchCount=$RunContext.Metrics.ExternalFetchCount
-            ReuseEligible=1
-            ReuseApplied=1
-            ReuseRejected=0
-            AvoidedParseCount=1
-            AvoidedExtractionCount=1
-            AvoidedEvaluationCount=1
-        }
+        $recomputed=$false
     } else {
         # Recompute uses the same run context and therefore the document that
         # has already been fetched above.  It composes existing Phase 2 and
@@ -375,15 +417,7 @@ function Invoke-BenefitIncrementalPostFetch {
         } elseif([string]::IsNullOrEmpty([string]$decision.ExpectedBaselineObservationId)) {
             $comparison=Compare-BenefitHistoryObservations -Store $Store -Previous $null -Current $package.Observation -StagedCurrentSemanticProjection $package.SemanticProjection
         }
-        $metrics=[pscustomobject][ordered]@{
-            ExternalFetchCount=$RunContext.Metrics.ExternalFetchCount
-            ReuseEligible=0
-            ReuseApplied=0
-            ReuseRejected=1
-            AvoidedParseCount=0
-            AvoidedExtractionCount=0
-            AvoidedEvaluationCount=0
-        }
+        $recomputed=$true
     }
     $manifest=New-HistoryRunManifest -RunId $RunId -StartedAt $ObservedAt -RepositoryRevision $RepositoryRevision -RequestedBusinessIds @($BusinessId) -CompletedBusinessIds @($BusinessId) -FailedBusinessIds @() -ExecutionStatus COMPLETE -RunCommitStatus PREPARED
     if($null -eq $comparison){
@@ -391,6 +425,8 @@ function Invoke-BenefitIncrementalPostFetch {
     } else {
         $prepared=Prepare-HistoryRun -Store $Store -RunManifest $manifest -Artifacts $package.PreparedArtifacts -Observations @($package.Observation) -Comparisons @($comparison)
     }
+    $artifactState=Get-BenefitIncrementalPreparedArtifactState -Store $Store -PreparedArtifacts @($package.PreparedArtifacts)
     $commit=Commit-HistoryRun -Store $Store -PreparedRun $prepared -ExpectedBaselines @{ (($BusinessId+'|BENEFIT'))=[string]$decision.ExpectedBaselineObservationId }
+    $metrics=New-BenefitIncrementalRunMetrics -RunContext $RunContext -Decision $decision -PreparedArtifacts @($package.PreparedArtifacts) -PreparedArtifactState $artifactState -Commit $commit -Recomputed $recomputed
     return [pscustomobject][ordered]@{ReuseDecision=$decision;Observation=$package.Observation;Comparison=$comparison;Result=$result;SourceRecord=$sourceRecord;Commit=$commit;Metrics=$metrics}
 }

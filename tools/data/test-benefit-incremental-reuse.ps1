@@ -297,7 +297,14 @@ try {
     $mmaDetail=(Get-Content -Raw -LiteralPath (Join-Path $mmaFixtureRoot 'mma-detail-2789.fixture.jsonp')) -replace '^MmaTestDetail','MmaBenefitDetail'
     $mmaRequests=[Collections.Generic.List[string]]::new()
     $mmaHttp={param($Uri);[void]$mmaRequests.Add([string]$Uri);if($Uri -like '*mmanrsrListAjaxJsonCallNew.json*'){return [pscustomobject]@{StatusCode=200;ContentType='application/json';Text=$mmaList;Bytes=$null}}if($Uri -like '*udgigwan_cd=2789*'){return [pscustomobject]@{StatusCode=200;ContentType='application/json';Text=$mmaDetail;Bytes=$null}}throw "Unexpected MMA request: $Uri"}.GetNewClosure()
-    $mmaRun=Invoke-BenefitIncrementalPostFetch -Store $incrementalStore -RunId 'run-dddddddddddddddddddddddddddddddd' -ObservedAt '2026-09-28T00:00:00Z' -RepositoryRevision ('b'*40) -BusinessId 'biz-33333333333333333333333333333333' -Benefit $mmaBenefit -BusinessIdentity $mmaBusiness -CanonicalPhone '02-2789-0000' -Candidate $mmaCandidate -RunContext (New-BenefitSourceRunContext) -RequestInvoker $mmaHttp -RepositoryStateProvider { [pscustomobject]@{IsClean=$true} }
+    # Keep the JSONP bypass contract independent from Task 7's deliberately
+    # corrupted-prior-artifact fixture: a recovery full scan is itself meant
+    # to fail closed on that unrelated corruption.
+    $mmaRoot=Join-Path ([IO.Path]::GetTempPath()) ('milimap-mma-incremental-' + [Guid]::NewGuid().ToString('N'))
+    try {
+        $mmaStore=New-HistoryStoreLayout -Root $mmaRoot
+        $mmaRun=Invoke-BenefitIncrementalPostFetch -Store $mmaStore -RunId 'run-dddddddddddddddddddddddddddddddd' -ObservedAt '2026-09-28T00:00:00Z' -RepositoryRevision ('b'*40) -BusinessId 'biz-33333333333333333333333333333333' -Benefit $mmaBenefit -BusinessIdentity $mmaBusiness -CanonicalPhone '02-2789-0000' -Candidate $mmaCandidate -RunContext (New-BenefitSourceRunContext) -RequestInvoker $mmaHttp -RepositoryStateProvider { [pscustomobject]@{IsClean=$true} }
+    } finally { if(Test-Path -LiteralPath $mmaRoot){Remove-Item -LiteralPath $mmaRoot -Recurse -Force} }
     Assert-Equal $mmaRun.ReuseDecision.Capability NONE 'MMA orchestration preserves capability NONE'
     Assert-Equal $mmaRun.Metrics.ReuseApplied 0 'MMA never applies reuse'
     Assert-Equal $mmaRun.Metrics.AvoidedParseCount 0 'MMA never reports avoided HTML/XLSX parsing'
@@ -321,27 +328,25 @@ try {
     # before the orchestration commit.  The test-only Commit wrapper invokes
     # the unchanged History CAS implementation for both competing and stale
     # writes; no production seam or retry hook is introduced.
-    function New-Task9CompetingReuseBaseline {
-        param([Parameter(Mandatory)]$Store,[Parameter(Mandatory)]$Baseline,[Parameter(Mandatory)][string]$RunId,[Parameter(Mandatory)][string]$ObservedAt,[Parameter(Mandatory)][scriptblock]$CommitImplementation)
-        $decision=New-BenefitIncrementalReuseDecision -ReuseApplied $true -Capability POST_FETCH -Baseline $Baseline -InputMatch $true -ExecutionMatch $true -PayloadMatch $true -RepositoryClean $true -ReasonCodes @('TASK9_COMPETING')
-        $package=New-BenefitIncrementalReusePackage -Store $Store -RunId $RunId -ObservedAt $ObservedAt -Decision $decision
-        $manifest=New-HistoryRunManifest -RunId $RunId -StartedAt $ObservedAt -RepositoryRevision ('c'*40) -RequestedBusinessIds @($package.Observation.BusinessId) -CompletedBusinessIds @($package.Observation.BusinessId) -FailedBusinessIds @() -ExecutionStatus COMPLETE -RunCommitStatus PREPARED
-        $prepared=Prepare-HistoryRun -Store $Store -RunManifest $manifest -Artifacts $package.PreparedArtifacts -Observations @($package.Observation) -Comparisons @()
-        $commit=& $CommitImplementation -Store $Store -PreparedRun $prepared -ExpectedBaselines @{ (($package.Observation.BusinessId + '|BENEFIT'))=[string]$Baseline.Observation.ObservationId }
-        Assert-Equal $commit.Code COMMITTED 'Task 9 competing baseline must commit before the stale attempt'
-        return $package
-    }
-
     function Invoke-Task9WithCompetingBaseline {
         param([Parameter(Mandatory)]$Store,[Parameter(Mandatory)][string]$RunId,[Parameter(Mandatory)]$Benefit,[Parameter(Mandatory)][string]$CompetingRunId,[Parameter(Mandatory)][string]$CompetingObservedAt,[Parameter(Mandatory)][scriptblock]$RequestInvoker)
         $baseline=Get-BenefitIncrementalBaseline -Store $Store -BusinessId 'biz-0123456789abcdef0123456789abcdef'
         $state=[pscustomobject]@{Moved=$false;CompetingPackage=$null}
         $originalCommit=(Get-Item Function:Commit-HistoryRun).ScriptBlock
+        $competingBuilder={
+            $decision=New-BenefitIncrementalReuseDecision -ReuseApplied $true -Capability POST_FETCH -Baseline $baseline -InputMatch $true -ExecutionMatch $true -PayloadMatch $true -RepositoryClean $true -ReasonCodes @('TASK9_COMPETING')
+            $package=New-BenefitIncrementalReusePackage -Store $Store -RunId $CompetingRunId -ObservedAt $CompetingObservedAt -Decision $decision
+            $manifest=New-HistoryRunManifest -RunId $CompetingRunId -StartedAt $CompetingObservedAt -RepositoryRevision ('c'*40) -RequestedBusinessIds @($package.Observation.BusinessId) -CompletedBusinessIds @($package.Observation.BusinessId) -FailedBusinessIds @() -ExecutionStatus COMPLETE -RunCommitStatus PREPARED
+            $prepared=Prepare-HistoryRun -Store $Store -RunManifest $manifest -Artifacts $package.PreparedArtifacts -Observations @($package.Observation) -Comparisons @()
+            $commit=& $originalCommit -Store $Store -PreparedRun $prepared -ExpectedBaselines @{ (($package.Observation.BusinessId + '|BENEFIT'))=[string]$baseline.Observation.ObservationId }
+            Assert-Equal $commit.Code COMMITTED 'Task 9 competing baseline must commit before the stale attempt'
+            return $package
+        }.GetNewClosure()
         $interceptor={
             param($Store,$PreparedRun,$ExpectedBaselines,$FaultInjector=$null)
             if(-not $state.Moved){
                 $state.Moved=$true
-                $state.CompetingPackage=New-Task9CompetingReuseBaseline -Store $Store -Baseline $baseline -RunId $CompetingRunId -ObservedAt $CompetingObservedAt -CommitImplementation $originalCommit
+                $state.CompetingPackage=& $competingBuilder
             }
             return & $originalCommit @PSBoundParameters
         }.GetNewClosure()
@@ -436,6 +441,26 @@ try {
         Assert-Equal $task9LockRun.Commit.RetryRequired $false 'Writer lock returns no automatic retry signal'
         Assert-True (-not (Test-Path -LiteralPath (Get-HistoryObservationPath -Store $task9LockStore -ObservationId $task9LockRun.Observation.ObservationId))) 'Writer-locked observation is never published authoritatively'
     } finally { if(Test-Path -LiteralPath $task9LockRoot){Remove-Item -LiteralPath $task9LockRoot -Recurse -Force} }
+
+    # Task 10 RED: the final per-row summary reports actual run-context work
+    # and durable artifact publication without inventing a second cache or
+    # counting recompute work as avoided.
+    function Assert-Task10MetricContract {
+        param([Parameter(Mandatory)]$Run,[Parameter(Mandatory)][hashtable]$Expected,[Parameter(Mandatory)][string]$Message)
+        foreach($name in @('RowsRequested','RowsCompleted','BaselineHits','BaselineMisses','ReuseEligible','ReuseApplied','ReuseRejected','ExternalFetchCount','ParseCount','ExtractionCount','EvaluationCount','AvoidedParseCount','AvoidedExtractionCount','AvoidedEvaluationCount','ArtifactWrites','ArtifactDedupHits')){
+            Assert-True ($Run.Metrics.PSObject.Properties.Name -contains $name) ($Message + ': metric is present: ' + $name)
+        }
+        foreach($name in @($Expected.Keys)){Assert-Equal $Run.Metrics.$name $Expected[$name] ($Message + ': ' + $name)}
+    }
+
+    Assert-Task10MetricContract -Run $orchestrationResult -Expected @{RowsRequested=1;RowsCompleted=1;BaselineHits=1;BaselineMisses=0;ParseCount=0;ExtractionCount=0;EvaluationCount=0;ArtifactWrites=1;ArtifactDedupHits=0} -Message 'HTML identical reuse metrics'
+    Assert-Task10MetricContract -Run $xlsxSecondRun -Expected @{RowsRequested=1;RowsCompleted=1;BaselineHits=1;BaselineMisses=0;ParseCount=0;ExtractionCount=0;EvaluationCount=0;ArtifactWrites=1;ArtifactDedupHits=0} -Message 'XLSX identical reuse metrics'
+    Assert-Task10MetricContract -Run $task7PayloadChanged.Run -Expected @{RowsRequested=1;RowsCompleted=1;BaselineHits=1;BaselineMisses=0;ReuseEligible=0;ReuseApplied=0;ReuseRejected=1;ExternalFetchCount=1;ParseCount=1;ExtractionCount=1;EvaluationCount=1;ArtifactWrites=2;ArtifactDedupHits=0} -Message 'Payload-changed recompute metrics'
+    Assert-Task10MetricContract -Run $task7NoBaseline.Run -Expected @{RowsRequested=1;RowsCompleted=1;BaselineHits=0;BaselineMisses=1;ReuseEligible=0;ReuseApplied=0;ReuseRejected=1;ExternalFetchCount=1;ParseCount=1;ExtractionCount=1;EvaluationCount=1;ArtifactWrites=0;ArtifactDedupHits=2} -Message 'No-baseline recompute metrics'
+    Assert-Task10MetricContract -Run $mmaRun -Expected @{RowsRequested=1;RowsCompleted=1;BaselineHits=0;BaselineMisses=1;ReuseEligible=0;ReuseApplied=0;ReuseRejected=1;ExternalFetchCount=2;ParseCount=2;ExtractionCount=1;EvaluationCount=1;AvoidedParseCount=0;AvoidedExtractionCount=0;AvoidedEvaluationCount=0} -Message 'MMA bypass metrics'
+    Assert-Task10MetricContract -Run $fetchFailureRun -Expected @{RowsRequested=1;RowsCompleted=1;BaselineHits=1;BaselineMisses=0;ReuseEligible=0;ReuseApplied=0;ReuseRejected=1;ExternalFetchCount=1;ParseCount=0;ExtractionCount=1;EvaluationCount=1;AvoidedParseCount=0;AvoidedExtractionCount=0;AvoidedEvaluationCount=0} -Message 'Fetch-failure metrics'
+    Assert-Task10MetricContract -Run $task9Eligible.Run -Expected @{RowsRequested=1;RowsCompleted=0;ReuseEligible=1;ReuseApplied=1;ReuseRejected=0;ParseCount=0;ExtractionCount=0;EvaluationCount=0;ArtifactWrites=0;ArtifactDedupHits=0} -Message 'BASELINE_MOVED metrics'
+    Assert-Task10MetricContract -Run $task9LockRun -Expected @{RowsRequested=1;RowsCompleted=0;BaselineHits=1;BaselineMisses=0;ReuseEligible=0;ReuseApplied=0;ReuseRejected=1;ExternalFetchCount=1;ParseCount=1;ExtractionCount=1;EvaluationCount=1;ArtifactWrites=0;ArtifactDedupHits=0} -Message 'WRITER_LOCKED metrics'
 } finally { if(Test-Path -LiteralPath $incrementalRoot){ Remove-Item -LiteralPath $incrementalRoot -Recurse -Force } }
 
 Write-Host 'Benefit incremental checkpoint tests passed.'

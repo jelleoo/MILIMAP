@@ -66,6 +66,49 @@ function New-BenefitIncrementalPayloadCheckpoint {
     }
 }
 
+function New-BenefitIncrementalRawSourcePayloadArtifact {
+    param(
+        [Parameter(Mandatory)]$Store,
+        [Parameter(Mandatory)]$Document,
+        [Parameter(Mandatory)]$Snapshot
+    )
+
+    Assert-BenefitSourceDocument $Document
+    if ($Document.FetchStatus -cne 'COMPLETE' -or $Document.SourceFormat -notin @('HTML','XLSX')) { throw 'Raw source payload requires a successful supported document' }
+    if ([string]$Snapshot.SourceUrl -cne [string]$Document.Url -or [string]$Snapshot.SourceFormat -cne [string]$Document.SourceFormat -or [string]$Snapshot.ObservedAt -cne [string]$Document.ObservedAt) {
+        throw 'Raw source payload snapshot/document identity mismatch'
+    }
+    if ($Document.SourceFormat -ceq 'HTML') {
+        if (-not [object]::ReferenceEquals($Snapshot.Text,$Document.Text)) { throw 'Raw HTML payload must retain the trusted snapshot text' }
+        $extension='html'
+    } else {
+        if ($Snapshot.Bytes -isnot [byte[]] -or -not [object]::ReferenceEquals($Snapshot.Bytes,$Document.Bytes)) { throw 'Raw XLSX payload must retain the trusted snapshot bytes' }
+        $extension='xlsx'
+    }
+    Assert-HistoryHash -Value ([string]$Snapshot.ContentHash) -Name 'raw source payload content hash'
+    $path=Get-HistoryArtifactPath -Store $Store -ContentHash ([string]$Snapshot.ContentHash) -Extension $extension
+    $reference=New-HistoryArtifactReference -Kind 'RAW_SOURCE_PAYLOAD' -ContentHash ([string]$Snapshot.ContentHash) -RelativePath (Get-HistoryRelativePath -Store $Store -FullPath $path)
+    $prepared=[ordered]@{ContentHash=[string]$Snapshot.ContentHash;Extension=$extension;Kind='RAW_SOURCE_PAYLOAD'}
+    if ($Document.SourceFormat -ceq 'HTML') { $prepared.Text=$Snapshot.Text } else { $prepared.Bytes=$Snapshot.Bytes }
+    return [pscustomobject][ordered]@{Reference=$reference;PreparedArtifact=[pscustomobject]$prepared}
+}
+
+function Add-BenefitIncrementalRawSourcePayloadArtifact {
+    param([Parameter(Mandatory)]$Package,[AllowNull()]$RawSourcePayloadArtifact=$null)
+
+    if ($null -eq $RawSourcePayloadArtifact) { return $Package }
+    $reference=$RawSourcePayloadArtifact.Reference
+    Assert-HistoryArtifactReference $reference
+    $referenceKey=([string]$reference.Kind)+'|'+([string]$reference.ContentHash)+'|'+([string]$reference.RelativePath)
+    $references=@($Package.Observation.ArtifactReferences)
+    if (@($references | Where-Object { (([string]$_.Kind)+'|'+([string]$_.ContentHash)+'|'+([string]$_.RelativePath)) -ceq $referenceKey }).Count -eq 0) {
+        $Package.Observation.ArtifactReferences=@($references)+@($reference)
+        Assert-HistoryObservation $Package.Observation
+    }
+    $Package.PreparedArtifacts=@($Package.PreparedArtifacts)+@($RawSourcePayloadArtifact.PreparedArtifact)
+    return $Package
+}
+
 function Test-BenefitIncrementalRepositoryClean {
     param([Parameter(Mandatory)][scriptblock]$RepositoryStateProvider)
 
@@ -267,7 +310,8 @@ function New-BenefitIncrementalReusePackage {
         [Parameter(Mandatory)]$Store,
         [Parameter(Mandatory)][string]$RunId,
         [Parameter(Mandatory)][string]$ObservedAt,
-        [Parameter(Mandatory)]$Decision
+        [Parameter(Mandatory)]$Decision,
+        [AllowNull()]$RawSourcePayloadArtifact=$null
     )
 
     Assert-HistoryToken -Value $RunId -Name 'run id'
@@ -297,11 +341,17 @@ function New-BenefitIncrementalReusePackage {
     $identity = $RunId + '|' + $previous.BusinessId + '|BENEFIT|REUSED|' + $previous.ObservationId + '|' + $ObservedAt
     $observationId = 'obs-' + (Get-HistorySha256 -Text $identity).Substring(0,32)
     $references = @($previous.ArtifactReferences) + @($auditArtifact.Reference)
+    if($null -ne $RawSourcePayloadArtifact){
+        $rawReference=$RawSourcePayloadArtifact.Reference
+        Assert-HistoryArtifactReference $rawReference
+        $rawKey=([string]$rawReference.Kind)+'|'+([string]$rawReference.ContentHash)+'|'+([string]$rawReference.RelativePath)
+        if(@($references | Where-Object { (([string]$_.Kind)+'|'+([string]$_.ContentHash)+'|'+([string]$_.RelativePath)) -ceq $rawKey }).Count -eq 0){$references+=@($rawReference)}
+    }
     $observation = New-HistoryObservation -ObservationId $observationId -RunId $RunId -BusinessId $previous.BusinessId -Domain BENEFIT -ObservedAt $ObservedAt -OperationalStatus COMPLETE -Comparable $true -InputFingerprint $previous.InputFingerprint -EvidenceFingerprint $previous.EvidenceFingerprint -SemanticFingerprint $previous.SemanticFingerprint -ExecutionFingerprint $previous.ExecutionFingerprint -ArtifactReferences $references -SemanticResultReference $previous.SemanticResultReference -NonComparableReasons @()
 
     return [pscustomobject][ordered]@{
         Observation = $observation
-        PreparedArtifacts = @($auditArtifact.PreparedArtifact)
+        PreparedArtifacts = @($auditArtifact.PreparedArtifact) + $(if($null -ne $RawSourcePayloadArtifact){@($RawSourcePayloadArtifact.PreparedArtifact)}else{@()})
         ReuseDecisionArtifact = [pscustomobject][ordered]@{ Reference = $auditArtifact.Reference; Projection = $auditProjection }
     }
 }
@@ -324,7 +374,8 @@ function New-BenefitIncrementalRunMetrics {
         [Parameter(Mandatory)][object[]]$PreparedArtifacts,
         [Parameter(Mandatory)][hashtable]$PreparedArtifactState,
         [Parameter(Mandatory)]$Commit,
-        [bool]$Recomputed
+        [bool]$ExtractionInvoked,
+        [bool]$EvaluationInvoked
     )
 
     $artifactWrites=0
@@ -346,8 +397,8 @@ function New-BenefitIncrementalRunMetrics {
         ReuseRejected=$(if($reuseApplied){0}else{1})
         ExternalFetchCount=[int]$RunContext.Metrics.ExternalFetchCount
         ParseCount=[int]$RunContext.Metrics.AdapterParseCount
-        ExtractionCount=$(if($Recomputed){1}else{0})
-        EvaluationCount=$(if($Recomputed){1}else{0})
+        ExtractionCount=$(if($ExtractionInvoked){1}else{0})
+        EvaluationCount=$(if($EvaluationInvoked){1}else{0})
         AvoidedParseCount=$(if($reuseApplied){1}else{0})
         AvoidedExtractionCount=$(if($reuseApplied){1}else{0})
         AvoidedEvaluationCount=$(if($reuseApplied){1}else{0})
@@ -364,6 +415,9 @@ function Invoke-BenefitIncrementalPostFetch {
     )
     $result=$null
     $sourceRecord=$null
+    $rawSourcePayloadArtifact=$null
+    $extractionInvoked=$false
+    $evaluationInvoked=$false
     $isMmaEntry=$false
     $candidateUri=[Uri]$Candidate.Url
     if($candidateUri.Host -ceq 'www.mma.go.kr' -and $candidateUri.AbsolutePath -ceq '/about/udgg/list.do'){
@@ -386,15 +440,15 @@ function Invoke-BenefitIncrementalPostFetch {
             # this local wrapper to its exact bytes before the generic checkpoint
             # verifies snapshot/document identity; no bytes are copied or rehashed.
             if($document.SourceFormat -ceq 'XLSX'){$document.Bytes=$snapshot.Bytes}
+            $rawSourcePayloadArtifact=New-BenefitIncrementalRawSourcePayloadArtifact -Store $Store -Document $document -Snapshot $snapshot
         }
         $input=ConvertTo-BenefitHistoryInputProjection -BusinessId $BusinessId -Benefit $Benefit -BusinessIdentity $BusinessIdentity -CanonicalPhone $CanonicalPhone
         $execution=ConvertTo-BenefitHistoryExecutionProjection -RepositoryRevision $RepositoryRevision
         $decision=Get-BenefitIncrementalReuseDecision -Store $Store -BusinessId $BusinessId -Candidate $Candidate -Document $document -CurrentSnapshot $snapshot -CurrentInputFingerprint (Get-HistoryFingerprint -Projection $input -SchemaVersion $script:FingerprintSchemaVersion) -CurrentExecutionFingerprint (Get-HistoryFingerprint -Projection $execution -SchemaVersion $script:FingerprintSchemaVersion) -RepositoryStateProvider $RepositoryStateProvider
     }
     if($decision.ReuseApplied){
-        $package=New-BenefitIncrementalReusePackage -Store $Store -RunId $RunId -ObservedAt $ObservedAt -Decision $decision
-        $comparison=$null
-        $recomputed=$false
+        $package=New-BenefitIncrementalReusePackage -Store $Store -RunId $RunId -ObservedAt $ObservedAt -Decision $decision -RawSourcePayloadArtifact $rawSourcePayloadArtifact
+        $comparison=Compare-BenefitHistoryObservations -Store $Store -Previous $decision.Baseline.Observation -Current $package.Observation
     } else {
         # Recompute uses the same run context and therefore the document that
         # has already been fetched above.  It composes existing Phase 2 and
@@ -405,19 +459,21 @@ function Invoke-BenefitIncrementalPostFetch {
         if($null -eq $sourceRecord){
             $sourceRecord=Invoke-ScopedPhase2BenefitSourceCandidate -Candidate $Candidate -Business $BusinessIdentity -CanonicalPhone $CanonicalPhone -RunContext $RunContext -RequestInvoker $RequestInvoker
         }
+        $extractionInvoked=($null -ne $sourceRecord.Observation -and [string]$sourceRecord.Document.FetchStatus -ceq 'COMPLETE' -and [string]$sourceRecord.LocationResult.OperationalStatus -ceq 'COMPLETE' -and [string]$sourceRecord.LocationResult.Status -ceq 'LOCATED' -and [string]$sourceRecord.Bound.BusinessBindingStatus -ceq 'STRONG')
+        $evaluationInvoked=$true
         $final=Get-Phase2BenefitEvaluation -Benefit $Benefit -SourceRecords @($sourceRecord) -DiscoveryStatus COMPLETE
         $reasonCodes=[Collections.Generic.List[string]]::new()
         Add-Phase2UniqueReasonCodes -Target $reasonCodes -ReasonCodes $final.Evaluation.ReasonCodes
         Add-Phase2UniqueReasonCodes -Target $reasonCodes -ReasonCodes $sourceRecord.ReasonCodes
         $result=New-BenefitVerificationResult -SourceRowNumber $Benefit.SourceRowNumber -BusinessIdentity $BusinessIdentity -BenefitState $final.Evaluation.BenefitState -ReviewClass $final.Evaluation.ReviewClass -ReasonCodes @($reasonCodes) -ClaimResults $final.ClaimResults -Evidence $final.Evaluation.Evidence -Warnings $final.Evaluation.Warnings -ProductionAction NONE
         $package=New-BenefitHistoryObservationPackage -Store $Store -RunId $RunId -BusinessId $BusinessId -ObservedAt $ObservedAt -RepositoryRevision $RepositoryRevision -Benefit $Benefit -BusinessIdentity $BusinessIdentity -CanonicalPhone $CanonicalPhone -Result $result -EvidenceDiagnostics @((ConvertTo-Phase2ScopedBenefitEvidenceDiagnostic -SourceRecord $sourceRecord)) -OperationalStatus $final.OperationalStatus
+        $package=Add-BenefitIncrementalRawSourcePayloadArtifact -Package $package -RawSourcePayloadArtifact $rawSourcePayloadArtifact
         $comparison=$null
         if($null -ne $decision.Baseline){
             $comparison=Compare-BenefitHistoryObservations -Store $Store -Previous $decision.Baseline.Observation -Current $package.Observation -StagedCurrentSemanticProjection $package.SemanticProjection
         } elseif([string]::IsNullOrEmpty([string]$decision.ExpectedBaselineObservationId)) {
             $comparison=Compare-BenefitHistoryObservations -Store $Store -Previous $null -Current $package.Observation -StagedCurrentSemanticProjection $package.SemanticProjection
         }
-        $recomputed=$true
     }
     $manifest=New-HistoryRunManifest -RunId $RunId -StartedAt $ObservedAt -RepositoryRevision $RepositoryRevision -RequestedBusinessIds @($BusinessId) -CompletedBusinessIds @($BusinessId) -FailedBusinessIds @() -ExecutionStatus COMPLETE -RunCommitStatus PREPARED
     if($null -eq $comparison){
@@ -427,6 +483,6 @@ function Invoke-BenefitIncrementalPostFetch {
     }
     $artifactState=Get-BenefitIncrementalPreparedArtifactState -Store $Store -PreparedArtifacts @($package.PreparedArtifacts)
     $commit=Commit-HistoryRun -Store $Store -PreparedRun $prepared -ExpectedBaselines @{ (($BusinessId+'|BENEFIT'))=[string]$decision.ExpectedBaselineObservationId }
-    $metrics=New-BenefitIncrementalRunMetrics -RunContext $RunContext -Decision $decision -PreparedArtifacts @($package.PreparedArtifacts) -PreparedArtifactState $artifactState -Commit $commit -Recomputed $recomputed
+    $metrics=New-BenefitIncrementalRunMetrics -RunContext $RunContext -Decision $decision -PreparedArtifacts @($package.PreparedArtifacts) -PreparedArtifactState $artifactState -Commit $commit -ExtractionInvoked $extractionInvoked -EvaluationInvoked $evaluationInvoked
     return [pscustomobject][ordered]@{ReuseDecision=$decision;Observation=$package.Observation;Comparison=$comparison;Result=$result;SourceRecord=$sourceRecord;Commit=$commit;Metrics=$metrics}
 }

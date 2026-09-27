@@ -119,10 +119,8 @@ function Get-A1HtmlTableTemplate {
     return [pscustomobject]@{ IsCandidate=$true; IsSafe=$true; Rows=@($data); Diagnostic=$null }
 }
 
-function ConvertTo-BenefitHtmlTemplate {
-    param([Parameter(Mandatory)]$Snapshot, [AllowNull()]$RunContextSnapshot=$null)
-    $trustedRunContext = ($null -ne $RunContextSnapshot -and [object]::ReferenceEquals($RunContextSnapshot,$Snapshot) -and (Test-InternalBenefitHtmlRunContextSnapshotTrust -Snapshot $Snapshot))
-    if (-not $trustedRunContext) { Assert-ScopeSnapshot $Snapshot }
+function ConvertTo-InternalBenefitHtmlTemplateCore {
+    param([Parameter(Mandatory)]$Snapshot,[Parameter(Mandatory)][bool]$TrustedRunContext)
     if ($Snapshot.SourceFormat -cne 'HTML') {
         return [pscustomobject]@{ AdapterStatus='UNSUPPORTED'; Rows=@(); Diagnostics=@(New-A1HtmlDiagnostic 'HTML_FORMAT_UNSUPPORTED' 'Only HTML snapshots are supported'); HtmlTokens=@(); HtmlValidationIndex=$null }
     }
@@ -164,8 +162,20 @@ function ConvertTo-BenefitHtmlTemplate {
     if ($unsafeSeen) { $status='PARTIAL' }
     elseif (-not $candidateSeen) { $status='UNSUPPORTED' }
     else { $status='COMPLETE' }
-    $index = if ($trustedRunContext) { New-InternalScopeHtmlValidationIndex -Snapshot $Snapshot -HtmlTokens $tokens } else { New-ScopeHtmlValidationIndex -Snapshot $Snapshot -HtmlTokens $tokens }
+    $index = if ($TrustedRunContext) { New-InternalScopeHtmlValidationIndex -Snapshot $Snapshot -HtmlTokens $tokens } else { New-ScopeHtmlValidationIndex -Snapshot $Snapshot -HtmlTokens $tokens }
     return [pscustomobject]@{ AdapterStatus=$status; Rows=@($resultRows); Diagnostics=@($diagnostics); HtmlTokens=@($tokens); HtmlValidationIndex=$index }
+}
+
+function ConvertTo-BenefitHtmlTemplate {
+    param([Parameter(Mandatory)]$Snapshot)
+    Assert-ScopeSnapshot $Snapshot
+    return ConvertTo-InternalBenefitHtmlTemplateCore -Snapshot $Snapshot -TrustedRunContext $false
+}
+
+function ConvertTo-InternalBenefitHtmlTemplate {
+    param([Parameter(Mandatory)]$Snapshot)
+    if (-not (Test-InternalBenefitHtmlRunContextSnapshotTrust -Snapshot $Snapshot)) { throw 'Internal HTML template conversion requires an exact trusted run-context snapshot' }
+    return ConvertTo-InternalBenefitHtmlTemplateCore -Snapshot $Snapshot -TrustedRunContext $true
 }
 
 function ConvertTo-BenefitHtmlObservation {

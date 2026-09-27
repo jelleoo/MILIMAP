@@ -408,31 +408,38 @@ function Assert-ScopeHtmlValidationIndex {
 function Set-InternalBenefitHtmlRunContextSnapshotTrust {
     param([Parameter(Mandatory)]$Snapshot)
     if ($Snapshot.SourceFormat -cne 'HTML' -or $Snapshot.Text -isnot [string] -or [string]::IsNullOrWhiteSpace($Snapshot.Text)) { throw 'HTML run-context trust requires an HTML text snapshot' }
-    if (@('RunContextSnapshot','RunContextText','RunContextTrust') | Where-Object { $Snapshot.PSObject.Properties.Name -contains $_ }) { throw 'HTML run-context snapshot trust is already initialized' }
-    $Snapshot | Add-Member -NotePropertyName RunContextSnapshot -NotePropertyValue $Snapshot
-    $Snapshot | Add-Member -NotePropertyName RunContextText -NotePropertyValue $Snapshot.Text
-    $Snapshot | Add-Member -NotePropertyName RunContextTrust -NotePropertyValue ([object]::new())
+    $trusts=Get-Variable -Name InternalBenefitHtmlRunContextSnapshotTrusts -Scope Script -ValueOnly -ErrorAction SilentlyContinue
+    if ($null -eq $trusts) { $script:InternalBenefitHtmlRunContextSnapshotTrusts=[Runtime.CompilerServices.ConditionalWeakTable[object,object]]::new(); $trusts=$script:InternalBenefitHtmlRunContextSnapshotTrusts }
+    [object]$existing=$null
+    if($trusts.TryGetValue($Snapshot,[ref]$existing)){ throw 'HTML run-context snapshot trust is already initialized' }
+    $trusts.Add($Snapshot,[pscustomobject]@{Snapshot=$Snapshot;Text=$Snapshot.Text;SnapshotId=$Snapshot.SnapshotId;ContentHash=$Snapshot.ContentHash;Token=[object]::new()})
 }
 function Test-InternalBenefitHtmlRunContextSnapshotTrust {
     param([Parameter(Mandatory)]$Snapshot)
-    $missing = @(@('RunContextSnapshot','RunContextText','RunContextTrust') | Where-Object { $Snapshot.PSObject.Properties.Name -notcontains $_ })
-    if ($Snapshot.SourceFormat -cne 'HTML' -or $missing.Count -gt 0) { return $false }
-    return ([object]::ReferenceEquals($Snapshot.RunContextSnapshot,$Snapshot) -and [object]::ReferenceEquals($Snapshot.RunContextText,$Snapshot.Text) -and $null -ne $Snapshot.RunContextTrust)
+    $trusts=Get-Variable -Name InternalBenefitHtmlRunContextSnapshotTrusts -Scope Script -ValueOnly -ErrorAction SilentlyContinue
+    if ($Snapshot.SourceFormat -cne 'HTML' -or $null -eq $trusts) { return $false }
+    [object]$binding=$null
+    if(-not $trusts.TryGetValue($Snapshot,[ref]$binding)){return $false}
+    return ($null -ne $binding -and [object]::ReferenceEquals($binding.Snapshot,$Snapshot) -and [object]::ReferenceEquals($binding.Text,$Snapshot.Text) -and [string]$binding.SnapshotId -ceq [string]$Snapshot.SnapshotId -and [string]$binding.ContentHash -ceq [string]$Snapshot.ContentHash -and $null -ne $binding.Token)
 }
 function Set-InternalBenefitHtmlRunContextTrust {
     param([Parameter(Mandatory)]$Snapshot,[Parameter(Mandatory)]$HtmlValidationIndex)
     if (-not (Test-InternalBenefitHtmlRunContextSnapshotTrust -Snapshot $Snapshot)) { throw 'HTML run-context snapshot trust is required before index binding' }
     Assert-ScopeHtmlValidationIndex -HtmlValidationIndex $HtmlValidationIndex -Snapshot $Snapshot
-    if ($HtmlValidationIndex.PSObject.Properties.Name -contains 'RunContextHtmlSnapshot' -or $HtmlValidationIndex.PSObject.Properties.Name -contains 'RunContextHtmlText') { throw 'HTML run-context index trust is already initialized' }
-    $HtmlValidationIndex | Add-Member -NotePropertyName RunContextHtmlSnapshot -NotePropertyValue $Snapshot
-    $HtmlValidationIndex | Add-Member -NotePropertyName RunContextHtmlText -NotePropertyValue $Snapshot.Text
+    $trusts=Get-Variable -Name InternalBenefitHtmlRunContextIndexTrusts -Scope Script -ValueOnly -ErrorAction SilentlyContinue
+    if ($null -eq $trusts) { $script:InternalBenefitHtmlRunContextIndexTrusts=[Runtime.CompilerServices.ConditionalWeakTable[object,object]]::new(); $trusts=$script:InternalBenefitHtmlRunContextIndexTrusts }
+    [object]$existing=$null
+    if($trusts.TryGetValue($HtmlValidationIndex,[ref]$existing)){ throw 'HTML run-context index trust is already initialized' }
+    $trusts.Add($HtmlValidationIndex,[pscustomobject]@{Snapshot=$Snapshot;Text=$Snapshot.Text;Token=[object]::new()})
 }
 function Test-InternalBenefitHtmlRunContextTrust {
     param([Parameter(Mandatory)]$Snapshot,[AllowNull()]$HtmlValidationIndex)
     if ($null -eq $HtmlValidationIndex -or -not (Test-InternalBenefitHtmlRunContextSnapshotTrust -Snapshot $Snapshot)) { return $false }
-    $missing = @(@('RunContextHtmlSnapshot','RunContextHtmlText') | Where-Object { $HtmlValidationIndex.PSObject.Properties.Name -notcontains $_ })
-    if ($missing.Count -gt 0) { return $false }
-    if (-not [object]::ReferenceEquals($HtmlValidationIndex.RunContextHtmlSnapshot,$Snapshot) -or -not [object]::ReferenceEquals($HtmlValidationIndex.RunContextHtmlText,$Snapshot.Text)) { return $false }
+    $trusts=Get-Variable -Name InternalBenefitHtmlRunContextIndexTrusts -Scope Script -ValueOnly -ErrorAction SilentlyContinue
+    if ($null -eq $trusts) { return $false }
+    [object]$binding=$null
+    if(-not $trusts.TryGetValue($HtmlValidationIndex,[ref]$binding)){return $false}
+    if($null -eq $binding -or -not [object]::ReferenceEquals($binding.Snapshot,$Snapshot) -or -not [object]::ReferenceEquals($binding.Text,$Snapshot.Text) -or $null -eq $binding.Token){return $false}
     try { Assert-ScopeHtmlValidationIndex -HtmlValidationIndex $HtmlValidationIndex -Snapshot $Snapshot } catch { return $false }
     return $true
 }

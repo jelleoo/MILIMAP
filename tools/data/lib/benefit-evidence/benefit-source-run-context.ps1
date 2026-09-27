@@ -210,7 +210,7 @@ function Get-BenefitRunHtmlObservation {
         $template = $Context.TemplateCache[$key]
         $cacheHit = $true
     } else {
-        $template = ConvertTo-BenefitHtmlTemplate -Snapshot $snapshot -RunContextSnapshot $snapshot
+        $template = ConvertTo-InternalBenefitHtmlTemplate -Snapshot $snapshot
         if ($null -ne $template.HtmlValidationIndex) { Set-InternalBenefitHtmlRunContextTrust -Snapshot $snapshot -HtmlValidationIndex $template.HtmlValidationIndex }
         $Context.TemplateCache.Add($key, $template)
         $Context.Metrics.AdapterParseCount++

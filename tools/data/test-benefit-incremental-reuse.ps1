@@ -102,6 +102,24 @@ try {
     Assert-Equal $orchestrationResult.Metrics.AvoidedEvaluationCount 1 'Reuse avoids downstream evaluation'
     Assert-Equal $orchestrationResult.Observation.EvidenceFingerprint $baselinePackage.Observation.EvidenceFingerprint 'Reuse retains the prior evidence fingerprint'
     Assert-Equal @($orchestrationResult.Observation.ArtifactReferences | Where-Object Kind -eq 'BENEFIT_REUSE_DECISION').Count 1 'Reuse persists its audit artifact'
+    $htmlRawPayload=@($orchestrationResult.Observation.ArtifactReferences | Where-Object Kind -eq 'RAW_SOURCE_PAYLOAD')
+    Assert-Equal $htmlRawPayload.Count 1 'HTML reuse attaches the current raw source payload artifact'
+    Assert-Equal $htmlRawPayload[0].ContentHash $orchestrationContext.PayloadCache[$htmlCandidate.Url].SourceSnapshot.ContentHash 'HTML raw payload uses the already-established snapshot content hash'
+    Assert-True (Test-Path -LiteralPath (Join-Path $incrementalStore.Root $htmlRawPayload[0].RelativePath)) 'HTML raw payload is durable only after the current commit succeeds'
+    Assert-Equal ([IO.File]::ReadAllText((Join-Path $incrementalStore.Root $htmlRawPayload[0].RelativePath),[Text.Encoding]::UTF8)) $htmlDocument.Text 'HTML raw payload preserves the exact fetched source text'
+    Assert-True ($null -ne $orchestrationResult.Comparison) 'Eligible reuse creates a baseline-to-current comparison'
+    Assert-Equal $orchestrationResult.Comparison.ComparisonStatus COMPLETE 'Eligible reuse comparison completes through the existing comparator'
+    Assert-Equal @($orchestrationResult.Comparison.DeltaDimensions).Count 0 'Identical reuse comparison has no delta dimensions'
+    Assert-Equal @($orchestrationResult.Comparison.ChangeCandidates).Count 0 'Identical reuse comparison has no change candidates'
+    Assert-Equal $orchestrationResult.Comparison.PreviousObservationId $baselinePackage.Observation.ObservationId 'Eligible reuse comparison links the indexed comparable baseline'
+    Assert-Equal $orchestrationResult.Comparison.CurrentObservationId $orchestrationResult.Observation.ObservationId 'Eligible reuse comparison links the fresh reused observation'
+
+    $htmlReuseAgain=Invoke-BenefitIncrementalPostFetch -Store $incrementalStore -RunId 'run-34343434343434343434343434343434' -ObservedAt '2026-09-27T00:00:01Z' -RepositoryRevision ('a'*40) -BusinessId $baselinePackage.Observation.BusinessId -Benefit $orchestrationBenefit -BusinessIdentity $orchestrationBusiness -Candidate $htmlCandidate -RunContext (New-BenefitSourceRunContext) -RequestInvoker $orchestrationHttp -RepositoryStateProvider { [pscustomobject]@{IsClean=$true} }
+    $htmlRawPayloadAgain=@($htmlReuseAgain.Observation.ArtifactReferences | Where-Object Kind -eq 'RAW_SOURCE_PAYLOAD')
+    Assert-Equal $htmlRawPayloadAgain.Count 1 'Subsequent HTML reuse retains one raw source payload reference'
+    Assert-Equal $htmlRawPayloadAgain[0].ContentHash $htmlRawPayload[0].ContentHash 'Same HTML payload reuses the content-addressed raw source artifact'
+    Assert-Equal $htmlReuseAgain.Metrics.ArtifactWrites 1 'Subsequent HTML reuse writes only its new audit artifact'
+    Assert-Equal $htmlReuseAgain.Metrics.ArtifactDedupHits 1 'Subsequent HTML reuse records one raw payload dedup hit'
 
     # Task 6 RED: establish a real scoped XLSX/P3-3 committed baseline, then
     # prove the generic second-run orchestrator reuses it without XLSX work.
@@ -183,7 +201,22 @@ try {
     Assert-Equal $xlsxSecondRun.Observation.SemanticFingerprint $xlsxFirstPackage.Observation.SemanticFingerprint 'Second XLSX reuse retains previous semantic fingerprint'
     Assert-Equal $xlsxSecondRun.Observation.SemanticResultReference $xlsxFirstPackage.Observation.SemanticResultReference 'Second XLSX reuse retains previous semantic result artifact'
     Assert-Equal @($xlsxSecondRun.Observation.ArtifactReferences | Where-Object Kind -eq 'BENEFIT_REUSE_DECISION').Count 1 'Second XLSX reuse records its audit artifact'
+    $xlsxRawPayload=@($xlsxSecondRun.Observation.ArtifactReferences | Where-Object Kind -eq 'RAW_SOURCE_PAYLOAD')
+    Assert-Equal $xlsxRawPayload.Count 1 'Second XLSX reuse attaches the exact current raw workbook artifact'
+    Assert-Equal $xlsxRawPayload[0].ContentHash $xlsxSecondSnapshot.ContentHash 'XLSX raw payload uses the already-established workbook snapshot hash'
+    Assert-True (Test-Path -LiteralPath (Join-Path $incrementalStore.Root $xlsxRawPayload[0].RelativePath)) 'XLSX raw payload is durable after its successful commit'
+    Assert-True ([Linq.Enumerable]::SequenceEqual([byte[]]$xlsxSecondSnapshot.Bytes,[IO.File]::ReadAllBytes((Join-Path $incrementalStore.Root $xlsxRawPayload[0].RelativePath)))) 'XLSX raw payload preserves the exact fetched workbook bytes'
     Assert-Equal $xlsxSecondRun.Commit.Code COMMITTED 'Second XLSX reuse commits successfully'
+
+    $xlsxThirdFetch=[pscustomobject]@{Count=0}
+    $xlsxThirdHttp={param($Uri);$xlsxThirdFetch.Count++;[pscustomobject]@{StatusCode=200;ContentType='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';Text='';Bytes=$xlsxBytes}}.GetNewClosure()
+    $xlsxThirdRun=Invoke-BenefitIncrementalPostFetch -Store $incrementalStore -RunId 'run-56565656565656565656565656565656' -ObservedAt '2026-09-27T00:00:01Z' -RepositoryRevision ('a'*40) -BusinessId $xlsxBusinessId -Benefit $xlsxBenefit -BusinessIdentity $xlsxBusiness -CanonicalPhone '031-861-4800' -Candidate $xlsxCandidate -RunContext (New-BenefitSourceRunContext) -RequestInvoker $xlsxThirdHttp -RepositoryStateProvider { [pscustomobject]@{IsClean=$true} }
+    $xlsxRawPayloadAgain=@($xlsxThirdRun.Observation.ArtifactReferences | Where-Object Kind -eq 'RAW_SOURCE_PAYLOAD')
+    Assert-Equal $xlsxThirdFetch.Count 1 'Subsequent XLSX reuse still performs exactly one current fetch'
+    Assert-Equal $xlsxRawPayloadAgain.Count 1 'Subsequent XLSX reuse retains one raw payload reference'
+    Assert-Equal $xlsxRawPayloadAgain[0].ContentHash $xlsxRawPayload[0].ContentHash 'Same XLSX workbook reuses the content-addressed raw payload artifact'
+    Assert-Equal $xlsxThirdRun.Metrics.ArtifactWrites 1 'Subsequent XLSX reuse writes only its audit artifact'
+    Assert-Equal $xlsxThirdRun.Metrics.ArtifactDedupHits 1 'Subsequent XLSX reuse records one raw workbook dedup hit'
 
     # Task 7 RED: every rejected gate must recompute using the already fetched
     # run-context payload.  The counters prove real Phase 2 work occurs.
@@ -234,6 +267,8 @@ try {
         Assert-True ($Tracked.ParserCount -gt 0) ($Message + ': XLSX parser/index actually runs')
         Assert-True ($Tracked.ExtractionCount -gt 0) ($Message + ': extraction actually runs')
         Assert-True ($Tracked.EvaluationCount -gt 0) ($Message + ': evaluation actually runs')
+        Assert-Equal $Tracked.Run.Metrics.ExtractionCount $Tracked.ExtractionCount ($Message + ': extraction summary matches the actual invocation count')
+        Assert-Equal $Tracked.Run.Metrics.EvaluationCount $Tracked.EvaluationCount ($Message + ': evaluation summary matches the actual invocation count')
         Assert-Equal $Tracked.Run.Commit.Code COMMITTED ($Message + ': fresh recompute observation commits')
         Assert-Equal @($Tracked.Run.Observation.ArtifactReferences | Where-Object Kind -eq 'BENEFIT_REUSE_DECISION').Count 0 ($Message + ': rejected recompute has no reuse audit artifact')
     }
@@ -274,10 +309,20 @@ try {
     $fetchFailureContext=New-BenefitSourceRunContext
     $fetchFailureCount=[pscustomobject]@{ Count=0 }
     $fetchFailureHttp={ param($Uri) $fetchFailureCount.Count++; [pscustomobject]@{ StatusCode=500; ContentType='text/plain'; Text='upstream failed'; Bytes=$null } }.GetNewClosure()
-    $fetchFailureRun=Invoke-BenefitIncrementalPostFetch -Store $incrementalStore -RunId 'run-cccccccccccccccccccccccccccccccc' -ObservedAt '2026-09-28T00:00:00Z' -RepositoryRevision ('b'*40) -BusinessId $xlsxBusinessId -Benefit $task7InputChangedBenefit -BusinessIdentity $xlsxBusiness -CanonicalPhone '031-861-4800' -Candidate $xlsxCandidate -RunContext $fetchFailureContext -RequestInvoker $fetchFailureHttp -RepositoryStateProvider { [pscustomobject]@{ IsClean=$true } }
+    $script:fetchFailureExtractionCount=0;$script:fetchFailureEvaluationCount=0
+    $fetchFailureOriginalExtraction=(Get-Item Function:Invoke-BenefitEvidenceExtraction).ScriptBlock
+    $fetchFailureOriginalEvaluation=(Get-Item Function:Get-Phase2BenefitEvaluation).ScriptBlock
+    function Invoke-BenefitEvidenceExtraction { param($Source,$Document,$EvidenceSlice,$XlsxValidationIndex);$script:fetchFailureExtractionCount++;& $fetchFailureOriginalExtraction @PSBoundParameters }
+    function Get-Phase2BenefitEvaluation { param($Benefit,$SourceRecords,$DiscoveryStatus);$script:fetchFailureEvaluationCount++;& $fetchFailureOriginalEvaluation @PSBoundParameters }
+    try {
+        $fetchFailureRun=Invoke-BenefitIncrementalPostFetch -Store $incrementalStore -RunId 'run-cccccccccccccccccccccccccccccccc' -ObservedAt '2026-09-28T00:00:00Z' -RepositoryRevision ('b'*40) -BusinessId $xlsxBusinessId -Benefit $task7InputChangedBenefit -BusinessIdentity $xlsxBusiness -CanonicalPhone '031-861-4800' -Candidate $xlsxCandidate -RunContext $fetchFailureContext -RequestInvoker $fetchFailureHttp -RepositoryStateProvider { [pscustomobject]@{ IsClean=$true } }
+    } finally { Set-Item Function:Invoke-BenefitEvidenceExtraction -Value $fetchFailureOriginalExtraction;Set-Item Function:Get-Phase2BenefitEvaluation -Value $fetchFailureOriginalEvaluation }
     Assert-Equal $fetchFailureCount.Count 1 'Fetch failure performs one current external request'
     Assert-Equal $fetchFailureRun.Metrics.ReuseApplied 0 'Fetch failure never applies reuse'
     Assert-Equal $fetchFailureRun.Metrics.AvoidedParseCount 0 'Fetch failure is not counted as avoided parse work'
+    Assert-Equal $script:fetchFailureExtractionCount 0 'Fetch failure never calls extraction'
+    Assert-Equal $fetchFailureRun.Metrics.ExtractionCount $script:fetchFailureExtractionCount 'Fetch-failure extraction metric follows actual work'
+    Assert-Equal $fetchFailureRun.Metrics.EvaluationCount $script:fetchFailureEvaluationCount 'Fetch-failure evaluation metric follows actual work'
     Assert-Equal $fetchFailureRun.Result.BenefitState NEEDS_VERIFICATION 'Fetch failure remains operationally unresolved'
     Assert-True (@($fetchFailureRun.Result.ClaimResults | Where-Object Result -in @('ENDED','UNCHANGED')).Count -eq 0) 'Fetch failure never becomes UNCHANGED or ENDED'
     Assert-True (@($fetchFailureRun.Comparison.ChangeCandidates) -notcontains 'BENEFIT_ABSENCE_SUSPECTED') 'Fetch failure never becomes benefit absence'
@@ -301,16 +346,23 @@ try {
     # corrupted-prior-artifact fixture: a recovery full scan is itself meant
     # to fail closed on that unrelated corruption.
     $mmaRoot=Join-Path ([IO.Path]::GetTempPath()) ('milimap-mma-incremental-' + [Guid]::NewGuid().ToString('N'))
+    $script:mmaExtractionCount=0;$script:mmaEvaluationCount=0
+    $mmaOriginalExtraction=(Get-Item Function:Invoke-BenefitEvidenceExtraction).ScriptBlock
+    $mmaOriginalEvaluation=(Get-Item Function:Get-Phase2BenefitEvaluation).ScriptBlock
+    function Invoke-BenefitEvidenceExtraction { param($Source,$Document,$EvidenceSlice,$XlsxValidationIndex);$script:mmaExtractionCount++;& $mmaOriginalExtraction @PSBoundParameters }
+    function Get-Phase2BenefitEvaluation { param($Benefit,$SourceRecords,$DiscoveryStatus);$script:mmaEvaluationCount++;& $mmaOriginalEvaluation @PSBoundParameters }
     try {
         $mmaStore=New-HistoryStoreLayout -Root $mmaRoot
         $mmaRun=Invoke-BenefitIncrementalPostFetch -Store $mmaStore -RunId 'run-dddddddddddddddddddddddddddddddd' -ObservedAt '2026-09-28T00:00:00Z' -RepositoryRevision ('b'*40) -BusinessId 'biz-33333333333333333333333333333333' -Benefit $mmaBenefit -BusinessIdentity $mmaBusiness -CanonicalPhone '02-2789-0000' -Candidate $mmaCandidate -RunContext (New-BenefitSourceRunContext) -RequestInvoker $mmaHttp -RepositoryStateProvider { [pscustomobject]@{IsClean=$true} }
-    } finally { if(Test-Path -LiteralPath $mmaRoot){Remove-Item -LiteralPath $mmaRoot -Recurse -Force} }
+    } finally { Set-Item Function:Invoke-BenefitEvidenceExtraction -Value $mmaOriginalExtraction;Set-Item Function:Get-Phase2BenefitEvaluation -Value $mmaOriginalEvaluation;if(Test-Path -LiteralPath $mmaRoot){Remove-Item -LiteralPath $mmaRoot -Recurse -Force} }
     Assert-Equal $mmaRun.ReuseDecision.Capability NONE 'MMA orchestration preserves capability NONE'
     Assert-Equal $mmaRun.Metrics.ReuseApplied 0 'MMA never applies reuse'
     Assert-Equal $mmaRun.Metrics.AvoidedParseCount 0 'MMA never reports avoided HTML/XLSX parsing'
     Assert-Equal $mmaRun.Metrics.AvoidedExtractionCount 0 'MMA never reports avoided extraction'
     Assert-Equal $mmaRun.Metrics.AvoidedEvaluationCount 0 'MMA never reports avoided evaluation'
     Assert-Equal $mmaRequests.Count 2 'MMA uses existing list then selected detail requests without a shortcut'
+    Assert-Equal $mmaRun.Metrics.ExtractionCount $script:mmaExtractionCount 'MMA extraction metric follows the existing actual invocation'
+    Assert-Equal $mmaRun.Metrics.EvaluationCount $script:mmaEvaluationCount 'MMA evaluation metric follows the actual invocation'
     Assert-Equal $mmaRun.SourceRecord.Document.SourceFormat JSONP 'MMA returns the existing JSONP detail source record'
     Assert-Equal @($mmaRun.SourceRecord.Validation.Claims | Where-Object ClaimType -eq BENEFIT_DESCRIPTION).Count 1 'MMA preserves existing detail claim validation'
     Assert-Equal @($mmaRun.Observation.ArtifactReferences | Where-Object Kind -eq 'BENEFIT_REUSE_DECISION').Count 0 'MMA creates no reuse audit artifact'
@@ -372,6 +424,9 @@ try {
         Assert-True (-not (Test-Path -LiteralPath (Get-HistoryObservationPath -Store $task9EligibleStore -ObservationId $task9Eligible.Run.Observation.ObservationId))) 'Stale reused observation is never published authoritatively'
         $task9EligibleAudit=@($task9Eligible.Run.Observation.ArtifactReferences | Where-Object Kind -eq 'BENEFIT_REUSE_DECISION')[0]
         Assert-True (-not (Test-Path -LiteralPath (Join-Path $task9EligibleStore.Root $task9EligibleAudit.RelativePath))) 'Stale reuse audit artifact is never published authoritatively'
+        $task9EligibleRaw=@($task9Eligible.Run.Observation.ArtifactReferences | Where-Object Kind -eq 'RAW_SOURCE_PAYLOAD')[0]
+        Assert-True (-not (Test-Path -LiteralPath (Join-Path $task9EligibleStore.Root $task9EligibleRaw.RelativePath))) 'Stale reuse raw payload is never published authoritatively'
+        if($null -ne $task9Eligible.Run.Comparison){Assert-True (-not (Test-Path -LiteralPath (Get-HistoryComparisonPath -Store $task9EligibleStore -ComparisonId $task9Eligible.Run.Comparison.ComparisonId))) 'Stale reuse comparison is never published authoritatively'}
         $task9EligibleLatest=Get-HistoryLatestEntry -Store $task9EligibleStore -BusinessId $task9EligibleBaseline.Observation.BusinessId -Domain BENEFIT -ComparableOnly
         Assert-Equal $task9EligibleLatest.LatestComparableObservationId $task9Eligible.State.CompetingPackage.Observation.ObservationId 'Competing observation remains the authoritative comparable baseline'
     } finally { if(Test-Path -LiteralPath $task9EligibleRoot){Remove-Item -LiteralPath $task9EligibleRoot -Recurse -Force} }
@@ -383,16 +438,16 @@ try {
         $task9ScopedHtml='<table><tr><th>업소명</th><th>주소</th><th>전화번호</th><th>할인</th></tr><tr><td>테스트 식당</td><td>경기도 양주시 테스트로 10</td><td>031-0000-0010</td><td>10% 할인</td></tr></table>'
         $task9ChangedBenefit=New-CanonicalBenefitRecord -SourceRowNumber 2 -BusinessName '테스트 식당' -BenefitDescription '입력 변경' -EligibleTarget '현역 장병' -UsageCondition '평일' -VerificationMethod '군인증' -ExistingSourceType '지자체 공식 자료' -ExistingSourceUrl $htmlCandidate.Url -ExistingVerifiedOn '2026-09-26'
         $script:task9ParseCount=0;$script:task9ExtractionCount=0;$script:task9EvaluationCount=0
-        $task9OriginalTemplate=(Get-Item Function:ConvertTo-BenefitHtmlTemplate).ScriptBlock
+        $task9OriginalTokenizer=(Get-Item Function:Get-ScopeHtmlTagTokens).ScriptBlock
         $task9OriginalExtraction=(Get-Item Function:Invoke-BenefitEvidenceExtraction).ScriptBlock
         $task9OriginalEvaluation=(Get-Item Function:Get-Phase2BenefitEvaluation).ScriptBlock
-        function ConvertTo-BenefitHtmlTemplate { param($Snapshot,$RunContextSnapshot);$script:task9ParseCount++;& $script:task9OriginalTemplate @PSBoundParameters }
+        function Get-ScopeHtmlTagTokens { param($Text);$script:task9ParseCount++;& $script:task9OriginalTokenizer @PSBoundParameters }
         function Invoke-BenefitEvidenceExtraction { param($Source,$Document,$EvidenceSlice,$XlsxValidationIndex);$script:task9ExtractionCount++;& $script:task9OriginalExtraction @PSBoundParameters }
         function Get-Phase2BenefitEvaluation { param($Benefit,$SourceRecords,$DiscoveryStatus);$script:task9EvaluationCount++;& $script:task9OriginalEvaluation @PSBoundParameters }
         try {
             $task9Rejected=Invoke-Task9WithCompetingBaseline -Store $task9RejectedStore -RunId 'run-f3333333333333333333333333333333' -Benefit $task9ChangedBenefit -CompetingRunId 'run-f4444444444444444444444444444444' -CompetingObservedAt '2026-09-29T00:00:01Z' -RequestInvoker {param($Uri) [pscustomobject]@{StatusCode=200;ContentType='text/html';Text=$task9ScopedHtml;Bytes=$null}}
         } finally {
-            Set-Item Function:ConvertTo-BenefitHtmlTemplate -Value $task9OriginalTemplate
+            Set-Item Function:Get-ScopeHtmlTagTokens -Value $task9OriginalTokenizer
             Set-Item Function:Invoke-BenefitEvidenceExtraction -Value $task9OriginalExtraction
             Set-Item Function:Get-Phase2BenefitEvaluation -Value $task9OriginalEvaluation
         }
@@ -415,11 +470,11 @@ try {
         [void](New-IncrementalBaselineFixture -Store $task9LockStore)
         $task9LockFetch=[pscustomobject]@{Count=0}
         $task9Lock=$null
-        $task9LockOriginalTemplate=(Get-Item Function:ConvertTo-BenefitHtmlTemplate).ScriptBlock
+        $task9LockOriginalTokenizer=(Get-Item Function:Get-ScopeHtmlTagTokens).ScriptBlock
         $task9LockOriginalExtraction=(Get-Item Function:Invoke-BenefitEvidenceExtraction).ScriptBlock
         $task9LockOriginalEvaluation=(Get-Item Function:Get-Phase2BenefitEvaluation).ScriptBlock
         $script:task9LockParseCount=0;$script:task9LockExtractionCount=0;$script:task9LockEvaluationCount=0
-        function ConvertTo-BenefitHtmlTemplate { param($Snapshot,$RunContextSnapshot);$script:task9LockParseCount++;& $task9LockOriginalTemplate @PSBoundParameters }
+        function Get-ScopeHtmlTagTokens { param($Text);$script:task9LockParseCount++;& $task9LockOriginalTokenizer @PSBoundParameters }
         function Invoke-BenefitEvidenceExtraction { param($Source,$Document,$EvidenceSlice,$XlsxValidationIndex);$script:task9LockExtractionCount++;& $script:task9LockOriginalExtraction @PSBoundParameters }
         function Get-Phase2BenefitEvaluation { param($Benefit,$SourceRecords,$DiscoveryStatus);$script:task9LockEvaluationCount++;& $script:task9LockOriginalEvaluation @PSBoundParameters }
         try {
@@ -427,7 +482,7 @@ try {
             $task9LockRun=Invoke-BenefitIncrementalPostFetch -Store $task9LockStore -RunId 'run-f5555555555555555555555555555555' -ObservedAt '2026-09-29T00:00:00Z' -RepositoryRevision ('a'*40) -BusinessId 'biz-0123456789abcdef0123456789abcdef' -Benefit $task9ChangedBenefit -BusinessIdentity $orchestrationBusiness -Candidate $htmlCandidate -RunContext (New-BenefitSourceRunContext) -RequestInvoker {param($Uri);$task9LockFetch.Count++;[pscustomobject]@{StatusCode=200;ContentType='text/html';Text=$task9ScopedHtml;Bytes=$null}} -RepositoryStateProvider { [pscustomobject]@{IsClean=$true} }
         } finally {
             if($null -ne $task9Lock){$task9Lock.Dispose()}
-            Set-Item Function:ConvertTo-BenefitHtmlTemplate -Value $task9LockOriginalTemplate
+            Set-Item Function:Get-ScopeHtmlTagTokens -Value $task9LockOriginalTokenizer
             Set-Item Function:Invoke-BenefitEvidenceExtraction -Value $task9LockOriginalExtraction
             Set-Item Function:Get-Phase2BenefitEvaluation -Value $task9LockOriginalEvaluation
         }
@@ -438,6 +493,8 @@ try {
         Assert-Equal $task9LockRun.Commit.Code WRITER_LOCKED 'Held writer lock fails only at Commit-HistoryRun'
         Assert-Equal $task9LockRun.Commit.RetryRequired $false 'Writer lock returns no automatic retry signal'
         Assert-True (-not (Test-Path -LiteralPath (Get-HistoryObservationPath -Store $task9LockStore -ObservationId $task9LockRun.Observation.ObservationId))) 'Writer-locked observation is never published authoritatively'
+        $task9LockRaw=@($task9LockRun.Observation.ArtifactReferences | Where-Object Kind -eq 'RAW_SOURCE_PAYLOAD')[0]
+        Assert-True (-not (Test-Path -LiteralPath (Join-Path $task9LockStore.Root $task9LockRaw.RelativePath))) 'Writer-locked raw payload is never published authoritatively'
     } finally { if(Test-Path -LiteralPath $task9LockRoot){Remove-Item -LiteralPath $task9LockRoot -Recurse -Force} }
 
     # Task 10 RED: the final per-row summary reports actual run-context work
@@ -451,12 +508,12 @@ try {
         foreach($name in @($Expected.Keys)){Assert-Equal $Run.Metrics.$name $Expected[$name] ($Message + ': ' + $name)}
     }
 
-    Assert-Task10MetricContract -Run $orchestrationResult -Expected @{RowsRequested=1;RowsCompleted=1;BaselineHits=1;BaselineMisses=0;ParseCount=0;ExtractionCount=0;EvaluationCount=0;ArtifactWrites=1;ArtifactDedupHits=0} -Message 'HTML identical reuse metrics'
-    Assert-Task10MetricContract -Run $xlsxSecondRun -Expected @{RowsRequested=1;RowsCompleted=1;BaselineHits=1;BaselineMisses=0;ParseCount=0;ExtractionCount=0;EvaluationCount=0;ArtifactWrites=1;ArtifactDedupHits=0} -Message 'XLSX identical reuse metrics'
-    Assert-Task10MetricContract -Run $task7PayloadChanged.Run -Expected @{RowsRequested=1;RowsCompleted=1;BaselineHits=1;BaselineMisses=0;ReuseEligible=0;ReuseApplied=0;ReuseRejected=1;ExternalFetchCount=1;ParseCount=1;ExtractionCount=1;EvaluationCount=1;ArtifactWrites=2;ArtifactDedupHits=0} -Message 'Payload-changed recompute metrics'
-    Assert-Task10MetricContract -Run $task7NoBaseline.Run -Expected @{RowsRequested=1;RowsCompleted=1;BaselineHits=0;BaselineMisses=1;ReuseEligible=0;ReuseApplied=0;ReuseRejected=1;ExternalFetchCount=1;ParseCount=1;ExtractionCount=1;EvaluationCount=1;ArtifactWrites=0;ArtifactDedupHits=2} -Message 'No-baseline recompute metrics'
+    Assert-Task10MetricContract -Run $orchestrationResult -Expected @{RowsRequested=1;RowsCompleted=1;BaselineHits=1;BaselineMisses=0;ParseCount=0;ExtractionCount=0;EvaluationCount=0;ArtifactWrites=2;ArtifactDedupHits=0} -Message 'HTML identical reuse metrics'
+    Assert-Task10MetricContract -Run $xlsxSecondRun -Expected @{RowsRequested=1;RowsCompleted=1;BaselineHits=1;BaselineMisses=0;ParseCount=0;ExtractionCount=0;EvaluationCount=0;ArtifactWrites=2;ArtifactDedupHits=0} -Message 'XLSX identical reuse metrics'
+    Assert-Task10MetricContract -Run $task7PayloadChanged.Run -Expected @{RowsRequested=1;RowsCompleted=1;BaselineHits=1;BaselineMisses=0;ReuseEligible=0;ReuseApplied=0;ReuseRejected=1;ExternalFetchCount=1;ParseCount=1;ExtractionCount=1;EvaluationCount=1;ArtifactWrites=3;ArtifactDedupHits=0} -Message 'Payload-changed recompute metrics'
+    Assert-Task10MetricContract -Run $task7NoBaseline.Run -Expected @{RowsRequested=1;RowsCompleted=1;BaselineHits=0;BaselineMisses=1;ReuseEligible=0;ReuseApplied=0;ReuseRejected=1;ExternalFetchCount=1;ParseCount=1;ExtractionCount=1;EvaluationCount=1;ArtifactWrites=0;ArtifactDedupHits=3} -Message 'No-baseline recompute metrics'
     Assert-Task10MetricContract -Run $mmaRun -Expected @{RowsRequested=1;RowsCompleted=1;BaselineHits=0;BaselineMisses=1;ReuseEligible=0;ReuseApplied=0;ReuseRejected=1;ExternalFetchCount=2;ParseCount=2;ExtractionCount=1;EvaluationCount=1;AvoidedParseCount=0;AvoidedExtractionCount=0;AvoidedEvaluationCount=0} -Message 'MMA bypass metrics'
-    Assert-Task10MetricContract -Run $fetchFailureRun -Expected @{RowsRequested=1;RowsCompleted=1;BaselineHits=1;BaselineMisses=0;ReuseEligible=0;ReuseApplied=0;ReuseRejected=1;ExternalFetchCount=1;ParseCount=0;ExtractionCount=1;EvaluationCount=1;AvoidedParseCount=0;AvoidedExtractionCount=0;AvoidedEvaluationCount=0} -Message 'Fetch-failure metrics'
+    Assert-Task10MetricContract -Run $fetchFailureRun -Expected @{RowsRequested=1;RowsCompleted=1;BaselineHits=1;BaselineMisses=0;ReuseEligible=0;ReuseApplied=0;ReuseRejected=1;ExternalFetchCount=1;ParseCount=0;ExtractionCount=0;EvaluationCount=1;AvoidedParseCount=0;AvoidedExtractionCount=0;AvoidedEvaluationCount=0} -Message 'Fetch-failure metrics'
     Assert-Task10MetricContract -Run $task9Eligible.Run -Expected @{RowsRequested=1;RowsCompleted=0;ReuseEligible=1;ReuseApplied=1;ReuseRejected=0;ParseCount=0;ExtractionCount=0;EvaluationCount=0;ArtifactWrites=0;ArtifactDedupHits=0} -Message 'BASELINE_MOVED metrics'
     Assert-Task10MetricContract -Run $task9LockRun -Expected @{RowsRequested=1;RowsCompleted=0;BaselineHits=1;BaselineMisses=0;ReuseEligible=0;ReuseApplied=0;ReuseRejected=1;ExternalFetchCount=1;ParseCount=1;ExtractionCount=1;EvaluationCount=1;ArtifactWrites=0;ArtifactDedupHits=0} -Message 'WRITER_LOCKED metrics'
 } finally { if(Test-Path -LiteralPath $incrementalRoot){ Remove-Item -LiteralPath $incrementalRoot -Recurse -Force } }

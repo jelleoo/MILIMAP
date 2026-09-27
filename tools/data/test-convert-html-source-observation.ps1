@@ -4,6 +4,8 @@ $parserPath = Join-Path $PSScriptRoot 'lib/benefit-evidence/convert-html-source-
 if (-not (Test-Path -LiteralPath $parserPath)) { throw 'Generic HTML observation parser is missing' }
 . $parserPath
 
+Assert-ScopeTrue (-not ((Get-Command ConvertTo-BenefitHtmlTemplate).Parameters.Keys -contains 'RunContextSnapshot')) 'Public HTML template conversion must not expose a run-context trust bypass switch'
+
 function Assert-ParserStatus {
     param($Result, [string]$Expected, [string]$Message)
     Assert-ScopeEqual $Result.AdapterStatus $Expected $Message

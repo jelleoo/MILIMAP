@@ -219,12 +219,16 @@ Assert-ScopeTrue ($null -eq $partialLocation.Status) 'Partial XLSX cannot claim 
 # no later locator/binding/extraction/validation step may hash the same text.
 $pipelineHashCount = [pscustomobject]@{ Count=0 }
 $pipelineTokenCount = [pscustomobject]@{ Count=0 }
+$pipelineIndexCount = [pscustomobject]@{ Count=0 }
 $originalPipelineHash = (Get-Item Function:Get-BenefitEvidenceTextHash).ScriptBlock
 $originalPipelineTokenizer = (Get-Item Function:Get-ScopeHtmlTagTokens).ScriptBlock
+$originalPipelineIndex = (Get-Item Function:New-InternalScopeHtmlValidationIndex).ScriptBlock
 $countingPipelineHash = { param([string]$Text) $pipelineHashCount.Count++; & $originalPipelineHash -Text $Text }.GetNewClosure()
 $countingPipelineTokenizer = { param([string]$Text) $pipelineTokenCount.Count++; & $originalPipelineTokenizer -Text $Text }.GetNewClosure()
+$countingPipelineIndex = { param($Snapshot,$HtmlTokens) $pipelineIndexCount.Count++; & $originalPipelineIndex @PSBoundParameters }.GetNewClosure()
 Set-Item Function:Get-BenefitEvidenceTextHash -Value $countingPipelineHash
 Set-Item Function:Get-ScopeHtmlTagTokens -Value $countingPipelineTokenizer
+Set-Item Function:New-InternalScopeHtmlValidationIndex -Value $countingPipelineIndex
 try {
     $pipelineContext = New-BenefitSourceRunContext
     $pipelineCandidate = New-RunCandidate -RowNumber 2 -Url 'https://city.example.go.kr/pipeline'
@@ -236,11 +240,13 @@ try {
 } finally {
     Set-Item Function:Get-BenefitEvidenceTextHash -Value $originalPipelineHash
     Set-Item Function:Get-ScopeHtmlTagTokens -Value $originalPipelineTokenizer
+    Set-Item Function:New-InternalScopeHtmlValidationIndex -Value $originalPipelineIndex
 }
 Assert-ScopeEqual $pipelineContext.Metrics.ExternalFetchCount 1 'Trusted full HTML chain still performs one external fetch'
 Assert-ScopeEqual $pipelineContext.Metrics.AdapterParseCount 1 'Trusted full HTML chain parses once'
 Assert-ScopeEqual $pipelineHashCount.Count $pipelineInitialHashCount 'Trusted full HTML chain adds no payload SHA-256 after checkpoint'
 Assert-ScopeEqual $pipelineTokenCount.Count 1 'Trusted full HTML chain tokenizes exactly once'
+Assert-ScopeEqual $pipelineIndexCount.Count 1 'Trusted full HTML chain creates one validation index from that tokenizer pass'
 Assert-ScopeEqual $pipelineRecord.LocationResult.Status LOCATED 'Trusted full HTML chain preserves locator semantics'
 Assert-ScopeEqual $pipelineRecord.Bound.BusinessBindingStatus STRONG 'Trusted full HTML chain preserves binding semantics'
 Assert-ScopeEqual $pipelineRecord.Extraction.Status COMPLETE 'Trusted full HTML chain preserves extraction semantics'
@@ -249,6 +255,11 @@ Assert-ScopeTrue (Test-InternalBenefitHtmlRunContextTrust -Snapshot $pipelineRec
 
 $differentSnapshot = New-BenefitSourceSnapshot -SourceUrl $pipelineDocument.Url -SourceFormat HTML -Text $pipelineDocument.Text -ObservedAt $pipelineDocument.ObservedAt
 Assert-ScopeTrue (-not (Test-InternalBenefitHtmlRunContextTrust -Snapshot $differentSnapshot -HtmlValidationIndex $pipelineRecord.Observation.HtmlValidationIndex)) 'Different snapshot object cannot reuse an HTML trust binding'
+$forgedSnapshot = New-BenefitSourceSnapshot -SourceUrl $pipelineDocument.Url -SourceFormat HTML -Text $pipelineDocument.Text -ObservedAt $pipelineDocument.ObservedAt
+$forgedSnapshot | Add-Member -NotePropertyName RunContextSnapshot -NotePropertyValue $forgedSnapshot
+$forgedSnapshot | Add-Member -NotePropertyName RunContextText -NotePropertyValue $forgedSnapshot.Text
+$forgedSnapshot | Add-Member -NotePropertyName RunContextTrust -NotePropertyValue ([object]::new())
+Assert-ScopeTrue (-not (Test-InternalBenefitHtmlRunContextSnapshotTrust -Snapshot $forgedSnapshot)) 'Forged run-context snapshot NoteProperties cannot create trusted HTML state'
 $differentIndex = New-ScopeHtmlValidationIndex -Snapshot $pipelineRecord.Observation.Snapshot -HtmlTokens $pipelineRecord.Observation.HtmlValidationIndex.Tokens
 Assert-ScopeTrue (-not (Test-InternalBenefitHtmlRunContextTrust -Snapshot $pipelineRecord.Observation.Snapshot -HtmlValidationIndex $differentIndex)) 'Different HTML validation index cannot reuse an HTML trust binding'
 $originalIndexSnapshotId = $pipelineRecord.Observation.HtmlValidationIndex.SnapshotId
@@ -259,6 +270,14 @@ $originalPipelineText = $pipelineRecord.Observation.Snapshot.Text
 $pipelineRecord.Observation.Snapshot.Text = '<html>tampered</html>'
 Assert-ScopeTrue (-not (Test-InternalBenefitHtmlRunContextTrust -Snapshot $pipelineRecord.Observation.Snapshot -HtmlValidationIndex $pipelineRecord.Observation.HtmlValidationIndex)) 'Replacing snapshot text invalidates HTML run-context trust'
 $pipelineRecord.Observation.Snapshot.Text = $originalPipelineText
+$originalPipelineSnapshotId=$pipelineRecord.Observation.Snapshot.SnapshotId
+$pipelineRecord.Observation.Snapshot.SnapshotId=('e' * 64)
+Assert-ScopeTrue (-not (Test-InternalBenefitHtmlRunContextTrust -Snapshot $pipelineRecord.Observation.Snapshot -HtmlValidationIndex $pipelineRecord.Observation.HtmlValidationIndex)) 'Replacing snapshot identity invalidates HTML run-context trust'
+$pipelineRecord.Observation.Snapshot.SnapshotId=$originalPipelineSnapshotId
+$originalPipelineContentHash=$pipelineRecord.Observation.Snapshot.ContentHash
+$pipelineRecord.Observation.Snapshot.ContentHash=('d' * 64)
+Assert-ScopeTrue (-not (Test-InternalBenefitHtmlRunContextTrust -Snapshot $pipelineRecord.Observation.Snapshot -HtmlValidationIndex $pipelineRecord.Observation.HtmlValidationIndex)) 'Replacing snapshot content hash invalidates HTML run-context trust'
+$pipelineRecord.Observation.Snapshot.ContentHash=$originalPipelineContentHash
 
 $directHashCount = [pscustomobject]@{ Count=0 }
 $originalDirectHash = (Get-Item Function:Get-BenefitEvidenceTextHash).ScriptBlock

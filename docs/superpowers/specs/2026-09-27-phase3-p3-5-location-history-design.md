@@ -7,6 +7,8 @@
 - Scope: P3-5 only
 - Out of scope: P3-6 matcher reuse integration
 
+**Authority:** For P3-5, this spec supersedes the P3-5 portions of `docs/superpowers/plans/2026-09-26-phase3-p3-5-p3-6-location-history.md`. That older plan remains background only for P3-5. Its P3-6 guidance is not superseded by this document.
+
 ## 1. Problem
 
 Phase 1 can evaluate the current POI/location state, but Phase 3 still lacks a Location-domain history adapter and comparator that can compare runs by stable `businessId` without confusing provider evidence movement with real location change.
@@ -202,7 +204,7 @@ Order-insensitive:
 - `Candidates[].DiscoveredBy[]`
 - `QueryAttempts[]`
 
-Each item carries its own semantic order/membership values such as `QueryOrder`; physical array position must not affect the fingerprint.
+Before canonical serialization, each candidate's `DiscoveredBy[]` is reduced to distinct query-membership tuples `(StrategyCode, Query, QueryOrder)`. Duplicate appearances from the same query do not create extra evidence because the current matcher also evaluates repeated discovery by distinct successful query membership. Each array item carries its own semantic values such as `QueryOrder`; physical array position must not affect the fingerprint.
 
 ### Rationale
 
@@ -247,8 +249,9 @@ Excluded:
 
 No new normalization algorithm is introduced.
 
-- selected name uses existing Phase 1 matcher text normalization semantics;
-- selected addresses use existing Phase 1 matcher normalization semantics;
+- selected name uses `ConvertTo-PoiMatchCompactText`;
+- selected road address uses `ConvertTo-PoiMatchCompactText`;
+- selected lot address uses `ConvertTo-PoiMatchCompactText`;
 - coordinates remain numeric and are serialized by the existing canonical History serializer using invariant numeric formatting.
 
 ### Material outcome reasons
@@ -474,8 +477,10 @@ If both observations are selected and NAME, ADDRESS, or COORDINATE changed:
 
 If selection changes between SELECTED and NONE, but strict absence is not proven:
 
-- emit `LOCATION_CHANGE_SUSPECTED`;
-- include `LOCATION_SELECTION_CHANGED`.
+- emit no Location change candidate;
+- include `LOCATION_SELECTION_CHANGED` as an audit reason.
+
+This avoids duplicating Phase 1's current-state review queue when selection confidence changes without evidence of a material selected-location field change or strict absence.
 
 ### Evaluation-only change
 
@@ -502,6 +507,7 @@ Must remain equal when only:
 
 - candidate array order changes;
 - `DiscoveredBy[]` physical order changes;
+- duplicate `DiscoveredBy[]` entries for the same `(StrategyCode, Query, QueryOrder)` membership are added/removed;
 - `QueryAttempts[]` physical order changes;
 - ResultPosition changes;
 - ResultCount changes;
@@ -550,7 +556,8 @@ Must change when:
 | address A -> B | selected | LOCATION_CHANGE_SUSPECTED + LOCATION_ADDRESS_CHANGED |
 | coordinate A -> B | selected | LOCATION_CHANGE_SUSPECTED + LOCATION_COORDINATE_CHANGED |
 | selected -> COMPLETE zero candidate | strict absence | LOCATION_ABSENCE_SUSPECTED only |
-| selected -> ambiguous NONE | non-absence | LOCATION_CHANGE_SUSPECTED + LOCATION_SELECTION_CHANGED |
+| selected -> ambiguous NONE | non-absence | no Location candidate + LOCATION_SELECTION_CHANGED |
+| NONE -> selected | non-absence | no Location candidate + LOCATION_SELECTION_CHANGED |
 | NONE/RED -> NONE/YELLOW | evaluation only | no Location candidate + LOCATION_EVALUATION_CHANGED |
 | current PARTIAL/FAILED | non-comparable | common operational failure/unavailable |
 | input changed | any semantic | CANONICAL_INPUT_CHANGED |
@@ -687,9 +694,9 @@ P3-5 is complete only when:
 2. comparable/operational boundaries are deterministic;
 3. staged-current comparison is fail-closed;
 4. common precedence is reused rather than duplicated;
-5. CandidateKey/provider-only movement does not create false Location change;
+5. CandidateKey/provider-only movement and selection-only confidence changes do not create false Location change candidates;
 6. strict absence is the only path to `LOCATION_ABSENCE_SUSPECTED`;
-7. selected material field changes create only review candidates, never MOVED/CLOSED truth;
+7. selected material NAME/ADDRESS/COORDINATE changes create only review candidates, never MOVED/CLOSED truth;
 8. Phase 1 behavior remains unchanged;
 9. protected paths remain unchanged;
 10. final full data suite and CI pass.

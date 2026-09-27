@@ -316,6 +316,126 @@ try {
     Assert-Equal $unsupportedRun.Metrics.AvoidedParseCount 0 'Unknown source format never reports avoided parse work'
     Assert-Equal $unsupportedRun.Result.BenefitState NEEDS_VERIFICATION 'Unknown source format preserves existing safe unresolved result'
     Assert-Equal @($unsupportedRun.Observation.ArtifactReferences | Where-Object Kind -eq 'BENEFIT_REUSE_DECISION').Count 0 'Unknown source format creates no reuse audit artifact'
+
+    # Task 9 RED: move the comparable baseline after the reuse decision but
+    # before the orchestration commit.  The test-only Commit wrapper invokes
+    # the unchanged History CAS implementation for both competing and stale
+    # writes; no production seam or retry hook is introduced.
+    function New-Task9CompetingReuseBaseline {
+        param([Parameter(Mandatory)]$Store,[Parameter(Mandatory)]$Baseline,[Parameter(Mandatory)][string]$RunId,[Parameter(Mandatory)][string]$ObservedAt,[Parameter(Mandatory)][scriptblock]$CommitImplementation)
+        $decision=New-BenefitIncrementalReuseDecision -ReuseApplied $true -Capability POST_FETCH -Baseline $Baseline -InputMatch $true -ExecutionMatch $true -PayloadMatch $true -RepositoryClean $true -ReasonCodes @('TASK9_COMPETING')
+        $package=New-BenefitIncrementalReusePackage -Store $Store -RunId $RunId -ObservedAt $ObservedAt -Decision $decision
+        $manifest=New-HistoryRunManifest -RunId $RunId -StartedAt $ObservedAt -RepositoryRevision ('c'*40) -RequestedBusinessIds @($package.Observation.BusinessId) -CompletedBusinessIds @($package.Observation.BusinessId) -FailedBusinessIds @() -ExecutionStatus COMPLETE -RunCommitStatus PREPARED
+        $prepared=Prepare-HistoryRun -Store $Store -RunManifest $manifest -Artifacts $package.PreparedArtifacts -Observations @($package.Observation) -Comparisons @()
+        $commit=& $CommitImplementation -Store $Store -PreparedRun $prepared -ExpectedBaselines @{ (($package.Observation.BusinessId + '|BENEFIT'))=[string]$Baseline.Observation.ObservationId }
+        Assert-Equal $commit.Code COMMITTED 'Task 9 competing baseline must commit before the stale attempt'
+        return $package
+    }
+
+    function Invoke-Task9WithCompetingBaseline {
+        param([Parameter(Mandatory)]$Store,[Parameter(Mandatory)][string]$RunId,[Parameter(Mandatory)]$Benefit,[Parameter(Mandatory)][string]$CompetingRunId,[Parameter(Mandatory)][string]$CompetingObservedAt,[Parameter(Mandatory)][scriptblock]$RequestInvoker)
+        $baseline=Get-BenefitIncrementalBaseline -Store $Store -BusinessId 'biz-0123456789abcdef0123456789abcdef'
+        $state=[pscustomobject]@{Moved=$false;CompetingPackage=$null}
+        $originalCommit=(Get-Item Function:Commit-HistoryRun).ScriptBlock
+        $interceptor={
+            param($Store,$PreparedRun,$ExpectedBaselines,$FaultInjector=$null)
+            if(-not $state.Moved){
+                $state.Moved=$true
+                $state.CompetingPackage=New-Task9CompetingReuseBaseline -Store $Store -Baseline $baseline -RunId $CompetingRunId -ObservedAt $CompetingObservedAt -CommitImplementation $originalCommit
+            }
+            return & $originalCommit @PSBoundParameters
+        }.GetNewClosure()
+        Set-Item Function:Commit-HistoryRun -Value $interceptor
+        try {
+            $fetch=[pscustomobject]@{Count=0}
+            $http={param($Uri);$fetch.Count++;& $RequestInvoker $Uri}.GetNewClosure()
+            $run=Invoke-BenefitIncrementalPostFetch -Store $Store -RunId $RunId -ObservedAt '2026-09-29T00:00:00Z' -RepositoryRevision ('a'*40) -BusinessId $baseline.Observation.BusinessId -Benefit $Benefit -BusinessIdentity $orchestrationBusiness -Candidate $htmlCandidate -RunContext (New-BenefitSourceRunContext) -RequestInvoker $http -RepositoryStateProvider { [pscustomobject]@{IsClean=$true} }
+            return [pscustomobject]@{Run=$run;Fetch=$fetch;State=$state}
+        } finally {
+            Set-Item Function:Commit-HistoryRun -Value $originalCommit
+        }
+    }
+
+    $task9EligibleRoot=Join-Path ([IO.Path]::GetTempPath()) ('milimap-task9-eligible-' + [Guid]::NewGuid().ToString('N'))
+    try {
+        $task9EligibleStore=New-HistoryStoreLayout -Root $task9EligibleRoot
+        $task9EligibleBaseline=New-IncrementalBaselineFixture -Store $task9EligibleStore
+        $task9Eligible=Invoke-Task9WithCompetingBaseline -Store $task9EligibleStore -RunId 'run-f1111111111111111111111111111111' -Benefit $orchestrationBenefit -CompetingRunId 'run-f2222222222222222222222222222222' -CompetingObservedAt '2026-09-29T00:00:01Z' -RequestInvoker {param($Uri) [pscustomobject]@{StatusCode=200;ContentType='text/html';Text=$htmlDocument.Text;Bytes=$null}}
+        Assert-True $task9Eligible.State.Moved 'Task 9 eligible path reaches the commit boundary after the decision'
+        Assert-Equal $task9Eligible.Fetch.Count 1 'Eligible CAS movement performs no second fetch or automatic retry'
+        Assert-Equal $task9Eligible.Run.ReuseDecision.ReuseApplied $true 'Eligible CAS movement is decided before the competing commit'
+        Assert-Equal $task9Eligible.Run.Commit.Code BASELINE_MOVED 'Eligible reuse stale commit fails with BASELINE_MOVED'
+        Assert-Equal $task9Eligible.Run.Commit.RetryRequired $true 'Eligible reuse stale commit requires explicit retry'
+        Assert-True (-not (Test-Path -LiteralPath (Get-HistoryObservationPath -Store $task9EligibleStore -ObservationId $task9Eligible.Run.Observation.ObservationId))) 'Stale reused observation is never published authoritatively'
+        $task9EligibleAudit=@($task9Eligible.Run.Observation.ArtifactReferences | Where-Object Kind -eq 'BENEFIT_REUSE_DECISION')[0]
+        Assert-True (-not (Test-Path -LiteralPath (Join-Path $task9EligibleStore.Root $task9EligibleAudit.RelativePath))) 'Stale reuse audit artifact is never published authoritatively'
+        $task9EligibleLatest=Get-HistoryLatestEntry -Store $task9EligibleStore -BusinessId $task9EligibleBaseline.Observation.BusinessId -Domain BENEFIT -ComparableOnly
+        Assert-Equal $task9EligibleLatest.LatestComparableObservationId $task9Eligible.State.CompetingPackage.Observation.ObservationId 'Competing observation remains the authoritative comparable baseline'
+    } finally { if(Test-Path -LiteralPath $task9EligibleRoot){Remove-Item -LiteralPath $task9EligibleRoot -Recurse -Force} }
+
+    $task9RejectedRoot=Join-Path ([IO.Path]::GetTempPath()) ('milimap-task9-rejected-' + [Guid]::NewGuid().ToString('N'))
+    try {
+        $task9RejectedStore=New-HistoryStoreLayout -Root $task9RejectedRoot
+        $task9RejectedBaseline=New-IncrementalBaselineFixture -Store $task9RejectedStore
+        $task9ScopedHtml='<table><tr><th>업소명</th><th>주소</th><th>전화번호</th><th>할인</th></tr><tr><td>테스트 식당</td><td>경기도 양주시 테스트로 10</td><td>031-0000-0010</td><td>10% 할인</td></tr></table>'
+        $task9ChangedBenefit=New-CanonicalBenefitRecord -SourceRowNumber 2 -BusinessName '테스트 식당' -BenefitDescription '입력 변경' -EligibleTarget '현역 장병' -UsageCondition '평일' -VerificationMethod '군인증' -ExistingSourceType '지자체 공식 자료' -ExistingSourceUrl $htmlCandidate.Url -ExistingVerifiedOn '2026-09-26'
+        $script:task9ParseCount=0;$script:task9ExtractionCount=0;$script:task9EvaluationCount=0
+        $task9OriginalTemplate=(Get-Item Function:ConvertTo-BenefitHtmlTemplate).ScriptBlock
+        $task9OriginalExtraction=(Get-Item Function:Invoke-BenefitEvidenceExtraction).ScriptBlock
+        $task9OriginalEvaluation=(Get-Item Function:Get-Phase2BenefitEvaluation).ScriptBlock
+        function ConvertTo-BenefitHtmlTemplate { param($Snapshot,$RunContextSnapshot);$script:task9ParseCount++;& $script:task9OriginalTemplate @PSBoundParameters }
+        function Invoke-BenefitEvidenceExtraction { param($Source,$Document,$EvidenceSlice,$XlsxValidationIndex);$script:task9ExtractionCount++;& $script:task9OriginalExtraction @PSBoundParameters }
+        function Get-Phase2BenefitEvaluation { param($Benefit,$SourceRecords,$DiscoveryStatus);$script:task9EvaluationCount++;& $script:task9OriginalEvaluation @PSBoundParameters }
+        try {
+            $task9Rejected=Invoke-Task9WithCompetingBaseline -Store $task9RejectedStore -RunId 'run-f3333333333333333333333333333333' -Benefit $task9ChangedBenefit -CompetingRunId 'run-f4444444444444444444444444444444' -CompetingObservedAt '2026-09-29T00:00:01Z' -RequestInvoker {param($Uri) [pscustomobject]@{StatusCode=200;ContentType='text/html';Text=$task9ScopedHtml;Bytes=$null}}
+        } finally {
+            Set-Item Function:ConvertTo-BenefitHtmlTemplate -Value $task9OriginalTemplate
+            Set-Item Function:Invoke-BenefitEvidenceExtraction -Value $task9OriginalExtraction
+            Set-Item Function:Get-Phase2BenefitEvaluation -Value $task9OriginalEvaluation
+        }
+        Assert-Equal $task9Rejected.Fetch.Count 1 'Rejected recompute CAS movement performs one current fetch and no retry'
+        Assert-Equal $task9Rejected.Run.ReuseDecision.ReuseApplied $false 'Input change rejects reuse before CAS movement'
+        Assert-Equal $task9Rejected.Run.Commit.Code BASELINE_MOVED 'Rejected recompute stale commit fails with BASELINE_MOVED'
+        Assert-Equal $task9Rejected.Run.Commit.RetryRequired $true 'Rejected recompute stale commit requires explicit retry'
+        Assert-True ($script:task9ParseCount -gt 0) 'Rejected recompute performs real parsing before the writer lock/CAS boundary'
+        Assert-True ($script:task9ExtractionCount -gt 0) 'Rejected recompute performs real extraction before the writer lock/CAS boundary'
+        Assert-True ($script:task9EvaluationCount -gt 0) 'Rejected recompute performs real evaluation before the writer lock/CAS boundary'
+        Assert-True (-not (Test-Path -LiteralPath (Get-HistoryObservationPath -Store $task9RejectedStore -ObservationId $task9Rejected.Run.Observation.ObservationId))) 'Stale recompute observation is never published authoritatively'
+        if($null -ne $task9Rejected.Run.Comparison){Assert-True (-not (Test-Path -LiteralPath (Get-HistoryComparisonPath -Store $task9RejectedStore -ComparisonId $task9Rejected.Run.Comparison.ComparisonId))) 'Stale recompute comparison is never published authoritatively'}
+    } finally { if(Test-Path -LiteralPath $task9RejectedRoot){Remove-Item -LiteralPath $task9RejectedRoot -Recurse -Force} }
+
+    # Task 9C: a held writer lock must reject only the final commit.  Current
+    # fetching and rejected recompute work remain outside the lock boundary.
+    $task9LockRoot=Join-Path ([IO.Path]::GetTempPath()) ('milimap-task9-lock-' + [Guid]::NewGuid().ToString('N'))
+    try {
+        $task9LockStore=New-HistoryStoreLayout -Root $task9LockRoot
+        [void](New-IncrementalBaselineFixture -Store $task9LockStore)
+        $task9LockFetch=[pscustomobject]@{Count=0}
+        $task9Lock=$null
+        $task9LockOriginalTemplate=(Get-Item Function:ConvertTo-BenefitHtmlTemplate).ScriptBlock
+        $task9LockOriginalExtraction=(Get-Item Function:Invoke-BenefitEvidenceExtraction).ScriptBlock
+        $task9LockOriginalEvaluation=(Get-Item Function:Get-Phase2BenefitEvaluation).ScriptBlock
+        $script:task9LockParseCount=0;$script:task9LockExtractionCount=0;$script:task9LockEvaluationCount=0
+        function ConvertTo-BenefitHtmlTemplate { param($Snapshot,$RunContextSnapshot);$script:task9LockParseCount++;& $task9LockOriginalTemplate @PSBoundParameters }
+        function Invoke-BenefitEvidenceExtraction { param($Source,$Document,$EvidenceSlice,$XlsxValidationIndex);$script:task9LockExtractionCount++;& $script:task9LockOriginalExtraction @PSBoundParameters }
+        function Get-Phase2BenefitEvaluation { param($Benefit,$SourceRecords,$DiscoveryStatus);$script:task9LockEvaluationCount++;& $script:task9LockOriginalEvaluation @PSBoundParameters }
+        try {
+            $task9Lock=[IO.File]::Open((Join-Path $task9LockStore.Root '.writer-lock'),[IO.FileMode]::OpenOrCreate,[IO.FileAccess]::ReadWrite,[IO.FileShare]::None)
+            $task9LockRun=Invoke-BenefitIncrementalPostFetch -Store $task9LockStore -RunId 'run-f5555555555555555555555555555555' -ObservedAt '2026-09-29T00:00:00Z' -RepositoryRevision ('a'*40) -BusinessId 'biz-0123456789abcdef0123456789abcdef' -Benefit $task9ChangedBenefit -BusinessIdentity $orchestrationBusiness -Candidate $htmlCandidate -RunContext (New-BenefitSourceRunContext) -RequestInvoker {param($Uri);$task9LockFetch.Count++;[pscustomobject]@{StatusCode=200;ContentType='text/html';Text=$task9ScopedHtml;Bytes=$null}} -RepositoryStateProvider { [pscustomobject]@{IsClean=$true} }
+        } finally {
+            if($null -ne $task9Lock){$task9Lock.Dispose()}
+            Set-Item Function:ConvertTo-BenefitHtmlTemplate -Value $task9LockOriginalTemplate
+            Set-Item Function:Invoke-BenefitEvidenceExtraction -Value $task9LockOriginalExtraction
+            Set-Item Function:Get-Phase2BenefitEvaluation -Value $task9LockOriginalEvaluation
+        }
+        Assert-Equal $task9LockFetch.Count 1 'Held writer lock does not block the current external fetch'
+        Assert-True ($script:task9LockParseCount -gt 0) 'Held writer lock does not cover rejected recompute parsing'
+        Assert-True ($script:task9LockExtractionCount -gt 0) 'Held writer lock does not cover rejected recompute extraction'
+        Assert-True ($script:task9LockEvaluationCount -gt 0) 'Held writer lock does not cover rejected recompute evaluation'
+        Assert-Equal $task9LockRun.Commit.Code WRITER_LOCKED 'Held writer lock fails only at Commit-HistoryRun'
+        Assert-Equal $task9LockRun.Commit.RetryRequired $false 'Writer lock returns no automatic retry signal'
+        Assert-True (-not (Test-Path -LiteralPath (Get-HistoryObservationPath -Store $task9LockStore -ObservationId $task9LockRun.Observation.ObservationId))) 'Writer-locked observation is never published authoritatively'
+    } finally { if(Test-Path -LiteralPath $task9LockRoot){Remove-Item -LiteralPath $task9LockRoot -Recurse -Force} }
 } finally { if(Test-Path -LiteralPath $incrementalRoot){ Remove-Item -LiteralPath $incrementalRoot -Recurse -Force } }
 
 Write-Host 'Benefit incremental checkpoint tests passed.'

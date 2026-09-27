@@ -212,4 +212,163 @@ Assert-Equal $execution.FingerprintSchemaVersion 1 'Execution projection preserv
 Assert-Equal $execution.ComparatorVersion 1 'Execution projection preserves comparator version'
 Assert-Throws { ConvertTo-LocationHistoryExecutionProjection -RepositoryRevision ('A'*40) } 'Execution projection rejects non-lowercase repository revisions'
 
-Write-Host 'Location history adapter projection tests passed.'
+# Task 2: operational/comparable assessment, prepared projection artifacts,
+# store-backed reads, and the internal staged-current validation boundary.
+function Copy-TestLocationObject {
+    param([Parameter(Mandatory)]$Value)
+    return ($Value | ConvertTo-Json -Depth 30 | ConvertFrom-Json)
+}
+
+function New-TestLocationPackage {
+    param(
+        [Parameter(Mandatory)]$Store,
+        [string]$RunId='run-0123456789abcdef0123456789abcdef',
+        [string]$ObservedAt='2026-09-27T00:00:00Z',
+        [string]$RepositoryRevision=('b'*40),
+        [AllowNull()]$BusinessOverride=$null,
+        [AllowNull()]$BatchOverride=$null,
+        [AllowNull()]$ResultOverride=$null
+    )
+    $packageBusiness=if($null -eq $BusinessOverride){New-TestBusiness}else{$BusinessOverride}
+    $packageBatch=if($null -eq $BatchOverride){New-TestDiscoveryBatch}else{$BatchOverride}
+    $packageResult=if($null -eq $ResultOverride){New-TestMatchResult}else{$ResultOverride}
+    return New-LocationHistoryObservationPackage -Store $Store -RunId $RunId -BusinessId 'biz-0123456789abcdef0123456789abcdef' -ObservedAt $ObservedAt -RepositoryRevision $RepositoryRevision -Business $packageBusiness -DiscoveryBatch $packageBatch -Result $packageResult -ExecutionConfiguration ([pscustomobject]@{Mode='TEST'})
+}
+
+function Publish-TestLocationPackageArtifacts {
+    param([Parameter(Mandatory)]$Store,[Parameter(Mandatory)]$Package)
+    foreach($artifact in @($Package.PreparedArtifacts)){
+        [void](Write-HistoryArtifact -Store $Store -ContentHash $artifact.ContentHash -Extension $artifact.Extension -Text $artifact.Text)
+    }
+}
+
+function New-TestLocationProjectionArtifact {
+    param([Parameter(Mandatory)]$Store,[Parameter(Mandatory)][string]$Kind,[Parameter(Mandatory)]$Projection)
+    $json=ConvertTo-HistoryCanonicalJson -Value $Projection -OrderInsensitivePaths @('MaterialReasonCodes','ConflictCodes')
+    $hash=Get-HistorySha256 -Text $json
+    [void](Write-HistoryArtifact -Store $Store -ContentHash $hash -Extension 'json' -Text $json)
+    return New-HistoryArtifactReference -Kind $Kind -ContentHash $hash -RelativePath (Get-HistoryRelativePath -Store $Store -FullPath (Get-HistoryArtifactPath -Store $Store -ContentHash $hash -Extension 'json'))
+}
+
+$completeAssessment=Get-LocationHistoryOperationalAssessment -DiscoveryBatch $batch -Result $result
+Assert-Equal $completeAssessment.OperationalStatus COMPLETE 'COMPLETE discovery and evaluation are operationally complete'
+Assert-True $completeAssessment.Comparable 'COMPLETE discovery and evaluation are comparable'
+$incompleteResult=New-TestMatchResult -Overrides @{EvaluationStatus='INCOMPLETE';Classification='YELLOW'}
+$incompleteAssessment=Get-LocationHistoryOperationalAssessment -DiscoveryBatch $batch -Result $incompleteResult
+Assert-Equal $incompleteAssessment.OperationalStatus PARTIAL 'Incomplete evaluation is operationally partial'
+Assert-True (-not $incompleteAssessment.Comparable) 'Incomplete evaluation is not comparable'
+Assert-Equal (@($incompleteAssessment.NonComparableReasons) -join ',') EVALUATION_INCOMPLETE 'Incomplete evaluation has the deterministic reason code'
+$partialBatch=New-TestDiscoveryBatch -Overrides @{Status='PARTIAL'}
+$partialAssessment=Get-LocationHistoryOperationalAssessment -DiscoveryBatch $partialBatch -Result $incompleteResult
+Assert-Equal $partialAssessment.OperationalStatus PARTIAL 'Partial discovery remains partial'
+Assert-Equal (@($partialAssessment.NonComparableReasons) -join ',') 'DISCOVERY_PARTIAL_FAILURE,EVALUATION_INCOMPLETE' 'Partial/incomplete reasons are deterministic and unique'
+$failedBatch=New-TestDiscoveryBatch -Overrides @{Status='FAILED'}
+$failedAssessment=Get-LocationHistoryOperationalAssessment -DiscoveryBatch $failedBatch -Result $incompleteResult
+Assert-Equal $failedAssessment.OperationalStatus FAILED 'Failed discovery dominates operational status'
+Assert-Equal (@($failedAssessment.NonComparableReasons) -join ',') 'DISCOVERY_FAILED,EVALUATION_INCOMPLETE' 'Failed/incomplete reasons are deterministic and unique'
+Assert-True (Get-LocationHistoryOperationalAssessment -DiscoveryBatch $batch -Result (New-TestMatchResult -Overrides @{Classification='YELLOW'})).Comparable 'Complete YELLOW remains comparable'
+Assert-True (Get-LocationHistoryOperationalAssessment -DiscoveryBatch $absenceBatch -Result $noneResult).Comparable 'Complete strict absence remains comparable'
+Assert-Throws { Get-LocationHistoryOperationalAssessment -DiscoveryBatch (New-TestDiscoveryBatch -Overrides @{SourceRowNumber=3}) -Result $result } 'Discovery/result SourceRowNumber mismatch must fail closed'
+
+$historyRoot=Join-Path ([IO.Path]::GetTempPath()) ('milimap-location-history-' + [Guid]::NewGuid().ToString('N'))
+try {
+    $store=New-HistoryStoreLayout -Root $historyRoot
+    $package=New-TestLocationPackage -Store $store
+    Assert-HistoryObservation $package.Observation
+    Assert-Equal $package.Observation.Domain LOCATION 'Location package creates a LOCATION observation'
+    Assert-Equal @($package.PreparedArtifacts).Count 2 'Location package prepares only evidence and semantic projection artifacts'
+    Assert-Equal @($package.Observation.ArtifactReferences).Count 2 'Location observation references exactly two artifacts'
+    $evidenceReference=@($package.Observation.ArtifactReferences | Where-Object { $_.Kind -ceq 'LOCATION_EVIDENCE_PROJECTION' })
+    $semanticReference=@($package.Observation.ArtifactReferences | Where-Object { $_.Kind -ceq 'LOCATION_SEMANTIC_PROJECTION' })
+    Assert-Equal $evidenceReference.Count 1 'Location observation has one evidence projection reference'
+    Assert-Equal $semanticReference.Count 1 'Location observation has one semantic projection reference'
+    Assert-Equal $package.Observation.SemanticResultReference $semanticReference[0].RelativePath 'Semantic result reference matches the semantic projection artifact'
+    Assert-True (@($package.Observation.ArtifactReferences | Where-Object { $_.Kind -match 'RAW|INPUT|EXECUTION' }).Count -eq 0) 'Location package does not prepare raw, input, or execution artifacts'
+    Assert-True (-not (Test-Path -LiteralPath (Join-Path $store.Root $semanticReference[0].RelativePath))) 'Prepared semantic artifact is not published before commit'
+
+    $expectedFingerprints=Get-TestFingerprintSet -InputProjection $package.InputProjection -Evidence $package.EvidenceProjection -Semantic $package.SemanticProjection -Execution $package.ExecutionProjection
+    Assert-Equal $package.Observation.InputFingerprint $expectedFingerprints.InputFingerprint 'Observation InputFingerprint uses Task 1 projection'
+    Assert-Equal $package.Observation.EvidenceFingerprint $expectedFingerprints.EvidenceFingerprint 'Observation EvidenceFingerprint uses Task 1 projection ordering'
+    Assert-Equal $package.Observation.SemanticFingerprint $expectedFingerprints.SemanticFingerprint 'Observation SemanticFingerprint uses Task 1 projection ordering'
+    Assert-Equal $package.Observation.ExecutionFingerprint $expectedFingerprints.ExecutionFingerprint 'Observation ExecutionFingerprint uses Task 1 projection'
+    $nextRun=New-TestLocationPackage -Store $store -RunId 'run-11111111111111111111111111111111'
+    Assert-NotEqual $nextRun.Observation.ObservationId $package.Observation.ObservationId 'Different RunId produces a different deterministic ObservationId'
+
+    $businessRowMismatch=New-TestBusiness -Overrides @{SourceRowNumber=3}
+    Assert-Throws { New-TestLocationPackage -Store $store -BusinessOverride $businessRowMismatch } 'Business/discovery/result SourceRowNumber chain mismatch must fail closed'
+
+    Publish-TestLocationPackageArtifacts -Store $store -Package $package
+    $readSemantic=Read-LocationHistorySemanticProjection -Store $store -Observation $package.Observation
+    Assert-Equal $readSemantic.ProjectionType LocationHistorySemantic 'Stored Location semantic projection is readable and typed'
+
+    $unpublishedReadResult=New-TestMatchResult -Overrides @{SelectedCandidate=(New-TestCandidate -Overrides @{NormalizedName='미발행식당양주점'})}
+    $unpublishedReadPackage=New-TestLocationPackage -Store $store -RunId 'run-22222222222222222222222222222222' -ResultOverride $unpublishedReadResult
+    Assert-Throws { Read-LocationHistorySemanticProjection -Store $store -Observation $unpublishedReadPackage.Observation } 'Location semantic reader rejects a missing semantic artifact'
+
+    $wrongDomain=Copy-TestLocationObject $package.Observation
+    $wrongDomain.Domain='BENEFIT'
+    Assert-Throws { Read-LocationHistorySemanticProjection -Store $store -Observation $wrongDomain } 'Location semantic reader rejects a non-LOCATION observation'
+    $wrongKind=Copy-TestLocationObject $package.Observation
+    (@($wrongKind.ArtifactReferences | Where-Object { $_.Kind -ceq 'LOCATION_SEMANTIC_PROJECTION' })[0]).Kind='OTHER_PROJECTION'
+    Assert-Throws { Read-LocationHistorySemanticProjection -Store $store -Observation $wrongKind } 'Location semantic reader requires exactly one semantic projection artifact'
+    $multipleSemanticReferences=Copy-TestLocationObject $package.Observation
+    $multipleSemanticReferences.ArtifactReferences=@($multipleSemanticReferences.ArtifactReferences)+@(New-HistoryArtifactReference -Kind 'LOCATION_SEMANTIC_PROJECTION' -ContentHash ('e'*64) -RelativePath 'artifacts/sha256/eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee.json')
+    Assert-Throws { Read-LocationHistorySemanticProjection -Store $store -Observation $multipleSemanticReferences } 'Location semantic reader rejects multiple semantic projection artifacts'
+    $wrongResultReference=Copy-TestLocationObject $package.Observation
+    $wrongResultReference.SemanticResultReference='artifacts/sha256/not-the-semantic-projection.json'
+    Assert-Throws { Read-LocationHistorySemanticProjection -Store $store -Observation $wrongResultReference } 'Location semantic reader rejects mismatched semantic result reference'
+
+    $wrongType=Copy-TestLocationObject $package.SemanticProjection
+    $wrongType.ProjectionType='WrongLocationHistorySemantic'
+    $wrongTypeReference=New-TestLocationProjectionArtifact -Store $store -Kind 'LOCATION_SEMANTIC_PROJECTION' -Projection $wrongType
+    $wrongTypeObservation=Copy-TestLocationObject $package.Observation
+    (@($wrongTypeObservation.ArtifactReferences | Where-Object { $_.Kind -ceq 'LOCATION_SEMANTIC_PROJECTION' })[0]).ContentHash=$wrongTypeReference.ContentHash
+    (@($wrongTypeObservation.ArtifactReferences | Where-Object { $_.Kind -ceq 'LOCATION_SEMANTIC_PROJECTION' })[0]).RelativePath=$wrongTypeReference.RelativePath
+    $wrongTypeObservation.SemanticResultReference=$wrongTypeReference.RelativePath
+    Assert-Throws { Read-LocationHistorySemanticProjection -Store $store -Observation $wrongTypeObservation } 'Location semantic reader rejects a tampered projection type'
+    $wrongVersion=Copy-TestLocationObject $package.SemanticProjection
+    $wrongVersion.ProjectionVersion=2
+    $wrongVersionReference=New-TestLocationProjectionArtifact -Store $store -Kind 'LOCATION_SEMANTIC_PROJECTION' -Projection $wrongVersion
+    $wrongVersionObservation=Copy-TestLocationObject $package.Observation
+    (@($wrongVersionObservation.ArtifactReferences | Where-Object { $_.Kind -ceq 'LOCATION_SEMANTIC_PROJECTION' })[0]).ContentHash=$wrongVersionReference.ContentHash
+    (@($wrongVersionObservation.ArtifactReferences | Where-Object { $_.Kind -ceq 'LOCATION_SEMANTIC_PROJECTION' })[0]).RelativePath=$wrongVersionReference.RelativePath
+    $wrongVersionObservation.SemanticResultReference=$wrongVersionReference.RelativePath
+    Assert-Throws { Read-LocationHistorySemanticProjection -Store $store -Observation $wrongVersionObservation } 'Location semantic reader rejects a tampered projection version'
+    $wrongFingerprint=Copy-TestLocationObject $package.Observation
+    $wrongFingerprint.SemanticFingerprint=('0'*64)
+    Assert-Throws { Read-LocationHistorySemanticProjection -Store $store -Observation $wrongFingerprint } 'Location semantic reader rejects a semantic fingerprint mismatch'
+
+    Assert-Equal (Get-InternalStagedLocationHistorySemanticProjection -Current $package.Observation -StagedCurrentSemanticProjection $package.SemanticProjection).ProjectionType LocationHistorySemantic 'Validated staged current semantic projection is accepted without pre-CAS publication'
+    $stagedWrongType=Copy-TestLocationObject $package.SemanticProjection
+    $stagedWrongType.ProjectionType='WrongLocationHistorySemantic'
+    Assert-Throws { Get-InternalStagedLocationHistorySemanticProjection -Current $package.Observation -StagedCurrentSemanticProjection $stagedWrongType } 'Staged projection type tampering fails closed'
+    $stagedWrongVersion=Copy-TestLocationObject $package.SemanticProjection
+    $stagedWrongVersion.ProjectionVersion=2
+    Assert-Throws { Get-InternalStagedLocationHistorySemanticProjection -Current $package.Observation -StagedCurrentSemanticProjection $stagedWrongVersion } 'Staged projection version tampering fails closed'
+    $stagedWrongFingerprint=Copy-TestLocationObject $package.Observation
+    $stagedWrongFingerprint.SemanticFingerprint=('0'*64)
+    Assert-Throws { Get-InternalStagedLocationHistorySemanticProjection -Current $stagedWrongFingerprint -StagedCurrentSemanticProjection $package.SemanticProjection } 'Staged projection fingerprint mismatch fails closed'
+    $stagedWrongReference=Copy-TestLocationObject $package.Observation
+    $stagedWrongReference.SemanticResultReference='artifacts/sha256/not-the-semantic-projection.json'
+    Assert-Throws { Get-InternalStagedLocationHistorySemanticProjection -Current $stagedWrongReference -StagedCurrentSemanticProjection $package.SemanticProjection } 'Staged semantic result reference mismatch fails closed'
+    $stagedWrongHash=Copy-TestLocationObject $package.Observation
+    (@($stagedWrongHash.ArtifactReferences | Where-Object { $_.Kind -ceq 'LOCATION_SEMANTIC_PROJECTION' })[0]).ContentHash=('0'*64)
+    Assert-Throws { Get-InternalStagedLocationHistorySemanticProjection -Current $stagedWrongHash -StagedCurrentSemanticProjection $package.SemanticProjection } 'Staged semantic artifact hash mismatch fails closed'
+    $stagedWrongKind=Copy-TestLocationObject $package.Observation
+    (@($stagedWrongKind.ArtifactReferences | Where-Object { $_.Kind -ceq 'LOCATION_SEMANTIC_PROJECTION' })[0]).Kind='OTHER_PROJECTION'
+    Assert-Throws { Get-InternalStagedLocationHistorySemanticProjection -Current $stagedWrongKind -StagedCurrentSemanticProjection $package.SemanticProjection } 'Staged validation rejects missing semantic reference'
+    $stagedMultipleReferences=Copy-TestLocationObject $package.Observation
+    $extraReference=New-HistoryArtifactReference -Kind 'LOCATION_SEMANTIC_PROJECTION' -ContentHash ('f'*64) -RelativePath 'artifacts/sha256/ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff.json'
+    $stagedMultipleReferences.ArtifactReferences=@($stagedMultipleReferences.ArtifactReferences)+@($extraReference)
+    Assert-Throws { Get-InternalStagedLocationHistorySemanticProjection -Current $stagedMultipleReferences -StagedCurrentSemanticProjection $package.SemanticProjection } 'Staged validation rejects multiple semantic references'
+
+    foreach($functionName in @('Get-LocationHistoryOperationalAssessment','New-LocationHistoryObservationPackage','Read-LocationHistorySemanticProjection')){
+        foreach($forbidden in @('Trusted','Validated','SkipValidation')){
+            Assert-True (-not (Get-Command $functionName).Parameters.ContainsKey($forbidden)) "$functionName exposes no public $forbidden bypass"
+        }
+    }
+} finally {
+    if(Test-Path -LiteralPath $historyRoot){ Remove-Item -LiteralPath $historyRoot -Recurse -Force }
+}
+
+Write-Host 'Location history adapter tests passed.'

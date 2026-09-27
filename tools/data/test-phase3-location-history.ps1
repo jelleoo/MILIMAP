@@ -273,9 +273,13 @@ try {
     Assert-Equal $cleanAfterDirty.Run.BaselineResolution.Observation.ObservationId $dirtyMiddle.Run.Observation.ObservationId 'Clean run sees latest comparable dirty observation'
     Assert-Equal $cleanAfterDirty.Run.ReuseDecision.ReasonCodes[0] 'EXECUTION_CHANGED' 'Dirty execution fingerprint cannot poison clean reuse'
     Assert-Sequence $cleanAfterDirty.Trace @('BASELINE','DISCOVERY','MATCHER') 'Clean after dirty recomputes once'
-    $dirtyAgain=Invoke-TestRun -Store $dirtyChain.Store -RunId 'run-dirty-again' -ObservedAt '2026-09-27T01:30:00Z' -Clean $false
+    $dirtyAfterClean=Invoke-TestRun -Store $dirtyChain.Store -RunId 'run-dirty-after-clean' -ObservedAt '2026-09-27T01:30:00Z' -Clean $false
+    Assert-Equal $dirtyAfterClean.Run.Commit.Code 'COMMITTED' 'Dirty-after-clean run establishes a dirty comparable baseline'
+    $dirtyAgain=Invoke-TestRun -Store $dirtyChain.Store -RunId 'run-dirty-after-dirty' -ObservedAt '2026-09-27T01:40:00Z' -Clean $false
+    Assert-Equal $dirtyAgain.Run.BaselineResolution.Observation.ObservationId $dirtyAfterClean.Run.Observation.ObservationId 'Dirty-to-dirty fixture uses the preceding dirty baseline'
+    Assert-Equal $dirtyAgain.Run.Observation.ExecutionFingerprint $dirtyAfterClean.Run.Observation.ExecutionFingerprint 'Dirty-to-dirty execution fingerprints match but still cannot reuse'
     Assert-Equal $dirtyAgain.Run.ReuseDecision.ReasonCodes[0] 'DIRTY_REPOSITORY' 'Dirty-to-dirty remains ineligible'
-    Assert-Sequence $dirtyAgain.Trace @('BASELINE','DISCOVERY','MATCHER') 'Dirty-to-dirty also invokes matcher once'
+    Assert-Sequence $dirtyAgain.Trace @('BASELINE','DISCOVERY','MATCHER') 'Dirty-to-dirty invokes matcher once'
 
     foreach($status in @('PARTIAL','FAILED')) {
         $statusScenario=New-TestScenario -Name ('discovery-' + $status.ToLowerInvariant())

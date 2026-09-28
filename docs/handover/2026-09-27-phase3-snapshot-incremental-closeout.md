@@ -1,10 +1,10 @@
 # Phase 3 Snapshot / Incremental Change Detection closeout evidence
 
 - Verification date: 2026-09-28
-- Baseline: `origin/dev@e9585884773fa28cec991439987a3ba83dae4bb5`
-- Implementation: Issue [#107](https://github.com/jelleoo/MILIMAP/issues/107), P3-7 branch `codex/phase3-p3-7-review-audit-closeout`
-- Parent architecture: Issue [#94](https://github.com/jelleoo/MILIMAP/issues/94), [approved Phase 3 design](../superpowers/specs/2026-09-26-phase3-snapshot-incremental-change-detection-design.md) §28
-- Bounded Phase 3 closeout status: `COMPLETE` after both required checks passed on PR #108 HEAD `7cbb2b8e9c037b932ca6b438ba8825e4a47b3ca9`. This docs-only finalization changes HEAD, so the new exact-HEAD CI must also pass before the PR is merge-ready.
+- Final dev merge: `d40e479b2f9e2b39839f338ef11259f126840460` (PR #108)
+- Implementation: Issue [#107](https://github.com/jelleoo/MILIMAP/issues/107) completed by merged PR [#108](https://github.com/jelleoo/MILIMAP/pull/108)
+- Parent architecture: Issue [#94](https://github.com/jelleoo/MILIMAP/issues/94) completed; [approved Phase 3 design](../superpowers/specs/2026-09-26-phase3-snapshot-incremental-change-detection-design.md) §28
+- Bounded Phase 3 closeout status: `COMPLETE`. PR #108 final HEAD `ffe419a34b5091215c0a5db4f1478e9953807842` passed both required checks, PR #108 merged, and post-merge `dev` CI run #209 on `d40e479b2f9e2b39839f338ef11259f126840460` also passed `verify-data` and `verify`.
 
 ## Implementation evidence
 
@@ -16,13 +16,13 @@
 | P3-4 | [PR #102](https://github.com/jelleoo/MILIMAP/pull/102), merge `5fc4f2354b3c2c8c0d33e1835a4fe8188d6169f2` | Post-fetch HTML/XLSX Benefit reuse, current fetch retained. |
 | P3-5 | [PR #104](https://github.com/jelleoo/MILIMAP/pull/104), merge `d1df26ce9a68383b9f3de04ba49ef67bef4d8052` | Location observation/projection and comparator. |
 | P3-6 | [PR #106](https://github.com/jelleoo/MILIMAP/pull/106), merge `e9585884773fa28cec991439987a3ba83dae4bb5` | Location matcher reuse after current discovery; provider work remains. |
-| P3-7 Tasks 1–3 | Branch commits `a16910f195150b10117bbe84e5ef4dbca2520994`, `a4fc3f6eedfb750d340019d8b17caff7479a965f`, `81555ab218866c45acaa5ace26862d2695a51f58` | Pure review projection, read-only COMMITTED-history scan, A/B/C matrix. Task 4 review additionally fixed previous comparison BusinessId/Domain lineage with RED→GREEN regression (`bf170c2`). |
+| P3-7 | [PR #108](https://github.com/jelleoo/MILIMAP/pull/108), merge `d40e479b2f9e2b39839f338ef11259f126840460` | Pure review projection, read-only COMMITTED-history scan, A/B/C matrix, closeout evidence. Task 4 review additionally fixed previous comparison BusinessId/Domain lineage with RED→GREEN regression (`bf170c2`). |
 
 P3-7 routes known candidates to `RECORD_ONLY`, `HUMAN_DOMAIN_REVIEW`, `AUDIT_VERIFICATION`, or `OPERATIONAL_DIAGNOSTIC`; unknown or mixed categories throw. A committed observation without comparison receives `COMPARISON_NOT_RECORDED` only in `AuditFlags`, not a fabricated History candidate or reason. The scanner uses terminal COMMITTED manifests as authority, one run/observation/comparison pass, map joins, and one physical validation per unique artifact key. It does not read/rebuild indexes, mutate the store, call providers, or re-evaluate domain semantics. [Projection tests](../../tools/data/test-phase3-review-audit.ps1) cover these properties, including the previous-lineage repair.
 
 ## Parent architecture §28: twenty closeout gates
 
-`PASS` below means the stated bounded contract has repository/test evidence, not population-level current-state accuracy. CI gate 19 is grounded in the first exact PR HEAD's successful checks; the final docs-only HEAD must pass the same checks before merge readiness.
+`PASS` below means the stated bounded contract has repository/test evidence, not population-level current-state accuracy. CI gate 19 includes successful PR-head checks and successful post-merge `dev` checks.
 
 | # | Gate | Status | Evidence |
 | ---: | --- | --- | --- |
@@ -44,7 +44,7 @@ P3-7 routes known candidates to `RECORD_ONLY`, `HUMAN_DOMAIN_REVIEW`, `AUDIT_VER
 | 16 | Representative validation | PASS | P3-7 A=3 deterministic controls, B=4 historical provenance-only, C=9 synthetic temporal replay, exact route/candidate/reason/audit-flag sets. No B temporal pair is fabricated. |
 | 17 | Efficiency metrics recorded | PASS | `test-benefit-incremental-reuse.ps1`: successful reuse avoids parse/extraction/evaluation and retains raw-artifact dedup. `test-phase3-location-history.ps1`: identical-evidence second run has `MatcherCount=0`, `AvoidedMatcherCount=1`, while provider requests remain positive. No latency estimate. |
 | 18 | Full data suite on final production state | PASS | 2026-09-28: `tools/data/test-*.ps1` **56/56 PASS, 0 FAIL**, after P3-7 lineage fix. |
-| 19 | CI | PASS | PR #108 HEAD `7cbb2b8e9c037b932ca6b438ba8825e4a47b3ca9`: [verify-data](https://github.com/jelleoo/MILIMAP/actions/runs/36418575884/job/108915516207) SUCCESS and [verify](https://github.com/jelleoo/MILIMAP/actions/runs/36418575884/job/108915516592) SUCCESS. Final docs-only HEAD requires a fresh exact-HEAD CI check before merge readiness. |
+| 19 | CI | PASS | PR #108 final HEAD `ffe419a34b5091215c0a5db4f1478e9953807842`: run [36419065337](https://github.com/jelleoo/MILIMAP/actions/runs/36419065337) SUCCESS for `verify-data` and `verify`; post-merge `dev` run [36420796267](https://github.com/jelleoo/MILIMAP/actions/runs/36420796267) also SUCCESS on merge commit `d40e479b2f9e2b39839f338ef11259f126840460`. |
 | 20 | Limitations documented | PASS | Limitations below and [P3-7 design](../superpowers/specs/2026-09-27-phase3-p3-7-review-audit-closeout-design.md). |
 
 ## Representative evidence boundary and safety
@@ -60,7 +60,7 @@ The [P3-7 matrix](../../tools/data/testdata/phase3-closeout/representative-resul
 - Full PowerShell data suite: 56/56 PASS, 0 FAIL.
 - Android (process-local Android Studio JBR and SDK): `assembleDebugUnitTest testDebugUnitTest` PASS; XML totals 99 tests, 0 failures, 0 errors, 1 skipped. `lintDebug assembleDebug` PASS; lint XML 0 errors, 25 warnings.
 - `git diff --check` and final protected-path diff are checked at PR preparation. No new live provider request was made.
-- CI: first exact PR HEAD `7cbb2b8` passed both `verify-data` and `verify` in [run 36418575884](https://github.com/jelleoo/MILIMAP/actions/runs/36418575884). The final docs-only commit requires a second exact-HEAD check before the PR is merge-ready.
+- CI: PR #108 final HEAD `ffe419a3` passed both checks in [run 36419065337](https://github.com/jelleoo/MILIMAP/actions/runs/36419065337), and the merged `dev` commit `d40e479b` passed post-merge CI in [run 36420796267](https://github.com/jelleoo/MILIMAP/actions/runs/36420796267).
 
 ## Limitations and next boundary
 
@@ -70,4 +70,4 @@ The [P3-7 matrix](../../tools/data/testdata/phase3-closeout/representative-resul
 - Corrupted content-addressed artifacts fail closed; there is no artifact repair subsystem.
 - Live provider validation is not a Phase 3 closeout condition and was not performed here.
 - Android instrumentation/device testing was not run; this gate covers local unit/lint/debug build only.
-- Issue #94 remains open for human parent-milestone judgment after P3-7 review/merge; this PR should close only Issue #107.
+- Issue #107 and parent Issue #94 are both closed as completed after PR #108 merge and successful post-merge CI.

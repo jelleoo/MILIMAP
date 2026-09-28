@@ -1,14 +1,14 @@
 # MILIMAP Development Roadmap
 
 - Status: Directional roadmap
-- Date: 2026-09-26
+- Date: 2026-09-28
 - Current development branch: `dev`
-- Current state: Phase 1 COMPLETE; Phase 2 Benefit Verification Core COMPLETE
-- Next phase: Phase 3 — Snapshot / Incremental Change Detection (approval/design required)
+- Current state: Phase 1 COMPLETE; Phase 2 Benefit Verification Core COMPLETE; bounded Phase 3 Snapshot / Incremental Change Detection closeout COMPLETE
+- Next gate: P3-7 Issue #107 final docs-only HEAD CI recheck and human review; parent Issue #94 remains open
 
 이 문서는 MILIMAP의 장기 개발 방향을 팀원이 한눈에 확인하기 위한 로드맵입니다.
 
-Phase 1 POI Verification Core / Shadow Mode와 Phase 2 Benefit Verification Core의 구현 및 bounded closeout evidence는 완료되었습니다. Phase 3 이후는 방향과 목적만 공유하며, 미래 담당자·세부 Issue·구현 파일·Contract는 지금 고정하지 않습니다.
+Phase 1 POI Verification Core / Shadow Mode와 Phase 2 Benefit Verification Core의 구현 및 bounded closeout evidence는 완료되었습니다. Phase 3도 승인된 file-history 구조와 P3-7 대표 검증의 bounded closeout을 완료했습니다. 최종 docs-only HEAD CI 재확인과 human review는 PR merge 전 조건입니다. Phase 4 이후는 방향과 목적만 공유하며, 미래 담당자·세부 Issue·구현 파일·Contract는 지금 고정하지 않습니다.
 
 항상 최신 `dev`, 해당 시점의 Issue/PR, 승인된 ADR/docs가 이 문서보다 우선합니다.
 
@@ -157,19 +157,9 @@ POI 위치가 아니라 **군인 혜택 자체가 현재 유효한지**를 검�
 
 ## Phase 3 — Snapshot / Incremental Change Detection
 
-### 방향
+승인된 [Phase 3 architecture](superpowers/specs/2026-09-26-phase3-snapshot-incremental-change-detection-design.md)에 따라 stable `businessId`, immutable file History Store, Input/Evidence/Semantic/Execution fingerprints, Location/Benefit comparison, bounded incremental reuse, CAS, read-only Review/Audit projection을 구현했다. P3-0~P3-6은 PR #96/#98/#100/#102/#104/#106으로 병합됐다. P3-7 Issue #107의 A/B/C representative validation과 local data/Android gates, PR #108 첫 exact-HEAD `verify-data`/`verify` CI가 모두 통과해 bounded Phase 3 closeout은 `COMPLETE`다.
 
-매 실행마다 모든 대상을 처음부터 검증하는 대신, **이전 관찰 결과와 현재 관찰 결과를 비교해 실제 변경 후보를 찾는 구조**로 발전시킵니다.
-
-### 예상 관심 영역
-
-- 이전/현재 observation 비교
-- location/benefit/evidence fingerprint
-- 신규·변경·이동 의심·폐업 의심·혜택 변경·혜택 종료 후보 탐지
-- 안전한 경우 unchanged 작업 생략
-- audit 가능한 snapshot/history
-
-persistent schema나 저장 방식은 이 Phase 시작 전에 별도 논의와 승인이 필요합니다.
+[Closeout evidence](handover/2026-09-27-phase3-snapshot-incremental-closeout.md)의 20개 parent gate는 첫 PR HEAD의 CI 성공 근거를 포함해 PASS다. 최종 docs-only HEAD의 CI 재확인은 merge-ready 조건이다. `HUMAN_DOMAIN_REVIEW`는 변경 후보의 검토 경로이지 승인·MOVED/CLOSED/ENDED 판정이 아니다. 이 Phase는 full 496-row 현재 상태 검증, scheduler, Location provider-fetch 절감, canonical/seed/apps 자동 수정, product DB persistence를 포함하지 않는다.
 
 ---
 

@@ -8,8 +8,8 @@
 - Phase 1 code baseline: `97d6070113196e922fb76af7508314b6eda8e7b7`
 - Phase 2 Task 6 merge baseline: `d43c00ee07b471a55ed7ece4abecc1dc242ed8ce`
 - Phase 2 Core Foundation: Issue #43 / Task 7 validation PR #50
-- current dev baseline: `1e504809743ffce89a0d141b274fff2dc694680f` (PR #91 merged)
-- 기준일: 2026-09-26
+- current dev baseline: `e9585884773fa28cec991439987a3ba83dae4bb5` (P3-6 PR #106 merged)
+- 기준일: 2026-09-28
 - Phase 1 A — Business Identity / Normalization: PR #37 merged
 - Phase 1 B — POI Discovery: PR #34 merged
 - Phase 1 C — POI Matching / Evaluation: PR #36 merged
@@ -24,9 +24,9 @@
 
 현재 코드/설정이 이 문서와 다르면 최신 `dev` 코드와 해당 Issue/PR을 우선합니다. release data 수치는 이번 closeout에서 변경하지 않았다.
 
-## 2026-09-26 Phase 2 최신 상태
+## Phase 2 closeout (2026-09-26)
 
-Phase 2 Benefit Verification Core의 scoped HTML, MMA JSONP, XLSX 경로와 fixed representative closeout **evidence matrix**를 완료했다. current-code fixed-12 live replay는 replayable raw capture가 없어 `NOT_RUN_NO_REPLAYABLE_RAW_CAPTURE`이며, 이 branch의 Issue #92 evidence가 병합되면 roadmap Phase 2 상태는 현재 구현 범위에서 `COMPLETE`다.
+Phase 2 Benefit Verification Core의 scoped HTML, MMA JSONP, XLSX 경로와 fixed representative closeout **evidence matrix**를 완료했다(Issue #92 / PR #93 merged). current-code fixed-12 live replay는 replayable raw capture가 없어 `NOT_RUN_NO_REPLAYABLE_RAW_CAPTURE`이며, Phase 2는 현재 구현된 source-family 경계 안에서 `COMPLETE`다.
 
 최근 완료된 항목:
 
@@ -69,7 +69,7 @@ Phase 2 Benefit Verification Core의 scoped HTML, MMA JSONP, XLSX 경로와 fixe
 - PDF: safe machine text/layout extraction runtime과 page/row provenance가 아직 승인되지 않음
 - long heterogeneous live batch의 transport latency/retry/isolation은 별도 operational concern이며 현재 source adapter issue와 섞지 않음
 
-Phase 2 이후의 다음 설계 대상은 Phase 3 snapshot/history이며, PDF/HWP/OCR, SNS/blog strong-evidence expansion, general discovery, and periodic execution은 later phases로 남는다.
+Phase 2 이후 Phase 3 snapshot/history는 P3-0~P3-6이 `dev`에 병합됐고 P3-7 closeout이 진행 중이다. PDF/HWP/OCR, SNS/blog strong-evidence expansion, general discovery, periodic execution은 later phases로 남는다.
 
 ## Phase 1 상태
 
@@ -163,9 +163,21 @@ Task 7 Golden fixture는 real source-cited historical provenance와 synthetic al
 - PDF text extraction capability/dependency
 - OCR/HWP pipeline
 - full 247 hold workload validation
-- snapshot/history persistence and periodic execution
+- periodic execution (Phase 3 file history persistence는 별도로 구현됨)
 
 이들은 현재 Phase 2 Core closeout의 blocker가 아니다. full 247-row validation is `NOT_RUN`, and future real-source GREEN은 그 row가 human audit을 통과하기 전까지 production approval을 받을 수 없다.
+
+## Phase 3 Snapshot / Incremental Change Detection 상태
+
+- P3-0 `businessId`: PR #96 merged
+- P3-1/P3-2 History contracts, fingerprints, file store, dedup, rebuild, CAS: PR #98 merged
+- P3-3 Benefit history: PR #100 merged; P3-4 post-fetch reuse: PR #102 merged
+- P3-5 Location history: PR #104 merged; P3-6 matcher reuse: PR #106 merged
+- P3-7 pure ReviewItem routing, COMMITTED read-only audit scanner, A/B/C representative matrix: Issue #107 implementation/representative validation complete on `codex/phase3-p3-7-review-audit-closeout`
+- 2026-09-28 local gates: data scripts 56/56 PASS; Android unit 99 tests (0 failures/errors, 1 skipped), lint 0 errors/25 warnings, debug build PASS; protected paths unchanged
+- Bounded Phase 3 closeout status: `COMPLETE`. PR #108의 첫 exact HEAD `7cbb2b8`에서 `verify-data`와 `verify`가 모두 성공했다([CI run 36418575884](https://github.com/jelleoo/MILIMAP/actions/runs/36418575884)). 최종 문서 커밋의 새 HEAD도 두 검사가 통과해야 PR이 merge-ready다.
+
+근거와 20개 parent gate는 [Phase 3 closeout handover](handover/2026-09-27-phase3-snapshot-incremental-closeout.md)에 기록한다. 이는 full 496-row current-state validation이나 periodic scheduler, provider-fetch reduction, automatic closure/ending, production auto-write, DB persistence를 포함하지 않는다.
 
 ## 안전 경계
 
@@ -177,7 +189,7 @@ Task 7 Golden fixture는 real source-cited historical provenance와 synthetic al
 
 ## 다음 액션
 
-1. Phase 3 snapshot/history 설계를 별도 승인 절차로 시작한다.
+1. Issue #107 P3-7 PR의 최종 docs-only HEAD에서 `verify-data`/`verify` CI를 재확인하고 human review를 받는다. Issue #94는 parent Phase 3 milestone 판단 대상으로 남긴다.
 2. PDF/HWP/OCR, SNS/blog, and general discovery는 source-expansion issue로 별도 판단한다.
 3. 모든 후속 Phase에서도 `ProductionAction=NONE`, canonical/seed automatic write 금지, and GREEN human approval requirement를 유지한다.
 

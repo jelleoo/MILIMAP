@@ -66,6 +66,10 @@ function Get-Phase3CommittedComparisonInventory {
         if ($previousId) {
             if (-not $ObservationInventory.AllObservationIds.Contains($previousId)) { throw 'Previous observation missing' }
             if (-not $ObservationInventory.ObservationById.ContainsKey($previousId)) { throw 'Previous observation is not committed' }
+            $previous = $ObservationInventory.ObservationById[$previousId]
+            foreach ($property in @('BusinessId','Domain')) {
+                if ([string]$comparison.$property -cne [string]$previous.$property) { throw "Previous observation $property mismatch" }
+            }
         }
         if ($byCurrentId.ContainsKey($currentId)) { throw 'Duplicate committed comparison for current observation' }
         $byCurrentId.Add($currentId,$comparison)

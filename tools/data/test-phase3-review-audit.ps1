@@ -239,6 +239,23 @@ foreach ($case in $comparisonCases) {
     }
 }
 
+foreach ($case in @(
+    @{ Name='previous business mismatch'; Domain='LOCATION'; BusinessId='biz-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' }
+    @{ Name='previous domain mismatch'; Domain='BENEFIT'; BusinessId=$businessId }
+)) {
+    $caseStore = New-AuditTestStore
+    try {
+        Write-AuditTestManifest -Store $caseStore -RunId 'run-current'
+        Write-AuditTestManifest -Store $caseStore -RunId 'run-previous'
+        [void](Write-AuditTestObservation -Store $caseStore -Id 'obs-current' -RunId 'run-current')
+        [void](Write-AuditTestObservation -Store $caseStore -Id 'obs-previous' -RunId 'run-previous' -Domain $case.Domain -BusinessId $case.BusinessId)
+        [void](Write-AuditTestComparison -Store $caseStore -Id 'cmp-case' -RunId 'run-current' -CurrentId 'obs-current' -PreviousId 'obs-previous')
+        Assert-ThrowsMatching { Invoke-Phase3ReviewAudit -Store $caseStore } 'Previous observation.*mismatch' "Comparison $($case.Name) must fail"
+    } finally {
+        Remove-Item -LiteralPath $caseStore.Root -Recurse -Force -ErrorAction SilentlyContinue
+    }
+}
+
 $badComparisonStore = New-AuditTestStore
 try {
     Write-AuditTestManifest -Store $badComparisonStore -RunId 'run-current'

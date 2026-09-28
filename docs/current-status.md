@@ -5,10 +5,11 @@
 - Phase 2 Task 6 merge baseline: `d43c00ee07b471a55ed7ece4abecc1dc242ed8ce`
 - Task 7 validation: Issue #43 / PR #50
 - 데이터 기준 commit: `edca54d23981501efa8ce602df98f5456973940c`
-- 기준일: 2026-09-24
+- current dev baseline: `e9585884773fa28cec991439987a3ba83dae4bb5` (P3-6 PR #106 merged)
+- 기준일: 2026-09-28
 - Phase 1 closeout evidence: [`docs/handover/2026-09-24-phase1-poi-shadow-validation.md`](handover/2026-09-24-phase1-poi-shadow-validation.md)
 
-코드 baseline과 data baseline은 구분한다. 이번 closeout은 Phase 1 구현과 Shadow validation evidence를 기록하는 docs-only 변경이며 release data를 수정하지 않는다. 구현 상태가 이 문서와 다르면 최신 `dev` 코드와 설정, 해당 Issue/Pull Request, 승인된 ADR 순으로 우선한다.
+코드 baseline과 data baseline은 구분한다. 현재 P3-7 closeout은 Phase 3 history/review 구현과 검증 근거를 기록하며 release data를 수정하지 않는다. 구현 상태가 이 문서와 다르면 최신 `dev` 코드와 설정, 해당 Issue/Pull Request, 승인된 ADR 순으로 우선한다.
 
 ## 브랜치와 협업 상태
 
@@ -63,14 +64,14 @@ Phase 1 A/B/C, Integration Shadow runner, candidate diagnostics/provenance가 `d
 
 Phase 1은 POI identity/location verification만 다룬다. GREEN은 automatic production approval이 아니며, RED는 폐업 또는 혜택 종료를 뜻하지 않는다. 혜택의 현재 유효성은 별도 검증 범위다.
 
-## Phase 2 Benefit Verification Core Foundation
+## Phase 2 Benefit Verification Core
 
-Phase 2 provider-neutral Core는 Task 1~6에서 구현됐고 Task 7 Golden safety와 existing-source smoke 검증을 완료했다.
+Phase 2 provider-neutral Core는 현재 공식 HTML, MMA JSONP, XLSX source-family 범위에서 Issue #92 / PR #93 closeout까지 완료했다. 아래 2026-09-24 smoke는 과거 관측이며, 현재-code fixed-12 live replay가 아니다.
 
 - Contract v1: 구현/테스트 완료
 - existing-source-first fetch/discovery boundary: 구현/테스트 완료
 - source qualification / business binding: 구현/테스트 완료
-- deterministic HTML/CSV extraction + injectable free-text/PDF/XLSX boundary: 구현/테스트 완료
+- scoped HTML, MMA JSONP, XLSX row/cell provenance: 구현/테스트 완료
 - Evidence Validation: 구현/테스트 완료
 - claim comparison / deterministic BenefitState + ReviewClass: 구현/테스트 완료
 - Shadow Mode orchestration / metrics / diagnostics / protected export: 구현/테스트 완료
@@ -95,19 +96,11 @@ Phase 2 provider-neutral Core는 Task 1~6에서 구현됐고 Task 7 Golden safet
 
 이 결과는 small operational smoke이며 population precision/recall 또는 247 hold 대표성의 근거가 아니다. DDC는 페이지 fetch와 structured extraction이 성공했지만 복수 업소의 claim이 한 canonical row 비교에 함께 들어가 `SOURCE_CONFLICT + RED`가 발생했다. 이는 false-GREEN이 아니라 보수적 fail-closed 결과지만, 후속 adapter의 row-scoped extraction 개선 대상이다.
 
-### Phase 2가 아직 COMPLETE가 아닌 이유
+Phase 2 `COMPLETE`는 구현된 HTML/MMA JSONP/XLSX core의 bounded closeout만 뜻한다. [Phase 2 closeout](handover/2026-09-26-phase2-benefit-verification-closeout.md)의 fixed-12는 authoritative evidence matrix이며 current-code live replay는 `NOT_RUN_NO_REPLAYABLE_RAW_CAPTURE`다. Observed real-source GREEN 0건으로 GREEN human audit은 `NOT_APPLICABLE`이다. PDF/HWP/OCR, SNS/blog, general discovery, full 247-row validation은 별도 후속 범위다.
 
-다음 항목은 별도 승인/구현/검증이 필요하다.
+## Phase 3 Snapshot / Incremental Change Detection
 
-- general official-source discovery provider
-- LLM/free-text extraction provider
-- PDF text extraction adapter/dependency
-- XLSX parsing adapter/dependency
-- 247 hold 중심 representative validation
-- positive controls
-- human GREEN audit
-
-따라서 Issue #43의 Core Foundation closeout과 roadmap Phase 2 COMPLETE는 구분한다.
+P3-0~P3-6은 PR #96/#98/#100/#102/#104/#106으로 `dev`에 병합됐다. P3-7 Issue #107은 pure ReviewItem routing, COMMITTED authority 기반 read-only audit scanner, A/B/C representative validation을 구현했다. 2026-09-28 local verification은 data suite 56/56 PASS, Android unit 99 tests(0 failures/errors, 1 skipped), lint 0 errors/25 warnings, debug build PASS다. Parent 20개 gate의 CI 항목은 아직 `PENDING`; 정확한 PR HEAD의 `verify-data`와 `verify`가 성공하기 전 Phase 3 상태는 `PENDING_CI`이며 `COMPLETE`가 아니다. 근거는 [Phase 3 closeout](handover/2026-09-27-phase3-snapshot-incremental-closeout.md)에 있다.
 
 ## 서버·iOS 상태
 
@@ -119,21 +112,20 @@ Phase 2 provider-neutral Core는 Task 1~6에서 구현됐고 Task 7 Golden safet
 ## 알려진 제약과 위험
 
 - Android의 `local.properties` 값은 Git에는 들어가지 않지만 일부 BuildConfig 값은 APK에서 추출 가능하므로 공개 배포 전 API-key 노출 위험을 별도 Issue로 해결해야 한다.
-- 실기기/emulator instrumentation은 P3 PR에서 실행하지 않았고 androidTest APK 컴파일/생성까지만 확인했다.
+- 이번 P3-7 closeout에서는 실기기/emulator instrumentation 및 androidTest APK 빌드를 실행하지 않았다. Android 검증 범위는 unit/lint/debug build다.
 - 정확 지도 핀이 없는 138건은 잘못된 좌표를 추정하지 않고 위치 미확정 상태를 유지한다.
 - 최신 혜택 근거 부족 247건은 좌표 검증과 별개의 혜택 재검증 대상이다.
 - Phase 1 operational sample은 작고 unresolved workload가 파주시 중심이다.
 - positive controls 3 / 6이 YELLOW여서 matcher recall 및 fast-review efficiency 개선 여지가 있다.
 - provider 결과는 2026-09-24 시점 observation이다.
-- Phase 2 live smoke에서 공식 source fetch는 5/5 성공했지만 모든 sample이 NEEDS_VERIFICATION으로 남아 현재 adapter/binding recall이 낮다.
-- DDC structured HTML은 한 페이지의 복수 업소 claim을 row-scoped로 제한하지 못해 conservative SOURCE_CONFLICT가 발생할 수 있다.
-- unsupported free-text/PDF/XLSX는 승인된 adapter가 생길 때까지 fail-closed가 정상 동작이다.
+- 2026-09-24 Phase 2 smoke의 공식 source fetch 5/5와 `NEEDS_VERIFICATION` 5/5는 당시 관측이다; 이후 scoped adapter 구현을 평가하는 현재 수치가 아니다.
+- PDF/HWP/OCR, SNS/blog와 general discovery는 아직 fail-closed 후속 범위이며, XLSX는 승인된 row/cell 경로에서만 지원한다.
+- Phase 3는 full 496-row 현재 상태 검증, scheduler, Location provider-fetch reduction, 자동 MOVED/CLOSED/ENDED, product DB persistence, human adjudication 완료를 뜻하지 않는다.
 
 ## 다음 우선순위
 
-1. Issue #43에 Task 7 Golden + live smoke + deterministic CI + protected-path non-write evidence를 Core Foundation closeout 근거로 유지한다.
-2. discovery/search, LLM/free-text, PDF/XLSX adapter는 새 외부 provider/dependency가 필요한 경우 별도 승인 후 작은 Issue/PR로 진행한다.
-3. adapter가 준비된 뒤 247 hold 중심 representative validation + positive controls + human GREEN audit를 수행한다.
-4. 이 후속 validation 전에는 roadmap Phase 2를 COMPLETE로 표시하지 않는다.
+1. P3-7 Issue #107 PR의 exact-HEAD `verify-data`/`verify` CI와 human review를 완료한 후 Phase 3 closeout을 확정한다. Parent Issue #94는 별도 human 판단 대상으로 유지한다.
+2. PDF/HWP/OCR, SNS/blog, general discovery, periodic execution은 각각 별도 승인 범위로 다룬다.
+3. `ProductionAction=NONE`, canonical/seed/apps 자동 수정 금지, GREEN human approval 경계를 유지한다.
 
 기술 사항이 확정되지 않은 항목은 `Pending`이며 이 문서만으로 승인된 아키텍처 결정으로 간주하지 않는다.

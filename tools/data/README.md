@@ -1,6 +1,6 @@
 # 데이터 도구
 
-`data/canonical/capital-area-military-benefits.csv`가 22열 정본입니다. `convert-benefits.ps1`은 정본 전체를 출시 전 중간 JSON으로 변환하고, `build-release-benefit-seed.ps1`은 최신 공식 혜택 후보만 골라 Android Room 초기 시드를 만듭니다. 중간 JSON은 Git에 저장하지 않고 임시 경로에 생성합니다.
+`data/canonical/capital-area-military-benefits.csv`가 `businessId`를 포함한 23열 정본입니다. `convert-benefits.ps1`은 정본 전체를 출시 전 중간 JSON으로 변환하고, `build-release-benefit-seed.ps1`은 최신 공식 혜택 후보만 골라 Android Room 초기 시드를 만듭니다. 중간 JSON은 Git에 저장하지 않고 임시 경로에 생성합니다.
 
 기존 출시 시드에 있는 세부 지역명(예: 파주시의 읍·면·동)은 `-DistrictReferenceJson`으로 보존합니다. 새 정본 행에 기존 ID가 없으면 정본의 `시군구`를 사용합니다. 업소명과 주소로 계산한 안정 ID는 유지되므로, 같은 업소가 다음 시드에도 남아 있으면 사용자의 찜도 유지됩니다.
 
@@ -442,3 +442,9 @@ Paju/Yangju HTML과 Suwon PDF는 현재 adapter 경계에서 충분한 row-speci
 - smoke 결과를 release 승인이나 canonical 자동 수정 근거로 사용하지 않는다.
 
 Phase 2 Core closeout is recorded by the fixed representative validation in [`docs/handover/2026-09-26-phase2-benefit-verification-closeout.md`](../../docs/handover/2026-09-26-phase2-benefit-verification-closeout.md). It does not expand support to PDF/HWP/OCR, SNS/blog, or general discovery; any future real-source GREEN still requires human audit.
+
+## Phase 3 Snapshot / Incremental History
+
+P3-0~P3-6은 stable canonical `businessId`와 별도의 file History Store, fingerprint, Location/Benefit observation·comparison, 보수적 증분 재사용을 구현했다. P3-7은 `lib/history/phase3-review-audit.ps1`의 pure review projection과 `invoke-phase3-review-audit.ps1`의 read-only COMMITTED-history scanner를 제공한다. Scanner는 기존 store를 입력받아 `Items`와 `Summary`를 반환하며 index rebuild, provider fetch, domain re-evaluation, canonical/seed/apps write를 하지 않는다.
+
+`test-phase3-review-audit.ps1`은 route fail-closed, COMMITTED authority, comparison linkage, unique-artifact validation reuse를 검증한다. `test-phase3-closeout-validation.ps1`은 A/B/C 대표 matrix의 deterministic comparator 결과와 historical provenance 경계를 검증한다. 전체 Phase 3 근거와 limitations는 [closeout handover](../../docs/handover/2026-09-27-phase3-snapshot-incremental-closeout.md)를 참조한다. 2026-09-28 현재 implementation/representative validation은 완료됐지만 최종 상태는 exact-HEAD CI 대기인 `PENDING_CI`다.

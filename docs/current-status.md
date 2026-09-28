@@ -100,7 +100,7 @@ Phase 2 `COMPLETE`는 구현된 HTML/MMA JSONP/XLSX core의 bounded closeout만 
 
 ## Phase 3 Snapshot / Incremental Change Detection
 
-P3-0~P3-6은 PR #96/#98/#100/#102/#104/#106으로 `dev`에 병합됐다. P3-7 Issue #107은 pure ReviewItem routing, COMMITTED authority 기반 read-only audit scanner, A/B/C representative validation을 구현했다. 2026-09-28 local verification은 data suite 56/56 PASS, Android unit 99 tests(0 failures/errors, 1 skipped), lint 0 errors/25 warnings, debug build PASS다. Parent 20개 gate의 CI 항목은 아직 `PENDING`; 정확한 PR HEAD의 `verify-data`와 `verify`가 성공하기 전 Phase 3 상태는 `PENDING_CI`이며 `COMPLETE`가 아니다. 근거는 [Phase 3 closeout](handover/2026-09-27-phase3-snapshot-incremental-closeout.md)에 있다.
+P3-0~P3-6은 PR #96/#98/#100/#102/#104/#106으로 `dev`에 병합됐다. P3-7 Issue #107은 pure ReviewItem routing, COMMITTED authority 기반 read-only audit scanner, A/B/C representative validation을 구현했다. 2026-09-28 local verification은 data suite 56/56 PASS, Android unit 99 tests(0 failures/errors, 1 skipped), lint 0 errors/25 warnings, debug build PASS다. PR #108 첫 exact HEAD `7cbb2b8`에서 `verify-data`와 `verify`가 모두 성공해 bounded Phase 3 closeout은 `COMPLETE`다. 최종 docs-only HEAD의 CI 재확인은 merge-ready 조건이며, population/current-state validation을 뜻하지 않는다. 근거는 [Phase 3 closeout](handover/2026-09-27-phase3-snapshot-incremental-closeout.md)에 있다.
 
 ## 서버·iOS 상태
 
@@ -124,7 +124,7 @@ P3-0~P3-6은 PR #96/#98/#100/#102/#104/#106으로 `dev`에 병합됐다. P3-7 Is
 
 ## 다음 우선순위
 
-1. P3-7 Issue #107 PR의 exact-HEAD `verify-data`/`verify` CI와 human review를 완료한 후 Phase 3 closeout을 확정한다. Parent Issue #94는 별도 human 판단 대상으로 유지한다.
+1. P3-7 Issue #107 PR의 최종 docs-only HEAD `verify-data`/`verify` CI를 재확인하고 human review를 받는다. Parent Issue #94는 별도 human 판단 대상으로 유지한다.
 2. PDF/HWP/OCR, SNS/blog, general discovery, periodic execution은 각각 별도 승인 범위로 다룬다.
 3. `ProductionAction=NONE`, canonical/seed/apps 자동 수정 금지, GREEN human approval 경계를 유지한다.
 

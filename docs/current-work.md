@@ -175,7 +175,7 @@ Task 7 Golden fixture는 real source-cited historical provenance와 synthetic al
 - P3-5 Location history: PR #104 merged; P3-6 matcher reuse: PR #106 merged
 - P3-7 pure ReviewItem routing, COMMITTED read-only audit scanner, A/B/C representative matrix: Issue #107 implementation/representative validation complete on `codex/phase3-p3-7-review-audit-closeout`
 - 2026-09-28 local gates: data scripts 56/56 PASS; Android unit 99 tests (0 failures/errors, 1 skipped), lint 0 errors/25 warnings, debug build PASS; protected paths unchanged
-- Final closeout status: `PENDING_CI`. `verify-data`와 `verify`가 정확한 PR HEAD에서 성공하기 전에는 Phase 3 `COMPLETE`를 선언하지 않는다.
+- Bounded Phase 3 closeout status: `COMPLETE`. PR #108의 첫 exact HEAD `7cbb2b8`에서 `verify-data`와 `verify`가 모두 성공했다([CI run 36418575884](https://github.com/jelleoo/MILIMAP/actions/runs/36418575884)). 최종 문서 커밋의 새 HEAD도 두 검사가 통과해야 PR이 merge-ready다.
 
 근거와 20개 parent gate는 [Phase 3 closeout handover](handover/2026-09-27-phase3-snapshot-incremental-closeout.md)에 기록한다. 이는 full 496-row current-state validation이나 periodic scheduler, provider-fetch reduction, automatic closure/ending, production auto-write, DB persistence를 포함하지 않는다.
 
@@ -189,7 +189,7 @@ Task 7 Golden fixture는 real source-cited historical provenance와 synthetic al
 
 ## 다음 액션
 
-1. Issue #107 P3-7 PR의 `verify-data`/`verify` exact-HEAD CI와 human review를 완료한다. Issue #94는 parent Phase 3 milestone 판단 대상으로 남긴다.
+1. Issue #107 P3-7 PR의 최종 docs-only HEAD에서 `verify-data`/`verify` CI를 재확인하고 human review를 받는다. Issue #94는 parent Phase 3 milestone 판단 대상으로 남긴다.
 2. PDF/HWP/OCR, SNS/blog, and general discovery는 source-expansion issue로 별도 판단한다.
 3. 모든 후속 Phase에서도 `ProductionAction=NONE`, canonical/seed automatic write 금지, and GREEN human approval requirement를 유지한다.
 

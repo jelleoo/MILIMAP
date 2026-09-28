@@ -4,7 +4,7 @@
 - Baseline: `origin/dev@e9585884773fa28cec991439987a3ba83dae4bb5`
 - Implementation: Issue [#107](https://github.com/jelleoo/MILIMAP/issues/107), P3-7 branch `codex/phase3-p3-7-review-audit-closeout`
 - Parent architecture: Issue [#94](https://github.com/jelleoo/MILIMAP/issues/94), [approved Phase 3 design](../superpowers/specs/2026-09-26-phase3-snapshot-incremental-change-detection-design.md) §28
-- Closeout status before PR CI: `PENDING_CI`. This document does not declare Phase 3 COMPLETE before checks pass on the exact PR HEAD.
+- Bounded Phase 3 closeout status: `COMPLETE` after both required checks passed on PR #108 HEAD `7cbb2b8e9c037b932ca6b438ba8825e4a47b3ca9`. This docs-only finalization changes HEAD, so the new exact-HEAD CI must also pass before the PR is merge-ready.
 
 ## Implementation evidence
 
@@ -22,7 +22,7 @@ P3-7 routes known candidates to `RECORD_ONLY`, `HUMAN_DOMAIN_REVIEW`, `AUDIT_VER
 
 ## Parent architecture §28: twenty closeout gates
 
-`PASS` below means the stated bounded contract has repository/test evidence, not population-level current-state accuracy. CI is deliberately pending until the exact PR HEAD passes both required workflows.
+`PASS` below means the stated bounded contract has repository/test evidence, not population-level current-state accuracy. CI gate 19 is grounded in the first exact PR HEAD's successful checks; the final docs-only HEAD must pass the same checks before merge readiness.
 
 | # | Gate | Status | Evidence |
 | ---: | --- | --- | --- |
@@ -44,7 +44,7 @@ P3-7 routes known candidates to `RECORD_ONLY`, `HUMAN_DOMAIN_REVIEW`, `AUDIT_VER
 | 16 | Representative validation | PASS | P3-7 A=3 deterministic controls, B=4 historical provenance-only, C=9 synthetic temporal replay, exact route/candidate/reason/audit-flag sets. No B temporal pair is fabricated. |
 | 17 | Efficiency metrics recorded | PASS | `test-benefit-incremental-reuse.ps1`: successful reuse avoids parse/extraction/evaluation and retains raw-artifact dedup. `test-phase3-location-history.ps1`: identical-evidence second run has `MatcherCount=0`, `AvoidedMatcherCount=1`, while provider requests remain positive. No latency estimate. |
 | 18 | Full data suite on final production state | PASS | 2026-09-28: `tools/data/test-*.ps1` **56/56 PASS, 0 FAIL**, after P3-7 lineage fix. |
-| 19 | CI | PENDING | Exact PR HEAD `verify-data` and `verify` results not yet available. Do not mark COMPLETE on local tests alone. |
+| 19 | CI | PASS | PR #108 HEAD `7cbb2b8e9c037b932ca6b438ba8825e4a47b3ca9`: [verify-data](https://github.com/jelleoo/MILIMAP/actions/runs/36418575884/job/108915516207) SUCCESS and [verify](https://github.com/jelleoo/MILIMAP/actions/runs/36418575884/job/108915516592) SUCCESS. Final docs-only HEAD requires a fresh exact-HEAD CI check before merge readiness. |
 | 20 | Limitations documented | PASS | Limitations below and [P3-7 design](../superpowers/specs/2026-09-27-phase3-p3-7-review-audit-closeout-design.md). |
 
 ## Representative evidence boundary and safety
@@ -60,7 +60,7 @@ The [P3-7 matrix](../../tools/data/testdata/phase3-closeout/representative-resul
 - Full PowerShell data suite: 56/56 PASS, 0 FAIL.
 - Android (process-local Android Studio JBR and SDK): `assembleDebugUnitTest testDebugUnitTest` PASS; XML totals 99 tests, 0 failures, 0 errors, 1 skipped. `lintDebug assembleDebug` PASS; lint XML 0 errors, 25 warnings.
 - `git diff --check` and final protected-path diff are checked at PR preparation. No new live provider request was made.
-- CI: `verify-data` and `verify` PENDING first PR push; the exact HEAD must pass before Phase 3 COMPLETE.
+- CI: first exact PR HEAD `7cbb2b8` passed both `verify-data` and `verify` in [run 36418575884](https://github.com/jelleoo/MILIMAP/actions/runs/36418575884). The final docs-only commit requires a second exact-HEAD check before the PR is merge-ready.
 
 ## Limitations and next boundary
 

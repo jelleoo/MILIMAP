@@ -8,7 +8,7 @@
 - Phase 1 code baseline: `97d6070113196e922fb76af7508314b6eda8e7b7`
 - Phase 2 Task 6 merge baseline: `d43c00ee07b471a55ed7ece4abecc1dc242ed8ce`
 - Phase 2 Core Foundation: Issue #43 / Task 7 validation PR #50
-- current dev baseline: `e9585884773fa28cec991439987a3ba83dae4bb5` (P3-6 PR #106 merged)
+- current dev baseline: `d40e479b2f9e2b39839f338ef11259f126840460` (P3-7 PR #108 merged)
 - 기준일: 2026-09-28
 - Phase 1 A — Business Identity / Normalization: PR #37 merged
 - Phase 1 B — POI Discovery: PR #34 merged
@@ -69,7 +69,7 @@ Phase 2 Benefit Verification Core의 scoped HTML, MMA JSONP, XLSX 경로와 fixe
 - PDF: safe machine text/layout extraction runtime과 page/row provenance가 아직 승인되지 않음
 - long heterogeneous live batch의 transport latency/retry/isolation은 별도 operational concern이며 현재 source adapter issue와 섞지 않음
 
-Phase 2 이후 Phase 3 snapshot/history는 P3-0~P3-6이 `dev`에 병합됐고 P3-7 closeout이 진행 중이다. PDF/HWP/OCR, SNS/blog strong-evidence expansion, general discovery, periodic execution은 later phases로 남는다.
+Phase 3 snapshot/history는 P3-0~P3-7까지 `dev`에 병합됐고 bounded closeout을 완료했다. PDF/HWP/OCR, SNS/blog strong-evidence expansion, general discovery, periodic execution은 later phases로 남는다.
 
 ## Phase 1 상태
 
@@ -173,9 +173,9 @@ Task 7 Golden fixture는 real source-cited historical provenance와 synthetic al
 - P3-1/P3-2 History contracts, fingerprints, file store, dedup, rebuild, CAS: PR #98 merged
 - P3-3 Benefit history: PR #100 merged; P3-4 post-fetch reuse: PR #102 merged
 - P3-5 Location history: PR #104 merged; P3-6 matcher reuse: PR #106 merged
-- P3-7 pure ReviewItem routing, COMMITTED read-only audit scanner, A/B/C representative matrix: Issue #107 implementation/representative validation complete on `codex/phase3-p3-7-review-audit-closeout`
+- P3-7 pure ReviewItem routing, COMMITTED read-only audit scanner, A/B/C representative matrix: PR #108 merged; Issue #107 completed
 - 2026-09-28 local gates: data scripts 56/56 PASS; Android unit 99 tests (0 failures/errors, 1 skipped), lint 0 errors/25 warnings, debug build PASS; protected paths unchanged
-- Bounded Phase 3 closeout status: `COMPLETE`. PR #108의 첫 exact HEAD `7cbb2b8`에서 `verify-data`와 `verify`가 모두 성공했다([CI run 36418575884](https://github.com/jelleoo/MILIMAP/actions/runs/36418575884)). 최종 문서 커밋의 새 HEAD도 두 검사가 통과해야 PR이 merge-ready다.
+- Bounded Phase 3 closeout status: `COMPLETE`. PR #108 final HEAD와 merge commit `d40e479b2f9e2b39839f338ef11259f126840460`의 post-merge CI run #209에서 `verify-data`와 `verify`가 모두 성공했고 parent Issue #94도 completed 상태다.
 
 근거와 20개 parent gate는 [Phase 3 closeout handover](handover/2026-09-27-phase3-snapshot-incremental-closeout.md)에 기록한다. 이는 full 496-row current-state validation이나 periodic scheduler, provider-fetch reduction, automatic closure/ending, production auto-write, DB persistence를 포함하지 않는다.
 
@@ -189,7 +189,7 @@ Task 7 Golden fixture는 real source-cited historical provenance와 synthetic al
 
 ## 다음 액션
 
-1. Issue #107 P3-7 PR의 최종 docs-only HEAD에서 `verify-data`/`verify` CI를 재확인하고 human review를 받는다. Issue #94는 parent Phase 3 milestone 판단 대상으로 남긴다.
+1. Phase 3 이후 product/UX 작업을 별도 설계·Issue로 시작한다.
 2. PDF/HWP/OCR, SNS/blog, and general discovery는 source-expansion issue로 별도 판단한다.
 3. 모든 후속 Phase에서도 `ProductionAction=NONE`, canonical/seed automatic write 금지, and GREEN human approval requirement를 유지한다.
 

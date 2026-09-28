@@ -5,11 +5,11 @@
 - Phase 2 Task 6 merge baseline: `d43c00ee07b471a55ed7ece4abecc1dc242ed8ce`
 - Task 7 validation: Issue #43 / PR #50
 - 데이터 기준 commit: `edca54d23981501efa8ce602df98f5456973940c`
-- current dev baseline: `e9585884773fa28cec991439987a3ba83dae4bb5` (P3-6 PR #106 merged)
+- current dev baseline: `d40e479b2f9e2b39839f338ef11259f126840460` (P3-7 PR #108 merged)
 - 기준일: 2026-09-28
 - Phase 1 closeout evidence: [`docs/handover/2026-09-24-phase1-poi-shadow-validation.md`](handover/2026-09-24-phase1-poi-shadow-validation.md)
 
-코드 baseline과 data baseline은 구분한다. 현재 P3-7 closeout은 Phase 3 history/review 구현과 검증 근거를 기록하며 release data를 수정하지 않는다. 구현 상태가 이 문서와 다르면 최신 `dev` 코드와 설정, 해당 Issue/Pull Request, 승인된 ADR 순으로 우선한다.
+코드 baseline과 data baseline은 구분한다. Phase 3 history/review closeout은 `dev`에 병합됐고 release data는 수정하지 않았다. 구현 상태가 이 문서와 다르면 최신 `dev` 코드와 설정, 해당 Issue/Pull Request, 승인된 ADR 순으로 우선한다.
 
 ## 브랜치와 협업 상태
 
@@ -100,7 +100,7 @@ Phase 2 `COMPLETE`는 구현된 HTML/MMA JSONP/XLSX core의 bounded closeout만 
 
 ## Phase 3 Snapshot / Incremental Change Detection
 
-P3-0~P3-6은 PR #96/#98/#100/#102/#104/#106으로 `dev`에 병합됐다. P3-7 Issue #107은 pure ReviewItem routing, COMMITTED authority 기반 read-only audit scanner, A/B/C representative validation을 구현했다. 2026-09-28 local verification은 data suite 56/56 PASS, Android unit 99 tests(0 failures/errors, 1 skipped), lint 0 errors/25 warnings, debug build PASS다. PR #108 첫 exact HEAD `7cbb2b8`에서 `verify-data`와 `verify`가 모두 성공해 bounded Phase 3 closeout은 `COMPLETE`다. 최종 docs-only HEAD의 CI 재확인은 merge-ready 조건이며, population/current-state validation을 뜻하지 않는다. 근거는 [Phase 3 closeout](handover/2026-09-27-phase3-snapshot-incremental-closeout.md)에 있다.
+P3-0~P3-6은 PR #96/#98/#100/#102/#104/#106으로, P3-7은 PR #108로 `dev`에 병합됐다. P3-7은 pure ReviewItem routing, COMMITTED authority 기반 read-only audit scanner, A/B/C representative validation을 제공한다. 2026-09-28 local verification은 data suite 56/56 PASS, Android unit 99 tests(0 failures/errors, 1 skipped), lint 0 errors/25 warnings, debug build PASS다. PR #108 최종 HEAD와 merge commit `d40e479b2f9e2b39839f338ef11259f126840460`의 post-merge CI run #209에서 `verify-data`와 `verify`가 모두 성공했다. Issue #107과 parent Issue #94도 완료되어 bounded Phase 3 closeout은 `COMPLETE`다. 이는 population/current-state validation을 뜻하지 않는다. 근거는 [Phase 3 closeout](handover/2026-09-27-phase3-snapshot-incremental-closeout.md)에 있다.
 
 ## 서버·iOS 상태
 
@@ -124,7 +124,7 @@ P3-0~P3-6은 PR #96/#98/#100/#102/#104/#106으로 `dev`에 병합됐다. P3-7 Is
 
 ## 다음 우선순위
 
-1. P3-7 Issue #107 PR의 최종 docs-only HEAD `verify-data`/`verify` CI를 재확인하고 human review를 받는다. Parent Issue #94는 별도 human 판단 대상으로 유지한다.
+1. Phase 3 이후 product/UX 작업은 별도 설계·Issue로 시작한다.
 2. PDF/HWP/OCR, SNS/blog, general discovery, periodic execution은 각각 별도 승인 범위로 다룬다.
 3. `ProductionAction=NONE`, canonical/seed/apps 자동 수정 금지, GREEN human approval 경계를 유지한다.
 

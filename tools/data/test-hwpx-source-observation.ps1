@@ -24,3 +24,54 @@ foreach($bytes in @((New-HwpxTestBytes -MissingRoot),(New-HwpxTestBytes -Mimetyp
     Assert-HwpxEqual (Read-InternalBenefitHwpxPackage -Snapshot (New-HwpxTestSnapshot -Bytes $bytes)).Status FAILED 'Unsafe or bounded-invalid ZIP rejected'
 }
 Write-Host 'HWPX package/XML tests passed.'
+$document=New-HwpxTestDocument
+$observation=ConvertTo-BenefitHwpxObservation -Document $document
+Assert-HwpxEqual $observation.AdapterStatus COMPLETE 'Supported table parses completely'
+Assert-HwpxEqual $observation.ContentUnits.Count 2 'Both independent business rows retained'
+$unit=$observation.ContentUnits[0];$index=$observation.DocumentValidationIndex
+Assert-HwpxEqual $unit.UnitReference HWPX_SECTION_1_TABLE_1_ROW_2 'Byte-derived physical row ordinal'
+Assert-HwpxEqual $unit.StructuredFields.BusinessName '합성가게 A' 'Existing semantic map reused'
+Assert-HwpxEqual $unit.FieldReferences.BenefitDescription.PhysicalReference 'section/1/table/1/row/2/cell/4' 'Exact physical cell retained'
+Assert-HwpxEqual $unit.FieldReferences.BenefitDescription.SourceText '합성 A 혜택' 'Source text is from cell bytes'
+Assert-HwpxEqual $index.AdapterId HWPX_GENERIC 'Fixed adapter metadata'
+Assert-HwpxEqual $index.ExtractorId BUILTIN_HWPX_XML 'Native extractor metadata'
+function Get-HwpxTestObservation {param([string]$Content);ConvertTo-BenefitHwpxObservation -Document (New-HwpxTestDocument -Bytes (New-HwpxTestBytes -Sections @((New-HwpxTestSection $Content))))}
+$table=New-HwpxTestTable
+$title=New-HwpxTestRow @((New-HwpxTestCell '합성 제목' -Span "<hp:cellSpan rowSpan='1' colSpan='4'/>"))
+$decorated=$table.Replace('<hp:tbl>',"<hp:tbl>$title")
+$decoratedObservation=Get-HwpxTestObservation $decorated
+Assert-HwpxEqual $decoratedObservation.AdapterStatus COMPLETE 'Merged decorative title permitted'
+Assert-HwpxEqual $decoratedObservation.ContentUnits[0].UnitReference HWPX_SECTION_1_TABLE_1_ROW_3 'Physical title row still counted'
+foreach($content in @($table.Replace('업소명','이름미지원'),(New-HwpxTestTable -Rows @((New-HwpxTestRow @((New-HwpxTestCell '업소'),(New-HwpxTestCell '혜택'))),(New-HwpxTestRow @((New-HwpxTestCell '명'),(New-HwpxTestCell '정보'))))),'<hp:p><hp:run><hp:t>업소명 합성가게 A 혜택</hp:t></hp:run></hp:p>')){
+    Assert-HwpxEqual (Get-HwpxTestObservation $content).AdapterStatus UNSUPPORTED 'No single supported BusinessName header; no paragraph/positional inference'
+}
+foreach($header in @(@('업소명','업체명','혜택'),@('업소명','혜택','할인정보'))){
+    $duplicate=New-HwpxTestTable -Rows @((New-HwpxTestRow @($header|ForEach-Object{New-HwpxTestCell $_})))
+    Assert-HwpxEqual (Get-HwpxTestObservation $duplicate).AdapterStatus PARTIAL 'Duplicate semantic header mapping fails closed'
+}
+foreach($badCell in @((New-HwpxTestCell '업소명' -Span "<hp:cellSpan rowSpan='1' colSpan='2'/>"),(New-HwpxTestCell '업소명' -Span ''),(New-HwpxTestCell '업소명' -Attributes "rowSpan='2' colSpan='1'"))){
+    Assert-HwpxEqual (Get-HwpxTestObservation ($table.Replace((New-HwpxTestCell '업소명'),$badCell))).AdapterStatus PARTIAL 'Merged/unknown/conflicting semantic header span rejected'
+}
+foreach($badInner in @('<hp:p><hp:run><hp:pic/></hp:run></hp:p>','<hp:p><hp:run><hp:equation/></hp:run></hp:p>','<hp:p><hp:run><hp:footNote/></hp:run></hp:p>',(New-HwpxTestTable),'<hp:p><hp:run><hp:unknown/></hp:run></hp:p>')){
+    $bad=Get-HwpxTestObservation ($table.Replace((New-HwpxTestCell '합성 A 혜택'),(New-HwpxTestCell -Inner $badInner)))
+    Assert-HwpxEqual $bad.AdapterStatus PARTIAL 'Unsupported semantic inline content rejected'
+    Assert-HwpxEqual $bad.ContentUnits.Count 1 'Bad row isolated; nested table never separately promoted'
+}
+$merged=Get-HwpxTestObservation ($table.Replace((New-HwpxTestCell '합성 A 혜택'),(New-HwpxTestCell '합성 A 혜택' -Span "<hp:cellSpan rowSpan='2' colSpan='1'/>")))
+Assert-HwpxEqual $merged.AdapterStatus PARTIAL 'Merged mapped data rejected'
+$textInner='<hp:p><hp:run><hp:t>  합</hp:t></hp:run><hp:run><hp:t>성</hp:t><hp:lineBreak/><hp:t>혜택</hp:t><hp:tab/><hp:t>A</hp:t></hp:run></hp:p><hp:p><hp:run><hp:t>다음  </hp:t></hp:run></hp:p>'
+$textObservation=Get-HwpxTestObservation ($table.Replace((New-HwpxTestCell '합성 A 혜택'),(New-HwpxTestCell -Inner $textInner)))
+Assert-HwpxEqual $textObservation.ContentUnits[0].StructuredFields.BenefitDescription "합성`n혜택`tA`n다음" 'Runs/paragraph/line/tab fidelity with outer trim only'
+$multi=Get-HwpxTestObservation ($table+$table)
+Assert-HwpxEqual $multi.ContentUnits.Count 4 'All independent tables processed'
+Assert-HwpxEqual $multi.ContentUnits[2].UnitReference HWPX_SECTION_1_TABLE_2_ROW_2 'Top-level table ordinal is physical'
+$renamed=(New-HwpxTestSection).Replace('xmlns:hp=','xmlns:q=').Replace('hp:','q:')
+Assert-HwpxEqual (ConvertTo-BenefitHwpxObservation -Document (New-HwpxTestDocument -Bytes (New-HwpxTestBytes -Sections @($renamed)))).AdapterStatus COMPLETE 'Equivalent paragraph prefix accepted'
+Assert-HwpxEqual (ConvertTo-BenefitHwpxObservation -Document (New-HwpxTestDocument -Bytes (New-HwpxTestBytes -Sections @((New-HwpxTestSection).Replace('http://www.hancom.co.kr/hwpml/2011/paragraph','urn:wrong'))))).AdapterStatus UNSUPPORTED 'Wrong paragraph namespace never trusted'
+foreach($mutation in @({param($u)$u.PhysicalPath='section/2/table/1/row/2'},{param($u)$u.FieldReferences.BenefitDescription.PhysicalReference='section/1/table/1/row/3/cell/4'},{param($u)$u.FieldReferences.BenefitDescription.SourceText='forged'},{param($u)$u.StructuredFields.BenefitDescription='forged'},{param($u)$u.ExtractorVersion='2'},{param($u)$u.AdapterId='forged'},{param($u)$u.UnitReference='HWPX_SECTION_1_TABLE_1_ROW_99'})){
+    $forged=Copy-ScopeContractData $unit;&$mutation $forged
+    Assert-HwpxThrows {Assert-ScopeDocumentUnit -Unit $forged -Snapshot $observation.Snapshot -ValidationIndex $index} 'Parsed-byte unit tampering rejected'
+}
+$foreign=ConvertTo-BenefitHwpxObservation -Document (New-HwpxTestDocument -Url 'https://city.example.go.kr/other.hwpx')
+Assert-HwpxThrows {Assert-ScopeDocumentUnit -Unit $unit -Snapshot $observation.Snapshot -ValidationIndex $foreign.DocumentValidationIndex} 'Cross-snapshot index rejected'
+Write-Host 'HWPX table/text/provenance tests passed.'

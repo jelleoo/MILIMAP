@@ -82,10 +82,22 @@ $failed = Get-BenefitSourceDocument -Candidate $candidate -RequestInvoker { para
 Assert-Equal $failed.FetchStatus 'FAILED' 'Fetch exception must remain operational failure'
 Assert-True ($failed.ReasonCodes -contains 'SOURCE_FETCH_FAILED') 'Fetch failure reason must be preserved'
 
+$missingPdfByteCases = @(
+    @{ Name='null bytes / PDF MIME'; Url='https://city.example.go.kr/download'; ContentType='application/pdf'; Bytes=$null },
+    @{ Name='empty bytes / PDF MIME'; Url='https://city.example.go.kr/download'; ContentType='application/pdf'; Bytes=[byte[]]@() },
+    @{ Name='null bytes / PDF extension'; Url='https://city.example.go.kr/notice.pdf'; ContentType=''; Bytes=$null },
+    @{ Name='empty bytes / PDF extension'; Url='https://city.example.go.kr/notice.pdf'; ContentType=''; Bytes=[byte[]]@() }
+)
+$missingPdfByteFailures = @(foreach ($case in $missingPdfByteCases) {
+    $actual = Get-BenefitSourceFormat -Url $case.Url -ContentType $case.ContentType -Bytes $case.Bytes
+    if ($actual -cne 'UNSUPPORTED') { "$($case.Name): expected UNSUPPORTED, actual $actual" }
+})
+Assert-Equal $missingPdfByteFailures.Count 0 ("PDF hints cannot establish format without signature bytes: " + ($missingPdfByteFailures -join '; '))
+
 $formatCases = @(
     @{ Url='https://city.example.go.kr/list.csv'; ContentType='text/csv'; Expected='CSV' },
     @{ Url='https://city.example.go.kr/list.xlsx'; ContentType='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'; Expected='XLSX' },
-    @{ Url='https://city.example.go.kr/notice.pdf'; ContentType='application/pdf'; Expected='PDF' },
+    @{ Url='https://city.example.go.kr/notice.pdf'; ContentType='application/pdf'; Expected='UNSUPPORTED' },
     @{ Url='https://city.example.go.kr/archive.bin'; ContentType='application/octet-stream'; Expected='UNSUPPORTED' }
 )
 foreach ($formatCase in $formatCases) {

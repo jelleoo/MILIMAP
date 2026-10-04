@@ -22,7 +22,7 @@ All code/test paths above are under `tools/data/`. The approved spec/plan are in
 
 ## Contract boundary
 
-- HWPX adds one SourceFormat value. PDF recognition checks a bounded version signature; HWPX checks bounded ZIP marker parts/mimetype with duplicate/unsafe-path rejection. Neither validates a fully parsed document. Legacy binary HWP remains unsupported.
+- HWPX adds one SourceFormat value. PDF classification requires non-empty bytes passing `Test-BenefitPdfBinaryPackage`'s bounded version signature check; `application/pdf` / `.pdf` alone with null, empty or invalid bytes returns `UNSUPPORTED`. MIME/filename are hints only. HWPX checks bounded ZIP marker parts/mimetype with duplicate/unsafe-path rejection. Neither validates a fully parsed document. Legacy binary HWP remains unsupported.
 - PDF/HWPX snapshots preserve original `byte[]` defensively with byte SHA-256 as provenance root and empty Text. HTML/JSONP text hashes and XLSX semantics remain unchanged.
 - `BenefitDocumentValidationIndex` binds SnapshotId, ContentHash, SourceFormat, AdapterId/Version, ExtractionMethod, ExtractorId/Version, ExtractionConfigHash and exact indexed rows. PDF uses page/table/row identity; HWPX uses section/table/row identity. Fields preserve exact per-cell references and source text.
 - Document units/slices reject fabricated RawStart/RawLength/RawFragment. Unit and slice values, physical paths and extraction metadata must equal the indexed record. Cross-snapshot indexes and altered fields/references fail closed.

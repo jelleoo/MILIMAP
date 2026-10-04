@@ -88,13 +88,13 @@ function Get-BenefitSourceFormat {
         if ($isHwpx) { return 'HWPX' }
         if ($extension -in @('.pdf','.hwpx','.xlsx') -or $mediaType -in @('application/pdf','application/hwp+zip','application/vnd.openxmlformats-officedocument.spreadsheetml.sheet','application/vnd.ms-excel','application/octet-stream','application/octer-stream')) { return 'UNSUPPORTED' }
     }
+    if ($mediaType -eq 'application/pdf' -or $extension -eq '.pdf') { return 'UNSUPPORTED' }
     if ($mediaType -in @('text/html', 'application/xhtml+xml')) { return 'HTML' }
     if ($mediaType -in @('text/csv', 'application/csv')) { return 'CSV' }
-    if ($mediaType -eq 'application/pdf') { return 'PDF' }
     if ($mediaType -in @('application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'application/vnd.ms-excel')) { return 'XLSX' }
     if ($mediaType -in @('application/octet-stream', 'application/octer-stream') -and (Test-BenefitXlsxBinaryPackage -Bytes $Bytes)) { return 'XLSX' }
     switch ($extension) {
-        '.html' { return 'HTML' }; '.htm' { return 'HTML' }; '.csv' { return 'CSV' }; '.xlsx' { return 'XLSX' }; '.pdf' { return 'PDF' }; default { return 'UNSUPPORTED' }
+        '.html' { return 'HTML' }; '.htm' { return 'HTML' }; '.csv' { return 'CSV' }; '.xlsx' { return 'XLSX' }; default { return 'UNSUPPORTED' }
     }
 }
 

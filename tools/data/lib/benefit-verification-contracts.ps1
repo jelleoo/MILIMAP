@@ -12,7 +12,7 @@ $script:BenefitVerificationContractDefinition = [pscustomobject][ordered]@{
         'BenefitVerificationResult'
     )
     SourceDiscoveryStatus = @('COMPLETE', 'PARTIAL', 'FAILED')
-    SourceFormat = @('HTML', 'CSV', 'XLSX', 'PDF', 'JSONP', 'UNSUPPORTED')
+    SourceFormat = @('HTML', 'CSV', 'XLSX', 'PDF', 'HWPX', 'JSONP', 'UNSUPPORTED')
     SourceKind = @('PUBLIC_OFFICIAL', 'BUSINESS_WEBSITE')
     OfficialityStatus = @('VERIFIED_OFFICIAL', 'UNVERIFIED', 'REJECTED')
     BusinessBindingStatus = @('STRONG', 'PLAUSIBLE', 'AMBIGUOUS', 'CONFLICT')

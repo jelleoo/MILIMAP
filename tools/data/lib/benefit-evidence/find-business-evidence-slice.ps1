@@ -63,6 +63,8 @@ function Find-BenefitBusinessEvidence {
     Assert-ScopeObject $Observation 'SourceObservation' @('SourceRowNumber','SnapshotId','SourceUrl','SourceFormat','ObservedAt','Snapshot','AdapterId','AdapterVersion','AdapterStatus','ContentUnits','Diagnostics')
     if ($null -eq $XlsxValidationIndex -and [string]$Observation.SourceFormat -ceq 'XLSX' -and $Observation.PSObject.Properties.Name -contains 'XlsxValidationIndex') { $XlsxValidationIndex = $Observation.XlsxValidationIndex }
     $htmlValidationIndex = $null
+    $documentValidationIndex = $null
+    if ($Observation.SourceFormat -cin @('PDF','HWPX') -and $Observation.PSObject.Properties.Name -contains 'DocumentValidationIndex') { $documentValidationIndex = $Observation.DocumentValidationIndex }
     if ([string]$Observation.SourceFormat -ceq 'HTML') {
         if ($Observation.PSObject.Properties.Name -contains 'HtmlValidationIndex' -and
             (Test-InternalBenefitHtmlRunContextTrust -Snapshot $Observation.Snapshot -HtmlValidationIndex $Observation.HtmlValidationIndex)) {
@@ -72,7 +74,7 @@ function Find-BenefitBusinessEvidence {
         }
     }
     $htmlTokens = if ($null -eq $htmlValidationIndex) { $null } else { @($htmlValidationIndex.Tokens) }
-    Assert-ScopeObservation -Observation $Observation -HtmlTokens $htmlTokens -HtmlValidationIndex $htmlValidationIndex -XlsxValidationIndex $XlsxValidationIndex
+    Assert-ScopeObservation -Observation $Observation -HtmlTokens $htmlTokens -HtmlValidationIndex $htmlValidationIndex -XlsxValidationIndex $XlsxValidationIndex -DocumentValidationIndex $documentValidationIndex
     Assert-NormalizedBusiness $Business
     if ([int]$Observation.SourceRowNumber -ne [int]$Business.SourceRowNumber) { throw 'Locator inputs must preserve one SourceRowNumber' }
     if ($Observation.AdapterStatus -cne 'COMPLETE') {
@@ -97,7 +99,7 @@ function Find-BenefitBusinessEvidence {
         $slice = if ($Observation.SourceFormat -ceq 'XLSX') {
             New-InternalRelevantBenefitXlsxSlice -Observation $Observation -Unit $selected.Unit -IdentityEvidence $selected.Evidence -XlsxValidationIndex $XlsxValidationIndex
         } else {
-            New-RelevantBenefitEvidenceSlice -Observation $Observation -Unit $selected.Unit -IdentityEvidence $selected.Evidence -HtmlTokens $htmlTokens -HtmlValidationIndex $htmlValidationIndex -XlsxValidationIndex $XlsxValidationIndex
+            New-RelevantBenefitEvidenceSlice -Observation $Observation -Unit $selected.Unit -IdentityEvidence $selected.Evidence -HtmlTokens $htmlTokens -HtmlValidationIndex $htmlValidationIndex -XlsxValidationIndex $XlsxValidationIndex -DocumentValidationIndex $documentValidationIndex
         }
         return New-BenefitEvidenceLocationResult -SourceRowNumber $Observation.SourceRowNumber -OperationalStatus COMPLETE -Status LOCATED -Slices @($slice) -CandidateReferences $references -Diagnostics $diagnostics
     }

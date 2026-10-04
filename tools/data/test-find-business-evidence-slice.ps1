@@ -177,4 +177,62 @@ $otherXlsxDocument = New-BenefitSourceDocument -SourceRowNumber 2 -Url 'https://
 $otherXlsxIndex = (ConvertTo-BenefitXlsxObservation -Document $otherXlsxDocument).XlsxValidationIndex
 Assert-ScopeThrows { Find-BenefitBusinessEvidence -Observation $xlsxConverted -Business $xlsxBusiness -CanonicalPhone '031-861-4800' -XlsxValidationIndex $otherXlsxIndex } 'The locator rejects a validation index from another XLSX snapshot'
 
+. (Join-Path $PSScriptRoot 'testdata/benefit-evidence-document/test-support.ps1')
+foreach ($format in @('PDF','HWPX')) {
+    $rows = @(
+        (New-DocumentTestRowRecord -Format $format -Name '테스트가게 A' -Address '서울특별시 마포구 테스트로 12' -Phone '02-0000-0012' -Benefit '합성 A 혜택'),
+        (New-DocumentTestRowRecord -Format $format -Row 3 -Name '테스트가게 B' -Address '서울특별시 마포구 테스트로 34' -Phone '02-0000-0034' -Benefit '합성 B 혜택')
+    )
+    $fixture = New-DocumentTestFixture -Format $format -Rows $rows
+    $observation = New-BenefitSourceObservation -SourceRowNumber 2 -Snapshot $fixture.Snapshot -AdapterId $fixture.Index.AdapterId -AdapterVersion $fixture.Index.AdapterVersion -AdapterStatus COMPLETE -ContentUnits $fixture.Units -DocumentValidationIndex $fixture.Index
+    $result = Find-BenefitBusinessEvidence -Observation $observation -Business $business -CanonicalPhone '02-0000-0012'
+    Assert-ScopeEqual $result.Status LOCATED "$format strong identity locates one exact document row"
+    Assert-ScopeEqual $result.Slices.Count 1 "$format exposes only one slice"
+    $slice = $result.Slices[0]
+    Assert-ScopeEqual $slice.StructuredFields.BenefitDescription '합성 A 혜택' "$format never leaks Business B benefit into A"
+    Assert-ScopeEqual $slice.ScopeType "${format}_ROW" 'Document slice preserves its format scope'
+    Assert-ScopeEqual $slice.LocatorMethod "STRUCTURED_${format}_ROW" 'Document locator method is explicit'
+    foreach ($key in @('PhysicalPath','RawEvidenceText','AdapterId','AdapterVersion','ExtractionMethod','ExtractorId','ExtractorVersion','ExtractionConfigHash')) {
+        Assert-ScopeEqual $slice.$key $fixture.Units[0].$key "Selected document metadata preserved: $key"
+    }
+    Assert-RelevantBenefitEvidenceSlice -Slice $slice -Document $fixture.Document -SourceRowNumber 2 -DocumentValidationIndex $fixture.Index
+    Assert-ScopeTrue ($slice.PSObject.Properties.Name -notcontains 'RawStart') 'Document slices do not fabricate byte offsets'
+    $businessB = ConvertTo-NormalizedBusiness -Row (New-ScopeTestRow -Name '테스트가게 B' -Building '34') -SourceRowNumber 2
+    $resultB = Find-BenefitBusinessEvidence -Observation $observation -Business $businessB -CanonicalPhone '02-0000-0034'
+    Assert-ScopeEqual $resultB.Slices[0].StructuredFields.BenefitDescription '합성 B 혜택' "$format Business B selects its own row"
+
+    $duplicateRows = @($rows[0],(New-DocumentTestRowRecord -Format $format -Row 3 -Name '테스트가게 A' -Address '' -Phone '' -Benefit '합성 대안'))
+    $duplicate = New-DocumentTestFixture -Format $format -Rows $duplicateRows
+    $duplicateObservation = New-BenefitSourceObservation -SourceRowNumber 2 -Snapshot $duplicate.Snapshot -AdapterId $duplicate.Index.AdapterId -AdapterVersion 1 -AdapterStatus COMPLETE -ContentUnits $duplicate.Units -DocumentValidationIndex $duplicate.Index
+    $ambiguous = Find-BenefitBusinessEvidence -Observation $duplicateObservation -Business $business -CanonicalPhone '02-0000-0012'
+    Assert-ScopeEqual $ambiguous.Status AMBIGUOUS 'An unresolved same-name document alternative prevents selection'
+    Assert-ScopeEqual $ambiguous.Slices.Count 0 'Ambiguous document rows cannot expose benefit evidence'
+    $missingBusiness = ConvertTo-NormalizedBusiness -Row (New-ScopeTestRow -Name '없는 합성 가게' -Building '12') -SourceRowNumber 2
+    $absent = Find-BenefitBusinessEvidence -Observation $observation -Business $missingBusiness
+    Assert-ScopeEqual $absent.Status NOT_FOUND 'Complete document absence is identity absence only'
+    Assert-ScopeTrue ($absent.PSObject.Properties.Name -notcontains 'BenefitState') 'Document absence cannot create ENDED'
+    foreach ($status in @('PARTIAL','FAILED','UNSUPPORTED')) {
+        $contentUnits = @(if ($status -ceq 'PARTIAL') { $fixture.Units })
+        $incomplete = New-BenefitSourceObservation -SourceRowNumber 2 -Snapshot $fixture.Snapshot -AdapterId $fixture.Index.AdapterId -AdapterVersion 1 -AdapterStatus $status -ContentUnits $contentUnits -DocumentValidationIndex $fixture.Index
+        $failure = Find-BenefitBusinessEvidence -Observation $incomplete -Business $missingBusiness
+        Assert-ScopeEqual $failure.OperationalStatus $status 'Document operational status is preserved'
+        Assert-ScopeTrue ($null -eq $failure.Status) 'Incomplete document cannot claim NOT_FOUND or ENDED'
+        Assert-ScopeEqual $failure.Slices.Count 0 'Incomplete document exposes no usable slice'
+    }
+    foreach ($mutation in @(
+        {param($s) $s.ExtractionMethod='invented'},
+        {param($s) $s.ExtractorVersion='2'},
+        {param($s) $s.PhysicalPath='invented'},
+        {param($s) $s.FieldReferences.BenefitDescription.PhysicalReference='another/row/cell/4'},
+        {param($s) $s.StructuredFields.BenefitDescription='합성 B 혜택'}
+    )) {
+        $forgedSlice = Copy-ScopeContractData $slice
+        & $mutation $forgedSlice
+        Assert-ScopeThrows { Assert-RelevantBenefitEvidenceSlice -Slice $forgedSlice -Document $fixture.Document -SourceRowNumber 2 -DocumentValidationIndex $fixture.Index } 'Document slice alteration fails closed'
+    }
+    $wrongIndex = (New-DocumentTestFixture -Format $format -ObservedAt '2026-10-05T00:00:01Z').Index
+    $forgedObservation = Copy-ScopeContractData $observation
+    $forgedObservation.DocumentValidationIndex = $wrongIndex
+    Assert-ScopeThrows { Find-BenefitBusinessEvidence -Observation $forgedObservation -Business $business } 'Locator rejects another document snapshot index'
+}
 Write-Host 'Business evidence locator tests passed.'

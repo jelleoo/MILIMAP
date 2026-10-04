@@ -67,4 +67,5 @@ $pdf = New-DocumentTestFixture -Format PDF
 $hwpx = New-DocumentTestFixture -Format HWPX
 Assert-DocumentThrows { Assert-ScopeDocumentUnit -Unit $pdf.Units[0] -Snapshot $hwpx.Snapshot -ValidationIndex $hwpx.Index } 'PDF unit cannot validate as HWPX'
 Assert-DocumentThrows { Assert-ScopeDocumentUnit -Unit $hwpx.Units[0] -Snapshot $pdf.Snapshot -ValidationIndex $pdf.Index } 'HWPX unit cannot validate as PDF'
+Assert-DocumentThrows { New-BenefitSourceObservation -SourceRowNumber 2 -Snapshot $pdf.Snapshot -AdapterId SYNTHETIC -AdapterVersion 1 -AdapterStatus COMPLETE } 'COMPLETE document processing requires an index even when there are no units'
 Write-Host 'Document source provenance tests passed (synthetic only).'

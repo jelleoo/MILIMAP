@@ -17,6 +17,14 @@ $xlsxDocument=New-BenefitSourceDocument -SourceRowNumber 2 -Url 'https://city.ex
 $xlsxCandidate=New-BenefitSourceCandidate -SourceRowNumber 2 -Url $xlsxDocument.Url -SourceKind PUBLIC_OFFICIAL -SourceLabel 'fixture' -DiscoveryMethod TEST -ObservedAt '2026-09-26T00:00:00Z'
 Assert-Equal (Get-BenefitIncrementalCapability -Candidate $xlsxCandidate -Document $xlsxDocument) 'POST_FETCH' 'Official XLSX supports POST_FETCH reuse'
 
+. (Join-Path $PSScriptRoot 'testdata/benefit-evidence-document/test-support.ps1')
+foreach ($documentFormat in @('PDF','HWPX')) {
+    $bytes = if ($documentFormat -ceq 'PDF') { New-DocumentTestPdfBytes } else { New-DocumentTestHwpxBytes }
+    $document = New-BenefitSourceDocument -SourceRowNumber 2 -Url "https://city.example.go.kr/source.$($documentFormat.ToLowerInvariant())" -SourceFormat $documentFormat -FetchStatus COMPLETE -Text '' -Bytes $bytes -ObservedAt '2026-10-05T00:00:00Z'
+    $documentCandidate = New-BenefitSourceCandidate -SourceRowNumber 2 -Url $document.Url -SourceKind PUBLIC_OFFICIAL -DiscoveryMethod TEST
+    Assert-Equal (Get-BenefitIncrementalCapability -Candidate $documentCandidate -Document $document) NONE 'Recognizing a document format must not enable post-fetch reuse'
+}
+
 $mmaCandidate=New-BenefitSourceCandidate -SourceRowNumber 2 -Url 'https://www.mma.go.kr/about/udgg/list.do?mc=mma0003357' -SourceKind PUBLIC_OFFICIAL -SourceLabel 'MMA' -DiscoveryMethod EXISTING_CANONICAL_URL -ObservedAt '2026-09-26T00:00:00Z'
 $mmaDocument=New-BenefitSourceDocument -SourceRowNumber 2 -Url $mmaCandidate.Url -SourceFormat JSONP -FetchStatus COMPLETE -ContentType 'application/javascript' -Text 'callback({});' -ObservedAt '2026-09-26T00:00:00Z'
 Assert-Equal (Get-BenefitIncrementalCapability -Candidate $mmaCandidate -Document $mmaDocument) 'NONE' 'MMA JSONP remains outside P3-4 reuse'

@@ -733,6 +733,7 @@ function Assert-ScopeObservation {
     Assert-ScopeText $Observation.AdapterId 'AdapterId'
     Assert-ScopeText $Observation.AdapterVersion 'AdapterVersion'
     if ($Observation.AdapterStatus -cnotin @('COMPLETE','PARTIAL','FAILED','UNSUPPORTED')) { throw 'Invalid adapter status' }
+    if ($Observation.SourceFormat -cin @('PDF','HWPX') -and $Observation.AdapterStatus -ceq 'COMPLETE' -and $null -eq $DocumentValidationIndex) { throw 'Complete document observation requires a validation index' }
     if ($Observation.ContentUnits -isnot [array] -or $Observation.Diagnostics -isnot [array]) { throw 'Observation collections must remain arrays' }
     if ($Observation.AdapterStatus -cin @('FAILED','UNSUPPORTED') -and $Observation.ContentUnits.Count -gt 0) { throw 'Failed adapter must not supply content units' }
     $references = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
@@ -769,6 +770,12 @@ function New-BenefitSourceObservation {
     if ($Snapshot.SourceFormat -cin @('PDF','HWPX') -and $null -ne $DocumentValidationIndex) { $result | Add-Member -NotePropertyName DocumentValidationIndex -NotePropertyValue $DocumentValidationIndex }
     return $result
 }
+function ConvertTo-InternalBenefitDocumentSliceUnit {
+    param([Parameter(Mandatory)]$Slice)
+    $unit = [ordered]@{ ContractType='SourceContentUnit'; ContractVersion=1; SnapshotId=$Slice.SnapshotId; UnitType=$Slice.ScopeType; UnitReference=$Slice.EvidenceReference }
+    foreach ($key in @('PhysicalPath','RawEvidenceText','StructuredFields','FieldReferences','AdapterId','AdapterVersion','ExtractionMethod','ExtractorId','ExtractorVersion','ExtractionConfigHash')) { $unit[$key] = $Slice.$key }
+    return [pscustomobject]$unit
+}
 function Assert-ScopeSliceShape {
     param([AllowNull()]$Slice, [int]$SourceRowNumber)
     Assert-ScopeObject $Slice 'RelevantEvidenceSlice' @('SourceRowNumber','SnapshotId','ContentHash','SourceUrl','SourceFormat','ObservedAt','LocatorMethod','ScopeType','EvidenceReference','StructuredFields','FieldReferences','IdentityEvidence')
@@ -786,6 +793,11 @@ function Assert-ScopeSliceShape {
             if ($Slice.PSObject.Properties.Name -contains $forbiddenRawProperty) { throw 'XLSX slices must not carry synthetic raw-span provenance' }
         }
         if ($Slice.ScopeType -cne 'XLSX_ROW' -or $Slice.LocatorMethod -cne 'STRUCTURED_XLSX_ROW' -or $Slice.EvidenceReference -cnotmatch '^XLSX_SHEET_[1-9]\d*_ROW_[1-9]\d*$') { throw 'XLSX slice scope mismatch' }
+    } elseif ($Slice.SourceFormat -cin @('PDF','HWPX')) {
+        Assert-ScopeObject $Slice 'RelevantEvidenceSlice' @('PhysicalPath','RawEvidenceText','AdapterId','AdapterVersion','ExtractionMethod','ExtractorId','ExtractorVersion','ExtractionConfigHash')
+        foreach ($key in @('RawStart','RawLength','RawFragment','TableStart','TableLength')) { if ($Slice.PSObject.Properties.Name -contains $key) { throw 'Document slices must not carry synthetic raw spans' } }
+        if ($Slice.ScopeType -cne ($Slice.SourceFormat + '_ROW') -or $Slice.LocatorMethod -cne ('STRUCTURED_' + $Slice.SourceFormat + '_ROW')) { throw 'Document slice scope mismatch' }
+        Assert-InternalBenefitDocumentRow -Row (ConvertTo-InternalBenefitDocumentSliceUnit $Slice) -SourceFormat $Slice.SourceFormat
     } else { throw 'Unsupported slice source format' }
     if ($Slice.ContentHash -cnotmatch '^[0-9a-f]{64}$' -or $Slice.SnapshotId -cnotmatch '^[0-9a-f]{64}$') { throw 'Invalid slice hash' }
     Assert-ScopeText $Slice.SourceUrl 'Slice.SourceUrl'
@@ -794,7 +806,7 @@ function Assert-ScopeSliceShape {
     foreach ($signal in $Slice.IdentityEvidence) { Assert-ScopeText $signal 'IdentityEvidence signal' }
 }
 function Assert-ScopeSliceAgainstSnapshot {
-    param([AllowNull()]$Slice, [Parameter(Mandatory)]$Snapshot, [int]$SourceRowNumber, [AllowNull()][object[]]$HtmlTokens=$null, [AllowNull()]$HtmlValidationIndex=$null, [AllowNull()]$XlsxValidationIndex=$null)
+    param([AllowNull()]$Slice, [Parameter(Mandatory)]$Snapshot, [int]$SourceRowNumber, [AllowNull()][object[]]$HtmlTokens=$null, [AllowNull()]$HtmlValidationIndex=$null, [AllowNull()]$XlsxValidationIndex=$null, [AllowNull()]$DocumentValidationIndex=$null)
     Assert-ScopeSliceShape $Slice $SourceRowNumber
     $trustedXlsx = ($Snapshot.SourceFormat -ceq 'XLSX' -and (Test-InternalBenefitXlsxRunContextTrust -Snapshot $Snapshot -XlsxValidationIndex $XlsxValidationIndex))
     $trustedHtml = ($Snapshot.SourceFormat -ceq 'HTML' -and (Test-InternalBenefitHtmlRunContextTrust -Snapshot $Snapshot -HtmlValidationIndex $HtmlValidationIndex))
@@ -822,8 +834,14 @@ function Assert-ScopeSliceAgainstSnapshot {
             HeaderRowNumber=$Slice.HeaderRowNumber; RowNumber=$Slice.RowNumber
             StructuredFields=$Slice.StructuredFields; FieldReferences=$Slice.FieldReferences
         }
+    } elseif ($Snapshot.SourceFormat -cin @('PDF','HWPX')) {
+        ConvertTo-InternalBenefitDocumentSliceUnit $Slice
     } else { throw 'Unsupported slice source format' }
-    Assert-ScopeUnit -Unit $unit -Snapshot $Snapshot -HtmlTokens $HtmlTokens -HtmlValidationIndex $HtmlValidationIndex -XlsxValidationIndex $XlsxValidationIndex
+    if ($Snapshot.SourceFormat -cin @('PDF','HWPX')) {
+        if ($null -eq $DocumentValidationIndex) { throw 'Document validation index is required' }
+        Assert-InternalBenefitDocumentValidationIndex -ValidationIndex $DocumentValidationIndex -Snapshot $Snapshot
+        Assert-ScopeDocumentUnitCore -Unit $unit -Snapshot $Snapshot -ValidationIndex $DocumentValidationIndex
+    } else { Assert-ScopeUnit -Unit $unit -Snapshot $Snapshot -HtmlTokens $HtmlTokens -HtmlValidationIndex $HtmlValidationIndex -XlsxValidationIndex $XlsxValidationIndex }
 }
 function New-InternalRelevantBenefitXlsxSlice {
     # Internal locator helper. Find-BenefitBusinessEvidence has already run the
@@ -860,10 +878,12 @@ function New-InternalRelevantBenefitXlsxSlice {
     return $result
 }
 function New-RelevantBenefitEvidenceSlice {
-    param([Parameter(Mandatory)]$Observation, [Parameter(Mandatory)]$Unit, [AllowEmptyCollection()][object[]]$IdentityEvidence=@(), [AllowNull()][object[]]$HtmlTokens=$null, [AllowNull()]$HtmlValidationIndex=$null, [AllowNull()]$XlsxValidationIndex=$null)
-    Assert-ScopeObservation -Observation $Observation -HtmlTokens $HtmlTokens -HtmlValidationIndex $HtmlValidationIndex -XlsxValidationIndex $XlsxValidationIndex
+    param([Parameter(Mandatory)]$Observation, [Parameter(Mandatory)]$Unit, [AllowEmptyCollection()][object[]]$IdentityEvidence=@(), [AllowNull()][object[]]$HtmlTokens=$null, [AllowNull()]$HtmlValidationIndex=$null, [AllowNull()]$XlsxValidationIndex=$null, [AllowNull()]$DocumentValidationIndex=$null)
+    if ($null -eq $DocumentValidationIndex -and $Observation.SourceFormat -cin @('PDF','HWPX') -and $Observation.PSObject.Properties.Name -contains 'DocumentValidationIndex') { $DocumentValidationIndex = $Observation.DocumentValidationIndex }
+    Assert-ScopeObservation -Observation $Observation -HtmlTokens $HtmlTokens -HtmlValidationIndex $HtmlValidationIndex -XlsxValidationIndex $XlsxValidationIndex -DocumentValidationIndex $DocumentValidationIndex
     if ($Observation.AdapterStatus -cne 'COMPLETE') { throw 'Only a complete observation can yield a usable slice' }
-    Assert-ScopeUnit -Unit $Unit -Snapshot $Observation.Snapshot -HtmlTokens $HtmlTokens -HtmlValidationIndex $HtmlValidationIndex -XlsxValidationIndex $XlsxValidationIndex
+    if ($Observation.SourceFormat -cin @('PDF','HWPX')) { Assert-ScopeDocumentUnitCore -Unit $Unit -Snapshot $Observation.Snapshot -ValidationIndex $DocumentValidationIndex }
+    else { Assert-ScopeUnit -Unit $Unit -Snapshot $Observation.Snapshot -HtmlTokens $HtmlTokens -HtmlValidationIndex $HtmlValidationIndex -XlsxValidationIndex $XlsxValidationIndex }
     $members = @($Observation.ContentUnits | Where-Object { $_.UnitReference -ceq $Unit.UnitReference })
     if ($members.Count -ne 1 -or
         (ConvertTo-Json -InputObject $members[0] -Depth 20 -Compress) -cne (ConvertTo-Json -InputObject $Unit -Depth 20 -Compress)) {
@@ -900,12 +920,21 @@ function New-RelevantBenefitEvidenceSlice {
             StructuredFields=(Copy-ScopeContractData $Unit.StructuredFields); FieldReferences=(Copy-ScopeContractData $Unit.FieldReferences)
             IdentityEvidence=(Copy-ScopeContractData $IdentityEvidence)
         }
+    } elseif ($Observation.SourceFormat -cin @('PDF','HWPX')) {
+        $data = [ordered]@{
+            ContractType='RelevantEvidenceSlice'; ContractVersion=1; SourceRowNumber=$Observation.SourceRowNumber
+            SnapshotId=$Observation.SnapshotId; ContentHash=$Observation.Snapshot.ContentHash; SourceUrl=$Observation.SourceUrl; SourceFormat=$Observation.SourceFormat; ObservedAt=$Observation.ObservedAt
+            LocatorMethod=('STRUCTURED_' + $Observation.SourceFormat + '_ROW'); ScopeType=$Unit.UnitType; EvidenceReference=$Unit.UnitReference
+            IdentityEvidence=(Copy-ScopeContractData $IdentityEvidence)
+        }
+        foreach ($key in @('PhysicalPath','RawEvidenceText','StructuredFields','FieldReferences','AdapterId','AdapterVersion','ExtractionMethod','ExtractorId','ExtractorVersion','ExtractionConfigHash')) { $data[$key] = Copy-ScopeContractData $Unit.$key }
+        [pscustomobject]$data
     } else { throw 'Unsupported scoped source format' }
-    Assert-ScopeSliceAgainstSnapshot -Slice $result -Snapshot $Observation.Snapshot -SourceRowNumber $Observation.SourceRowNumber -HtmlTokens $HtmlTokens -HtmlValidationIndex $HtmlValidationIndex -XlsxValidationIndex $XlsxValidationIndex
+    Assert-ScopeSliceAgainstSnapshot -Slice $result -Snapshot $Observation.Snapshot -SourceRowNumber $Observation.SourceRowNumber -HtmlTokens $HtmlTokens -HtmlValidationIndex $HtmlValidationIndex -XlsxValidationIndex $XlsxValidationIndex -DocumentValidationIndex $DocumentValidationIndex
     return $result
 }
 function Assert-RelevantBenefitEvidenceSlice {
-    param([AllowNull()]$Slice, [Parameter(Mandatory)]$Document, [int]$SourceRowNumber, [AllowNull()]$XlsxValidationIndex=$null)
+    param([AllowNull()]$Slice, [Parameter(Mandatory)]$Document, [int]$SourceRowNumber, [AllowNull()]$XlsxValidationIndex=$null, [AllowNull()]$DocumentValidationIndex=$null)
     Assert-BenefitSourceDocument $Document
     if ($Document.SourceRowNumber -ne $SourceRowNumber -or $Document.FetchStatus -cne 'COMPLETE') { throw 'Slice requires the original successful source row document' }
     $htmlValidationIndex = $null
@@ -931,10 +960,10 @@ function Assert-RelevantBenefitEvidenceSlice {
         if (-not (Test-InternalBenefitXlsxRunContextTrust -Snapshot $snapshot -XlsxValidationIndex $XlsxValidationIndex)) { Assert-ScopeSnapshot $snapshot }
     } else {
         $snapshotParameters = @{ SourceUrl=$Document.Url; SourceFormat=$Document.SourceFormat; Text=$Document.Text; ObservedAt=$Document.ObservedAt }
-        if ($Document.SourceFormat -ceq 'XLSX') { $snapshotParameters.Text = ''; $snapshotParameters.Bytes = $Document.Bytes }
+        if ($Document.SourceFormat -cin @('XLSX','PDF','HWPX')) { $snapshotParameters.Text = ''; $snapshotParameters.Bytes = $Document.Bytes }
         $snapshot = New-BenefitSourceSnapshot @snapshotParameters
     }
-    Assert-ScopeSliceAgainstSnapshot -Slice $Slice -Snapshot $snapshot -SourceRowNumber $SourceRowNumber -HtmlValidationIndex $htmlValidationIndex -XlsxValidationIndex $XlsxValidationIndex
+    Assert-ScopeSliceAgainstSnapshot -Slice $Slice -Snapshot $snapshot -SourceRowNumber $SourceRowNumber -HtmlValidationIndex $htmlValidationIndex -XlsxValidationIndex $XlsxValidationIndex -DocumentValidationIndex $DocumentValidationIndex
 }
 function New-BenefitEvidenceLocationResult {
     param([int]$SourceRowNumber, [Parameter(Mandatory)][string]$OperationalStatus, [AllowNull()]$Status=$null,

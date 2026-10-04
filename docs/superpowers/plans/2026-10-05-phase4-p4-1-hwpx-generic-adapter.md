@@ -736,4 +736,3 @@ End each report with:
 - Phase: Phase 4 — Multi-source Adapters
 - Stage: P4-1 HWPX Generic Adapter
 - Status: exact current implementation/review/merge state
-

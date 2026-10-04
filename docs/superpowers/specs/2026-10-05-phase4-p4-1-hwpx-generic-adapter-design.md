@@ -1,7 +1,7 @@
 # Phase 4 P4-1 HWPX Generic Adapter Design
 
-**Date:** 2026-10-05  
-**Status:** Approved conversational design; implementation blocked until P4-0 PR #112 is merged and `dev` is refreshed.  
+**Date:** 2026-10-05
+**Status:** Approved conversational design; implementation blocked until P4-0 PR #112 is merged and `dev` is refreshed.
 **Authority:** Current GitHub code first; approved Phase 4 multi-source adapter design; P4-0 reviewed HEAD `bc36bf6a7d9dc6024e5b44294d5667c162170487`.
 
 ## Problem

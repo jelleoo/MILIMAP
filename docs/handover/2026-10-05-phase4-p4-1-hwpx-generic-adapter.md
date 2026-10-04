@@ -2,7 +2,7 @@
 
 ## Authority and boundary
 
-- Issue #113; PR is created against `dev` after this documentation commit. Exact PR URL/HEAD/CI and review outcome are recorded in the PR and implementation report; no auto-merge.
+- Issue #113; [PR #114](https://github.com/jelleoo/MILIMAP/pull/114) targets `dev`. Exact final PR HEAD/CI are recorded in the PR and implementation report; no auto-merge.
 - Refreshed base: `b0b0bb18e4e1a19e045477a884256ac51d8a9605`. P4-0 reviewed `bc36bf6a7d9dc6024e5b44294d5667c162170487` is an ancestor; PR #112 is merged.
 - Approved spec/plan source commits `6e01633b09f9356bdde8ee4238f5a95931fdda4c` / `ffe96b542d34340396e5bb1c4043bf452d804c42` are included without technical edits as `88e9591` / `5271523`.
 - Phase 4 is **not COMPLETE**. Next: **P4-2 PDF native adapter**.
@@ -57,7 +57,30 @@ Task 3 also fixed the existing byte-copy helper's pipeline enumeration so cached
 - Synthetic business A/B claim leakage **0**; foreign-row and tampered physical/reference/text/metadata/cross-snapshot evidence rejected; PARTIAL semantic promotion **0**; unsupported PDF stays unsupported; HWPX incremental capability **NONE**.
 - Android: `assembleDebugUnitTest testDebugUnitTest --stacktrace` PASS, **99 tests / 0 failures / 0 errors / 1 skipped**; `lintDebug assembleDebug --stacktrace` PASS, **0 errors / 25 existing warnings**, debug APK built. Android-directory Gradle daemon contract is Java 17.
 - `git diff --check`: PASS. `git diff origin/dev -- data/canonical data/seed apps`: empty. No dependency, workflow, schema, auth, DB or API changes. ProductionAction remains NONE.
-- Exact-head `verify-data` / `verify` and whole-branch read-only review: required after PR creation; pending at this documentation commit. Local PASS is not a claim about future CI.
+- Initial exact HEAD `23580c4b76a7d0e1a32012fa1ec1c31639c92f97`: `verify-data` and `verify` both PASS in [CI run 37220118547](https://github.com/jelleoo/MILIMAP/actions/runs/37220118547).
+- After that CI, one fresh-context whole-branch read-only review found four Important acceptance/text-fidelity defects (no Critical/Minor). All four were reproduced with raw-byte fixture tests before changes and minimally fixed: preserve whitespace-only `hp:t`; reject unsupported recognized semantic headers instead of losing conditions; retain and reject malformed row/cell namespaces before selectors can hide them; reject child content in line/tab separators, including nested tables. Scoped regressions prove PARTIAL/status null/no claims and cached failure reuse; safely unmapped decorative complex cells remain ignorable. Final full suite/Android verification was repeated after fixes. Final exact-head CI must rerun after push; initial CI is not represented as final CI.
+
+### Review rulings and retained boundaries
+
+The reviewer deliberately excluded the following; executor checked each and retained these boundaries:
+
+- Live compatibility remains unproven (`NOT_OBSERVED`); no invented official source.
+- Full-suite/Android/CI results were verified by executor, not redundantly by reviewer.
+- Paragraph-only, multi-row headers, arbitrary inline, PDF/OCR and legacy HWP remain non-scope.
+- Real layout metadata such as `linesegarray` may limit supported coverage; reject rather than infer.
+- Wholly foreign-namespace tables remain unrecognized/unsupported; malformed rows inside recognized tables now block semantic absence.
+- Decorative tables/unmapped complex columns/merged titles remain safely skippable; no evidence is inferred from them.
+- Empty BusinessName rows are skipped as approved, not promoted to identity candidates.
+- Multiple eligible headers and duplicate mappings retain conservative rejection.
+- Unused manifest/resources do not supply evidence outside trusted spine membership.
+- `cellAddr`/logical grids/unusual merged layouts get no reconstruction; exact physical ordinals and selected-cell unmerged checks remain the boundary.
+- Repeated hash/index scans and deep-input costs are unmeasured future bottlenecks; existing bounds/strict validation remain, no speculative cache or parser.
+- Public mutable validation-index behavior is inherited from P4-0, not expanded into a new trust bypass.
+- No unexpected parse-once exception gap was reproduced; defined failure/partial/unsupported results are cached.
+- Incremental reuse stays NONE; production mutation and lifecycle inference remain prohibited.
+- Historical pending-CI prose was replaced with actual initial CI/review evidence; final exact status remains in PR/report.
+
+Implementation rulings: native worktree lookup could not resolve this chat's repository, so a verified ignored repo-local isolated worktree was used (risk: manual worktree lifecycle). Locator already accepts the attached document index, so no duplicate index parameter/path was added (regressions verify this). Approved docs' trailing whitespace was normalized without technical edits (only Markdown line-break rendering may differ). No deferred Minor findings.
 
 ## Non-runs and remaining risks
 

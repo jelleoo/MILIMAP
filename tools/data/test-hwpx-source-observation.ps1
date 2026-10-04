@@ -75,3 +75,49 @@ foreach($mutation in @({param($u)$u.PhysicalPath='section/2/table/1/row/2'},{par
 $foreign=ConvertTo-BenefitHwpxObservation -Document (New-HwpxTestDocument -Url 'https://city.example.go.kr/other.hwpx')
 Assert-HwpxThrows {Assert-ScopeDocumentUnit -Unit $unit -Snapshot $observation.Snapshot -ValidationIndex $foreign.DocumentValidationIndex} 'Cross-snapshot index rejected'
 Write-Host 'HWPX table/text/provenance tests passed.'
+
+# Whole-branch review regressions: exercise raw ZIP/XML, not parser doubles.
+$reviewCases=@(
+    @{Name='Whitespace-only semantic text run';Action={
+        $inner='<hp:p><hp:run><hp:t>합성</hp:t></hp:run><hp:run><hp:t> </hp:t></hp:run><hp:run><hp:t>A 혜택</hp:t></hp:run></hp:p>'
+        $actual=Get-HwpxTestObservation ($table.Replace((New-HwpxTestCell '합성 A 혜택'),(New-HwpxTestCell -Inner $inner)))
+        Assert-HwpxEqual $actual.AdapterStatus COMPLETE 'Ordinary text-only run remains supported'
+        Assert-HwpxEqual $actual.ContentUnits[0].StructuredFields.BenefitDescription '합성 A 혜택' 'Whitespace-only hp:t must preserve its source space'
+        Assert-HwpxEqual $actual.ContentUnits[0].FieldReferences.BenefitDescription.SourceText '합성 A 혜택' 'Physical source text preserves run spacing'
+    }},
+    @{Name='Unsupported semantic header';Action={
+        $header=New-HwpxTestRow @((New-HwpxTestCell '업소명'),(New-HwpxTestCell '주소'),(New-HwpxTestCell '혜택'),(New-HwpxTestCell -Inner '<hp:p><hp:run><hp:t>이용조건</hp:t><hp:pic/></hp:run></hp:p>'))
+        $row=New-HwpxTestRow @('합성가게 A','서울특별시 마포구 테스트로 12','합성 A 혜택','평일 한정'|ForEach-Object{New-HwpxTestCell $_})
+        $actual=Get-HwpxTestObservation (New-HwpxTestTable -Rows @($header,$row))
+        Assert-HwpxEqual $actual.AdapterStatus PARTIAL 'Unsupported semantic header must not silently discard a condition'
+        Assert-HwpxEqual $actual.ContentUnits.Count 0 'Unusable header exposes no business row'
+    }},
+    @{Name='Malformed row namespace';Action={
+        $bRow=New-HwpxTestRow @('합성가게 B','서울특별시 마포구 테스트로 34','02-0000-0034','합성 B 혜택'|ForEach-Object{New-HwpxTestCell $_})
+        $badRow=$bRow.Replace('<hp:tr>',"<wrong:tr xmlns:wrong='urn:wrong'>").Replace('</hp:tr>','</wrong:tr>')
+        $actual=Get-HwpxTestObservation ($table.Replace($bRow,$badRow))
+        Assert-HwpxEqual $actual.AdapterStatus PARTIAL 'Wrong-namespace row cannot silently become identity absence'
+        $badCell=(New-HwpxTestCell '합성가게 B').Replace('<hp:tc ',"<wrong:tc xmlns:wrong='urn:wrong' ").Replace('</hp:tc>','</wrong:tc>')
+        $actual=Get-HwpxTestObservation ($table.Replace((New-HwpxTestCell '합성가게 B'),$badCell))
+        Assert-HwpxEqual $actual.AdapterStatus PARTIAL 'Wrong-namespace mapped cell is not trusted'
+    }},
+    @{Name='Unsupported separator children';Action={
+        foreach($separator in @('lineBreak','tab')){
+            $inner="<hp:p><hp:run><hp:t>합성</hp:t><hp:$separator><hp:pic/></hp:$separator><hp:t>A 혜택</hp:t></hp:run></hp:p>"
+            $actual=Get-HwpxTestObservation ($table.Replace((New-HwpxTestCell '합성 A 혜택'),(New-HwpxTestCell -Inner $inner)))
+            Assert-HwpxEqual $actual.AdapterStatus PARTIAL 'Unsupported child cannot hide inside a line/tab separator'
+            Assert-HwpxEqual $actual.ContentUnits.Count 1 'Unsafe A row isolated while B physical row is retained'
+        }
+        $inner='<hp:p><hp:run><hp:t>합성</hp:t><hp:lineBreak>'+(New-HwpxTestTable)+'</hp:lineBreak><hp:t>A 혜택</hp:t></hp:run></hp:p>'
+        $actual=Get-HwpxTestObservation ($table.Replace((New-HwpxTestCell '합성 A 혜택'),(New-HwpxTestCell -Inner $inner)))
+        Assert-HwpxEqual $actual.AdapterStatus PARTIAL 'Nested table cannot hide inside a separator'
+        Assert-HwpxEqual $actual.ContentUnits.Count 1 'Hidden nested table is not independent evidence'
+    }}
+)
+$reviewFailures=[Collections.Generic.List[string]]::new()
+foreach($case in $reviewCases){try{& $case.Action;Write-Host "PASS: $($case.Name)"}catch{$reviewFailures.Add("$($case.Name): $($_.Exception.Message)");Write-Host "FAIL: $($case.Name): $($_.Exception.Message)"}}
+if($reviewFailures.Count){throw ($reviewFailures -join "`n")}
+
+$decorativeHeader=New-HwpxTestRow @((New-HwpxTestCell '업소명'),(New-HwpxTestCell '주소'),(New-HwpxTestCell '혜택'),(New-HwpxTestCell -Inner '<hp:p><hp:run><hp:t>참고</hp:t><hp:pic/></hp:run></hp:p>'))
+$decorativeData=New-HwpxTestRow @((New-HwpxTestCell '합성가게 A'),(New-HwpxTestCell '서울특별시 마포구 테스트로 12'),(New-HwpxTestCell '합성 A 혜택'),(New-HwpxTestCell -Inner '<hp:p><hp:run><hp:pic/></hp:run></hp:p>'))
+Assert-HwpxEqual (Get-HwpxTestObservation (New-HwpxTestTable -Rows @($decorativeHeader,$decorativeData))).AdapterStatus COMPLETE 'Safely unmapped decorative complex column remains ignorable'

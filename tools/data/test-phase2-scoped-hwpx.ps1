@@ -62,3 +62,33 @@ $pdf=Invoke-ScopedPhase2BenefitSourceCandidate -Candidate (New-HwpxScopedCandida
 Assert-ScopeTrue ($null -eq $pdf.Observation) 'PDF remains excluded from scoped runner'
 Assert-ScopeTrue ($pdf.ReasonCodes -contains 'SOURCE_UNSUPPORTED') 'PDF fails closed'
 Write-Host 'Scoped HWPX tests passed: cross-business leakage 0; shared source fetch 1 / parse 1 / reuse 1.'
+
+# Final review: no incomplete structural/header/inline content can become absence or validated benefit.
+$reviewHeader=New-HwpxTestRow @((New-HwpxTestCell '업소명'),(New-HwpxTestCell '주소'),(New-HwpxTestCell '혜택'),(New-HwpxTestCell -Inner '<hp:p><hp:run><hp:t>이용조건</hp:t><hp:pic/></hp:run></hp:p>'))
+$reviewData=New-HwpxTestRow @('합성가게 A','서울특별시 마포구 테스트로 12','합성 A 혜택','평일 한정'|ForEach-Object{New-HwpxTestCell $_})
+$bPhysicalRow=New-HwpxTestRow @('합성가게 B','서울특별시 마포구 테스트로 34','02-0000-0034','합성 B 혜택'|ForEach-Object{New-HwpxTestCell $_})
+$wrongNamespaceRow=$bPhysicalRow.Replace('<hp:tr>',"<bad:tr xmlns:bad='urn:wrong'>").Replace('</hp:tr>','</bad:tr>')
+$reviewTables=@(
+    (New-HwpxTestTable -Rows @($reviewHeader,$reviewData)),
+    (New-HwpxTestTable).Replace($bPhysicalRow,$wrongNamespaceRow),
+    (New-HwpxTestTable).Replace((New-HwpxTestCell '합성 A 혜택'),(New-HwpxTestCell -Inner '<hp:p><hp:run><hp:t>합성</hp:t><hp:lineBreak><hp:pic/></hp:lineBreak><hp:t>A 혜택</hp:t></hp:run></hp:p>'))
+)
+$reviewFailures=[Collections.Generic.List[string]]::new()
+foreach($reviewTable in $reviewTables){
+    try{
+        $reviewBytes=New-HwpxTestBytes -Sections @((New-HwpxTestSection $reviewTable))
+        $reviewHttp={param($Uri)[pscustomobject]@{StatusCode=200;ContentType='application/hwp+zip';Text='';Bytes=$reviewBytes}}.GetNewClosure()
+        $reviewContext=New-BenefitSourceRunContext
+        foreach($businessCase in @(@{Name='합성가게 A';Building=12;Row=2},@{Name='합성가게 B';Building=34;Row=3})){
+            $result=Invoke-ScopedPhase2BenefitSourceCandidate -Candidate (New-HwpxScopedCandidate $businessCase.Row) -Business (New-HwpxScopedBusiness -Name $businessCase.Name -Building $businessCase.Building -Row $businessCase.Row) -RunContext $reviewContext -RequestInvoker $reviewHttp
+            Assert-ScopeEqual $result.LocationResult.OperationalStatus PARTIAL 'Unsafe header/row/inline source must remain operational PARTIAL'
+            Assert-ScopeTrue ($null -eq $result.LocationResult.Status) 'Unsafe source cannot become LOCATED/NOT_FOUND'
+            Assert-ScopeEqual $result.Slices.Count 0 'Unsafe source exposes no business evidence'
+            Assert-ScopeEqual $result.Extraction.Claims.Count 0 'No condition-dropping validated benefit'
+        }
+        Assert-ScopeEqual $reviewContext.Metrics.ExternalFetchCount 1 'Incomplete source shared fetch remains once'
+        Assert-ScopeEqual $reviewContext.Metrics.AdapterParseCount 1 'Incomplete source shared parse remains once'
+        Assert-ScopeEqual $reviewContext.Metrics.AdapterReuseCount 1 'Incomplete status is cached, not recomputed'
+    }catch{$reviewFailures.Add($_.Exception.Message);Write-Host "FAIL: $($_.Exception.Message)"}
+}
+if($reviewFailures.Count){throw ($reviewFailures -join "`n")}

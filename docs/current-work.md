@@ -36,7 +36,7 @@ Issue #111의 P4-0 foundation은 PR #112로 `dev`에 병합됐다. reviewed HEAD
 
 ## Phase 4 P4-1 — HWPX Generic Adapter
 
-Issue #113의 native ZIP/XML table-only adapter와 scoped 경로를 구현하고 로컬 검증했다. exact PR HEAD CI와 whole-branch read-only review는 병합 전 필수이며 이 문서 작성 시점에는 대기 중이다.
+Issue #113의 native ZIP/XML table-only adapter와 scoped 경로를 PR #114에서 구현하고 로컬 검증했다. 최초 exact HEAD CI 두 job PASS 후 whole-branch read-only review를 수행했고 Important 4건을 RED→GREEN 수정했다. 최종 수정 HEAD의 `verify-data` / `verify` 재확인이 병합 전 필수다. 자동 병합하지 않는다.
 
 - trusted OPF manifest/spine과 section namespace, bounded ZIP, DTD/external entity 차단
 - 단일 명시적 header와 unmerged semantic cells만 지원; paragraph-only, nested table/unsupported inline, positional guessing은 지원하지 않음

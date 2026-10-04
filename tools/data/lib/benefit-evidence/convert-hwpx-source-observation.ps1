@@ -69,10 +69,17 @@ function Read-InternalBenefitHwpxPackage {
 function Read-InternalBenefitHwpxTextNode {
     param([Parameter(Mandatory)]$Node)
     if($Node.NodeType -in @([Xml.XmlNodeType]::Text,[Xml.XmlNodeType]::CDATA)){return [string]$Node.Value}
-    if($Node.NodeType -in @([Xml.XmlNodeType]::Whitespace,[Xml.XmlNodeType]::SignificantWhitespace,[Xml.XmlNodeType]::Comment)){return ''}
+    if($Node.NodeType -in @([Xml.XmlNodeType]::Whitespace,[Xml.XmlNodeType]::SignificantWhitespace)){
+        if($null -ne $Node.ParentNode -and $Node.ParentNode.LocalName -ceq 't' -and $Node.ParentNode.NamespaceURI -ceq 'http://www.hancom.co.kr/hwpml/2011/paragraph'){return [string]$Node.Value}
+        return ''
+    }
+    if($Node.NodeType -eq [Xml.XmlNodeType]::Comment){return ''}
     if($Node.NodeType -ne [Xml.XmlNodeType]::Element -or $Node.NamespaceURI -cne 'http://www.hancom.co.kr/hwpml/2011/paragraph'){throw 'Unsupported semantic text node'}
-    if($Node.LocalName -ceq 'lineBreak'){return "`n"}
-    if($Node.LocalName -ceq 'tab'){return "`t"}
+    if($Node.LocalName -cin @('lineBreak','tab')){
+        if($Node.HasChildNodes){throw 'Unsupported separator content'}
+        if($Node.LocalName -ceq 'lineBreak'){return "`n"}
+        return "`t"
+    }
     if($Node.LocalName -cnotin @('subList','p','run','t')){throw 'Unsupported semantic inline object'}
     if($Node.LocalName -ceq 'subList'){
         # Only direct paragraphs are valid; separators are physical paragraph boundaries.
@@ -86,6 +93,7 @@ function Read-InternalBenefitHwpxTextNode {
 }
 function Read-InternalBenefitHwpxCell {
     param([Parameter(Mandatory)]$Cell,[Parameter(Mandatory)]$NamespaceManager)
+    if($Cell.LocalName -cne 'tc' -or $Cell.NamespaceURI -cne $NamespaceManager.LookupNamespace('hp')){throw 'Untrusted cell namespace/structure'}
     $lists=@($Cell.SelectNodes('./hp:subList',$NamespaceManager))
     if($lists.Count -ne 1){throw 'Cell must have one supported text container'}
     foreach($child in @($Cell.ChildNodes|Where-Object{$_.NodeType -eq [Xml.XmlNodeType]::Element})){
@@ -116,11 +124,33 @@ function ConvertTo-InternalBenefitHwpxObservation {
         $tables=@($section.Xml.SelectNodes('//hp:tbl[not(ancestor::hp:tbl)]',$ns));$tableOrdinal=0
         foreach($table in $tables){
             $tableOrdinal++;$path="section/$($section.SectionOrdinal)/table/$tableOrdinal"
-            $rows=@($table.SelectNodes('./hp:tr',$ns));$headerCandidates=[Collections.Generic.List[object]]::new();$badHeader=$false
+            # Count physical row-like members before trusting their namespaces.
+            # Filtering malformed rows out would manufacture COMPLETE absence.
+            $rows=@($table.SelectNodes('./*[local-name()="tr"]'))
+            $badRows=[Collections.Generic.HashSet[int]]::new()
             for($r=0;$r -lt $rows.Count;$r++){
+                $badChildren=@($rows[$r].ChildNodes|Where-Object{$_.NodeType -eq [Xml.XmlNodeType]::Element -and ($_.LocalName -cne 'tc' -or $_.NamespaceURI -cne $ns.LookupNamespace('hp'))})
+                if($rows[$r].NamespaceURI -cne $ns.LookupNamespace('hp') -or $badChildren.Count){
+                    [void]$badRows.Add($r);$isolated=$true
+                    $diagnostics.Add((New-InternalBenefitHwpxDiagnostic 'HWPX_ROW_UNUSABLE' "$path/row/$($r+1)" 'Untrusted row/cell namespace or structure'))
+                }
+            }
+            $headerCandidates=[Collections.Generic.List[object]]::new();$badHeader=$false
+            for($r=0;$r -lt $rows.Count;$r++){
+                if($badRows.Contains($r)){continue}
                 $cells=@($rows[$r].SelectNodes('./hp:tc',$ns));$mapping=[ordered]@{};$semanticSeen=[Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal);$safe=$true;$nameSeen=$false
                 for($c=0;$c -lt $cells.Count;$c++){
-                    try{$read=Read-InternalBenefitHwpxCell $cells[$c] $ns}catch{continue}
+                    try{$read=Read-InternalBenefitHwpxCell $cells[$c] $ns}catch{
+                        # Unsafe XML text is only a rejection hint, never extracted evidence.
+                        # Keep decorative/unmapped complex cells ignorable, but do not erase
+                        # a known semantic header (and its qualifying data column).
+                        $hint=([string]$cells[$c].InnerText).Trim()
+                        if($headers.ContainsKey($hint)){
+                            $safe=$false
+                            if($headers[$hint] -ceq 'BusinessName'){$nameSeen=$true}
+                        }
+                        continue
+                    }
                     if($headers.ContainsKey($read.Text)){
                         $field=[string]$headers[$read.Text];if($field -ceq 'BusinessName'){$nameSeen=$true}
                         if(-not $read.Unmerged -or -not $semanticSeen.Add($field)){$safe=$false}
@@ -133,6 +163,7 @@ function ConvertTo-InternalBenefitHwpxObservation {
             if($headerCandidates.Count -eq 0){continue}
             $hasHeader=$true;$header=$headerCandidates[0]
             for($r=$header.Row+1;$r -lt $rows.Count;$r++){
+                if($badRows.Contains($r)){continue}
                 $cells=@($rows[$r].SelectNodes('./hp:tc',$ns));$fields=[ordered]@{};$refs=[ordered]@{};$texts=[Collections.Generic.List[string]]::new();$safe=$true
                 $unitReference="HWPX_SECTION_$($section.SectionOrdinal)_TABLE_${tableOrdinal}_ROW_$($r+1)";$rowPath="$path/row/$($r+1)"
                 foreach($column in $header.Mapping.Keys){

@@ -116,4 +116,18 @@ $qualifiedSlice = (Find-BenefitBusinessEvidence -Observation $qualifiedObservati
 $truncatedQualifiedClaim = New-ExtractedBenefitClaim -ClaimType BENEFIT_DESCRIPTION -Value '10% 할인' -EvidenceText '10% 할인' -EvidenceReference $qualifiedSlice.FieldReferences.BenefitDescription.FieldReference -SourceUrl $qualifiedDocument.Url -ExtractionMethod SCOPED_HTML_CELL
 Assert-Equal (Test-ScopedBenefitExtractedClaim -Claim $truncatedQualifiedClaim -Document $qualifiedDocument -EvidenceSlice $qualifiedSlice).ValidationStatus 'INVALID' 'Decoded literal qualifiers cannot be stripped to certify a truncated scoped claim'
 
+. (Join-Path $PSScriptRoot 'testdata/benefit-evidence-hwpx/test-support.ps1')
+. (Join-Path $PSScriptRoot 'lib/benefit-evidence/convert-hwpx-source-observation.ps1')
+$hwpxDocument=New-HwpxTestDocument
+$hwpxObservation=ConvertTo-BenefitHwpxObservation -Document $hwpxDocument
+$hwpxSlice=New-RelevantBenefitEvidenceSlice -Observation $hwpxObservation -Unit $hwpxObservation.ContentUnits[0]
+$hwpxClaim=New-ExtractedBenefitClaim -ClaimType BENEFIT_DESCRIPTION -Value '합성 A 혜택' -EvidenceText '합성 A 혜택' -EvidenceReference HWPX_SECTION_1_TABLE_1_ROW_2/BenefitDescription -SourceUrl $hwpxDocument.Url -ExtractionMethod SCOPED_HWPX_CELL
+$hwpxExtraction=[pscustomobject]@{SourceRowNumber=2;Status='COMPLETE';Claims=@($hwpxClaim);ReasonCodes=@()}
+$hwpxValidation=ConvertTo-ValidatedBenefitEvidence -Extraction $hwpxExtraction -Document $hwpxDocument -EvidenceSlice $hwpxSlice -DocumentValidationIndex $hwpxObservation.DocumentValidationIndex
+Assert-Equal $hwpxValidation.Status COMPLETE 'Valid parsed HWPX field passes validation'
+Assert-Equal $hwpxValidation.Claims[0].ValidationStatus VALIDATED 'Exact source evidence validated'
+$hwpxClaim.EvidenceReference='HWPX_SECTION_1_TABLE_1_ROW_3/BenefitDescription'
+Assert-Equal (ConvertTo-ValidatedBenefitEvidence -Extraction $hwpxExtraction -Document $hwpxDocument -EvidenceSlice $hwpxSlice -DocumentValidationIndex $hwpxObservation.DocumentValidationIndex).Claims[0].ValidationStatus INVALID 'Foreign HWPX row reference rejected'
+$hwpxSlice.StructuredFields.BenefitDescription='tampered'
+Assert-Throws {ConvertTo-ValidatedBenefitEvidence -Extraction $hwpxExtraction -Document $hwpxDocument -EvidenceSlice $hwpxSlice -DocumentValidationIndex $hwpxObservation.DocumentValidationIndex} 'Tampered parsed HWPX slice rejected'
 Write-Host 'Benefit evidence validation tests passed.'

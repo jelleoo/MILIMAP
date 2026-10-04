@@ -102,11 +102,11 @@ function Invoke-ScopedPhase2BenefitSourceCandidate {
         if ($failureReasons.Count -eq 0) { $failureReasons = @('SOURCE_OFFICIALITY_UNRESOLVED') }
         $extraction = New-ScopedBenefitEmptyExtraction -BoundSource $bound -ReasonCodes $failureReasons
         $validation = New-ScopedBenefitEmptyValidation -Extraction $extraction
-    } elseif ($document.SourceFormat -notin @('HTML','XLSX')) {
-        # A successfully fetched format outside the scoped HTML/XLSX paths is unsupported.
+    } elseif ($document.SourceFormat -notin @('HTML','XLSX','HWPX')) {
+        # A successfully fetched format outside the scoped HTML/XLSX/HWPX paths is unsupported.
         # Never manufacture a text snapshot or invoke an extraction provider.
         $preparationDiagnostics += [pscustomobject][ordered]@{
-            Code='HTML_FORMAT_UNSUPPORTED'; Stage='SCOPED_PREPARATION'; EvidenceReference=''; Detail='Scoped preparation accepts HTML or XLSX documents only'
+            Code='HTML_FORMAT_UNSUPPORTED'; Stage='SCOPED_PREPARATION'; EvidenceReference=''; Detail='Scoped preparation accepts HTML, XLSX or HWPX documents only'
         }
         $bound = New-ScopedBenefitPlaceholderBoundSource -QualifiedSource $qualified
         $extraction = New-ScopedBenefitEmptyExtraction -BoundSource $bound -ReasonCodes @('SOURCE_UNSUPPORTED')
@@ -115,7 +115,9 @@ function Invoke-ScopedPhase2BenefitSourceCandidate {
         # Isolate source parsing/span-construction failures, not invalid caller
         # contracts, request-profile changes, or unsafe URL rejection above.
         try {
-            $observation = if ($document.SourceFormat -ceq 'XLSX') { Get-BenefitRunXlsxObservation -Context $RunContext -Document $document } else { Get-BenefitRunHtmlObservation -Context $RunContext -Document $document }
+            $observation = if ($document.SourceFormat -ceq 'XLSX') { Get-BenefitRunXlsxObservation -Context $RunContext -Document $document }
+                elseif ($document.SourceFormat -ceq 'HWPX') { Get-BenefitRunHwpxObservation -Context $RunContext -Document $document }
+                else { Get-BenefitRunHtmlObservation -Context $RunContext -Document $document }
         } catch {
             $isXlsx = $document.SourceFormat -ceq 'XLSX'
             $preparationCode = 'HTML_PREPARATION_FAILED'
@@ -124,6 +126,11 @@ function Invoke-ScopedPhase2BenefitSourceCandidate {
             if ($isXlsx) {
                 $preparationCode = 'XLSX_PREPARATION_FAILED'
                 $preparationFormat = 'XLSX'
+                $failureReason = 'SOURCE_UNSUPPORTED'
+            }
+            if ($document.SourceFormat -ceq 'HWPX') {
+                $preparationCode = 'HWPX_PREPARATION_FAILED'
+                $preparationFormat = 'HWPX'
                 $failureReason = 'SOURCE_UNSUPPORTED'
             }
             $preparationDiagnostics += [pscustomobject][ordered]@{
@@ -137,6 +144,8 @@ function Invoke-ScopedPhase2BenefitSourceCandidate {
 
         if ($null -ne $observation) {
             $xlsxValidationIndex = if ($observation.PSObject.Properties.Name -contains 'XlsxValidationIndex') { $observation.XlsxValidationIndex } else { $null }
+            $documentValidationIndex = if ($observation.PSObject.Properties.Name -contains 'DocumentValidationIndex') { $observation.DocumentValidationIndex } else { $null }
+            # Locator consumes the attached document index through its existing observation boundary.
             $location = Find-BenefitBusinessEvidence -Observation $observation -Business $Business -CanonicalPhone $CanonicalPhone -XlsxValidationIndex $xlsxValidationIndex
             $preparationDiagnostics += @($observation.Diagnostics)
             $preparationDiagnostics += @($location.Diagnostics)
@@ -144,10 +153,10 @@ function Invoke-ScopedPhase2BenefitSourceCandidate {
             if ($location.OperationalStatus -ceq 'COMPLETE' -and $location.Status -ceq 'LOCATED') {
                 $slices = @($location.Slices)
                 $slice = $slices[0]
-                $bound = Get-BenefitBusinessBinding -Source $qualified -Business $Business -CanonicalPhone $CanonicalPhone -EvidenceSlice $slice -XlsxValidationIndex $xlsxValidationIndex
+                $bound = Get-BenefitBusinessBinding -Source $qualified -Business $Business -CanonicalPhone $CanonicalPhone -EvidenceSlice $slice -XlsxValidationIndex $xlsxValidationIndex -DocumentValidationIndex $documentValidationIndex
                 if ($bound.BusinessBindingStatus -ceq 'STRONG') {
-                    $extraction = Invoke-BenefitEvidenceExtraction -Source $bound -Document $document -EvidenceSlice $slice -XlsxValidationIndex $xlsxValidationIndex
-                    $validation = ConvertTo-ValidatedBenefitEvidence -Extraction $extraction -Document $document -EvidenceSlice $slice -XlsxValidationIndex $xlsxValidationIndex
+                    $extraction = Invoke-BenefitEvidenceExtraction -Source $bound -Document $document -EvidenceSlice $slice -XlsxValidationIndex $xlsxValidationIndex -DocumentValidationIndex $documentValidationIndex
+                    $validation = ConvertTo-ValidatedBenefitEvidence -Extraction $extraction -Document $document -EvidenceSlice $slice -XlsxValidationIndex $xlsxValidationIndex -DocumentValidationIndex $documentValidationIndex
                 } else {
                     $extraction = New-ScopedBenefitEmptyExtraction -BoundSource $bound
                     $validation = New-ScopedBenefitEmptyValidation -Extraction $extraction

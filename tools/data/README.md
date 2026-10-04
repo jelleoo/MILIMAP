@@ -288,9 +288,11 @@ BenefitVerificationResult + row report + summary + evidence diagnostics
 
 ### Current scoped source families
 
-The current scoped path supports HTML table rows, MMA JSONP list-to-detail evidence, and XLSX rows with raw-byte-bound sheet/row/cell provenance. It does not relabel JSONP as HTML, and it does not treat PDFs, HWP/OCR, SNS/blog, or discovery signals as strong verification evidence. `ProductionAction` remains `NONE` for every family.
+The current scoped path supports HTML table rows, MMA JSONP list-to-detail evidence, XLSX rows with raw-byte-bound sheet/row/cell provenance, and the P4-1 HWPX table-only subset below. It does not relabel JSONP as HTML, and it does not treat PDFs, legacy HWP/OCR, SNS/blog, or discovery signals as strong verification evidence. `ProductionAction` remains `NONE` for every family.
 
-P4-0 adds byte-first PDF/HWPX recognition and original-byte snapshots, plus validated synthetic `PDF_ROW` / `HWPX_ROW` provenance indexes and locator slices. Recognition is not parser support: there is no real PDF/HWPX parser, OCR, document scoped production runner, or document POST_FETCH reuse. Synthetic records are contract controls, not real benefit truth; future adapters must establish their physical evidence from source bytes. PDF/HWPX incremental capability remains `NONE`. See the [P4-0 handover](../../docs/handover/2026-09-29-phase4-p4-0-document-adapter-foundation.md).
+P4-0 adds byte-first PDF/HWPX recognition and original-byte snapshots, plus validated synthetic `PDF_ROW` / `HWPX_ROW` provenance indexes and locator slices. Recognition itself is not parser support. PDF parsing/OCR and PDF/HWPX POST_FETCH reuse remain unsupported. See the [P4-0 handover](../../docs/handover/2026-09-29-phase4-p4-0-document-adapter-foundation.md).
+
+P4-1 adds native bounded HWPX ZIP/XML parsing for tables with one explicit semantic header and unmerged mapped cells. It reuses `Get-BenefitScopedHeaderMap`, `BenefitDocumentValidationIndex`, and the existing scoped pipeline. `HWPX_ROW` evidence is byte-derived with exact section/table/row/cell paths; claims use `SCOPED_HWPX_CELL`. A shared run-context fetches/parses once and reuses the same document validation index. Ambiguous headers, unsafe XML, merged semantic cells and unsupported inline/nested-table content fail closed; PARTIAL observations cannot produce LOCATED/NOT_FOUND. Paragraph-only evidence, multi-row header inference, positional guessing, cross-table stitching and legacy HWP are not supported. HWPX incremental capability remains `NONE`. Live official HWPX validation is `NOT_OBSERVED`; synthetic tests are not real benefit truth. See the [P4-1 handover](../../docs/handover/2026-10-05-phase4-p4-1-hwpx-generic-adapter.md).
 
 ### A1 scoped HTML evidence path
 

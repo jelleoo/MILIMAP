@@ -142,4 +142,15 @@ $unknownPhoneSlice = (Find-BenefitBusinessEvidence -Observation $scopedObservati
 $unknownPhoneResult = Get-BenefitBusinessBinding -Source $scopedQualified -Business $scopedBusiness -CanonicalPhone '전화번호미상' -EvidenceSlice $unknownPhoneSlice
 Assert-Equal $unknownPhoneResult.BusinessBindingStatus 'CONFLICT' 'A supplied nonempty canonical phone that cannot match must not silently disable scoped phone conflict'
 
+. (Join-Path $PSScriptRoot 'testdata/benefit-evidence-hwpx/test-support.ps1')
+. (Join-Path $PSScriptRoot 'lib/benefit-evidence/convert-hwpx-source-observation.ps1')
+$hwpxDocument=New-HwpxTestDocument
+$hwpxObservation=ConvertTo-BenefitHwpxObservation -Document $hwpxDocument
+$hwpxSlice=New-RelevantBenefitEvidenceSlice -Observation $hwpxObservation -Unit $hwpxObservation.ContentUnits[0]
+$hwpxBusiness=ConvertTo-NormalizedBusiness -Row (New-ScopeTestRow -Name '합성가게 A' -Building 12) -SourceRowNumber 2
+$hwpxCandidate=New-BenefitSourceCandidate -SourceRowNumber 2 -Url $hwpxDocument.Url -SourceKind PUBLIC_OFFICIAL -SourceLabel fixture -DiscoveryMethod TEST
+$hwpxQualified=New-QualifiedBenefitSource -Candidate $hwpxCandidate -Document $hwpxDocument -OfficialityStatus VERIFIED_OFFICIAL -CurrentnessStatus UNKNOWN
+Assert-Equal (Get-BenefitBusinessBinding -Source $hwpxQualified -Business $hwpxBusiness -CanonicalPhone '02-0000-0012' -EvidenceSlice $hwpxSlice -DocumentValidationIndex $hwpxObservation.DocumentValidationIndex).BusinessBindingStatus STRONG 'Exact parsed HWPX identity uses existing strong binding'
+$foreignHwpx=ConvertTo-BenefitHwpxObservation -Document (New-HwpxTestDocument -Url 'https://city.example.go.kr/foreign.hwpx')
+Assert-Throws {Get-BenefitBusinessBinding -Source $hwpxQualified -Business $hwpxBusiness -EvidenceSlice $hwpxSlice -DocumentValidationIndex $foreignHwpx.DocumentValidationIndex} 'Binding rejects wrong document index'
 Write-Host 'Benefit business binding tests passed.'

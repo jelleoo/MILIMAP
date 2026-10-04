@@ -1,4 +1,5 @@
 $ErrorActionPreference = 'Stop'
+. (Join-Path $PSScriptRoot 'testdata/benefit-evidence-hwpx/test-support.ps1')
 . (Join-Path $PSScriptRoot 'testdata/benefit-evidence-location/test-support.ps1')
 . (Join-Path $PSScriptRoot 'testdata/benefit-evidence-xlsx/test-support.ps1')
 . (Join-Path $PSScriptRoot 'lib/benefit-source/discover-official-benefit-sources.ps1')
@@ -289,4 +290,39 @@ try {
 } finally { Set-Item Function:Get-BenefitEvidenceTextHash -Value $originalDirectHash }
 Assert-ScopeTrue ($directHashCount.Count -gt 0) 'Direct/public HTML conversion retains strict snapshot hash validation'
 
+$hwpxBytes=New-HwpxTestBytes -Sections @((New-HwpxTestSection))
+$hwpxCalls=[pscustomobject]@{Fetch=0;Parse=0}
+$hwpxHttp={param($Uri)$hwpxCalls.Fetch++;[pscustomobject]@{StatusCode=200;ContentType='application/hwp+zip';Text='';Bytes=$hwpxBytes}}.GetNewClosure()
+$hwpxContext=New-BenefitSourceRunContext
+$hwpxDocA=Get-BenefitRunSourceDocument -Context $hwpxContext -Candidate (New-RunCandidate 2 'https://city.example.go.kr/benefit.hwpx') -RequestInvoker $hwpxHttp
+$hwpxSnapshot=Get-BenefitRunSourceSnapshot -Context $hwpxContext -Document $hwpxDocA
+Assert-ScopeEqual $hwpxSnapshot.Text '' 'HWPX snapshot is byte-backed'
+Assert-ScopeEqual $hwpxSnapshot.ContentHash (Get-BenefitEvidenceByteHash $hwpxBytes) 'Original HWPX byte hash retained'
+$foreignHwpxDoc=New-HwpxTestDocument -Bytes (New-HwpxTestBytes -Sections @((New-HwpxTestSection).Replace('합성 A 혜택','다른 합성 혜택'))) -Url $hwpxDocA.Url
+Assert-ScopeThrows {Get-BenefitRunSourceSnapshot -Context $hwpxContext -Document $foreignHwpxDoc} 'Untrusted wrapper cannot reuse another payload snapshot'
+$originalHwpxReader=${function:Read-InternalBenefitHwpxPackage}
+Set-Item Function:Read-InternalBenefitHwpxPackage -Value {param($Snapshot)$hwpxCalls.Parse++;&$originalHwpxReader -Snapshot $Snapshot}
+try {
+    $hwpxObsA=Get-BenefitRunHwpxObservation -Context $hwpxContext -Document $hwpxDocA
+    $hwpxDocB=Get-BenefitRunSourceDocument -Context $hwpxContext -Candidate (New-RunCandidate 3 $hwpxDocA.Url) -RequestInvoker $hwpxHttp
+    $hwpxObsB=Get-BenefitRunHwpxObservation -Context $hwpxContext -Document $hwpxDocB
+}finally{Set-Item Function:Read-InternalBenefitHwpxPackage -Value $originalHwpxReader}
+Assert-ScopeEqual $hwpxCalls.Fetch 1 'Underlying HWPX request runs once'
+Assert-ScopeEqual $hwpxCalls.Parse 1 'Actual HWPX package/XML parse runs once'
+Assert-ScopeEqual $hwpxContext.Metrics.ExternalFetchCount 1 'HWPX fetch metric'
+Assert-ScopeEqual $hwpxContext.Metrics.AdapterParseCount 1 'HWPX parse metric'
+Assert-ScopeEqual $hwpxContext.Metrics.AdapterReuseCount 1 'HWPX second wrapper reuses template'
+Assert-ScopeEqual $hwpxObsB.SourceRowNumber 3 'Second wrapper has its own row number'
+Assert-ScopeTrue ([object]::ReferenceEquals($hwpxObsA.DocumentValidationIndex,$hwpxObsB.DocumentValidationIndex)) 'Same parsed index reused without copy/rebuild'
+$hwpxObsB.ContentUnits[0].StructuredFields.BusinessName='wrapper-local mutation'
+Assert-ScopeEqual $hwpxObsA.ContentUnits[0].StructuredFields.BusinessName '합성가게 A' 'Wrapper semantic data remains isolated'
+foreach($case in @(@{Sections=@((New-HwpxTestSection),'<broken');Expected='PARTIAL';Root=$null},@{Sections=@((New-HwpxTestSection));Expected='FAILED';Root='<broken'},@{Sections=@((New-HwpxTestSection '<hp:p/>'));Expected='UNSUPPORTED';Root=$null})){
+    $bytes=New-HwpxTestBytes -Sections $case.Sections -RootXml $case.Root
+    $httpFailure={param($Uri)[pscustomobject]@{StatusCode=200;ContentType='application/hwp+zip';Text='';Bytes=$bytes}}.GetNewClosure()
+    $contextFailure=New-BenefitSourceRunContext
+    $docFailure=Get-BenefitRunSourceDocument -Context $contextFailure -Candidate (New-RunCandidate 2 'https://city.example.go.kr/failure.hwpx') -RequestInvoker $httpFailure
+    1..2|ForEach-Object{Assert-ScopeEqual (Get-BenefitRunHwpxObservation -Context $contextFailure -Document $docFailure).AdapterStatus $case.Expected 'Incomplete parse result cached without semantic promotion'}
+    Assert-ScopeEqual $contextFailure.Metrics.AdapterParseCount 1 'Incomplete package parsed once'
+    Assert-ScopeEqual $contextFailure.Metrics.AdapterReuseCount 1 'Incomplete template reused'
+}
 Write-Host 'Benefit source run context tests passed.'

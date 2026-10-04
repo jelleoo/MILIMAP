@@ -5,6 +5,7 @@ $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'convert-html-source-observation.ps1')
 . (Join-Path $PSScriptRoot 'convert-mma-jsonp-source-observation.ps1')
 . (Join-Path $PSScriptRoot 'convert-xlsx-source-observation.ps1')
+. (Join-Path $PSScriptRoot 'convert-hwpx-source-observation.ps1')
 
 function New-BenefitSourceRunContext {
     $payloadCache = [Collections.Generic.Dictionary[string,object]]::new([StringComparer]::Ordinal)
@@ -46,7 +47,7 @@ function Assert-BenefitSourceRunContext {
 function Copy-BenefitRunBytes {
     param([AllowNull()][byte[]]$Bytes)
     if ($null -eq $Bytes) { return $null }
-    return [byte[]]$Bytes.Clone()
+    return ,([byte[]]$Bytes.Clone())
 }
 
 function New-BenefitRunDocumentFromPayload {
@@ -64,8 +65,8 @@ function Get-BenefitRunSourceSnapshot {
 
     Assert-BenefitSourceRunContext $Context
     Assert-BenefitSourceDocument $Document
-    if ($Document.FetchStatus -cne 'COMPLETE' -or $Document.SourceFormat -notin @('HTML','XLSX')) {
-        throw 'Run-context snapshot requires a successfully fetched HTML or XLSX document'
+    if ($Document.FetchStatus -cne 'COMPLETE' -or $Document.SourceFormat -notin @('HTML','XLSX','HWPX')) {
+        throw 'Run-context snapshot requires a successfully fetched HTML, XLSX or HWPX document'
     }
     $key = [string]$Document.Url
     if (-not $Context.PayloadCache.ContainsKey($key)) { throw 'Run-context snapshot requires a cached payload' }
@@ -76,17 +77,18 @@ function Get-BenefitRunSourceSnapshot {
         throw 'Run-context payload/document identity mismatch'
     }
     $trustedWrapper = ($Document.PSObject.Properties.Name -contains 'RunContextPayload' -and [object]::ReferenceEquals($Document.RunContextPayload,$payload))
-    if (-not $trustedWrapper) {
-        if ($Document.SourceFormat -ceq 'XLSX') {
+    if (-not $trustedWrapper -or $Document.SourceFormat -ceq 'HWPX') {
+        if ($Document.SourceFormat -cin @('XLSX','HWPX')) {
             if ($Document.Bytes -isnot [byte[]] -or $payload.Bytes -isnot [byte[]] -or -not [Linq.Enumerable]::SequenceEqual([byte[]]$Document.Bytes,[byte[]]$payload.Bytes)) {
-                throw 'Run-context XLSX payload/document bytes mismatch'
+                throw 'Run-context binary payload/document bytes mismatch'
             }
         } elseif ([string]$Document.Text -cne [string]$payload.Text) {
             throw 'Run-context HTML payload/document text mismatch'
         }
     }
     if ($payload.PSObject.Properties.Name -notcontains 'SourceSnapshot') {
-        $snapshot = New-BenefitSourceSnapshot -SourceUrl $payload.Url -SourceFormat $payload.SourceFormat -Text $payload.Text -Bytes $payload.Bytes -ObservedAt $payload.ObservedAt
+        $snapshotText = if ($payload.SourceFormat -ceq 'HWPX') { '' } else { $payload.Text }
+        $snapshot = New-BenefitSourceSnapshot -SourceUrl $payload.Url -SourceFormat $payload.SourceFormat -Text $snapshotText -Bytes $payload.Bytes -ObservedAt $payload.ObservedAt
         if ($snapshot.SourceFormat -ceq 'HTML') { Set-InternalBenefitHtmlRunContextSnapshotTrust -Snapshot $snapshot }
         $payload | Add-Member -NotePropertyName SourceSnapshot -NotePropertyValue $snapshot
     }
@@ -256,4 +258,20 @@ function Get-BenefitRunXlsxObservation {
     $observation=New-BenefitSourceObservation -SourceRowNumber $Document.SourceRowNumber -Snapshot $snapshot -AdapterId $template.AdapterId -AdapterVersion $template.AdapterVersion -AdapterStatus $template.AdapterStatus -ContentUnits $template.ContentUnits -Diagnostics $template.Diagnostics -XlsxValidationIndex $template.XlsxValidationIndex
     $observation | Add-Member -NotePropertyName XlsxValidationIndex -NotePropertyValue $template.XlsxValidationIndex
     return $observation
+}
+
+function Get-BenefitRunHwpxObservation {
+    param([Parameter(Mandatory)]$Context,[Parameter(Mandatory)]$Document)
+    Assert-BenefitSourceRunContext $Context
+    Assert-BenefitSourceDocument $Document
+    if($Document.FetchStatus -cne 'COMPLETE' -or $Document.SourceFormat -cne 'HWPX'){throw 'HWPX observation requires a successful HWPX document'}
+    $snapshot=Get-BenefitRunSourceSnapshot -Context $Context -Document $Document
+    $key="$($snapshot.SnapshotId)|HWPX_GENERIC|1"
+    if($Context.TemplateCache.ContainsKey($key)){$template=$Context.TemplateCache[$key];$cacheHit=$true;$Context.Metrics.AdapterReuseCount++}
+    else {
+        $template=ConvertTo-InternalBenefitHwpxObservation -Document $Document -Snapshot $snapshot
+        $Context.TemplateCache.Add($key,$template);$cacheHit=$false;$Context.Metrics.AdapterParseCount++
+    }
+    [void]$Context.Attempts.Add([pscustomobject][ordered]@{Stage='PARSE';Key=$key;CacheHit=$cacheHit;Status=$template.AdapterStatus})
+    New-BenefitSourceObservation -SourceRowNumber $Document.SourceRowNumber -Snapshot $snapshot -AdapterId $template.AdapterId -AdapterVersion $template.AdapterVersion -AdapterStatus $template.AdapterStatus -ContentUnits $template.ContentUnits -Diagnostics $template.Diagnostics -DocumentValidationIndex $template.DocumentValidationIndex
 }

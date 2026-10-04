@@ -289,11 +289,11 @@ function Assert-ScopeSnapshot {
         throw 'SourceUrl must be an absolute HTTP(S) URL without embedded credentials'
     }
     Assert-BenefitAllowedCode 'SourceFormat' $Snapshot.SourceFormat
-    if ($Snapshot.SourceFormat -ceq 'XLSX') {
-        if ($Snapshot.Text -cne '' -or $Snapshot.PSObject.Properties.Name -notcontains 'Bytes' -or $Snapshot.Bytes -isnot [byte[]] -or $Snapshot.Bytes.Length -eq 0) { throw 'XLSX snapshot requires empty Text and original Bytes' }
+    if ($Snapshot.SourceFormat -cin @('XLSX','PDF','HWPX')) {
+        if ($Snapshot.Text -cne '' -or $Snapshot.PSObject.Properties.Name -notcontains 'Bytes' -or $Snapshot.Bytes -isnot [byte[]] -or $Snapshot.Bytes.Length -eq 0) { throw 'Byte-backed snapshot requires empty Text and original Bytes' }
     } else { Assert-ScopeText $Snapshot.Text 'Snapshot.Text' }
     Assert-ScopeTimestamp $Snapshot.ObservedAt
-    $hash = if ($Snapshot.SourceFormat -ceq 'XLSX') { Get-BenefitEvidenceByteHash -Bytes $Snapshot.Bytes } else { Get-BenefitEvidenceTextHash -Text $Snapshot.Text }
+    $hash = if ($Snapshot.SourceFormat -cin @('XLSX','PDF','HWPX')) { Get-BenefitEvidenceByteHash -Bytes $Snapshot.Bytes } else { Get-BenefitEvidenceTextHash -Text $Snapshot.Text }
     if ($Snapshot.ContentHash -cne $hash -or
         $Snapshot.SnapshotId -cne (Get-ScopeSnapshotId $Snapshot.SourceUrl $Snapshot.SourceFormat $Snapshot.ObservedAt $hash)) {
         throw 'Snapshot content or identity mismatch'
@@ -303,13 +303,13 @@ function Assert-ScopeSnapshot {
 function New-BenefitSourceSnapshot {
     param([Parameter(Mandatory)][string]$SourceUrl, [Parameter(Mandatory)][string]$SourceFormat,
         [Parameter(Mandatory)][AllowEmptyString()][string]$Text, [AllowNull()][byte[]]$Bytes=$null, [Parameter(Mandatory)][string]$ObservedAt)
-    $hash = if ($SourceFormat -ceq 'XLSX') { Get-BenefitEvidenceByteHash -Bytes $Bytes } else { Get-BenefitEvidenceTextHash -Text $Text }
+    $hash = if ($SourceFormat -cin @('XLSX','PDF','HWPX')) { Get-BenefitEvidenceByteHash -Bytes $Bytes } else { Get-BenefitEvidenceTextHash -Text $Text }
     $result = [pscustomobject][ordered]@{
         ContractType='BenefitSourceSnapshot'; ContractVersion=1
         SnapshotId=(Get-ScopeSnapshotId $SourceUrl $SourceFormat $ObservedAt $hash)
         SourceUrl=$SourceUrl; SourceFormat=$SourceFormat; Text=$Text; ObservedAt=$ObservedAt; ContentHash=$hash
     }
-    if ($SourceFormat -ceq 'XLSX') { $result | Add-Member -NotePropertyName Bytes -NotePropertyValue ([byte[]]$Bytes.Clone()) }
+    if ($SourceFormat -cin @('XLSX','PDF','HWPX')) { $result | Add-Member -NotePropertyName Bytes -NotePropertyValue ([byte[]]$Bytes.Clone()) }
     Assert-ScopeSnapshot $result
     return $result
 }

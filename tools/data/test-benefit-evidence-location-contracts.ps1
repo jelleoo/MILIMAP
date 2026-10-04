@@ -215,5 +215,33 @@ $fakeSnapshot = New-BenefitSourceSnapshot -SourceUrl $d.Url -SourceFormat HTML -
 $fakeTable = '<table><tr><td>comment only</td></tr></table>'
 $fakeRow = '<tr><td>comment only</td></tr>'
 Assert-ScopeThrows { New-BenefitSourceContentUnit -Snapshot $fakeSnapshot -UnitReference HTML_TABLE_1_ROW_1 -TableStart ($fake.IndexOf('<table>')) -TableLength $fakeTable.Length -RawStart ($fake.IndexOf('<tr>')) -RawLength $fakeRow.Length -RawEvidenceText 'comment only' -StructuredFields @{} -FieldReferences @{} } 'Comment text must not become a physical evidence row'
+. (Join-Path $PSScriptRoot 'testdata/benefit-evidence-document/test-support.ps1')
+foreach ($format in @('PDF','HWPX')) {
+    $bytes = if ($format -ceq 'PDF') { New-DocumentTestPdfBytes } else { New-DocumentTestHwpxBytes }
+    $original = [byte[]]$bytes.Clone()
+    $expectedHash = [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData($original)).ToLowerInvariant()
+    $snapshot = New-BenefitSourceSnapshot -SourceUrl "https://city.example.go.kr/document.$($format.ToLowerInvariant())" -SourceFormat $format -Text '' -Bytes $bytes -ObservedAt '2026-10-05T00:00:00Z'
+    Assert-ScopeTrue ($snapshot.Bytes -is [byte[]]) "$format snapshot preserves byte[]"
+    Assert-ScopeEqual $snapshot.Text '' "$format snapshot has no reconstructed text"
+    Assert-ScopeEqual $snapshot.ContentHash $expectedHash "$format provenance root is original byte SHA-256"
+    $bytes[0] = $bytes[0] -bxor 1
+    Assert-ScopeEqual $snapshot.Bytes[0] $original[0] "$format snapshot owns a byte copy"
+    Assert-ScopeSnapshot $snapshot
+    $changed = New-BenefitSourceSnapshot -SourceUrl $snapshot.SourceUrl -SourceFormat $format -Text '' -Bytes $bytes -ObservedAt $snapshot.ObservedAt
+    Assert-ScopeTrue ($changed.ContentHash -cne $snapshot.ContentHash) "$format changed bytes change content identity"
+    $snapshot.Bytes[0] = $snapshot.Bytes[0] -bxor 1
+    Assert-ScopeThrows { Assert-ScopeSnapshot $snapshot } "$format stored-byte mutation fails closed"
+    Assert-ScopeThrows { New-BenefitSourceSnapshot -SourceUrl $snapshot.SourceUrl -SourceFormat $format -Text '' -ObservedAt $snapshot.ObservedAt } "$format requires bytes"
+    Assert-ScopeThrows { New-BenefitSourceSnapshot -SourceUrl $snapshot.SourceUrl -SourceFormat $format -Text '' -Bytes ([byte[]]@()) -ObservedAt $snapshot.ObservedAt } "$format rejects empty bytes"
+    Assert-ScopeThrows { New-BenefitSourceSnapshot -SourceUrl $snapshot.SourceUrl -SourceFormat $format -Text 'reconstructed text' -Bytes $original -ObservedAt $snapshot.ObservedAt } "$format rejects text-backed provenance"
+}
 Assert-ScopeEqual (Get-BenefitVerificationContractDefinition | ConvertTo-Json -Depth 8 -Compress) $before 'Global contracts remain unchanged after use'
+foreach ($format in @('PDF','HWPX')) {
+    $documentFixture = New-DocumentTestFixture -Format $format
+    Assert-ScopeUnit -Unit $documentFixture.Units[0] -Snapshot $documentFixture.Snapshot -DocumentValidationIndex $documentFixture.Index
+    Assert-ScopeThrows { Assert-ScopeUnit -Unit $documentFixture.Units[0] -Snapshot $documentFixture.Snapshot } 'Document units require their strict validation index'
+    $observation = New-BenefitSourceObservation -SourceRowNumber 2 -Snapshot $documentFixture.Snapshot -AdapterId $documentFixture.Index.AdapterId -AdapterVersion $documentFixture.Index.AdapterVersion -AdapterStatus COMPLETE -ContentUnits $documentFixture.Units -DocumentValidationIndex $documentFixture.Index
+    Assert-ScopeObservation -Observation $observation -DocumentValidationIndex $observation.DocumentValidationIndex
+    Assert-ScopeEqual $observation.DocumentValidationIndex.SnapshotId $documentFixture.Snapshot.SnapshotId 'Observation carries snapshot-bound document index'
+}
 Write-Host 'Benefit evidence location contract tests passed.'

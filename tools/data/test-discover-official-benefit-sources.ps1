@@ -5,6 +5,7 @@ $sourcePath = Join-Path $PSScriptRoot 'lib/benefit-source/discover-official-bene
 . $contractPath
 if (Test-Path -LiteralPath $sourcePath) { . $sourcePath }
 . (Join-Path $PSScriptRoot 'testdata/benefit-evidence-xlsx/test-support.ps1')
+. (Join-Path $PSScriptRoot 'testdata/benefit-evidence-document/test-support.ps1')
 
 function Assert-Equal {
     param([AllowNull()]$Actual, [AllowNull()]$Expected, [Parameter(Mandatory)][string]$Message)
@@ -81,10 +82,22 @@ $failed = Get-BenefitSourceDocument -Candidate $candidate -RequestInvoker { para
 Assert-Equal $failed.FetchStatus 'FAILED' 'Fetch exception must remain operational failure'
 Assert-True ($failed.ReasonCodes -contains 'SOURCE_FETCH_FAILED') 'Fetch failure reason must be preserved'
 
+$missingPdfByteCases = @(
+    @{ Name='null bytes / PDF MIME'; Url='https://city.example.go.kr/download'; ContentType='application/pdf'; Bytes=$null },
+    @{ Name='empty bytes / PDF MIME'; Url='https://city.example.go.kr/download'; ContentType='application/pdf'; Bytes=[byte[]]@() },
+    @{ Name='null bytes / PDF extension'; Url='https://city.example.go.kr/notice.pdf'; ContentType=''; Bytes=$null },
+    @{ Name='empty bytes / PDF extension'; Url='https://city.example.go.kr/notice.pdf'; ContentType=''; Bytes=[byte[]]@() }
+)
+$missingPdfByteFailures = @(foreach ($case in $missingPdfByteCases) {
+    $actual = Get-BenefitSourceFormat -Url $case.Url -ContentType $case.ContentType -Bytes $case.Bytes
+    if ($actual -cne 'UNSUPPORTED') { "$($case.Name): expected UNSUPPORTED, actual $actual" }
+})
+Assert-Equal $missingPdfByteFailures.Count 0 ("PDF hints cannot establish format without signature bytes: " + ($missingPdfByteFailures -join '; '))
+
 $formatCases = @(
     @{ Url='https://city.example.go.kr/list.csv'; ContentType='text/csv'; Expected='CSV' },
     @{ Url='https://city.example.go.kr/list.xlsx'; ContentType='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'; Expected='XLSX' },
-    @{ Url='https://city.example.go.kr/notice.pdf'; ContentType='application/pdf'; Expected='PDF' },
+    @{ Url='https://city.example.go.kr/notice.pdf'; ContentType='application/pdf'; Expected='UNSUPPORTED' },
     @{ Url='https://city.example.go.kr/archive.bin'; ContentType='application/octet-stream'; Expected='UNSUPPORTED' }
 )
 foreach ($formatCase in $formatCases) {
@@ -99,5 +112,29 @@ $validatedBinaryXlsx = Get-BenefitSourceDocument -Candidate $ambiguousBinaryCand
 Assert-Equal $validatedBinaryXlsx.SourceFormat XLSX 'An extensionless ambiguous binary is XLSX only when its package is safely recognizable'
 $arbitraryPk = Get-BenefitSourceDocument -Candidate $ambiguousBinaryCandidate -RequestInvoker { param($Uri) [pscustomobject]@{ StatusCode=200; ContentType='application/octer-stream'; Text=''; Bytes=[byte[]](0x50,0x4b,0x03,0x04,0x00) } }
 Assert-Equal $arbitraryPk.SourceFormat UNSUPPORTED 'An arbitrary PK-prefixed binary is not an XLSX document'
+
+$pdfBytes = New-DocumentTestPdfBytes
+$hwpxBytes = New-DocumentTestHwpxBytes
+Assert-Equal (Get-BenefitSourceFormat -Url 'https://city.example.go.kr/download' -ContentType 'application/octet-stream' -Bytes $hwpxBytes) HWPX 'Validated HWPX package must outrank generic MIME and extensionless URL'
+Assert-Equal (Get-BenefitSourceFormat -Url 'https://city.example.go.kr/document.pdf' -ContentType 'application/pdf' -Bytes $pdfBytes) PDF 'PDF signature bytes must support PDF classification'
+Assert-Equal (Get-BenefitSourceFormat -Url 'https://city.example.go.kr/document.pdf' -ContentType 'application/pdf' -Bytes ([Text.Encoding]::UTF8.GetBytes('<html>error</html>'))) UNSUPPORTED 'PDF MIME/extension must not override non-PDF bytes'
+Assert-Equal (Get-BenefitSourceFormat -Url 'https://city.example.go.kr/download' -ContentType 'application/octet-stream' -Bytes $pdfBytes) PDF 'PDF magic must support extensionless binary classification'
+foreach ($invalidHwpx in @(
+    (New-DocumentTestHwpxBytes -WrongMimetype),
+    (New-DocumentTestHwpxBytes -MissingContent),
+    (New-DocumentTestHwpxBytes -MissingSection),
+    (New-DocumentTestHwpxBytes -DuplicateMimetype),
+    (New-DocumentTestHwpxBytes -UnsafePath)
+)) {
+    Assert-Equal (Get-BenefitSourceFormat -Url 'https://city.example.go.kr/document.hwpx' -ContentType 'application/hwp+zip' -Bytes $invalidHwpx) UNSUPPORTED 'Invalid or ambiguous HWPX package must fail closed despite hints'
+}
+Assert-Equal (Get-BenefitSourceFormat -Url 'https://city.example.go.kr/document.xlsx' -ContentType 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' -Bytes $pdfBytes) PDF 'Actual binary format must outrank a misleading attachment hint'
+Assert-Equal (Get-BenefitSourceFormat -Url 'https://city.example.go.kr/document.xlsx' -ContentType 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' -Bytes ([byte[]](1,2,3))) UNSUPPORTED 'Invalid XLSX bytes must not be promoted by MIME/extension'
+Assert-Equal (Get-BenefitSourceFormat -Url 'https://city.example.go.kr/document.hwp' -ContentType 'application/x-hwp' -Bytes ([byte[]](1,2,3))) UNSUPPORTED 'Legacy binary HWP remains unsupported'
+Assert-True (Test-BenefitPdfBinaryPackage -Bytes $pdfBytes) 'PDF binary signature helper must recognize synthetic valid header'
+Assert-True (Test-BenefitHwpxBinaryPackage -Bytes $hwpxBytes) 'HWPX binary helper must recognize bounded package markers'
+$hwpxDocument = Get-BenefitSourceDocument -Candidate $ambiguousBinaryCandidate -RequestInvoker { param($Uri) [pscustomobject]@{StatusCode=200;ContentType='application/octet-stream';Text='';Bytes=$hwpxBytes} }.GetNewClosure()
+Assert-Equal $hwpxDocument.SourceFormat HWPX 'Source fetch boundary must preserve validated HWPX format'
+Assert-Equal $hwpxDocument.Bytes.Length $hwpxBytes.Length 'Source fetch boundary must preserve exact attachment bytes'
 
 Write-Host 'Official benefit source boundary tests passed.'

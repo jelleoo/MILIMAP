@@ -39,16 +39,62 @@ function Test-BenefitXlsxBinaryPackage {
     } catch { return $false }
 }
 
+function Test-BenefitPdfBinaryPackage {
+    param([AllowNull()][byte[]]$Bytes)
+    if ($null -eq $Bytes -or $Bytes.Length -lt 9) { return $false }
+    # Classification only: native parsing and physical layout validation are later work.
+    return [Text.Encoding]::ASCII.GetString($Bytes,0,9) -cmatch '^%PDF-(1\.[0-7]|2\.0)[\r\n]'
+}
+
+function Test-BenefitHwpxBinaryPackage {
+    param([AllowNull()][byte[]]$Bytes)
+    if ($null -eq $Bytes -or $Bytes.Length -lt 4 -or $Bytes[0] -ne 0x50 -or $Bytes[1] -ne 0x4b -or $Bytes[2] -ne 0x03 -or $Bytes[3] -ne 0x04) { return $false }
+    try {
+        $stream = [IO.MemoryStream]::new($Bytes,$false)
+        try {
+            $archive = [IO.Compression.ZipArchive]::new($stream,[IO.Compression.ZipArchiveMode]::Read,$false)
+            try {
+                if ($archive.Entries.Count -gt 256) { return $false }
+                $names = [Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
+                $mimetype = $null; $hasContent = $false; $hasSection = $false; $total = 0L
+                foreach ($entry in $archive.Entries) {
+                    if ([string]::IsNullOrWhiteSpace($entry.FullName) -or $entry.FullName -match '(^|/)\.\.(/|$)|\\' -or $entry.FullName.StartsWith('/') -or -not $names.Add($entry.FullName)) { return $false }
+                    if ($entry.Length -gt 16MB) { return $false }
+                    $total += $entry.Length
+                    if ($total -gt 64MB) { return $false }
+                    if ($entry.FullName -ceq 'mimetype') { $mimetype = $entry }
+                    if ($entry.FullName -ceq 'Contents/content.hpf') { $hasContent = $true }
+                    if ($entry.FullName -cmatch '^Contents/section[0-9]+\.xml$') { $hasSection = $true }
+                }
+                $expected = 'application/hwp+zip'
+                if ($null -eq $mimetype -or $mimetype.Length -ne $expected.Length -or -not $hasContent -or -not $hasSection) { return $false }
+                $reader = [IO.StreamReader]::new($mimetype.Open(),[Text.Encoding]::ASCII,$false)
+                try { return $reader.ReadToEnd() -ceq $expected } finally { $reader.Dispose() }
+            } finally { $archive.Dispose() }
+        } finally { $stream.Dispose() }
+    } catch { return $false }
+}
+
 function Get-BenefitSourceFormat {
     param([Parameter(Mandatory)][string]$Url, [string]$ContentType='', [AllowNull()][byte[]]$Bytes=$null)
     $mediaType = ($ContentType -split ';', 2)[0].Trim().ToLowerInvariant()
+    $extension = [IO.Path]::GetExtension(([Uri]$Url).AbsolutePath).ToLowerInvariant()
+    if ($null -ne $Bytes -and $Bytes.Length -gt 0) {
+        if (Test-BenefitPdfBinaryPackage -Bytes $Bytes) { return 'PDF' }
+        $isXlsx = Test-BenefitXlsxBinaryPackage -Bytes $Bytes
+        $isHwpx = Test-BenefitHwpxBinaryPackage -Bytes $Bytes
+        if ($isXlsx -and $isHwpx) { return 'UNSUPPORTED' }
+        if ($isXlsx) { return 'XLSX' }
+        if ($isHwpx) { return 'HWPX' }
+        if ($extension -in @('.pdf','.hwpx','.xlsx') -or $mediaType -in @('application/pdf','application/hwp+zip','application/vnd.openxmlformats-officedocument.spreadsheetml.sheet','application/vnd.ms-excel','application/octet-stream','application/octer-stream')) { return 'UNSUPPORTED' }
+    }
+    if ($mediaType -eq 'application/pdf' -or $extension -eq '.pdf') { return 'UNSUPPORTED' }
     if ($mediaType -in @('text/html', 'application/xhtml+xml')) { return 'HTML' }
     if ($mediaType -in @('text/csv', 'application/csv')) { return 'CSV' }
-    if ($mediaType -eq 'application/pdf') { return 'PDF' }
     if ($mediaType -in @('application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'application/vnd.ms-excel')) { return 'XLSX' }
     if ($mediaType -in @('application/octet-stream', 'application/octer-stream') -and (Test-BenefitXlsxBinaryPackage -Bytes $Bytes)) { return 'XLSX' }
-    switch ([IO.Path]::GetExtension(([Uri]$Url).AbsolutePath).ToLowerInvariant()) {
-        '.html' { return 'HTML' }; '.htm' { return 'HTML' }; '.csv' { return 'CSV' }; '.xlsx' { return 'XLSX' }; '.pdf' { return 'PDF' }; default { return 'UNSUPPORTED' }
+    switch ($extension) {
+        '.html' { return 'HTML' }; '.htm' { return 'HTML' }; '.csv' { return 'CSV' }; '.xlsx' { return 'XLSX' }; default { return 'UNSUPPORTED' }
     }
 }
 

@@ -8,8 +8,8 @@
 - Phase 1 code baseline: `97d6070113196e922fb76af7508314b6eda8e7b7`
 - Phase 2 Task 6 merge baseline: `d43c00ee07b471a55ed7ece4abecc1dc242ed8ce`
 - Phase 2 Core Foundation: Issue #43 / Task 7 validation PR #50
-- current dev baseline: `d40e479b2f9e2b39839f338ef11259f126840460` (P3-7 PR #108 merged)
-- 기준일: 2026-09-28
+- current dev baseline: `28a6845684e94cd3490fcc1c4112ef6fce402205` (P4-0 preflight fetch, 2026-10-05)
+- 기준일: 2026-10-05
 - Phase 1 A — Business Identity / Normalization: PR #37 merged
 - Phase 1 B — POI Discovery: PR #34 merged
 - Phase 1 C — POI Matching / Evaluation: PR #36 merged
@@ -23,6 +23,18 @@
 - Android bundled seed version: 7
 
 현재 코드/설정이 이 문서와 다르면 최신 `dev` 코드와 해당 Issue/PR을 우선합니다. release data 수치는 이번 closeout에서 변경하지 않았다.
+
+## Phase 4 P4-0 — Document Adapter Foundation
+
+Issue #111의 P4-0 foundation을 구현하고 로컬 검증했다. 아직 `dev`에 병합하지 않았으며 exact PR HEAD의 `verify-data` / `verify` GREEN이 merge 전 필수다.
+
+- PDF signature / bounded HWPX ZIP marker 분류, original-byte immutable snapshot, synthetic `PDF_ROW` / `HWPX_ROW` index/unit/slice provenance와 locator bridge
+- format recognition은 parser 지원이 아니다. 실제 PDF/HWPX parsing, OCR, scoped production orchestration은 미구현이다.
+- `ProductionAction=NONE`, PDF/HWPX reuse capability `NONE`; canonical/seed/apps 변경 없음
+- local data suite 57/57 및 Android unit/lint/debug build PASS
+- [P4-0 handover](handover/2026-09-29-phase4-p4-0-document-adapter-foundation.md); merge 후 다음은 P4-1 HWPX generic adapter
+
+Phase 4 전체는 COMPLETE가 아니다.
 
 ## Phase 2 closeout (2026-09-26)
 

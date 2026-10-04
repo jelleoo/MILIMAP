@@ -290,6 +290,8 @@ BenefitVerificationResult + row report + summary + evidence diagnostics
 
 The current scoped path supports HTML table rows, MMA JSONP list-to-detail evidence, and XLSX rows with raw-byte-bound sheet/row/cell provenance. It does not relabel JSONP as HTML, and it does not treat PDFs, HWP/OCR, SNS/blog, or discovery signals as strong verification evidence. `ProductionAction` remains `NONE` for every family.
 
+P4-0 adds byte-first PDF/HWPX recognition and original-byte snapshots, plus validated synthetic `PDF_ROW` / `HWPX_ROW` provenance indexes and locator slices. Recognition is not parser support: there is no real PDF/HWPX parser, OCR, document scoped production runner, or document POST_FETCH reuse. Synthetic records are contract controls, not real benefit truth; future adapters must establish their physical evidence from source bytes. PDF/HWPX incremental capability remains `NONE`. See the [P4-0 handover](../../docs/handover/2026-09-29-phase4-p4-0-document-adapter-foundation.md).
+
 ### A1 scoped HTML evidence path
 
 A1의 scoped HTML 경로는 기존 Phase 2 Shadow Mode를 대체하지 않는 **opt-in** 경로다. 호출자는 검증할 canonical 행과 원본 CSV 행 번호를 함께 넘기고, 이미 승인된 HTTP boundary인 `RequestInvoker`를 주입한다.

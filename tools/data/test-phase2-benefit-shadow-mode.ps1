@@ -3,6 +3,7 @@ $ErrorActionPreference = 'Stop'
 $runnerPath = Join-Path $PSScriptRoot 'invoke-phase2-benefit-shadow-mode.ps1'
 if (-not (Test-Path -LiteralPath $runnerPath)) { throw 'Phase 2 shadow runner is not implemented' }
 . $runnerPath
+. (Join-Path $PSScriptRoot 'testdata/benefit-evidence-document/test-support.ps1')
 
 function Assert-Equal {
     param([AllowNull()]$Actual, [AllowNull()]$Expected, [Parameter(Mandatory)][string]$Message)
@@ -190,7 +191,7 @@ Assert-True ($historicalReferenceRun.Rows[0].ReviewClass -ne 'GREEN') 'Unrevalid
 # Official PDF without an approved text adapter must fail closed.
 $pdfRun = Invoke-Phase2BenefitShadowMode -Rows @(New-Phase2TestRow -SourceUrl 'https://city.example.go.kr/benefit.pdf') -SourceRowNumberOffset 1 -RequestInvoker {
     param($Uri)
-    [pscustomobject]@{ StatusCode=200; ContentType='application/pdf'; Text=''; Bytes=([byte[]](1,2,3)) }
+    [pscustomobject]@{ StatusCode=200; ContentType='application/pdf'; Text=''; Bytes=(New-DocumentTestPdfBytes) }
 } -UnstructuredExtractor $extractor
 Assert-Equal $pdfRun.Rows[0].BenefitState 'NEEDS_VERIFICATION' 'PDF without text adapter must remain unresolved'
 Assert-True ($pdfRun.Rows[0].ReasonCodes -contains 'EXTRACTION_PROVIDER_NOT_CONFIGURED') 'Missing PDF adapter reason must be preserved'
@@ -305,7 +306,7 @@ Assert-True ($notFoundRun.Rows[0].BenefitState -ne 'ENDED') 'HTTP 404 must never
 # PDF without an injected text adapter must fail closed.
 $pdfRun = Invoke-Phase2BenefitShadowMode -Rows @(New-Phase2TestRow -SourceUrl 'https://city.example.go.kr/benefit.pdf') -SourceRowNumberOffset 1 -RequestInvoker {
     param($Uri)
-    [pscustomobject]@{ StatusCode=200; ContentType='application/pdf'; Text=''; Bytes=[byte[]](1,2,3) }
+    [pscustomobject]@{ StatusCode=200; ContentType='application/pdf'; Text=''; Bytes=(New-DocumentTestPdfBytes) }
 } -UnstructuredExtractor $extractor
 Assert-Equal $pdfRun.Rows[0].BenefitState 'NEEDS_VERIFICATION' 'PDF without adapter must remain unresolved'
 Assert-True ($pdfRun.Rows[0].ReasonCodes -contains 'EXTRACTION_PROVIDER_NOT_CONFIGURED') 'Missing PDF adapter reason must be preserved'

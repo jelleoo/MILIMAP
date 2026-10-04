@@ -194,4 +194,15 @@ Assert-Equal @($targetOnlyExtraction.Claims).Count 1 'Absent benefit detail rema
 Assert-Equal $targetOnlyExtraction.Claims[0].ClaimType 'ELIGIBLE_TARGET' 'A present supported non-benefit detail maps deterministically'
 Assert-Equal $targetOnlyExtraction.Claims[0].Value '현역 장병' 'Scoped extraction preserves the selected source value'
 
+. (Join-Path $PSScriptRoot 'testdata/benefit-evidence-hwpx/test-support.ps1')
+. (Join-Path $PSScriptRoot 'lib/benefit-evidence/convert-hwpx-source-observation.ps1')
+$hwpxDocument=New-HwpxTestDocument
+$hwpxObservation=ConvertTo-BenefitHwpxObservation -Document $hwpxDocument
+$hwpxSlice=New-RelevantBenefitEvidenceSlice -Observation $hwpxObservation -Unit $hwpxObservation.ContentUnits[0]
+$hwpxSource=New-TestBoundSource -Document $hwpxDocument
+$hwpxExtraction=Invoke-BenefitEvidenceExtraction -Source $hwpxSource -Document $hwpxDocument -EvidenceSlice $hwpxSlice -DocumentValidationIndex $hwpxObservation.DocumentValidationIndex
+Assert-Equal $hwpxExtraction.Claims.Count 1 'HWPX extracts selected benefit only'
+Assert-Equal $hwpxExtraction.Claims[0].Value '합성 A 혜택' 'No cross-business benefit leakage'
+Assert-Equal $hwpxExtraction.Claims[0].ExtractionMethod SCOPED_HWPX_CELL 'HWPX method is explicit, not HTML'
+Assert-Equal $hwpxExtraction.Claims[0].EvidenceReference HWPX_SECTION_1_TABLE_1_ROW_2/BenefitDescription 'Exact physical field reference'
 Write-Host 'Benefit evidence extraction tests passed.'

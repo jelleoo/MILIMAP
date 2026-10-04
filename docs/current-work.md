@@ -8,7 +8,7 @@
 - Phase 1 code baseline: `97d6070113196e922fb76af7508314b6eda8e7b7`
 - Phase 2 Task 6 merge baseline: `d43c00ee07b471a55ed7ece4abecc1dc242ed8ce`
 - Phase 2 Core Foundation: Issue #43 / Task 7 validation PR #50
-- current dev baseline: `28a6845684e94cd3490fcc1c4112ef6fce402205` (P4-0 preflight fetch, 2026-10-05)
+- current dev baseline: `b0b0bb18e4e1a19e045477a884256ac51d8a9605` (P4-1 preflight fetch, 2026-10-05)
 - 기준일: 2026-10-05
 - Phase 1 A — Business Identity / Normalization: PR #37 merged
 - Phase 1 B — POI Discovery: PR #34 merged
@@ -26,13 +26,26 @@
 
 ## Phase 4 P4-0 — Document Adapter Foundation
 
-Issue #111의 P4-0 foundation을 구현하고 로컬 검증했다. 아직 `dev`에 병합하지 않았으며 exact PR HEAD의 `verify-data` / `verify` GREEN이 merge 전 필수다.
+Issue #111의 P4-0 foundation은 PR #112로 `dev`에 병합됐다. reviewed HEAD `bc36bf6a7d9dc6024e5b44294d5667c162170487`가 위 dev baseline의 ancestor임을 확인했다.
 
 - PDF signature / bounded HWPX ZIP marker 분류, original-byte immutable snapshot, synthetic `PDF_ROW` / `HWPX_ROW` index/unit/slice provenance와 locator bridge
-- format recognition은 parser 지원이 아니다. 실제 PDF/HWPX parsing, OCR, scoped production orchestration은 미구현이다.
+- P4-0의 format recognition 자체는 parser 지원이 아니다. PDF parsing/OCR은 미구현이고 HWPX table parsing은 아래 P4-1 범위에서 추가한다.
 - `ProductionAction=NONE`, PDF/HWPX reuse capability `NONE`; canonical/seed/apps 변경 없음
 - local data suite 57/57 및 Android unit/lint/debug build PASS
-- [P4-0 handover](handover/2026-09-29-phase4-p4-0-document-adapter-foundation.md); merge 후 다음은 P4-1 HWPX generic adapter
+- [P4-0 handover](handover/2026-09-29-phase4-p4-0-document-adapter-foundation.md)
+
+## Phase 4 P4-1 — HWPX Generic Adapter
+
+Issue #113의 native ZIP/XML table-only adapter와 scoped 경로를 구현하고 로컬 검증했다. exact PR HEAD CI와 whole-branch read-only review는 병합 전 필수이며 이 문서 작성 시점에는 대기 중이다.
+
+- trusted OPF manifest/spine과 section namespace, bounded ZIP, DTD/external entity 차단
+- 단일 명시적 header와 unmerged semantic cells만 지원; paragraph-only, nested table/unsupported inline, positional guessing은 지원하지 않음
+- original bytes → section/table/row/cell provenance → 기존 locator/binding/extraction/validation; claim method `SCOPED_HWPX_CELL`
+- shared-source fetch 1 / package parse 1 / adapter reuse 1; PARTIAL observation의 semantic LOCATED/NOT_FOUND 차단
+- local complete data suite 59/59 PASS; Android unit/lint/debug build PASS
+- live official HWPX validation: `NOT_OBSERVED`; synthetic fixture는 실제 혜택 truth가 아님
+- `ProductionAction=NONE`, HWPX incremental reuse capability `NONE`, dependency/protected paths 변경 없음
+- [P4-1 handover](handover/2026-10-05-phase4-p4-1-hwpx-generic-adapter.md); 다음은 P4-2 PDF native adapter
 
 Phase 4 전체는 COMPLETE가 아니다.
 

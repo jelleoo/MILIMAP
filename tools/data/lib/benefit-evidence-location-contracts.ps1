@@ -1,6 +1,7 @@
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'benefit-verification-contracts.ps1')
+. (Join-Path $PSScriptRoot 'benefit-evidence/document-source-provenance.ps1')
 
 # These contracts are deliberately separate from the existing core registry.
 # They describe source preparation, never officiality or benefit lifecycle.
@@ -652,7 +653,12 @@ function New-InternalBenefitXlsxSourceContentUnit {
     Assert-ScopeXlsxUnitCore -Unit $unit -Snapshot $Snapshot -XlsxValidationIndex $XlsxValidationIndex;return $unit
 }
 function Assert-ScopeUnit {
-    param([AllowNull()]$Unit, [Parameter(Mandatory)]$Snapshot, [AllowNull()][object[]]$HtmlTokens=$null, [AllowNull()]$HtmlValidationIndex=$null,[AllowNull()]$XlsxValidationIndex=$null)
+    param([AllowNull()]$Unit, [Parameter(Mandatory)]$Snapshot, [AllowNull()][object[]]$HtmlTokens=$null, [AllowNull()]$HtmlValidationIndex=$null,[AllowNull()]$XlsxValidationIndex=$null,[AllowNull()]$DocumentValidationIndex=$null)
+    if ($Snapshot.SourceFormat -cin @('PDF','HWPX')) {
+        if ($null -eq $DocumentValidationIndex) { throw 'Document validation index is required' }
+        Assert-ScopeDocumentUnit -Unit $Unit -Snapshot $Snapshot -ValidationIndex $DocumentValidationIndex
+        return
+    }
     if ($Snapshot.SourceFormat -ceq 'XLSX') {
         if ($null -eq $XlsxValidationIndex) { throw 'XLSX validation index is required' }
         Assert-ScopeXlsxUnit -Unit $Unit -Snapshot $Snapshot -XlsxValidationIndex $XlsxValidationIndex
@@ -711,12 +717,16 @@ function Assert-ScopeDiagnostics {
     }
 }
 function Assert-ScopeObservation {
-    param([AllowNull()]$Observation, [AllowNull()][object[]]$HtmlTokens=$null, [AllowNull()]$HtmlValidationIndex=$null, [AllowNull()]$XlsxValidationIndex=$null)
+    param([AllowNull()]$Observation, [AllowNull()][object[]]$HtmlTokens=$null, [AllowNull()]$HtmlValidationIndex=$null, [AllowNull()]$XlsxValidationIndex=$null,[AllowNull()]$DocumentValidationIndex=$null)
     Assert-ScopeObject $Observation 'SourceObservation' @('SourceRowNumber','SnapshotId','SourceUrl','SourceFormat','ObservedAt','Snapshot','AdapterId','AdapterVersion','AdapterStatus','ContentUnits','Diagnostics')
     Assert-BenefitSourceRowNumber $Observation.SourceRowNumber
     $trustedXlsx = ($Observation.SourceFormat -ceq 'XLSX' -and (Test-InternalBenefitXlsxRunContextTrust -Snapshot $Observation.Snapshot -XlsxValidationIndex $XlsxValidationIndex))
     $trustedHtml = ($Observation.SourceFormat -ceq 'HTML' -and (Test-InternalBenefitHtmlRunContextTrust -Snapshot $Observation.Snapshot -HtmlValidationIndex $HtmlValidationIndex))
     if (-not $trustedXlsx -and -not $trustedHtml) { Assert-ScopeSnapshot $Observation.Snapshot }
+    if ($Observation.SourceFormat -cin @('PDF','HWPX') -and $null -ne $DocumentValidationIndex) {
+        Assert-InternalBenefitDocumentValidationIndex -ValidationIndex $DocumentValidationIndex -Snapshot $Observation.Snapshot
+        if ($Observation.AdapterId -cne $DocumentValidationIndex.AdapterId -or $Observation.AdapterVersion -cne $DocumentValidationIndex.AdapterVersion) { throw 'Observation adapter must match document index' }
+    }
     foreach ($key in @('SnapshotId','SourceUrl','SourceFormat','ObservedAt')) {
         if ($Observation.$key -cne $Observation.Snapshot.$key) { throw 'Observation must preserve snapshot identity' }
     }
@@ -727,7 +737,10 @@ function Assert-ScopeObservation {
     if ($Observation.AdapterStatus -cin @('FAILED','UNSUPPORTED') -and $Observation.ContentUnits.Count -gt 0) { throw 'Failed adapter must not supply content units' }
     $references = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
     foreach ($unit in $Observation.ContentUnits) {
-        if ($Observation.SourceFormat -ceq 'JSONP') {
+        if ($Observation.SourceFormat -cin @('PDF','HWPX')) {
+            if ($null -eq $DocumentValidationIndex) { throw 'Document validation index is required' }
+            Assert-ScopeDocumentUnitCore -Unit $unit -Snapshot $Observation.Snapshot -ValidationIndex $DocumentValidationIndex
+        } elseif ($Observation.SourceFormat -ceq 'JSONP') {
             Assert-ScopeJsonpUnitCore -Unit $unit -Snapshot $Observation.Snapshot
         } elseif ($Observation.SourceFormat -ceq 'XLSX') {
             Assert-ScopeXlsxUnitCore -Unit $unit -Snapshot $Observation.Snapshot -XlsxValidationIndex $XlsxValidationIndex
@@ -742,7 +755,7 @@ function New-BenefitSourceObservation {
     param([int]$SourceRowNumber, [Parameter(Mandatory)]$Snapshot, [Parameter(Mandatory)][string]$AdapterId,
         [Parameter(Mandatory)][string]$AdapterVersion, [Parameter(Mandatory)][string]$AdapterStatus,
         [AllowEmptyCollection()][object[]]$ContentUnits=@(), [AllowEmptyCollection()][object[]]$Diagnostics=@(),
-        [AllowNull()][object[]]$HtmlTokens=$null, [AllowNull()]$HtmlValidationIndex=$null, [AllowNull()]$XlsxValidationIndex=$null)
+        [AllowNull()][object[]]$HtmlTokens=$null, [AllowNull()]$HtmlValidationIndex=$null, [AllowNull()]$XlsxValidationIndex=$null,[AllowNull()]$DocumentValidationIndex=$null)
     $trustedXlsx = ($Snapshot.SourceFormat -ceq 'XLSX' -and (Test-InternalBenefitXlsxRunContextTrust -Snapshot $Snapshot -XlsxValidationIndex $XlsxValidationIndex))
     $trustedHtml = ($Snapshot.SourceFormat -ceq 'HTML' -and (Test-InternalBenefitHtmlRunContextTrust -Snapshot $Snapshot -HtmlValidationIndex $HtmlValidationIndex))
     if (-not $trustedXlsx -and -not $trustedHtml) { Assert-ScopeSnapshot $Snapshot }
@@ -752,7 +765,8 @@ function New-BenefitSourceObservation {
         Snapshot=$(if ($trustedXlsx -or $trustedHtml) { $Snapshot } else { Copy-ScopeContractData $Snapshot }); AdapterId=$AdapterId; AdapterVersion=$AdapterVersion; AdapterStatus=$AdapterStatus
         ContentUnits=(Copy-ScopeContractData $ContentUnits); Diagnostics=(Copy-ScopeContractData $Diagnostics)
     }
-    Assert-ScopeObservation -Observation $result -HtmlTokens $HtmlTokens -HtmlValidationIndex $HtmlValidationIndex -XlsxValidationIndex $XlsxValidationIndex
+    Assert-ScopeObservation -Observation $result -HtmlTokens $HtmlTokens -HtmlValidationIndex $HtmlValidationIndex -XlsxValidationIndex $XlsxValidationIndex -DocumentValidationIndex $DocumentValidationIndex
+    if ($Snapshot.SourceFormat -cin @('PDF','HWPX') -and $null -ne $DocumentValidationIndex) { $result | Add-Member -NotePropertyName DocumentValidationIndex -NotePropertyValue $DocumentValidationIndex }
     return $result
 }
 function Assert-ScopeSliceShape {

@@ -236,4 +236,12 @@ foreach ($format in @('PDF','HWPX')) {
     Assert-ScopeThrows { New-BenefitSourceSnapshot -SourceUrl $snapshot.SourceUrl -SourceFormat $format -Text 'reconstructed text' -Bytes $original -ObservedAt $snapshot.ObservedAt } "$format rejects text-backed provenance"
 }
 Assert-ScopeEqual (Get-BenefitVerificationContractDefinition | ConvertTo-Json -Depth 8 -Compress) $before 'Global contracts remain unchanged after use'
+foreach ($format in @('PDF','HWPX')) {
+    $documentFixture = New-DocumentTestFixture -Format $format
+    Assert-ScopeUnit -Unit $documentFixture.Units[0] -Snapshot $documentFixture.Snapshot -DocumentValidationIndex $documentFixture.Index
+    Assert-ScopeThrows { Assert-ScopeUnit -Unit $documentFixture.Units[0] -Snapshot $documentFixture.Snapshot } 'Document units require their strict validation index'
+    $observation = New-BenefitSourceObservation -SourceRowNumber 2 -Snapshot $documentFixture.Snapshot -AdapterId $documentFixture.Index.AdapterId -AdapterVersion $documentFixture.Index.AdapterVersion -AdapterStatus COMPLETE -ContentUnits $documentFixture.Units -DocumentValidationIndex $documentFixture.Index
+    Assert-ScopeObservation -Observation $observation -DocumentValidationIndex $observation.DocumentValidationIndex
+    Assert-ScopeEqual $observation.DocumentValidationIndex.SnapshotId $documentFixture.Snapshot.SnapshotId 'Observation carries snapshot-bound document index'
+}
 Write-Host 'Benefit evidence location contract tests passed.'

@@ -63,6 +63,16 @@ Issue #117: isolated .NET 8 / locked PdfPig 0.1.16(승인된 Apache-2.0 dependen
 - P4-2 bounded native adapter는 구현/회귀 기준 COMPLETE이며 final docs-only exact-head CI 통과 후 merge-ready. Phase 4 전체는 COMPLETE가 아니다.
 - [P4-2B handover](handover/2026-10-05-phase4-p4-2b-pdf-native-adapter.md); 다음은 P4-2B 병합 후 P4-3 OCR fallback
 
+## Phase 4 P4-3A — OCR Technical Evaluation
+
+- Technical evaluation: `REJECTED` (사용자 최종 판정, 2026-10-05).
+- Windows portable Tesseract 5.5.3 supply, exact runtime/model identity 및 offline Korean OCR 실행은 성공했다. 그러나 bounded Gray/RGB matrix의 OCR 16회 / threshold 평가 80건은 모두 PARTIAL이었다.
+- PSM 3/4/6 containment failure 및 PSM 11 동일 address cell 내부 정상 Korean word bbox overlap으로 usable positive가 0건이다. Exact-containment / overlapping-word rejection 및 confidence reject-only 정책은 완화하지 않았다.
+- Task 4/5: `NOT_RUN_CORE_ACCEPTANCE_GATE_FAILED`; Windows/Ubuntu semantic determinism은 미검증이다.
+- Product dependency: `NOT_APPROVED`; P4-3B: `BLOCKED`. 평가 harness는 production OCR adapter가 아니다.
+- Phase 4: `NOT COMPLETE`. 다음 단계는 OCR fallback design 재검토이며, 다른 engine/model/crop/preprocessing/geometry 전략은 새 설계 승인 없이 진행하지 않는다.
+- [P4-3A rejected handover](handover/2026-10-05-phase4-p4-3a-ocr-technical-evaluation.md)
+
 ## Phase 2 closeout (2026-09-26)
 
 Phase 2 Benefit Verification Core의 scoped HTML, MMA JSONP, XLSX 경로와 fixed representative closeout **evidence matrix**를 완료했다(Issue #92 / PR #93 merged). current-code fixed-12 live replay는 replayable raw capture가 없어 `NOT_RUN_NO_REPLAYABLE_RAW_CAPTURE`이며, Phase 2는 현재 구현된 source-family 경계 안에서 `COMPLETE`다.

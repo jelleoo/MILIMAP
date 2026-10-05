@@ -1,6 +1,10 @@
-param([ValidateSet('Contract','ImageEligibility','GridOcr','Safety','All')][string]$Group='All')
+param([ValidateSet('Contract','ImageEligibility','GridOcr','Safety','All')][string]$Group='All',
+    [string]$TesseractExecutable,[string]$KoreanModelPath)
 Set-StrictMode -Version Latest
 $ErrorActionPreference='Stop'
+if($Group -in @('Safety','All')){
+    throw 'NOT_RUN_CORE_ACCEPTANCE_GATE_FAILED: Task 4/5 are intentionally unimplemented; run Contract, ImageEligibility, and GridOcr separately. All cannot claim PASS.'
+}
 function Require($Condition,[string]$Message){ if(-not $Condition){throw $Message} }
 if($Group -in @('Contract','All')){
     $project=Join-Path $PSScriptRoot 'Milimap.P4_3A.OcrEval.csproj'
@@ -59,4 +63,31 @@ if($Group -in @('ImageEligibility','All')){
         }finally{[IO.Directory]::Delete($scratch,$true)}
     }
     Write-Host 'ImageEligibility PASS'
+}
+if($Group -in @('GridOcr','All')){
+    $runner=Join-Path $PSScriptRoot 'run-evaluation.ps1'
+    Require (Test-Path $runner) 'Missing pixel-grid Korean OCR evaluation runner'
+    . $runner
+    Require ($TesseractExecutable -and $KoreanModelPath) 'GridOcr requires explicit external engine and official model paths; missing runtime is NOT_RUN, not PASS'
+    $scratch=Join-Path ([IO.Path]::GetTempPath()) ('p43a-ocr-contract-'+[guid]::NewGuid().ToString('N'))
+    [void][IO.Directory]::CreateDirectory($scratch)
+    try{
+        $dll=Join-Path $PSScriptRoot 'bin/Release/net8.0/Milimap.P4_3A.OcrEval.dll'
+        $inspect=& dotnet $dll inspect --input (Join-Path $PSScriptRoot 'fixtures/gray.pdf') --artifact-dir $scratch | ConvertFrom-Json
+        $actual=Invoke-TesseractEvaluation -Executable $TesseractExecutable -ModelPath $KoreanModelPath -ModelHash '6b85e11d9bbf07863b97b3523b1b112844c43e713df8b66418a081fd1060b3b2' -Inputs @($inspect.Images[0].ArtifactPath)
+        Require ($actual.Status -eq 'COMPLETE' -and $actual.EngineVersion -ceq '5.5.3' -and $actual.InvocationCount -eq 1 -and $actual.Words.Count -gt 0) 'Verified Windows release build must supply real OCR TSV, not be rejected or stubbed'
+    }finally{[IO.Directory]::Delete($scratch,$true)}
+    $cells=@([pscustomobject]@{Id=1;X0=0;Y0=0;X1=100;Y1=100},[pscustomobject]@{Id=2;X0=100;Y0=0;X1=200;Y1=100})
+    $cross=Resolve-EvaluationOcrCells -Cells $cells -Words @([pscustomobject]@{Left=90;Top=10;Width=20;Height=20;Confidence=99;Text='cross';Page=1}) -Threshold 0
+    Require ($cross.Status -eq 'PARTIAL' -and $cross.Accepted.Count -eq 0) 'Cross-cell box must not be assigned by centroid'
+    $overlap=Resolve-EvaluationOcrCells -Cells $cells -Words @([pscustomobject]@{Left=10;Top=10;Width=20;Height=20;Confidence=99;Text='one';Page=1},[pscustomobject]@{Left=15;Top=10;Width=20;Height=20;Confidence=99;Text='two';Page=1}) -Threshold 0
+    Require ($overlap.Status -eq 'PARTIAL' -and $overlap.Accepted.Count -eq 0) 'Overlapping OCR words must fail closed'
+    $ordered=Resolve-EvaluationOcrCells -Cells $cells -Words @([pscustomobject]@{Left=10;Top=40;Width=20;Height=20;Confidence=99;Text='second';Page=1},[pscustomobject]@{Left=10;Top=10;Width=20;Height=20;Confidence=99;Text='first';Page=1}) -Threshold 0
+    Require ($ordered.CellText[0].Text -ceq "first`nsecond") 'Within-cell multiline ordering must be physical, not TSV reading order'
+    foreach($name in @('gray','rgb','borderless','broken','merged')){
+        $result=Invoke-P43aGridProbe -PdfPath (Join-Path $PSScriptRoot ('fixtures/'+$name+'.pdf'))
+        if($name -in @('gray','rgb')){Require ($result.Status -eq 'COMPLETE' -and $result.Cells.Count -eq 12) "$name must prove 12 independent closed cells"}
+        else{Require ($result.Status -ne 'COMPLETE' -and $result.Cells.Count -eq 0) "$name must not infer grid"}
+    }
+    Write-Host 'GridOcr geometry PASS; actual OCR calibration is a separate measured gate, not a test constant.'
 }

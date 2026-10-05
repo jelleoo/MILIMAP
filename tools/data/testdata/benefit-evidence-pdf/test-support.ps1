@@ -1,6 +1,11 @@
 # Independently authored, parseable synthetic PDF controls. No real benefit truth.
 function Assert-PdfEqual { param($Actual,$Expected,[string]$Message); if($Actual -cne $Expected){throw "$Message (expected $Expected, actual $Actual)"} }
 function Assert-PdfThrows { param([scriptblock]$Action,[string]$Message); try{& $Action}catch{return}; throw "$Message (not rejected)" }
+function New-PdfTestDocument {
+    param([string]$Fixture='two-business',[int]$SourceRowNumber=2)
+    $bytes=[IO.File]::ReadAllBytes((Join-Path $PSScriptRoot "$Fixture.pdf"))
+    New-BenefitSourceDocument -SourceRowNumber $SourceRowNumber -Url 'https://city.example.go.kr/synthetic.pdf' -SourceFormat PDF -FetchStatus COMPLETE -Text '' -Bytes $bytes -ObservedAt '2026-10-05T00:00:00Z'
+}
 function New-PdfTestBytes {
     param([string]$Content='BT /F1 12 Tf 20 100 Td (Synthetic native control) Tj ET')
     $objects=@('<< /Type /Catalog /Pages 2 0 R >>','<< /Type /Pages /Kids [3 0 R] /Count 1 >>',

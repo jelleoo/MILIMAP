@@ -64,3 +64,19 @@ $duplicate=Invoke-ScopedPhase2BenefitSourceCandidate -Candidate (New-PdfScopedCa
 Assert-PdfEqual $duplicate.LocationResult.Status 'AMBIGUOUS' 'Conflicting same-name alternative not discarded'
 Assert-PdfEqual $duplicate.Slices.Count 0 'Ambiguity yields no evidence'
 Write-Host 'Scoped PDF tests passed: leakage 0; fetch 1 / native parse 1 / grid-index 1 / reuse 1.'
+$damagedBytes=(New-PdfTestDocument 'unsafe-lower-table').Bytes
+$damagedHttp={param($Uri)[pscustomobject]@{StatusCode=200;ContentType='application/pdf';Text='';Bytes=$damagedBytes}}.GetNewClosure()
+$damaged=Invoke-ScopedPhase2BenefitSourceCandidate -Candidate (New-PdfScopedCandidate 4) -Business (New-PdfScopedBusiness -Name '합성가게 C' -Building 56 -Row 4) -CanonicalPhone '02-0000-0056' -RunContext (New-BenefitSourceRunContext) -RequestInvoker $damagedHttp
+Assert-PdfEqual $damaged.Observation.AdapterStatus PARTIAL 'Unsafe second table cannot disappear behind valid first table'
+Assert-PdfEqual $damaged.Observation.ContentUnits.Count 2 'Safe first-table units retained for audit'
+Assert-PdfEqual $damaged.LocationResult.Status $null 'Damaged-table business absence is not semantic NOT_FOUND'
+Assert-PdfEqual $damaged.Extraction.Claims.Count 0 'No claims from mixed unsafe document'
+$mixedBytes=(New-PdfTestDocument 'empty-name').Bytes
+$mixedHttp={param($Uri)[pscustomobject]@{StatusCode=200;ContentType='application/pdf';Text='';Bytes=$mixedBytes}}.GetNewClosure()
+$mixed=Invoke-ScopedPhase2BenefitSourceCandidate -Candidate (New-PdfScopedCandidate 3) -Business (New-PdfScopedBusiness -Name '합성가게 B' -Building 34 -Row 3) -CanonicalPhone '02-0000-0034' -RunContext (New-BenefitSourceRunContext) -RequestInvoker $mixedHttp
+Assert-PdfEqual $mixed.Observation.AdapterStatus PARTIAL 'Identity-less mapped evidence remains incomplete even alongside valid A'
+Assert-PdfEqual $mixed.Observation.ContentUnits.Count 1 'Safe A unit retained for audit only'
+Assert-PdfEqual $mixed.LocationResult.OperationalStatus PARTIAL 'Missing identity remains operational'
+Assert-PdfEqual $mixed.LocationResult.Status $null 'Missing identity must not manufacture NOT_FOUND'
+Assert-PdfEqual $mixed.Extraction.Claims.Count 0 'Mixed incomplete source creates no claims'
+Assert-PdfEqual $mixed.Observation.Diagnostics[0].EvidenceReference 'PDF_PAGE_1_TABLE_1_ROW_3' 'Identity-less row diagnostic preserves exact physical reference'

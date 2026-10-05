@@ -36,6 +36,8 @@ No OCR, borderless/reading-order inference, multi-row header inference, semantic
 | Letters | 20,000/page; 100,000 total after page becomes observable |
 | Paths | 2,048/page; 16,384 total path commands after page becomes observable |
 | Grid work | 512 segments/page before component search; 128 coordinates/axis; 4,096 cells/grid |
+| Glyph geometry work | 128 glyphs/cell; shared document budget of 500,000 glyph/cell checks and 100,000 overlap comparisons before corresponding loops |
+| Geometry wall time | Cooperative 10-second deadline shared across all pages; failure clears all units |
 | JSON / stderr | 16 MiB / 64 KiB; bounded streaming reads, terminate on excess |
 | Child wall time | 10 seconds default after process starts; kill process tree and clean own temp folder |
 | PdfPig token stack | 128, strict parsing, missing fonts rejected, clip paths enabled |
@@ -90,6 +92,18 @@ Duplicate-name control was corrected to strong + same-name name-only alternative
 Not run/available: current Suwon physical identity/benefit verification (firewall redirect, no PDF); OCR, arbitrary PDF families, portable hard-memory enforcement. No population precision/recall claim. Existing historical sources and deterministic controls are not current live truth.
 
 ## Remaining risks / next
+
+### Whole-branch review / final fix pass
+
+Fresh read-only review of `24a64aa..9901749` found no Critical and three Important findings. The same review resumed after a usage-limit interruption; no second reviewer/re-review was used. All three entered one RED→GREEN fix pass:
+
+1. Mixed identity-less mapped evidence falsely allowed COMPLETE/NOT_FOUND. Actual `empty-name.pdf` now yields PARTIAL even with safe A present; B locator remains operational PARTIAL, semantic null, zero claims. Safe A is audit-only.
+2. A safe first table hid a damaged second table discarded before header validation. Independently authored `unsafe-lower-table.pdf` proves this from actual bytes; uncovered exact native identity-header hints now cause PARTIAL without constructing rows/claims. Hint-only regions do not count as physical tables (`uncovered-heading.pdf` ordinal RED→GREEN).
+3. Allowed glyph workload could monopolize PowerShell after child timeout. Genuine crowded/spread grid controls prove per-cell and shared document comparison budgets plus deadline enforcement. A 600-glyph case now rejects by cell quota in **525 ms geometry** (native **573 ms**), versus the review's **4,804 ms** unbounded geometry measurement; this is a local control, not a throughput benchmark.
+
+Review exclusions remain explicit limitations, not hidden PASS claims: current Suwon unavailable; CI checked separately on exact HEAD; no hard OS memory ceiling/parser-security audit/general invisible-text or paint-order visual-fidelity guarantee; skew/OCR/borderless/merged reconstruction out of scope; no demonstrated nested-projection bypass; OS-denied termination/deletion races not fault-injected; whitespace containment remains strict; repeated hashes and existing internal index-mutability model are unchanged; dependency/fixture approval and incremental/lifecycle/protected boundaries are preserved. No independent Minor finding was deferred.
+
+Initial exact HEAD `9901749e4d0e0c3f24c05596f5849342bb2a4f55` passed both jobs in [run 37267090989](https://github.com/jelleoo/MILIMAP/actions/runs/37267090989). That run is **not** final-fix CI evidence. [PR #118](https://github.com/jelleoo/MILIMAP/pull/118) must show both jobs successful on the new final HEAD after this fix pass. Local full suite and Android gates are re-executed after the fix pass; final report/check surface records their result.
 
 - Current official PDF live layout remains unobserved from this environment; human/current-source confirmation is still needed for a Suwon live-control claim.
 - Native parser can allocate before observable count checks; child isolation/deadline/output limits are not an OS memory sandbox.

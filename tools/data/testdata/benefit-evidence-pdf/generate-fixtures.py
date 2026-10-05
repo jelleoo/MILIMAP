@@ -20,6 +20,7 @@ def table(c, rows, top=500, mode="", left=20):
     xs=[left,left+150,left+360,left+470,left+700]
     ys=[top-i*40 for i in range(len(rows)+1)]
     for x in xs:
+        if mode=="missing-vertical":continue
         if mode in ("merged-header", "merged-value") and x==xs[1]:
             gap=0 if mode=="merged-header" else 1
             c.line(x,ys[-1],x,ys[gap+1]);c.line(x,ys[gap],x,ys[0])
@@ -44,7 +45,7 @@ def table(c, rows, top=500, mode="", left=20):
 for mode in ("two-business","decorative","multi-table","multi-page","native-no-grid","image-only",
              "missing-name-header","duplicate-header","ambiguous-header","merged-header","merged-value",
              "broken","crossing","overlap","continuation","repeated","duplicate-name","empty-name",
-             "rotation-90","rotation-180","rotation-270","encrypted","malformed-later","official-alias","nonexact-alias"):
+             "rotation-90","rotation-180","rotation-270","encrypted","malformed-later","official-alias","nonexact-alias","unsafe-lower-table","uncovered-heading"):
     encryption=StandardEncryption("test-only",ownerPassword="test-owner",strength=128) if mode=="encrypted" else None
     size=(600,800) if mode in ("rotation-90","rotation-270") else (800,600)
     c=canvas.Canvas(str(root/(mode+".pdf")),pagesize=size,invariant=1,encrypt=encryption)
@@ -61,10 +62,12 @@ for mode in ("two-business","decorative","multi-table","multi-page","native-no-g
         if mode=="duplicate-name":d[1][0]=d[0][0];d[1][1]="";d[1][2]=""
         if mode=="empty-name":d[1][0]=""
         if mode=="decorative":table(c,[["장식","","",""]],top=590)
+        if mode=="uncovered-heading":c.setFont("HYSMyeongJo-Medium",10);c.drawString(20,580,"업소명")
         if mode=="ambiguous-header":d=[h]+d
         if mode=="continuation":d[1][0]=""
         table(c,[h]+d,mode=mode)
         if mode=="multi-table":table(c,[h]+d,top=280)
+        if mode=="unsafe-lower-table":table(c,[h]+[["합성가게 C","서울특별시 마포구 테스트로 56","02-0000-0056","합성 C 혜택"]],top=280,mode="missing-vertical")
         if mode=="repeated":
             c.setFont("HYSMyeongJo-Medium",10);c.drawString(20,580,"문서 머리말");c.drawString(20,30,"문서 꼬리말")
         if mode in ("multi-page","continuation","repeated","malformed-later"):

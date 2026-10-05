@@ -8,7 +8,8 @@ function Get-InternalBenefitPdfGridConfiguration {
         CoordinatePolicy='PDFPIG_INVERSE_ORTHOGONAL_V1';OverlapFraction=0.5;OverlapVisibleOnly=$true;MaxGridCoordinates=128;
         MaxGridCells=4096;AxisEpsilon=0.00000001;Parser='PDFPIG';ParserVersion='0.1.16';StackDepth=128;Strict=$true;ClipPaths=$true;
         MaxSourceBytes=10485760;MaxPages=32;MaxLettersPerPage=20000;MaxTotalLetters=100000;MaxPathsPerPage=2048;
-        MaxTotalPathCommands=16384;MaxGridSegments=512;MaxProjectionBytes=16777216;WallTimeoutMilliseconds=10000;MaxErrorBytes=65536}
+        MaxTotalPathCommands=16384;MaxGridSegments=512;MaxProjectionBytes=16777216;WallTimeoutMilliseconds=10000;MaxErrorBytes=65536;
+        MaxCellGlyphs=128;MaxGlyphCellChecks=500000;MaxOverlapChecks=100000;GeometryDeadlineMilliseconds=10000;HeaderHintGap=20.0}
 }
 function Get-BenefitPdfExtractionConfigHash {
     $policy=Get-InternalBenefitPdfGridConfiguration
@@ -53,21 +54,26 @@ function Test-InternalBenefitPdfCoverage {
     return $false
 }
 function Get-InternalBenefitPdfPageGrids {
-    param([Parameter(Mandatory)]$Page)
+    param([Parameter(Mandatory)]$Page,[AllowNull()]$WorkBudget=$null)
     $policy=Get-InternalBenefitPdfGridConfiguration
+    if($null -eq $WorkBudget){$WorkBudget=New-InternalBenefitPdfWorkBudget}
+    Assert-InternalBenefitPdfWorkDeadline $WorkBudget
     $snap=$policy.Snap;$thin=$policy.ThinRectangle;$epsilon=$policy.Containment
     if($Page.Width -le 0 -or $Page.Height -le 0 -or -not [double]::IsFinite($Page.Width) -or -not [double]::IsFinite($Page.Height)){throw 'Invalid page box'}
     if($Page.RotationDegrees -notin @(0,90,180,270)){throw 'Unsupported page rotation'}
     $segments=[Collections.Generic.List[object]]::new();$letters=[Collections.Generic.List[object]]::new()
     foreach($letter in $Page.Letters){
+        Assert-InternalBenefitPdfWorkDeadline $WorkBudget
         if($letter.Text -isnot [string] -or $letter.Text.Length -eq 0){throw 'Invalid native glyph text'}
         $points=@((Convert-InternalBenefitPdfPoint $letter.X0 $letter.Y0 $Page),(Convert-InternalBenefitPdfPoint $letter.X0 $letter.Y1 $Page),(Convert-InternalBenefitPdfPoint $letter.X1 $letter.Y0 $Page),(Convert-InternalBenefitPdfPoint $letter.X1 $letter.Y1 $Page))
         $baseline=Convert-InternalBenefitPdfPoint $letter.BaselineX $letter.BaselineY $Page
         $letters.Add([pscustomobject]@{Text=$letter.Text;Index=$letter.Index;X0=($points | ForEach-Object {$_[0]} | Measure-Object -Minimum).Minimum;X1=($points | ForEach-Object {$_[0]} | Measure-Object -Maximum).Maximum;Y0=($points | ForEach-Object {$_[1]} | Measure-Object -Minimum).Minimum;Y1=($points | ForEach-Object {$_[1]} | Measure-Object -Maximum).Maximum;Baseline=$baseline[1]})
     }
     foreach($path in $Page.Paths){foreach($subpath in $path.Subpaths){
+        Assert-InternalBenefitPdfWorkDeadline $WorkBudget
         $lines=[Collections.Generic.List[object]]::new();$closed=$false;$straight=$true
         foreach($command in $subpath){
+            Assert-InternalBenefitPdfWorkDeadline $WorkBudget
             if($command.Kind -ceq 'Close'){$closed=$true}
             elseif($command.Kind -ceq 'Line'){
                 $a=Convert-InternalBenefitPdfPoint $command.Points.From.X $command.Points.From.Y $Page
@@ -91,10 +97,12 @@ function Get-InternalBenefitPdfPageGrids {
     if($segments.Count -gt $policy.MaxGridSegments){throw 'PDF grid segment quota exceeded'}
     # Connected vector components isolate tables before coordinate clustering.
     $remaining=[Collections.Generic.HashSet[int]]::new();for($i=0;$i -lt $segments.Count;$i++){[void]$remaining.Add($i)}
-    $grids=[Collections.Generic.List[object]]::new()
+    $grids=[Collections.Generic.List[object]]::new();$coveredGlyphs=[Collections.Generic.HashSet[int]]::new()
     while($remaining.Count -gt 0){
+        Assert-InternalBenefitPdfWorkDeadline $WorkBudget
         $seed=@($remaining)[0];[void]$remaining.Remove($seed);$todo=[Collections.Generic.Queue[int]]::new();$todo.Enqueue($seed);$members=[Collections.Generic.List[object]]::new()
         while($todo.Count -gt 0){
+            Assert-InternalBenefitPdfWorkDeadline $WorkBudget
             $a=$segments[$todo.Dequeue()];$members.Add($a)
             foreach($i in @($remaining)){
                 $b=$segments[$i];$connected=$false
@@ -111,21 +119,32 @@ function Get-InternalBenefitPdfPageGrids {
         for($r=0;$r -lt $ys.Count-1;$r++){
             $cells=[Collections.Generic.List[object]]::new()
             for($c=0;$c -lt $xs.Count-1;$c++){
+                Assert-InternalBenefitPdfWorkDeadline $WorkBudget
                 $safe=(Test-InternalBenefitPdfCoverage $horizontal $ys[$r] $xs[$c] $xs[$c+1]) -and (Test-InternalBenefitPdfCoverage $horizontal $ys[$r+1] $xs[$c] $xs[$c+1]) -and (Test-InternalBenefitPdfCoverage $vertical $xs[$c] $ys[$r+1] $ys[$r]) -and (Test-InternalBenefitPdfCoverage $vertical $xs[$c+1] $ys[$r+1] $ys[$r])
                 $cells.Add([pscustomobject]@{X0=$xs[$c];X1=$xs[$c+1];Y0=$ys[$r+1];Y1=$ys[$r];Safe=$safe;Text='';Letters=[Collections.Generic.List[object]]::new()})
             }
             $rows.Add([pscustomobject]@{Cells=@($cells.ToArray())})
         }
         $allCells=@($rows | ForEach-Object {$_.Cells});$gridLetters=[Collections.Generic.List[object]]::new()
+        $checks=[long]$allCells.Count * $letters.Count * 2
+        if($checks -gt $WorkBudget.CellChecks){throw 'PDF glyph/cell comparison quota exceeded'}
+        $WorkBudget.CellChecks-=$checks
         foreach($letter in $letters){
+            Assert-InternalBenefitPdfWorkDeadline $WorkBudget
             $intersections=@($allCells | Where-Object {$letter.X1 -gt $_.X0+$epsilon -and $letter.X0 -lt $_.X1-$epsilon -and $letter.Y1 -gt $_.Y0+$epsilon -and $letter.Y0 -lt $_.Y1-$epsilon})
             if($intersections.Count -eq 0){continue}
+            [void]$coveredGlyphs.Add([int]$letter.Index)
             $gridLetters.Add($letter)
             $owners=@($allCells | Where-Object {$_.Safe -and $letter.X0 -ge $_.X0-$epsilon -and $letter.X1 -le $_.X1+$epsilon -and $letter.Y0 -ge $_.Y0-$epsilon -and $letter.Y1 -le $_.Y1+$epsilon})
             if($owners.Count -ne 1){foreach($cell in $intersections){$cell.Safe=$false};continue}
             $owners[0].Letters.Add($letter)
         }
         foreach($cell in $allCells){
+            Assert-InternalBenefitPdfWorkDeadline $WorkBudget
+            if($cell.Letters.Count -gt $policy.MaxCellGlyphs){throw 'PDF cell glyph quota exceeded'}
+            $pairs=([long]$cell.Letters.Count * ($cell.Letters.Count-1))/2
+            if($pairs -gt $WorkBudget.OverlapChecks){throw 'PDF glyph overlap comparison quota exceeded'}
+            $WorkBudget.OverlapChecks-=$pairs
             for($i=0;$i -lt $cell.Letters.Count;$i++){
                 $a=$cell.Letters[$i];if($a.Text.Contains([char]0xfffd)){$cell.Safe=$false}
                 for($j=0;$j -lt $i;$j++){
@@ -145,7 +164,35 @@ function Get-InternalBenefitPdfPageGrids {
         }
         $grids.Add([pscustomobject]@{Rows=@($rows.ToArray());Top=$ys[0];Left=$xs[0];HintText=(@($gridLetters | Sort-Object Index | ForEach-Object {$_.Text}) -join '')})
     }
+    # Rejection only: an exact native header outside any reconstructed grid
+    # signals lost relevant structure. Never reconstruct a row from this text.
+    $uncovered=@($letters | Where-Object {-not $coveredGlyphs.Contains([int]$_.Index)})
+    foreach($hint in @(Get-InternalBenefitPdfUncoveredHeaderHints -Letters $uncovered -WorkBudget $WorkBudget)){
+        $grids.Add([pscustomobject]@{Rows=@();Top=$hint.Top;Left=$hint.Left;HintText=$hint.Text;RejectionHint=$true})
+    }
     @($grids | Sort-Object @{Expression='Top';Descending=$true},Left)
+}
+
+function New-InternalBenefitPdfWorkBudget {
+    $policy=Get-InternalBenefitPdfGridConfiguration
+    [pscustomobject]@{CellChecks=[long]$policy.MaxGlyphCellChecks;OverlapChecks=[long]$policy.MaxOverlapChecks;DeadlineMilliseconds=$policy.GeometryDeadlineMilliseconds;Clock=[Diagnostics.Stopwatch]::StartNew()}
+}
+function Assert-InternalBenefitPdfWorkDeadline {
+    param([Parameter(Mandatory)]$WorkBudget)
+    if($WorkBudget.Clock.ElapsedMilliseconds -gt $WorkBudget.DeadlineMilliseconds){throw 'PDF geometry deadline exceeded'}
+}
+function Get-InternalBenefitPdfUncoveredHeaderHints {
+    param([object[]]$Letters,[Parameter(Mandatory)]$WorkBudget)
+    $policy=Get-InternalBenefitPdfGridConfiguration;$map=Get-BenefitScopedHeaderMap
+    $chunks=[Collections.Generic.List[object]]::new();$chunk=$null
+    foreach($letter in @($Letters | Sort-Object @{Expression='Baseline';Descending=$true},X0,Index)){
+        Assert-InternalBenefitPdfWorkDeadline $WorkBudget
+        if($null -eq $chunk -or [Math]::Abs($chunk.Baseline-$letter.Baseline) -gt $policy.Baseline -or $letter.X0-$chunk.Right -gt $policy.HeaderHintGap){
+            $chunk=[pscustomobject]@{Text='';Top=$letter.Y1;Left=$letter.X0;Right=$letter.X1;Baseline=$letter.Baseline};$chunks.Add($chunk)
+        }
+        $chunk.Text+=$letter.Text;$chunk.Right=[Math]::Max($chunk.Right,$letter.X1)
+    }
+    foreach($chunk in $chunks){$text=$chunk.Text.Trim();if($map.ContainsKey($text) -and $map[$text] -ceq 'BusinessName'){$chunk}}
 }
 function ConvertTo-BenefitPdfObservation {
     param([Parameter(Mandatory)]$Document,[AllowNull()]$Snapshot=$null)
@@ -160,11 +207,16 @@ function ConvertTo-BenefitPdfObservation {
     $map=Get-BenefitScopedHeaderMap
     if($status -ceq 'COMPLETE'){
         try {
+            $workBudget=New-InternalBenefitPdfWorkBudget
             $pageNumber=0
             foreach($page in $runtime.Projection.Pages){
                 $pageNumber++;if($page.PageNumber -ne $pageNumber){throw 'Non-sequential native page identity'}
-                $grids=@(Get-InternalBenefitPdfPageGrids $page);$ordinal=0
+                $grids=@(Get-InternalBenefitPdfPageGrids -Page $page -WorkBudget $workBudget);$ordinal=0
                 foreach($grid in $grids){
+                    if($grid.PSObject.Properties.Name -contains 'RejectionHint'){
+                        $partial=$true;$diagnostics.Add((New-InternalBenefitPdfDiagnostic 'PDF_HEADER_UNUSABLE' "page/$pageNumber" 'Uncovered native identity header has no proven grid'))
+                        continue
+                    }
                     $ordinal++;$path="page/$pageNumber/table/$ordinal";$candidates=[Collections.Generic.List[object]]::new();$badHeader=$false
                     for($r=0;$r -lt $grid.Rows.Count;$r++){
                         $mapping=[ordered]@{};$seen=[Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal);$name=$false;$safe=$true
@@ -181,7 +233,7 @@ function ConvertTo-BenefitPdfObservation {
                     $hint=@($map.Keys | Where-Object {$map[$_] -ceq 'BusinessName' -and $grid.HintText.Contains($_)}).Count -gt 0
                     if($badHeader -or $candidates.Count -gt 1 -or ($candidates.Count -eq 0 -and $hint)){$partial=$true;$diagnostics.Add((New-InternalBenefitPdfDiagnostic 'PDF_HEADER_UNUSABLE' $path 'Ambiguous or unsafe semantic header'));continue}
                     if($candidates.Count -eq 0){continue}
-                    $hasHeader=$true;$header=$candidates[0];$tableRecords=[Collections.Generic.List[object]]::new();$emptyEvidence=$false
+                    $hasHeader=$true;$header=$candidates[0];$tableRecords=[Collections.Generic.List[object]]::new()
                     for($r=$header.Row+1;$r -lt $grid.Rows.Count;$r++){
                         $fields=[ordered]@{};$refs=[ordered]@{};$texts=[Collections.Generic.List[string]]::new();$safe=$true
                         $reference="PDF_PAGE_${pageNumber}_TABLE_${ordinal}_ROW_$($r+1)";$rowPath="$path/row/$($r+1)"
@@ -192,12 +244,12 @@ function ConvertTo-BenefitPdfObservation {
                             if($cell.Text){$texts.Add($cell.Text)}
                         }
                         if(-not $safe){$partial=$true;$diagnostics.Add((New-InternalBenefitPdfDiagnostic 'PDF_ROW_UNUSABLE' $reference 'Unproven mapped cell boundaries or glyph containment'));continue}
-                        if([string]::IsNullOrWhiteSpace($fields.BusinessName)){if($texts.Count){$emptyEvidence=$true};continue}
+                        if([string]::IsNullOrWhiteSpace($fields.BusinessName)){
+                            if($texts.Count){$partial=$true;$diagnostics.Add((New-InternalBenefitPdfDiagnostic 'PDF_ROW_UNUSABLE' $reference 'Identity-less mapped evidence cannot establish complete table coverage'))}
+                            continue
+                        }
                         $tableRecords.Add([pscustomobject][ordered]@{UnitType='PDF_ROW';UnitReference=$reference;PhysicalPath=$rowPath;RawEvidenceText=($texts -join ' | ');StructuredFields=$fields;FieldReferences=$refs})
                     }
-                    # A page-local table consisting only of identity-less evidence is not
-                    # a complete absence proof (e.g. unsupported cross-page continuation).
-                    if($tableRecords.Count -eq 0 -and $emptyEvidence){$partial=$true;$diagnostics.Add((New-InternalBenefitPdfDiagnostic 'PDF_ROW_UNUSABLE' $path 'Identity-less evidence cannot establish complete table coverage'))}
                     foreach($record in $tableRecords){$records.Add($record)}
                 }
             }

@@ -8,7 +8,49 @@ function Reject-Tsv([scriptblock]$Action){
     try{& $Action | Out-Null}catch{if($_.Exception.Message -notlike 'P43A2_TSV_*'){throw};$rejected=$true}
     Require $rejected 'Unsafe TSV must fail closed'
 }
-if($Group -ne 'Contract'){throw 'A2_GROUP_NOT_IMPLEMENTED: only Task 1 Contract is available'}
+if($Group -eq 'OverlapPolicy'){
+    $evaluation=Join-Path $PSScriptRoot 'run-evaluation.ps1'
+    Require (Test-Path -LiteralPath $evaluation) 'Missing A2 unique-membership/overlap classifier'
+    . $evaluation
+    function New-Word($Left,$Top,$Width,$Height,$Text,$Ordinal=1){
+        return [pscustomobject]@{Page=1;Block=1;Paragraph=1;Line=1;Word=$Ordinal;Left=$Left;Top=$Top;Width=$Width;Height=$Height;Confidence=99;Text=$Text}
+    }
+    $cell=[pscustomobject]@{Page=1;CellId='one';Left=0;Top=0;Width=100;Height=100}
+    $other=[pscustomobject]@{Page=1;CellId='two';Left=100;Top=0;Width=100;Height=100}
+    Require ((Get-P43a2CellMembership -Cells @($cell,$other) -Word (New-Word 10 10 20 10 'a')).Status -eq 'UNIQUE') 'Exact cell containment lost'
+    Require ((Get-P43a2CellMembership -Cells @($cell,$other) -Word (New-Word 90 10 20 10 'cross')).Status -eq 'AMBIGUOUS') 'Cross-cell bbox accepted'
+    Require ((Get-P43a2CellMembership -Cells @($cell) -Word (New-Word 200 10 20 10 'outside')).Status -eq 'NONE') 'Outside bbox accepted'
+    Require ((Get-P43a2CellMembership -Cells @($cell,$cell) -Word (New-Word 10 10 20 10 'a')).Status -eq 'AMBIGUOUS') 'Ambiguous cell containment accepted'
+    $passed=[Collections.Generic.List[double]]::new()
+    foreach($ratio in @(0.25,0.50,0.75)){
+        $a=New-Word 10 10 20 10 'a' 1;$b=New-Word 29 10 20 10 'b' 2
+        $safe=Resolve-P43a2OcrCells -Cells @($cell) -Words @($a,$b) -ConfidenceThreshold 0 -SameRegionRatio $ratio
+        Require ($safe.Status -eq 'COMPLETE' -and $safe.CellText[0].Text -ceq 'a b' -and @($safe.Diagnostics | Where-Object Code -eq 'SAFE_ADJACENT').Count -eq 1) 'One-pixel uniquely contained adjacency not safely classified'
+        Require ((Get-P43a2OverlapClass -A $a -B $b -SameRegionRatio $ratio) -ne 'SAFE_ADJACENT') 'Unproven membership passed classifier'
+        foreach($case in @(
+            @{Words=@((New-Word 10 10 20 10 'same' 1),(New-Word 11 10 20 10 'same' 2));Code='DUPLICATE'},
+            @{Words=@((New-Word 10 10 20 10 'a' 1),(New-Word 11 10 20 10 'b' 2));Code='CONFLICTING'},
+            @{Words=@((New-Word 10 10 20 10 'a' 1),(New-Word 10 10 10 10 'b' 2));Code='ORDERING_UNSAFE'},
+            @{Words=@((New-Word 10 10 20 10 'a' 2),(New-Word 29 10 20 10 'b' 1));Code='ORDERING_UNSAFE'},
+            @{Words=@((New-Word 10 10 10 10 'a' 1),(New-Word 25 18 10 14 'bridge' 2),(New-Word 40 30 10 10 'b' 3));Code='ORDERING_UNSAFE'},
+            @{Words=@((New-Word 90 10 20 10 'cross' 1));Code='CELL_AMBIGUOUS'},
+            @{Words=@((New-Word 200 10 20 10 'outside' 1));Code='CELL_NONE'}
+        )){
+            foreach($threshold in @(0,95)){
+                $bad=Resolve-P43a2OcrCells -Cells @($cell,$other) -Words $case.Words -ConfidenceThreshold $threshold -SameRegionRatio $ratio
+                Require ($bad.Status -eq 'PARTIAL' -and $bad.AcceptedWords.Count -eq 0 -and $bad.CellText.Count -eq 0 -and @($bad.Diagnostics | Where-Object Code -eq $case.Code).Count -gt 0) "Unsafe $($case.Code) rescued at ratio $ratio / confidence $threshold"
+            }
+        }
+        $reverse=Resolve-P43a2OcrCells -Cells @($cell) -Words @($b,$a) -ConfidenceThreshold 0 -SameRegionRatio $ratio
+        Require ($reverse.CellText[0].Text -ceq $safe.CellText[0].Text) 'Input enumeration changes physical text order'
+        $passed.Add($ratio)
+        Write-Host "Overlap candidate $ratio PASS: adjacency + duplicate/conflict/order/bridge/cross-cell negatives"
+    }
+    Require ($passed.Count -eq 3 -and $passed[0] -eq 0.25) 'GATE_A_CLASSIFIER_REJECTED'
+    Write-Host 'Selected SAME_CELL_OVERLAP_V1 ratio=0.25 (lowest passing fixed candidate); real Gate A NOT_RUN'
+    return
+}
+if($Group -ne 'Contract'){throw 'A2_GROUP_NOT_IMPLEMENTED: only Contract/OverlapPolicy are available'}
 $wrapper=Join-Path $PSScriptRoot 'invoke-tesseract-eval.ps1'
 Require (Test-Path -LiteralPath $wrapper) 'Missing A2-only hierarchical TSV/runtime wrapper'
 . $wrapper

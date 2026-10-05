@@ -3,6 +3,13 @@ $ErrorActionPreference='Stop'
 . (Join-Path $PSScriptRoot 'lib/benefit-evidence-location-contracts.ps1')
 . (Join-Path $PSScriptRoot 'testdata/benefit-evidence-pdf/test-support.ps1')
 . (Join-Path $PSScriptRoot 'lib/benefit-evidence/convert-pdf-source-observation.ps1')
+$alias=ConvertTo-BenefitPdfObservation -Document (New-PdfTestDocument 'official-alias')
+Assert-PdfEqual ($alias.ContentUnits[0].StructuredFields.Contains('Address')) $true 'Reviewed exact address header maps actual cell'
+Assert-PdfEqual $alias.ContentUnits[0].StructuredFields.Address '서울특별시 마포구 테스트로 12' 'Reviewed address source text'
+Assert-PdfEqual $alias.ContentUnits[0].StructuredFields.Phone '02-0000-0012' 'Reviewed exact phone header maps actual cell'
+$nonexact=ConvertTo-BenefitPdfObservation -Document (New-PdfTestDocument 'nonexact-alias')
+Assert-PdfEqual ($nonexact.ContentUnits[0].StructuredFields.Contains('Address')) $false 'No contains/fuzzy address mapping'
+Assert-PdfEqual ($nonexact.ContentUnits[0].StructuredFields.Contains('Phone')) $false 'No contains/fuzzy phone mapping'
 $document=New-PdfTestDocument
 $o=ConvertTo-BenefitPdfObservation -Document $document
 Assert-PdfEqual $o.AdapterStatus 'COMPLETE' 'Safe ruled business table'

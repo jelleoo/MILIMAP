@@ -33,13 +33,18 @@ def table(c, rows, top=500, mode="", left=20):
             x=xs[col]+5
             if mode=="crossing" and r==1 and col==0:x=xs[1]-15
             for line_no,line in enumerate(text.split("\n")):
-                y=ys[r]-16-line_no*12;c.drawString(x,y,line)
+                y=ys[r]-16-line_no*12
+                if mode in ("official-alias","nonexact-alias") and r==0:
+                    # CID fallback punctuation bboxes are wide. Author this safe
+                    # header with explicit non-overlapping physical glyph positions.
+                    for pos,char in enumerate(line):c.drawString(x+pos*10.02,y,char)
+                else:c.drawString(x,y,line)
                 if mode=="overlap" and r==1 and col==0:c.drawString(x,y,line)
 
 for mode in ("two-business","decorative","multi-table","multi-page","native-no-grid","image-only",
              "missing-name-header","duplicate-header","ambiguous-header","merged-header","merged-value",
              "broken","crossing","overlap","continuation","repeated","duplicate-name","empty-name",
-             "rotation-90","rotation-180","rotation-270","encrypted","malformed-later"):
+             "rotation-90","rotation-180","rotation-270","encrypted","malformed-later","official-alias","nonexact-alias"):
     encryption=StandardEncryption("test-only",ownerPassword="test-owner",strength=128) if mode=="encrypted" else None
     size=(600,800) if mode in ("rotation-90","rotation-270") else (800,600)
     c=canvas.Canvas(str(root/(mode+".pdf")),pagesize=size,invariant=1,encrypt=encryption)
@@ -49,6 +54,8 @@ for mode in ("two-business","decorative","multi-table","multi-page","native-no-g
         image=Image.new("RGB",(40,20),"white");c.drawInlineImage(image,20,400,200,100)
     else:
         h=list(headers);d=[list(row) for row in data]
+        if mode=="official-alias":h[1]="영업소 주소(도로명)";h[2]="소재지전화"
+        if mode=="nonexact-alias":h[1]="추가 영업소 주소(도로명)";h[2]="소재지전화 안내"
         if mode=="missing-name-header":h[0]="설명"
         if mode=="duplicate-header":h[1]="업체명"
         if mode=="duplicate-name":d[1][0]=d[0][0]

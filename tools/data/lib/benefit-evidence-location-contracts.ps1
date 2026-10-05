@@ -143,6 +143,7 @@ function Get-BenefitScopedHeaderMap {
     return @{
         '업소명'='BusinessName'; '업체명'='BusinessName'; '사업장명'='BusinessName'; '상호'='BusinessName'
         '주소'='Address'; '소재지'='Address'; '소재지도로명주소'='Address'
+        '영업소 주소(도로명)'='Address'; '소재지전화'='Phone'
         '전화번호'='Phone'; '연락처'='Phone'; '전화'='Phone'; '지점'='Branch'; '지점명'='Branch'
         '할인'='BenefitDescription'; '할인정보'='BenefitDescription'; '할인내용'='BenefitDescription'; '혜택'='BenefitDescription'
         '적용대상'='EligibleTarget'; '이용조건'='UsageCondition'; '인증방법'='VerificationMethod'

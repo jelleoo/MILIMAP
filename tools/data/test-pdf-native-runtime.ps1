@@ -59,3 +59,22 @@ try {
     }
 } finally {Set-Item Function:Get-InternalBenefitPdfNativeCommand $originalCommand}
 Write-Host 'PDF native helper/runtime boundary tests passed.'
+$oversized=[byte[]]::new(10485761)
+[Text.Encoding]::ASCII.GetBytes('%PDF-1.4').CopyTo($oversized,0)
+$r=Invoke-BenefitPdfNativeProjection -Bytes $oversized
+Assert-PdfEqual $r.Diagnostics[0].Code 'PDF_SOURCE_LIMIT' 'Oversized source rejected before parser open'
+foreach($case in @(
+    @('pages',(New-PdfTestBytes -PageCount 33),'PDF_PAGE_LIMIT'),
+    @('letters',(New-PdfTestBytes -Content ('BT /F1 12 Tf 20 100 Td (a) Tj ET '*20001)),'PDF_LETTER_LIMIT'),
+    @('paths',(New-PdfTestBytes -Content (('20 20 m 30 20 l S '+"`n")*2049)),'PDF_PATH_LIMIT')
+)) {
+    $r=Invoke-BenefitPdfNativeProjection -Bytes $case[1]
+    Assert-PdfEqual $r.Status FAILED "$($case[0]) quota fails closed"
+    Assert-PdfEqual $r.Projection $null "$($case[0]) leaves no physical evidence"
+    Assert-PdfEqual $r.Diagnostics[0].Code $case[2] "$($case[0]) explicit quota"
+}
+$deep=New-PdfTestBytes -Content (('['*300)+'1'+(']'*300)+' unknownOperator')
+$r=Invoke-BenefitPdfNativeProjection -Bytes $deep
+Assert-PdfEqual $r.Status FAILED 'Deep malformed input fails closed'
+Assert-PdfEqual $r.Projection $null 'Deep malformed input yields no evidence'
+Write-Host 'PDF resource limits tests passed.'

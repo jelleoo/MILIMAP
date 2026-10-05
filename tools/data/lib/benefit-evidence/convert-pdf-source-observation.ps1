@@ -6,7 +6,9 @@ function Get-InternalBenefitPdfGridConfiguration {
     # One material policy, shared by cache identity and indexed provenance.
     [ordered]@{Version='PDF_GRID_CONFIG_V1';Snap=0.5;ThinRectangle=0.75;Containment=0.01;Baseline=1.0;
         CoordinatePolicy='PDFPIG_INVERSE_ORTHOGONAL_V1';OverlapFraction=0.5;OverlapVisibleOnly=$true;MaxGridCoordinates=128;
-        MaxGridCells=4096;AxisEpsilon=0.00000001;Parser='PDFPIG';ParserVersion='0.1.16';StackDepth=128;Strict=$true;ClipPaths=$true}
+        MaxGridCells=4096;AxisEpsilon=0.00000001;Parser='PDFPIG';ParserVersion='0.1.16';StackDepth=128;Strict=$true;ClipPaths=$true;
+        MaxSourceBytes=10485760;MaxPages=32;MaxLettersPerPage=20000;MaxTotalLetters=100000;MaxPathsPerPage=2048;
+        MaxTotalPathCommands=16384;MaxGridSegments=512;MaxProjectionBytes=16777216;WallTimeoutMilliseconds=10000;MaxErrorBytes=65536}
 }
 function Get-BenefitPdfExtractionConfigHash {
     $policy=Get-InternalBenefitPdfGridConfiguration
@@ -86,6 +88,7 @@ function Get-InternalBenefitPdfPageGrids {
             }
         }
     }}
+    if($segments.Count -gt $policy.MaxGridSegments){throw 'PDF grid segment quota exceeded'}
     # Connected vector components isolate tables before coordinate clustering.
     $remaining=[Collections.Generic.HashSet[int]]::new();for($i=0;$i -lt $segments.Count;$i++){[void]$remaining.Add($i)}
     $grids=[Collections.Generic.List[object]]::new()

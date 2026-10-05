@@ -24,6 +24,7 @@ function Invoke-BenefitPdfNativeProjection {
     $clock=[Diagnostics.Stopwatch]::StartNew();$peak=[long]0
     try {
         if($Bytes.Length -eq 0){throw 'Empty native PDF input'}
+        if($Bytes.Length -gt 10485760){$code='PDF_SOURCE_LIMIT';throw 'Native PDF source exceeds byte quota'}
         $expectedHash=Get-BenefitEvidenceByteHash -Bytes $Bytes
         [void][IO.Directory]::CreateDirectory($scratch)
         $inputFile=Join-Path $scratch 'source.pdf';[IO.File]::WriteAllBytes($inputFile,$Bytes)
@@ -78,7 +79,12 @@ function Invoke-BenefitPdfNativeProjection {
             $projection=$parsed;$status='COMPLETE';$code=$null
         } elseif($parsed.OpenStatus -ceq 'UNSUPPORTED' -and $parsed.Encrypted -and $parsed.Pages.Count -eq 0 -and $process.ExitCode -eq 1){
             $status='UNSUPPORTED';$code='ENCRYPTED_PDF'
-        } elseif($parsed.OpenStatus -ceq 'FAILED' -and $parsed.Pages.Count -eq 0 -and $process.ExitCode -eq 1){$code='PDF_PARSE_FAILED'}
+        } elseif($parsed.OpenStatus -ceq 'FAILED' -and $parsed.Pages.Count -eq 0 -and $process.ExitCode -eq 1){
+            $code='PDF_PARSE_FAILED'
+            foreach($diagnostic in $parsed.Diagnostics){
+                if($diagnostic.Code -cin @('PDF_SOURCE_LIMIT','PDF_PAGE_LIMIT','PDF_LETTER_LIMIT','PDF_PATH_LIMIT','PDF_OUTPUT_LIMIT')){$code=$diagnostic.Code;break}
+            }
+        }
         else {throw 'Inconsistent native failure'}
     } catch { $projection=$null }
     finally {

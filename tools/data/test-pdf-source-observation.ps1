@@ -44,3 +44,6 @@ $later=ConvertTo-BenefitPdfObservation -Document (New-PdfTestDocument 'malformed
 Assert-PdfEqual $later.AdapterStatus 'FAILED' 'Later-page parser trust failure'
 Assert-PdfEqual $later.ContentUnits.Count 0 'Later-page failure clears earlier units'
 Write-Host 'PDF source observation tests passed.'
+$dense=Invoke-BenefitPdfNativeProjection -Bytes (New-PdfTestBytes -Content ('20 20 m 30 20 l S '*513))
+Assert-PdfEqual $dense.Status COMPLETE 'Native parser permits bounded source below path quota'
+Assert-PdfThrows {Get-InternalBenefitPdfPageGrids -Page $dense.Projection.Pages[0]} 'Grid segment quota precedes component quadratic work'

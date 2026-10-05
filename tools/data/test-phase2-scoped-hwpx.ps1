@@ -59,8 +59,10 @@ Assert-ScopeEqual $duplicate.LocationResult.Status AMBIGUOUS 'Two corroborated s
 Assert-ScopeEqual $duplicate.Slices.Count 0 'Ambiguity cannot leak claims'
 $pdfHttp={param($Uri)[pscustomobject]@{StatusCode=200;ContentType='application/pdf';Text='';Bytes=[Text.Encoding]::ASCII.GetBytes("%PDF-1.7`nsynthetic")}}
 $pdf=Invoke-ScopedPhase2BenefitSourceCandidate -Candidate (New-HwpxScopedCandidate) -Business (New-HwpxScopedBusiness) -RunContext (New-BenefitSourceRunContext) -RequestInvoker $pdfHttp
-Assert-ScopeTrue ($null -eq $pdf.Observation) 'PDF remains excluded from scoped runner'
-Assert-ScopeTrue ($pdf.ReasonCodes -contains 'SOURCE_UNSUPPORTED') 'PDF fails closed'
+Assert-ScopeEqual $pdf.Observation.AdapterStatus FAILED 'Malformed PDF fails closed in native preparation'
+Assert-ScopeEqual $pdf.LocationResult.OperationalStatus FAILED 'Malformed PDF remains operational failure'
+Assert-ScopeEqual $pdf.LocationResult.Status $null 'Malformed PDF never becomes semantic absence'
+Assert-ScopeEqual $pdf.Extraction.Claims.Count 0 'Malformed PDF creates no claims'
 Write-Host 'Scoped HWPX tests passed: cross-business leakage 0; shared source fetch 1 / parse 1 / reuse 1.'
 
 # Final review: no incomplete structural/header/inline content can become absence or validated benefit.

@@ -8,7 +8,7 @@
 - Phase 1 code baseline: `97d6070113196e922fb76af7508314b6eda8e7b7`
 - Phase 2 Task 6 merge baseline: `d43c00ee07b471a55ed7ece4abecc1dc242ed8ce`
 - Phase 2 Core Foundation: Issue #43 / Task 7 validation PR #50
-- current dev baseline: `b0b0bb18e4e1a19e045477a884256ac51d8a9605` (P4-1 preflight fetch, 2026-10-05)
+- current dev baseline: `24a64aa96338ddbc7fe7f315f5c1fa01aa21b7b1` (P4-2B preflight fetch, 2026-10-05)
 - 기준일: 2026-10-05
 - Phase 1 A — Business Identity / Normalization: PR #37 merged
 - Phase 1 B — POI Discovery: PR #34 merged
@@ -29,14 +29,14 @@
 Issue #111의 P4-0 foundation은 PR #112로 `dev`에 병합됐다. reviewed HEAD `bc36bf6a7d9dc6024e5b44294d5667c162170487`가 위 dev baseline의 ancestor임을 확인했다.
 
 - PDF signature / bounded HWPX ZIP marker 분류, original-byte immutable snapshot, synthetic `PDF_ROW` / `HWPX_ROW` index/unit/slice provenance와 locator bridge
-- P4-0의 format recognition 자체는 parser 지원이 아니다. PDF parsing/OCR은 미구현이고 HWPX table parsing은 아래 P4-1 범위에서 추가한다.
+- P4-0의 format recognition 자체는 parser 지원이 아니다. Native HWPX/PDF table parsing은 아래 후속 범위에서 추가하며 OCR은 미구현이다.
 - `ProductionAction=NONE`, PDF/HWPX reuse capability `NONE`; canonical/seed/apps 변경 없음
 - local data suite 57/57 및 Android unit/lint/debug build PASS
 - [P4-0 handover](handover/2026-09-29-phase4-p4-0-document-adapter-foundation.md)
 
 ## Phase 4 P4-1 — HWPX Generic Adapter
 
-Issue #113의 native ZIP/XML table-only adapter와 scoped 경로를 PR #114에서 구현하고 로컬 검증했다. 최초 exact HEAD CI 두 job PASS 후 whole-branch read-only review를 수행했고 Important 4건을 RED→GREEN 수정했다. 최종 수정 HEAD의 `verify-data` / `verify` 재확인이 병합 전 필수다. 자동 병합하지 않는다.
+Issue #113의 native ZIP/XML table-only adapter와 scoped 경로는 PR #114로 `dev`에 병합됐다. 위 최신 baseline에서 이 병합을 확인했다.
 
 - trusted OPF manifest/spine과 section namespace, bounded ZIP, DTD/external entity 차단
 - 단일 명시적 header와 unmerged semantic cells만 지원; paragraph-only, nested table/unsupported inline, positional guessing은 지원하지 않음
@@ -48,6 +48,20 @@ Issue #113의 native ZIP/XML table-only adapter와 scoped 경로를 PR #114에�
 - [P4-1 handover](handover/2026-10-05-phase4-p4-1-hwpx-generic-adapter.md); 다음은 P4-2 PDF native adapter
 
 Phase 4 전체는 COMPLETE가 아니다.
+
+## Phase 4 P4-2B — Bounded PDF Native Adapter
+
+Issue #117: isolated .NET 8 / locked PdfPig 0.1.16(승인된 Apache-2.0 dependency) → primitive glyph/vector projection → fixed ruled-grid validation → 기존 `PDF_ROW` document index / scoped pipeline을 구현했다. `SCOPED_PDF_CELL`, exact reviewed address/phone header aliases, run-context fetch 1 / native parse 1 / index 1 / reuse 1을 synthetic bytes로 검증했다.
+
+- digital-text / page-local ruled-grid / 단일 명시적 header / unmerged mapped cells만 지원
+- OCR, borderless inference, cross-page stitching, PDF POST_FETCH reuse는 지원하지 않음
+- PARTIAL/FAILED/UNSUPPORTED의 semantic LOCATED/NOT_FOUND 및 claim 생성 차단
+- local CI-order data suite 62/62 PASS, locked restore/build 및 Android unit/lint/debug build PASS
+- current Suwon identity/layout control: `NOT_OBSERVED` (2026-10-05 공식 URL HTTP 302 → firewall warning, body 0 bytes). 과거 source/hash를 현재 evidence로 대체하지 않음. P4-2 closeout의 live-control applicability는 `NOT_APPLICABLE_SOURCE_UNAVAILABLE`로 기록하며, 이는 current Suwon layout PASS를 의미하지 않는다.
+- `ProductionAction=NONE`, PDF/HWPX incremental capability `NONE`, canonical/seed/apps diff 0
+- runtime/review HEAD `84a47fc77b55d2489c4811f2832a12fb22203a81`의 `verify-data` / `verify`는 SUCCESS, whole-branch review Critical 0 / Important 0. docs-only closeout HEAD도 두 CI job이 다시 SUCCESS여야 merge한다.
+- P4-2 bounded native adapter는 구현/회귀 기준 COMPLETE이며 final docs-only exact-head CI 통과 후 merge-ready. Phase 4 전체는 COMPLETE가 아니다.
+- [P4-2B handover](handover/2026-10-05-phase4-p4-2b-pdf-native-adapter.md); 다음은 P4-2B 병합 후 P4-3 OCR fallback
 
 ## Phase 2 closeout (2026-09-26)
 
@@ -91,7 +105,7 @@ Phase 2 Benefit Verification Core의 scoped HTML, MMA JSONP, XLSX 경로와 fixe
 - DDC: row-scoped benefit extraction은 가능하지만 individual currentness evidence가 부족함
 - MMA: live compatibility는 복구됐지만 일부 canonical businesses는 current official list에서 safe identity를 찾지 못함
 - XLSX: workbook-level observation is not individual currentness; the positive control has a validated benefit-description cell but no invented lifecycle claim
-- PDF: safe machine text/layout extraction runtime과 page/row provenance가 아직 승인되지 않음
+- PDF: bounded native ruled-grid adapter가 구현되었고 현재 PR #118 closeout 단계다. OCR/borderless/general PDF는 여전히 미지원이다.
 - long heterogeneous live batch의 transport latency/retry/isolation은 별도 operational concern이며 현재 source adapter issue와 섞지 않음
 
 Phase 3 snapshot/history는 P3-0~P3-7까지 `dev`에 병합됐고 bounded closeout을 완료했다. PDF/HWP/OCR, SNS/blog strong-evidence expansion, general discovery, periodic execution은 later phases로 남는다.

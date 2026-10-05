@@ -35,4 +35,27 @@ try {
     Assert-PdfEqual $lock.dependencies.'net8.0'.PdfPig.resolved '0.1.16' 'Locked resolved version'
     Assert-PdfEqual $lock.dependencies.'net8.0'.PdfPig.requested '[0.1.16, 0.1.16]' 'Exact dependency range'
 } finally {[IO.Directory]::Delete($scratch,$true)}
-Write-Host 'PDF native helper boundary tests passed.'
+. (Join-Path $PSScriptRoot 'lib/benefit-evidence/pdf-native-runtime.ps1')
+$bytes=New-PdfTestBytes
+$runtime=Invoke-BenefitPdfNativeProjection -Bytes $bytes
+Assert-PdfEqual $runtime.Status 'COMPLETE' 'Real isolated runtime success'
+Assert-PdfEqual $runtime.Projection.FileSha256 (Get-BenefitEvidenceByteHash $bytes) 'Byte/hash identity'
+$originalCommand=(Get-Item Function:Get-InternalBenefitPdfNativeCommand).ScriptBlock
+$script:PdfFaultMode='schema'
+try {
+    function Get-InternalBenefitPdfNativeCommand {
+        param([string]$InputFile)
+        [pscustomobject]@{FileName=(Get-Command pwsh).Source;Arguments=@('-NoProfile','-File',(Join-Path $PSScriptRoot 'testdata/benefit-evidence-pdf/fault-helper.ps1'),'-Mode',$script:PdfFaultMode,'-InputFile',$InputFile)}
+    }
+    foreach($case in @(@('schema','PDF_PROJECTION_INVALID'),@('parser','PDF_PROJECTION_INVALID'),@('version','PDF_PROJECTION_INVALID'),@('hash','PDF_PROJECTION_INVALID'),@('json','PDF_PROJECTION_INVALID'),@('crash','PDF_PROCESS_FAILED'),@('timeout','PDF_PROCESS_TIMEOUT'),@('output','PDF_OUTPUT_LIMIT'))){
+        $script:PdfFaultMode=$case[0]
+        $before=@(Get-ChildItem ([IO.Path]::GetTempPath()) -Directory -Filter 'milimap-pdf-native-*').Count
+        $timeout=if($case[0] -ceq 'timeout'){100}else{5000}
+        $r=Invoke-BenefitPdfNativeProjection -Bytes $bytes -TimeoutMilliseconds $timeout -MaxOutputBytes 4096
+        Assert-PdfEqual $r.Status 'FAILED' "$($case[0]) fail closed"
+        Assert-PdfEqual $r.Projection $null "$($case[0]) discards projection"
+        Assert-PdfEqual $r.Diagnostics[0].Code $case[1] "$($case[0]) diagnostic"
+        Assert-PdfEqual (@(Get-ChildItem ([IO.Path]::GetTempPath()) -Directory -Filter 'milimap-pdf-native-*').Count) $before "$($case[0]) temporary cleanup"
+    }
+} finally {Set-Item Function:Get-InternalBenefitPdfNativeCommand $originalCommand}
+Write-Host 'PDF native helper/runtime boundary tests passed.'

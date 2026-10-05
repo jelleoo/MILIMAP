@@ -33,3 +33,4 @@ foreach($control in Get-ChildItem (Join-Path $here 'controls') -Filter '*.pdf' |
 }
 Get-FileHash (Join-Path $here 'Program.cs'),(Join-Path $here 'PdfPigProbe.csproj'),(Join-Path $here 'grid-probe.py'),(Join-Path $here 'obj/project.assets.json') | Select-Object Path,Hash | ConvertTo-Json | Out-File (Join-Path $out 'source-assets-hashes.json') -Encoding utf8
 Write-Host 'All evaluation gates PASS; parser-open status is not adapter approval.'
+exit 0

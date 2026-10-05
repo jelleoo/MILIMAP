@@ -1,0 +1,38 @@
+name: P4-2A temporary PdfPig evaluation
+on:
+  push:
+    branches: [codex/phase4-p4-2a-pdfpig-evaluation]
+    paths: [.github/workflows/p4-2a-pdfpig-probe.yml, .evaluation-p4-2a/**]
+permissions:
+  contents: read
+jobs:
+  probe:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
+    env:
+      DOTNET_CLI_TELEMETRY_OPTOUT: '1'
+      DOTNET_GENERATE_ASPNET_CERTIFICATE: 'false'
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: 8.0.425
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - name: Execute temp-only evaluation
+        shell: pwsh
+        run: |
+          $temp = Join-Path $env:RUNNER_TEMP 'milimap-p42a-pdfpig-eval'
+          Copy-Item .evaluation-p4-2a $temp -Recurse
+          & (Join-Path $temp 'ci-probe.ps1')
+      - uses: actions/upload-artifact@v7.0.1
+        if: always()
+        with:
+          name: pdfpig-${{ matrix.os }}
+          path: ${{ runner.temp }}/milimap-p42a-pdfpig-eval/evidence
+          retention-days: 7

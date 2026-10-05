@@ -73,6 +73,17 @@ Issue #117: isolated .NET 8 / locked PdfPig 0.1.16(승인된 Apache-2.0 dependen
 - Phase 4: `NOT COMPLETE`. 다음 단계는 OCR fallback design 재검토이며, 다른 engine/model/crop/preprocessing/geometry 전략은 새 설계 승인 없이 진행하지 않는다.
 - [P4-3A rejected handover](handover/2026-10-05-phase4-p4-3a-ocr-technical-evaluation.md)
 
+## Phase 4 P4-3A2 — Same-cell Overlap Safety Evaluation
+
+- Final technical verdict: `P4_3A2_REJECTED` (human approved); reason: `GATE_A_CONFIDENCE_REJECTED`.
+- Selected same-cell overlap ratio `0.25`의 fixed safety controls는 PASS다. Clear Gray/RGB PSM11은 각각 40 words이며 2회 반복 동일; threshold 0만 COMPLETE / 2 technical rows이고 50/80/90/95는 PARTIAL이다.
+- Original degraded는 grid COMPLETE이나 `FAILED / EMPTY_WORD_OUTPUT`, acceptance NOT_EVALUATED / confidence NOT_OBSERVED다. Confidence rejection 근거로 사용하지 않는다.
+- 승인된 mild Gray 1개는 39 words, grid COMPLETE이며 threshold 0부터 CONFLICTING 2건으로 모든 fixed threshold가 PARTIAL이다. Confidence-only separation이 없어 selected confidence threshold는 없다.
+- PSM3/4/6 containment failures 5/2/2 및 PARTIAL 유지. Historical `P4-3A = REJECTED`는 변경하지 않는다.
+- Task 4/5: `NOT_RUN_GATE_A_FAILED`; Windows/Ubuntu determinism과 business isolation/resource/fault/multipage gates는 NOT_RUN. Android local: `NOT_RUN_EVALUATION_ONLY`.
+- Product dependency: `NOT_APPROVED`; P4-3B: `BLOCKED`; P4-3 / Phase 4: `NOT COMPLETE`. 다음 단계는 별도 승인에 따른 OCR fallback design 재검토이며 추가 실험/구현은 시작하지 않는다.
+- [P4-3A2 rejected handover](handover/2026-10-05-phase4-p4-3a2-overlap-safety-evaluation.md)
+
 ## Phase 2 closeout (2026-09-26)
 
 Phase 2 Benefit Verification Core의 scoped HTML, MMA JSONP, XLSX 경로와 fixed representative closeout **evidence matrix**를 완료했다(Issue #92 / PR #93 merged). current-code fixed-12 live replay는 replayable raw capture가 없어 `NOT_RUN_NO_REPLAYABLE_RAW_CAPTURE`이며, Phase 2는 현재 구현된 source-family 경계 안에서 `COMPLETE`다.

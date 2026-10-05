@@ -30,9 +30,11 @@ containment and duplicate/conflict/order/bridge rejection are unchanged.
 
 Task 3 resumed under explicit human approval to separate operational failure and
 add exactly **one** mild Gray control. No fixture/config tuning followed OCR.
-Task 4/5 have NOT_STARTED; resource/fault hardening, multipage and Windows/Ubuntu
-determinism remain NOT_RUN. This is a Task 3 result submitted for human review,
-not a product dependency approval or completed whole-plan closeout.
+Human review confirmed final `P4_3A2_REJECTED`, reason
+`GATE_A_CONFIDENCE_REJECTED`. Task 6 records rejection closeout only.
+Task 4/5 are `NOT_RUN_GATE_A_FAILED`; resource/fault hardening, business isolation,
+multipage and Windows/Ubuntu determinism remain NOT_RUN. Product dependency
+remains NOT_APPROVED; P4-3B remains BLOCKED; Phase 4 is NOT COMPLETE.
 
 Runtime: portable Tesseract `v5.5.3.20260724`, Leptonica 1.87.0, 55 root DLLs.
 Installer SHA-256:
@@ -111,8 +113,15 @@ pwsh -NoProfile -File tools/data/evaluation/p4-3a2-ocr/test-evaluation.ps1 -Grou
 Acceptance test PASS means the observed result and stop conditions are recorded
 correctly; it **does not mean the OCR acceptance gate passed**. No Group All or
 later-gate placeholder is made GREEN. Current process output limits are post-read,
-not a portable hard-memory ceiling. Evaluation runtime is retained outside Git
-pending human review; final cleanup/whole-plan closeout has not occurred.
+not a portable hard-memory ceiling. Final closeout runs only Contract,
+OverlapPolicy, Acceptance, locked restore/build and the repository data suite.
+Safety, DeterminismContract and All are not run because Gate A failed;
+Android local is `NOT_RUN_EVALUATION_ONLY`. No missing later gate is implemented
+to manufacture a passing All result.
+
+Repo-external evaluation runtime/model/installer extraction and temporary OCR
+outputs are removed after final verification; hashes and aggregate results are
+preserved in the [rejection handover](../../../../docs/handover/2026-10-05-phase4-p4-3a2-overlap-safety-evaluation.md).
 
 Task diff-check is measured against the approved plan HEAD; inherited approved
 spec lines3/4 contain trailing Markdown hard-break spaces relative to origin/dev.

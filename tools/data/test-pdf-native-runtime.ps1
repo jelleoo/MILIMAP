@@ -1,0 +1,38 @@
+Set-StrictMode -Version Latest
+$ErrorActionPreference='Stop'
+. (Join-Path $PSScriptRoot 'testdata/benefit-evidence-pdf/test-support.ps1')
+$project=Join-Path $PSScriptRoot 'pdf-native/Milimap.PdfNative.csproj'
+if(-not (Test-Path $project)){throw 'Missing isolated PdfPig helper project'}
+$dotnet=(Get-Command dotnet -ErrorAction Stop).Source
+$null=& $dotnet restore $project --locked-mode
+if($LASTEXITCODE -ne 0){throw 'Locked helper restore failed'}
+$null=& $dotnet build $project -c Release --no-restore
+if($LASTEXITCODE -ne 0){throw 'Helper build failed'}
+$dll=Join-Path $PSScriptRoot 'pdf-native/bin/Release/net8.0/Milimap.PdfNative.dll'
+$scratch=Join-Path ([IO.Path]::GetTempPath()) ('milimap-pdf-test-'+[Guid]::NewGuid().ToString('N'))
+[void][IO.Directory]::CreateDirectory($scratch)
+try {
+    $raw=& $dotnet $dll inspect --input (Join-Path $scratch 'missing.pdf')
+    Assert-PdfEqual $LASTEXITCODE 1 'Missing input must fail'
+    $missing=($raw -join "`n") | ConvertFrom-Json
+    Assert-PdfEqual $missing.OpenStatus 'FAILED' 'Missing file structured status'
+    Assert-PdfEqual $missing.Diagnostics[0].Code 'FILE_NOT_FOUND' 'Missing file diagnostic'
+    $bytes=New-PdfTestBytes;$file=Join-Path $scratch 'minimal.pdf';[IO.File]::WriteAllBytes($file,$bytes)
+    $first=((& $dotnet $dll inspect --input $file) -join "`n")
+    Assert-PdfEqual $LASTEXITCODE 0 'Native input opens'
+    $second=((& $dotnet $dll inspect --input $file) -join "`n")
+    Assert-PdfEqual $LASTEXITCODE 0 'Repeated native input opens'
+    Assert-PdfEqual $first $second 'Deterministic primitive projection'
+    $p=$first | ConvertFrom-Json
+    Assert-PdfEqual $p.SchemaVersion 1 'Projection schema'
+    Assert-PdfEqual $p.ParserId 'PDFPIG' 'Parser identity'
+    Assert-PdfEqual $p.ParserVersion '0.1.16' 'Exact parser pin'
+    Assert-PdfEqual $p.OpenStatus 'COMPLETE' 'Native parse status'
+    Assert-PdfEqual $p.Pages.Count 1 'Physical page count'
+    Assert-PdfEqual ($p.Pages[0].Letters.Text -join '') 'Synthetic native control' 'Native text'
+    if($first -match 'UglyToad|PdfPig\.'){throw 'Parser CLR types leaked through JSON'}
+    $lock=Get-Content (Join-Path $PSScriptRoot 'pdf-native/packages.lock.json') -Raw | ConvertFrom-Json
+    Assert-PdfEqual $lock.dependencies.'net8.0'.PdfPig.resolved '0.1.16' 'Locked resolved version'
+    Assert-PdfEqual $lock.dependencies.'net8.0'.PdfPig.requested '[0.1.16, 0.1.16]' 'Exact dependency range'
+} finally {[IO.Directory]::Delete($scratch,$true)}
+Write-Host 'PDF native helper boundary tests passed.'

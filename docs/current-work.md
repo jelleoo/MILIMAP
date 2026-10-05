@@ -57,9 +57,10 @@ Issue #117: isolated .NET 8 / locked PdfPig 0.1.16(승인된 Apache-2.0 dependen
 - OCR, borderless inference, cross-page stitching, PDF POST_FETCH reuse는 지원하지 않음
 - PARTIAL/FAILED/UNSUPPORTED의 semantic LOCATED/NOT_FOUND 및 claim 생성 차단
 - local CI-order data suite 62/62 PASS, locked restore/build 및 Android unit/lint/debug build PASS
-- current Suwon identity/layout control: `NOT_OBSERVED` (2026-10-05 공식 URL HTTP 302 → firewall warning, body 0 bytes). 과거 source/hash를 현재 evidence로 대체하지 않음
+- current Suwon identity/layout control: `NOT_OBSERVED` (2026-10-05 공식 URL HTTP 302 → firewall warning, body 0 bytes). 과거 source/hash를 현재 evidence로 대체하지 않음. P4-2 closeout의 live-control applicability는 `NOT_APPLICABLE_SOURCE_UNAVAILABLE`로 기록하며, 이는 current Suwon layout PASS를 의미하지 않는다.
 - `ProductionAction=NONE`, PDF/HWPX incremental capability `NONE`, canonical/seed/apps diff 0
-- exact PR HEAD `verify-data` / `verify`와 whole-branch review는 PR 병합 전 gate; 자동 병합 금지
+- runtime/review HEAD `84a47fc77b55d2489c4811f2832a12fb22203a81`의 `verify-data` / `verify`는 SUCCESS, whole-branch review Critical 0 / Important 0. docs-only closeout HEAD도 두 CI job이 다시 SUCCESS여야 merge한다.
+- P4-2 bounded native adapter는 구현/회귀 기준 COMPLETE이며 final docs-only exact-head CI 통과 후 merge-ready. Phase 4 전체는 COMPLETE가 아니다.
 - [P4-2B handover](handover/2026-10-05-phase4-p4-2b-pdf-native-adapter.md); 다음은 P4-2B 병합 후 P4-3 OCR fallback
 
 ## Phase 2 closeout (2026-09-26)
@@ -104,7 +105,7 @@ Phase 2 Benefit Verification Core의 scoped HTML, MMA JSONP, XLSX 경로와 fixe
 - DDC: row-scoped benefit extraction은 가능하지만 individual currentness evidence가 부족함
 - MMA: live compatibility는 복구됐지만 일부 canonical businesses는 current official list에서 safe identity를 찾지 못함
 - XLSX: workbook-level observation is not individual currentness; the positive control has a validated benefit-description cell but no invented lifecycle claim
-- PDF: safe machine text/layout extraction runtime과 page/row provenance가 아직 승인되지 않음
+- PDF: bounded native ruled-grid adapter가 구현되었고 현재 PR #118 closeout 단계다. OCR/borderless/general PDF는 여전히 미지원이다.
 - long heterogeneous live batch의 transport latency/retry/isolation은 별도 operational concern이며 현재 source adapter issue와 섞지 않음
 
 Phase 3 snapshot/history는 P3-0~P3-7까지 `dev`에 병합됐고 bounded closeout을 완료했다. PDF/HWP/OCR, SNS/blog strong-evidence expansion, general discovery, periodic execution은 later phases로 남는다.

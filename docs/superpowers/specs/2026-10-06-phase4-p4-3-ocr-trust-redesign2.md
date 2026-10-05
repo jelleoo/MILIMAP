@@ -1,7 +1,7 @@
 # Phase 4 P4-3 — OCR Trust Model Redesign 2
 
 Date: 2026-10-06  
-Status: DESIGN APPROVED / WRITTEN SPEC REVIEW REQUIRED / IMPLEMENTATION NOT AUTHORIZED  
+Status: DESIGN AMENDMENT APPROVED / WRITTEN SPEC RE-REVIEW REQUIRED / IMPLEMENTATION PAUSED AFTER GATE A1  
 Base: `dev` at `3f40d5c566568b424c83f539aa6554150e74d14d`
 
 ## 1. Purpose
@@ -27,9 +27,22 @@ The failed assumption was not that Tesseract was unusable. The failed assumption
 was that one mandatory fixed confidence threshold had to separate trustworthy and
 untrustworthy OCR while preserving otherwise valid clear evidence.
 
-This redesign therefore changes the acceptance authority from a mandatory global
-confidence threshold to structural provenance, deterministic reconstruction, and
-required coverage.
+This redesign therefore removes mandatory global confidence from runtime structural
+acceptance. After the first authorized Redesign 2 structural evaluation passed, human
+review identified a separate gap: a structurally accepted required header word was
+reported with a Korean character misrecognition. Physical provenance therefore does
+not prove OCR text fidelity.
+
+The revised qualification model has two distinct mandatory stages before business
+isolation:
+
+1. Gate A1 proves structural trust: provenance, representation consistency,
+   deterministic reconstruction, and required coverage.
+2. Gate A2 proves evaluation-only text fidelity by comparing reconstructed text from
+   fixed synthetic clear fixtures against pre-existing fixture ground truth.
+
+Gate A2 is an evaluation qualification gate only. It does not add expected-text
+matching to the product OCR runtime.
 
 ## 2. Fixed scope
 
@@ -89,11 +102,14 @@ Confidence can never:
 - create `GREEN`, `ACTIVE`, or currentness;
 - change `PARTIAL` or `FAILED` into `COMPLETE`.
 
-Only a structurally `COMPLETE` OCR document may enter the existing locator.
+Only a structurally `COMPLETE` OCR document may enter the existing locator in a future
+product implementation. Separately, this OCR candidate may not advance to business
+isolation, dependency review, or product implementation until the evaluation-only
+Gate A2 text-fidelity qualification passes.
 
 ## 4. Primary trust model
 
-Acceptance authority is ordered as follows:
+Runtime structural completeness is ordered as follows:
 
 ```text
 runtime/model identity
@@ -103,11 +119,21 @@ runtime/model identity
   -> same-cell representation consistency
   -> deterministic cell-text reconstruction
   -> required structural coverage
-  -> COMPLETE or PARTIAL/FAILED
+  -> runtime structural COMPLETE or PARTIAL/FAILED
+```
+
+Candidate qualification is stricter:
+
+```text
+Gate A1 structural trust PASS
+  -> Gate A2 evaluation-only text fidelity PASS
+  -> PRE_BUSINESS_TRUST_PASS
+  -> Gate B business isolation may begin
 ```
 
 Confidence remains observed and auditable, but it is not an independent mandatory
-acceptance gate in v1 of this redesign.
+acceptance gate. Gate A2 adds direct text-fidelity measurement without giving
+confidence acceptance authority.
 
 ### 4.1 Runtime and input identity
 
@@ -225,16 +251,24 @@ Do not introduce:
 
 - per-word hard confidence thresholds;
 - average-cell confidence thresholds;
-- expected-text matching to rescue or reject OCR;
+- production/runtime expected-text matching to rescue, correct, or reject OCR;
+- using canonical business/benefit data as OCR ground truth;
+- using expected text to choose among OCR alternatives;
 - adaptive confidence thresholds by business or document;
 - confidence-based selection among duplicate/conflicting words.
 
 A future design may give confidence independent rejection authority only after a
 separate bounded proof and approval.
 
+The one allowed expected-text comparison in this redesign is Gate A2's
+**evaluation-only** comparison against fixed synthetic fixture ground truth. That
+comparison qualifies or rejects the OCR candidate; it never changes OCR output,
+selects a word, or participates in product runtime behavior.
+
 ## 6. Product-side trust boundary
 
-The intended future flow remains:
+Gate A2 is deliberately absent from the product runtime flow. The intended future
+product flow remains:
 
 ```text
 PDF bytes
@@ -326,8 +360,14 @@ Allowed only when all mandatory structural trust conditions pass:
 
 Raw confidence values are not an additional mandatory PASS condition.
 
-Only `COMPLETE` may enter the existing locator. `PARTIAL`, `FAILED`, and
-`UNSUPPORTED` must not produce semantic absence or benefit claims.
+`COMPLETE` is a runtime **structural** status. It does not claim that arbitrary OCR
+characters are correct. The fixed OCR candidate itself is eligible for further
+qualification only after Gate A2 demonstrates required text fidelity on the approved
+clear controls.
+
+Only `COMPLETE` may enter the existing locator in a future product implementation.
+`PARTIAL`, `FAILED`, and `UNSUPPORTED` must not produce semantic absence or benefit
+claims.
 
 ## 8. Diagnostics and execution identity
 
@@ -362,12 +402,27 @@ The future material execution/extraction identity must include:
 Confidence is still part of raw OCR evidence even though it is not an independent
 acceptance gate.
 
+Gate A2 evaluation diagnostics additionally preserve, per compared cell:
+
+- fixture identity/hash;
+- cell ID;
+- field role;
+- expected text from pre-existing fixture metadata;
+- reconstructed OCR text;
+- normalized expected text;
+- normalized actual text;
+- `FIDELITY_MATCH|FIDELITY_MISMATCH|FIDELITY_NOT_EVALUATED`;
+- contributing raw word confidences for diagnosis only.
+
+The fidelity decision is based on normalized expected/actual equality, never on
+confidence.
+
 ## 9. Revised evaluation
 
-The next technical evaluation must reuse the existing fixed OCR candidate and
-historical fixtures where possible. It must not reopen engine/model/config search.
+The technical evaluation must keep the existing fixed OCR candidate and historical
+fixtures. It must not reopen engine/model/config search.
 
-### Gate A — Structural Trust
+### Gate A1 — Structural Trust
 
 Central question:
 
@@ -376,8 +431,8 @@ Central question:
 
 Required positive evidence:
 
-- clear Gray PSM11 -> `COMPLETE`;
-- clear RGB PSM11 -> `COMPLETE`;
+- clear Gray PSM11 -> structural `COMPLETE`;
+- clear RGB PSM11 -> structural `COMPLETE`;
 - usable technical rows > 0;
 - all relevant positive words have unique proven-cell membership;
 - overlap is absent or `SAFE_ADJACENT`;
@@ -399,9 +454,90 @@ Required negative evidence:
 
 Any structural-safety regression rejects the candidate.
 
+The already executed Task 1/2 commits are preserved without amendment. Their
+human-reviewed result is interpreted as `GATE_A1_STRUCTURAL_PASS`, not as a
+combined A1+A2 pass.
+
+### Gate A2 — Evaluation-only Text Fidelity
+
+Gate A2 runs only after Gate A1 passes.
+
+Central question:
+
+> Does the structurally reconstructed OCR text match the known text authored into the
+> fixed synthetic clear fixtures for the fields that matter to downstream evidence?
+
+Ground truth must come only from pre-existing synthetic fixture metadata/generator
+contracts fixed before the OCR run. OCR output must never generate or modify its own
+ground truth.
+
+Mandatory comparison roles:
+
+- header cells;
+- business-name cells;
+- benefit cells.
+
+The evaluation should also report whole-table fidelity across all 12 cells of the
+retained 3x4 clear control, but whole-table fidelity is an additional metric rather
+than a broader production contract.
+
+Use versioned `TEXT_FIDELITY_NORMALIZATION_V1` with only deterministic
+representation normalization:
+
+- CRLF -> LF;
+- leading/trailing whitespace trim;
+- repeated horizontal whitespace within a line -> one ASCII space;
+- deterministic line-ending representation.
+
+Do not perform:
+
+- Korean-character or jamo correction;
+- Unicode look-alike substitution that changes characters;
+- punctuation deletion;
+- numeric correction;
+- edit-distance or fuzzy matching;
+- pronunciation/semantic equivalence;
+- expected-text-driven OCR correction.
+
+Each mandatory cell produces exactly one:
+
+- `FIDELITY_MATCH`;
+- `FIDELITY_MISMATCH`;
+- `FIDELITY_NOT_EVALUATED`.
+
+Gate result:
+
+- every mandatory cell `FIDELITY_MATCH` ->
+  `GATE_A2_TEXT_FIDELITY_PASS`;
+- any mandatory `FIDELITY_MISMATCH` ->
+  `GATE_A2_TEXT_FIDELITY_REJECTED` and
+  `P4_3_REDESIGN2_REJECTED`;
+- missing/corrupt ground truth, fixture identity/hash mismatch, or another condition
+  that prevents trustworthy comparison ->
+  `GATE_A2_TEXT_FIDELITY_NOT_EVALUATED`; Gate B remains blocked and dependency
+  review is forbidden.
+
+Confidence is diagnostic-only at Gate A2. For example, a confidence-22 word that
+matches expected text passes fidelity, while a confidence-97 word with different text
+fails fidelity.
+
+Only:
+
+```text
+GATE_A1_STRUCTURAL_PASS
+AND
+GATE_A2_TEXT_FIDELITY_PASS
+```
+
+produces `PRE_BUSINESS_TRUST_PASS`.
+
+Expected-text data must remain isolated in the evaluation-only fidelity layer. It
+must not be added to the structural resolver signature or any future production OCR
+runtime path.
+
 ### Gate B — Business Isolation
 
-Only after Gate A passes:
+Only after `PRE_BUSINESS_TRUST_PASS`:
 
 ```text
 Business A lookup -> A row only
@@ -409,7 +545,7 @@ Business B lookup -> B row only
 cross-business leakage = 0
 ```
 
-OCR `COMPLETE` does not imply business-binding success.
+OCR structural `COMPLETE` does not imply business-binding success.
 
 Incomplete OCR observations must never become semantic `NOT_FOUND`, absence,
 currentness, or benefit claims.
@@ -418,7 +554,7 @@ Any cross-business leakage is a hard rejection.
 
 ### Gate C — Operational Safety
 
-Only after Gates A-B pass, validate:
+Only after Gates A1, A2, and B pass, validate:
 
 - PDF open = 1;
 - bounded image decode;
@@ -447,8 +583,8 @@ If not proven:
 - `MULTIPAGE_NOT_APPROVED`.
 
 A safe single-page core may still receive a conditional result if all mandatory
-single-page safety gates pass. No per-page/business OCR workaround may be added
-merely to rescue this gate.
+single-page gates, including A2 text fidelity, pass. No per-page/business OCR
+workaround may be added merely to rescue this gate.
 
 ### Gate E — Windows/Ubuntu Determinism
 
@@ -463,7 +599,9 @@ Compare at least:
 - reconstructed technical rows;
 - final adapter status.
 
-OS-specific executable/DLL/package hashes may differ when the OS supply differs, but version substitution is forbidden. Runtime identity and supply provenance must be recorded separately from semantic determinism.
+OS-specific executable/DLL/package hashes may differ when the OS supply differs, but
+version substitution is forbidden. Runtime identity and supply provenance must be
+recorded separately from semantic determinism.
 
 Classification:
 
@@ -482,23 +620,27 @@ The revised evaluation must end in exactly one of:
 
 ### `P4_3_REDESIGN2_APPROVED_FOR_DEPENDENCY_REVIEW`
 
-All mandatory gates pass and no unresolved core safety issue remains.
+All mandatory gates, including Gate A2 text fidelity, pass and no unresolved core
+safety issue remains.
 
 This authorizes dependency review only, not product implementation.
 
 ### `P4_3_REDESIGN2_CONDITIONALLY_APPROVED`
 
-Core single-page safety passes but a bounded optional scope restriction remains,
-such as multi-page not approved.
+Core single-page safety, including Gate A2 text fidelity, passes but a bounded
+optional scope restriction remains, such as multi-page not approved.
 
 This also authorizes only bounded dependency review.
 
 ### `P4_3_REDESIGN2_REJECTED`
 
-Any mandatory structural provenance, reconstruction, coverage, business
-isolation, operational fail-closed, or cross-platform determinism gate fails.
+Any mandatory structural provenance, reconstruction, coverage, **text fidelity**,
+business isolation, operational fail-closed, or cross-platform determinism gate
+fails.
 
-There is no rejection path based solely on raw confidence.
+A Gate A2 mismatch is a direct rejection because measured reconstructed text differs
+from fixed fixture ground truth. There is still no rejection path based solely on raw
+confidence.
 
 ## 11. Product dependency review
 
@@ -551,6 +693,10 @@ The repository must continue to preserve:
 
 The new trust model applies only to the new redesign/evaluation cycle.
 
+The authorized Redesign 2 Task 1 and Task 2 commits are also preserved rather than
+amended. Task 2's structural result is recorded as `GATE_A1_STRUCTURAL_PASS`. The
+new Gate A2 is added afterward as a separate evaluation-only qualification step.
+
 ## 14. Completion boundary
 
 P4-3 remains incomplete until the revised evaluation, dependency gate, P4-3B
@@ -559,7 +705,14 @@ implementation, integration tests, CI, review, and closeout all succeed.
 Phase 4 remains incomplete until P4-3 and the later Phase 4 integration/closeout
 work are completed.
 
-Until then:
+Current execution checkpoint:
+
+- Task 1 runtime boundary: completed in the authorized local implementation cycle;
+- Gate A1 structural trust: human-reviewed PASS;
+- Gate A2 text fidelity: not yet executed;
+- Gate B-E: blocked until Gate A2 passes.
+
+Until full qualification succeeds:
 
 - product dependency = `NOT_APPROVED`;
 - P4-3B = `BLOCKED`;

@@ -1,8 +1,10 @@
 # Phase 4 P4-2 PDF Native Adapter Design
 
-**Date:** 2026-10-05  
-**Status:** Approved conversational design; written-spec review required before implementation planning.  
-**Baseline:** `dev@53443468ec48a30c33a0b089c55357fa7d14818f`  
+**Date:** 2026-10-05
+
+**Status:** Approved conversational design; written-spec review required before implementation planning.
+
+**Baseline:** `dev@53443468ec48a30c33a0b089c55357fa7d14818f`
 **Previous phase:** P4-1 HWPX Generic Adapter merged in PR #114; Issue #113 closed.
 
 ## 1. Problem

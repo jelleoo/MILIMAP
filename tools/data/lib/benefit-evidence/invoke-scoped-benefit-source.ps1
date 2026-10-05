@@ -102,11 +102,11 @@ function Invoke-ScopedPhase2BenefitSourceCandidate {
         if ($failureReasons.Count -eq 0) { $failureReasons = @('SOURCE_OFFICIALITY_UNRESOLVED') }
         $extraction = New-ScopedBenefitEmptyExtraction -BoundSource $bound -ReasonCodes $failureReasons
         $validation = New-ScopedBenefitEmptyValidation -Extraction $extraction
-    } elseif ($document.SourceFormat -notin @('HTML','XLSX','HWPX')) {
-        # A successfully fetched format outside the scoped HTML/XLSX/HWPX paths is unsupported.
+    } elseif ($document.SourceFormat -notin @('HTML','XLSX','HWPX','PDF')) {
+        # A successfully fetched format outside these scoped paths is unsupported.
         # Never manufacture a text snapshot or invoke an extraction provider.
         $preparationDiagnostics += [pscustomobject][ordered]@{
-            Code='HTML_FORMAT_UNSUPPORTED'; Stage='SCOPED_PREPARATION'; EvidenceReference=''; Detail='Scoped preparation accepts HTML, XLSX or HWPX documents only'
+            Code='HTML_FORMAT_UNSUPPORTED'; Stage='SCOPED_PREPARATION'; EvidenceReference=''; Detail='Scoped preparation accepts HTML, XLSX, HWPX or PDF documents only'
         }
         $bound = New-ScopedBenefitPlaceholderBoundSource -QualifiedSource $qualified
         $extraction = New-ScopedBenefitEmptyExtraction -BoundSource $bound -ReasonCodes @('SOURCE_UNSUPPORTED')
@@ -117,6 +117,7 @@ function Invoke-ScopedPhase2BenefitSourceCandidate {
         try {
             $observation = if ($document.SourceFormat -ceq 'XLSX') { Get-BenefitRunXlsxObservation -Context $RunContext -Document $document }
                 elseif ($document.SourceFormat -ceq 'HWPX') { Get-BenefitRunHwpxObservation -Context $RunContext -Document $document }
+                elseif ($document.SourceFormat -ceq 'PDF') { Get-BenefitRunPdfObservation -Context $RunContext -Document $document }
                 else { Get-BenefitRunHtmlObservation -Context $RunContext -Document $document }
         } catch {
             $isXlsx = $document.SourceFormat -ceq 'XLSX'
@@ -131,6 +132,11 @@ function Invoke-ScopedPhase2BenefitSourceCandidate {
             if ($document.SourceFormat -ceq 'HWPX') {
                 $preparationCode = 'HWPX_PREPARATION_FAILED'
                 $preparationFormat = 'HWPX'
+                $failureReason = 'SOURCE_UNSUPPORTED'
+            }
+            if ($document.SourceFormat -ceq 'PDF') {
+                $preparationCode = 'PDF_PREPARATION_FAILED'
+                $preparationFormat = 'PDF'
                 $failureReason = 'SOURCE_UNSUPPORTED'
             }
             $preparationDiagnostics += [pscustomobject][ordered]@{

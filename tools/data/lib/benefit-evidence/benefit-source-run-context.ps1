@@ -6,6 +6,7 @@ $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'convert-mma-jsonp-source-observation.ps1')
 . (Join-Path $PSScriptRoot 'convert-xlsx-source-observation.ps1')
 . (Join-Path $PSScriptRoot 'convert-hwpx-source-observation.ps1')
+. (Join-Path $PSScriptRoot 'convert-pdf-source-observation.ps1')
 
 function New-BenefitSourceRunContext {
     $payloadCache = [Collections.Generic.Dictionary[string,object]]::new([StringComparer]::Ordinal)
@@ -65,8 +66,8 @@ function Get-BenefitRunSourceSnapshot {
 
     Assert-BenefitSourceRunContext $Context
     Assert-BenefitSourceDocument $Document
-    if ($Document.FetchStatus -cne 'COMPLETE' -or $Document.SourceFormat -notin @('HTML','XLSX','HWPX')) {
-        throw 'Run-context snapshot requires a successfully fetched HTML, XLSX or HWPX document'
+    if ($Document.FetchStatus -cne 'COMPLETE' -or $Document.SourceFormat -notin @('HTML','XLSX','HWPX','PDF')) {
+        throw 'Run-context snapshot requires a successfully fetched HTML, XLSX, HWPX or PDF document'
     }
     $key = [string]$Document.Url
     if (-not $Context.PayloadCache.ContainsKey($key)) { throw 'Run-context snapshot requires a cached payload' }
@@ -77,8 +78,8 @@ function Get-BenefitRunSourceSnapshot {
         throw 'Run-context payload/document identity mismatch'
     }
     $trustedWrapper = ($Document.PSObject.Properties.Name -contains 'RunContextPayload' -and [object]::ReferenceEquals($Document.RunContextPayload,$payload))
-    if (-not $trustedWrapper -or $Document.SourceFormat -ceq 'HWPX') {
-        if ($Document.SourceFormat -cin @('XLSX','HWPX')) {
+    if (-not $trustedWrapper -or $Document.SourceFormat -cin @('HWPX','PDF')) {
+        if ($Document.SourceFormat -cin @('XLSX','HWPX','PDF')) {
             if ($Document.Bytes -isnot [byte[]] -or $payload.Bytes -isnot [byte[]] -or -not [Linq.Enumerable]::SequenceEqual([byte[]]$Document.Bytes,[byte[]]$payload.Bytes)) {
                 throw 'Run-context binary payload/document bytes mismatch'
             }
@@ -87,7 +88,7 @@ function Get-BenefitRunSourceSnapshot {
         }
     }
     if ($payload.PSObject.Properties.Name -notcontains 'SourceSnapshot') {
-        $snapshotText = if ($payload.SourceFormat -ceq 'HWPX') { '' } else { $payload.Text }
+        $snapshotText = if ($payload.SourceFormat -cin @('HWPX','PDF')) { '' } else { $payload.Text }
         $snapshot = New-BenefitSourceSnapshot -SourceUrl $payload.Url -SourceFormat $payload.SourceFormat -Text $snapshotText -Bytes $payload.Bytes -ObservedAt $payload.ObservedAt
         if ($snapshot.SourceFormat -ceq 'HTML') { Set-InternalBenefitHtmlRunContextSnapshotTrust -Snapshot $snapshot }
         $payload | Add-Member -NotePropertyName SourceSnapshot -NotePropertyValue $snapshot
@@ -270,6 +271,22 @@ function Get-BenefitRunHwpxObservation {
     if($Context.TemplateCache.ContainsKey($key)){$template=$Context.TemplateCache[$key];$cacheHit=$true;$Context.Metrics.AdapterReuseCount++}
     else {
         $template=ConvertTo-InternalBenefitHwpxObservation -Document $Document -Snapshot $snapshot
+        $Context.TemplateCache.Add($key,$template);$cacheHit=$false;$Context.Metrics.AdapterParseCount++
+    }
+    [void]$Context.Attempts.Add([pscustomobject][ordered]@{Stage='PARSE';Key=$key;CacheHit=$cacheHit;Status=$template.AdapterStatus})
+    New-BenefitSourceObservation -SourceRowNumber $Document.SourceRowNumber -Snapshot $snapshot -AdapterId $template.AdapterId -AdapterVersion $template.AdapterVersion -AdapterStatus $template.AdapterStatus -ContentUnits $template.ContentUnits -Diagnostics $template.Diagnostics -DocumentValidationIndex $template.DocumentValidationIndex
+}
+
+function Get-BenefitRunPdfObservation {
+    param([Parameter(Mandatory)]$Context,[Parameter(Mandatory)]$Document)
+    Assert-BenefitSourceRunContext $Context
+    Assert-BenefitSourceDocument $Document
+    if ($Document.FetchStatus -cne 'COMPLETE' -or $Document.SourceFormat -cne 'PDF') { throw 'PDF observation requires a successful PDF document' }
+    $snapshot=Get-BenefitRunSourceSnapshot -Context $Context -Document $Document
+    $key="$($snapshot.SnapshotId)|PDF_GRID|1|PDFPIG|0.1.16|$(Get-BenefitPdfExtractionConfigHash)"
+    if ($Context.TemplateCache.ContainsKey($key)) { $template=$Context.TemplateCache[$key];$cacheHit=$true;$Context.Metrics.AdapterReuseCount++ }
+    else {
+        $template=ConvertTo-BenefitPdfObservation -Document $Document -Snapshot $snapshot
         $Context.TemplateCache.Add($key,$template);$cacheHit=$false;$Context.Metrics.AdapterParseCount++
     }
     [void]$Context.Attempts.Add([pscustomobject][ordered]@{Stage='PARSE';Key=$key;CacheHit=$cacheHit;Status=$template.AdapterStatus})

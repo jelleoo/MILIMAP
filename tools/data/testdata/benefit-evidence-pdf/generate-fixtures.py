@@ -58,7 +58,7 @@ for mode in ("two-business","decorative","multi-table","multi-page","native-no-g
         if mode=="nonexact-alias":h[1]="추가 영업소 주소(도로명)";h[2]="소재지전화 안내"
         if mode=="missing-name-header":h[0]="설명"
         if mode=="duplicate-header":h[1]="업체명"
-        if mode=="duplicate-name":d[1][0]=d[0][0]
+        if mode=="duplicate-name":d[1][0]=d[0][0];d[1][1]="";d[1][2]=""
         if mode=="empty-name":d[1][0]=""
         if mode=="decorative":table(c,[["장식","","",""]],top=590)
         if mode=="ambiguous-header":d=[h]+d

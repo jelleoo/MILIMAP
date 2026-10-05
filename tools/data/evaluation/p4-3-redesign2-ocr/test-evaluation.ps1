@@ -12,6 +12,57 @@ function Assert-FrozenPaths {
 Assert-FrozenPaths
 Require (Test-Path (Join-Path $PSScriptRoot 'invoke-tesseract-eval.ps1')) 'Missing Redesign 2 runtime boundary'
 . (Join-Path $PSScriptRoot 'invoke-tesseract-eval.ps1')
+if($Group -eq 'StructuralTrust'){
+    Require (Test-Path (Join-Path $PSScriptRoot 'run-evaluation.ps1')) 'Missing Redesign 2 structural trust functions'
+    . (Join-Path $PSScriptRoot 'run-evaluation.ps1')
+    function W($Left,$Top,$Width,$Height,$Text,$Ordinal=1,$Confidence=99){
+        [pscustomobject]@{Page=1;Block=1;Paragraph=1;Line=1;Word=$Ordinal;Left=$Left;Top=$Top;Width=$Width;Height=$Height;Confidence=$Confidence;Text=$Text}
+    }
+    $cell=[pscustomobject]@{Page=1;CellId='one';Left=0;Top=0;Width=100;Height=100}
+    $other=[pscustomobject]@{Page=1;CellId='two';Left=100;Top=0;Width=100;Height=100}
+    Require (-not (Get-Command Resolve-P43R2OcrCells).Parameters.ContainsKey('ConfidenceThreshold')) 'Resolver exposes threshold'
+    $low=W 10 10 20 10 'low' 1 1
+    $safe=Resolve-P43R2OcrCells -Cells @($cell) -Words @($low,(W 29 10 20 10 'b' 2)) -RequiredCellIds @('one')
+    Require ($safe.Status -eq 'COMPLETE' -and $safe.CellText[0].Text -ceq 'low b' -and $safe.AcceptedWords[0].Record.Confidence -eq 1) 'Structurally valid low confidence rejected'
+    Require (@($safe.Diagnostics | Where-Object Code -ne 'SAFE_ADJACENT').Count -eq 0) 'Low confidence creates blocking diagnostic'
+    Require ((Get-P43R2OverlapClass -A $low -B $low) -eq 'ORDERING_UNSAFE') 'Unbound word trusted'
+    foreach($case in @(
+        @{Words=@((W 10 10 20 10 'same'),(W 11 10 20 10 'same' 2));Code='DUPLICATE'},
+        @{Words=@((W 10 10 20 10 'a'),(W 11 10 20 10 'b' 2));Code='CONFLICTING'},
+        @{Words=@((W 10 10 20 10 'a'),(W 10 10 10 10 'b' 2));Code='ORDERING_UNSAFE'},
+        @{Words=@((W 10 10 20 10 'a' 2),(W 29 10 20 10 'b' 1));Code='ORDERING_UNSAFE'},
+        @{Words=@((W 10 10 10 10 'a'),(W 25 18 10 14 'bridge' 2),(W 40 30 10 10 'b' 3));Code='ORDERING_UNSAFE'},
+        @{Words=@((W 90 10 20 10 'cross'));Code='CELL_AMBIGUOUS'},
+        @{Words=@((W 200 10 20 10 'outside'));Code='CELL_NONE'}
+    )){
+        $bad=Resolve-P43R2OcrCells -Cells @($cell,$other) -Words $case.Words -RequiredCellIds @('one')
+        Require ($bad.Status -eq 'PARTIAL' -and $bad.AcceptedWords.Count -eq 0 -and $bad.CellText.Count -eq 0 -and @($bad.Diagnostics | Where-Object Code -eq $case.Code).Count -gt 0) "Unsafe $($case.Code) rescued"
+    }
+    Require ((Get-P43R2CellMembership -Cells @($cell,$cell) -Word $low).Status -eq 'AMBIGUOUS') 'Duplicate cell accepted'
+    $missing=Resolve-P43R2OcrCells -Cells @($cell,$other) -Words @($low) -RequiredCellIds @('one','two')
+    Require ($missing.Status -eq 'PARTIAL' -and @($missing.Diagnostics | Where-Object Code -eq 'REQUIRED_COVERAGE_MISSING').Count -eq 1) 'Missing required coverage accepted'
+    $reverse=Resolve-P43R2OcrCells -Cells @($cell) -Words @((W 29 10 20 10 'b' 2),$low) -RequiredCellIds @('one')
+    Require ($reverse.CellText[0].Text -ceq 'low b') 'Enumeration changes reconstruction'
+    $failed=New-P43R2StructuralEvidence -Cells @($cell) -Ocr ([pscustomobject]@{Status='FAILED';Code='P43A2_TSV_EMPTY_WORD_OUTPUT';Words=@();Diagnostics=@([pscustomobject]@{Code='P43A2_TSV_EMPTY_WORD_OUTPUT'})}) -RequiredCellIds @('one')
+    Require ($failed.OperationalStatus -eq 'FAILED' -and $failed.OperationalCode -eq 'EMPTY_WORD_OUTPUT' -and $failed.AcceptanceStatus -eq 'NOT_EVALUATED' -and $failed.AcceptedWords.Count -eq 0) 'Empty output becomes structural absence'
+    $matrix=Invoke-P43R2GateAMatrix -Executable $TesseractExecutable -ModelPath $KoreanModelPath
+    $matrix | ConvertTo-Json -Depth 16 | Write-Host
+    Require ($matrix.Verdict -eq 'GATE_A_PASS' -and $matrix.RepetitionsIdentical -and $matrix.Runs.Count -eq 13) 'Gate A structural matrix failed'
+    $clear=@($matrix.Runs | Where-Object {$_.Psm -eq 11 -and $_.Fixture -in @('gray.pdf','rgb.pdf')})
+    foreach($run in $clear){Require ($run.WordCount -eq 40 -and $run.Status -eq 'COMPLETE' -and $run.UsableRows -eq 2 -and $run.AcceptedBelow50.Count -gt 0 -and $run.ExactMembership -and $run.RequiredCoverage) 'Clear physical/low-confidence positive failed'}
+    $mild=@($matrix.Runs | Where-Object Fixture -eq 'mild-degraded-gray.pdf')[0]
+    Require ($mild.WordCount -eq 39 -and $mild.Status -eq 'PARTIAL' -and @($mild.Diagnostics | Where-Object Code -eq 'CONFLICTING').Count -eq 2) 'Mild structural conflict lost'
+    foreach($run in @($matrix.Runs | Where-Object Psm -ne 11)){
+        $want=if($run.Psm -eq 3){5}else{2}
+        Require ($run.Status -eq 'PARTIAL' -and @($run.Diagnostics | Where-Object {$_.Code -in @('CELL_NONE','CELL_AMBIGUOUS')}).Count -eq $want) 'PSM containment regression changed'
+    }
+    foreach($run in @($matrix.Runs | Where-Object {$_.Fixture -in @('degraded-gray.pdf','degraded-rgb.pdf')})){
+        Require ($run.WordCount -eq 0 -and $run.OperationalStatus -eq 'FAILED' -and $run.OperationalCode -eq 'EMPTY_WORD_OUTPUT' -and $run.Status -eq 'NOT_EVALUATED' -and $run.UsableRows -eq 0) 'Old degraded failure rescued'
+    }
+    Assert-FrozenPaths
+    Write-Host 'Redesign2 StructuralTrust PASS; GATE_A_PASS; HUMAN REVIEW STOP before Task3'
+    return
+}
 if($Group -ne 'Contract'){throw 'REDESIGN2_GROUP_NOT_IMPLEMENTED'}
 Require (-not (Get-Command Invoke-P43R2TesseractEvaluation).Parameters.ContainsKey('ConfidenceThreshold')) 'Threshold bypass exposed'
 $header="level`tpage_num`tblock_num`tpar_num`tline_num`tword_num`tleft`ttop`twidth`theight`tconf`ttext"

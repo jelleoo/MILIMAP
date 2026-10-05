@@ -1,5 +1,5 @@
 param([ValidateSet('Contract','OverlapPolicy','Acceptance','Safety','DeterminismContract','All')][string]$Group='Contract',
-    [string]$TesseractExecutable,[string]$KoreanModelPath)
+    [string]$TesseractExecutable,[string]$KoreanModelPath,[string]$FixturePythonExecutable)
 Set-StrictMode -Version Latest
 $ErrorActionPreference='Stop'
 function Require($Condition,[string]$Message){if(-not $Condition){throw $Message}}
@@ -50,10 +50,69 @@ if($Group -eq 'OverlapPolicy'){
     Write-Host 'Selected SAME_CELL_OVERLAP_V1 ratio=0.25 (lowest passing fixed candidate); real Gate A NOT_RUN'
     return
 }
-if($Group -ne 'Contract'){throw 'A2_GROUP_NOT_IMPLEMENTED: only Contract/OverlapPolicy are available'}
+if($Group -eq 'Acceptance'){
+    . (Join-Path $PSScriptRoot 'run-evaluation.ps1')
+    Require ([bool](Get-Command Invoke-P43a2AcceptanceMatrix -ErrorAction SilentlyContinue)) 'Missing A2 real acceptance matrix'
+    Assert-P43a2FixtureSet -Directory (Join-Path $PSScriptRoot 'fixtures')
+    Require (-not [string]::IsNullOrWhiteSpace($FixturePythonExecutable)) 'Supply existing fixture-authoring Python for byte-derived grid integrity check'
+    & $FixturePythonExecutable (Join-Path $PSScriptRoot 'fixtures/generate-fixtures.py') --check | Out-Host
+    Require ($LASTEXITCODE -eq 0) 'Actual PDF bytes/grid/one-mild fixture contract failed'
+    $matrix=Invoke-P43a2AcceptanceMatrix -Executable $TesseractExecutable -ModelPath $KoreanModelPath -SameRegionRatio 0.25
+    Require ($matrix.Runs.Count -eq 13) 'Bounded matrix must contain only 4 clear / 6 regression / 2 old degraded / 1 mild runs'
+    $old=@($matrix.Runs | Where-Object Fixture -eq 'degraded-gray.pdf')[0]
+    Require ($old.GridStatus -eq 'COMPLETE' -and $old.OperationalStatus -eq 'FAILED' -and $old.OperationalCode -eq 'EMPTY_WORD_OUTPUT' -and $old.AcceptanceStatus -eq 'NOT_EVALUATED' -and $old.ConfidenceEvidence -eq 'NOT_OBSERVED' -and $old.Thresholds.Count -eq 0) 'Old empty OCR misclassified as confidence evidence'
+    $mild=@($matrix.Runs | Where-Object Fixture -eq 'mild-degraded-gray.pdf')[0]
+    Require ($mild.GridStatus -eq 'COMPLETE' -and $mild.GridPixelsMatchClear) 'Mild grid must be exact clear-grid pixels'
+    foreach($clear in @($matrix.Runs | Where-Object Psm -eq 11 | Where-Object {$_.Fixture -in @('gray.pdf','rgb.pdf')})){
+        Require ($clear.WordCount -eq 40 -and $clear.Thresholds[0].Status -eq 'COMPLETE' -and $clear.Thresholds[0].UsableRows -eq 2) 'Clear threshold0 physical positive changed'
+        Require (@($clear.Thresholds | Where-Object Threshold -gt 0 | Where-Object Status -ne 'PARTIAL').Count -eq 0) 'Clear fixed nonzero threshold result changed'
+    }
+    Require ($matrix.RepetitionsIdentical -and $matrix.RegressionSafe -and $matrix.RegressionUsableRows -eq 0) 'Clear repeat / PSM3/4/6 containment regression failed'
+    if($mild.OperationalStatus -eq 'COMPLETE'){
+        Require ($mild.WordCount -gt 0 -and ($mild.Thresholds.Threshold -join ',') -eq '0,50,80,90,95' -and $mild.ConfidenceEvidence -eq 'OBSERVED') 'Words require exact fixed confidence matrix'
+    }else{
+        Require ($mild.OperationalCode -eq 'EMPTY_WORD_OUTPUT' -and $mild.Thresholds.Count -eq 0 -and $matrix.Code -eq 'GATE_A_CONFIDENCE_NOT_OBSERVED') 'Mild empty output cannot be confidence rejection'
+    }
+    if($matrix.Status -eq 'COMPLETE'){
+        Require ($matrix.SelectedConfidenceThreshold -in @(0,50,80,90,95) -and $matrix.Verdict -eq 'GATES_A_B_PASS') 'Unapproved selected threshold'
+    }else{
+        Require ($matrix.Status -eq 'REJECTED' -and $matrix.Verdict -eq 'P4_3A2_REJECTED' -and $null -eq $matrix.SelectedConfidenceThreshold -and $matrix.Code -in @('GATE_A_CONFIDENCE_NOT_OBSERVED','GATE_A_CONFIDENCE_REJECTED')) 'No qualifying threshold requires explicit bounded rejection'
+    }
+    $matrix | ConvertTo-Json -Depth 12 | Write-Host
+    Write-Host "Acceptance assertions PASS; actual verdict=$($matrix.Verdict); Task4/5 STOP for human review"
+    return
+}
+if($Group -ne 'Contract'){throw 'A2_GROUP_NOT_IMPLEMENTED: this group is not implemented'}
 $wrapper=Join-Path $PSScriptRoot 'invoke-tesseract-eval.ps1'
 Require (Test-Path -LiteralPath $wrapper) 'Missing A2-only hierarchical TSV/runtime wrapper'
 . $wrapper
+. (Join-Path $PSScriptRoot 'run-evaluation.ps1')
+Require ([bool](Get-Command New-P43a2OcrAcceptanceEvidence -ErrorAction SilentlyContinue)) 'Missing distinct operational/acceptance evidence boundary'
+$emptyOcr=[pscustomobject]@{Status='FAILED';Code='P43A2_TSV_EMPTY_WORD_OUTPUT';Words=@()}
+$emptyEvidence=New-P43a2OcrAcceptanceEvidence -Cells @() -Ocr $emptyOcr -SameRegionRatio 0.25
+Require ($emptyEvidence.OperationalStatus -eq 'FAILED' -and $emptyEvidence.OperationalCode -eq 'EMPTY_WORD_OUTPUT' -and $emptyEvidence.AcceptanceStatus -eq 'NOT_EVALUATED' -and $emptyEvidence.ConfidenceEvidence -eq 'NOT_OBSERVED' -and $emptyEvidence.Thresholds.Count -eq 0) 'EMPTY_WORD_OUTPUT must remain operational failure only'
+$emptyGate=Get-P43a2ConfidenceDecision -Clear @() -Mild $emptyEvidence
+Require ($emptyGate.Code -eq 'GATE_A_CONFIDENCE_NOT_OBSERVED' -and $emptyGate.Code -ne 'GATE_A_CONFIDENCE_REJECTED' -and $null -eq $emptyGate.SelectedConfidenceThreshold) 'Operational failure cannot masquerade as confidence rejection'
+$calibrationCells=@(foreach($row in 1..3){foreach($col in 1..4){[pscustomobject]@{Page=1;CellId="$row-$col";Left=100*$col;Top=100*$row;Width=90;Height=90;Row=$row;Column=$col}}})
+$calibrationWords=@($calibrationCells | ForEach-Object {[pscustomobject]@{Page=1;Block=1;Paragraph=1;Line=1;Word=1;Left=$_.Left+10;Top=$_.Top+10;Width=10;Height=10;Confidence=60;Text='synthetic'}})
+$wordOcr=[pscustomobject]@{Status='COMPLETE';Code=$null;Words=$calibrationWords}
+$wordEvidence=New-P43a2OcrAcceptanceEvidence -Cells $calibrationCells -Ocr $wordOcr -SameRegionRatio 0.25
+Require ($wordEvidence.OperationalStatus -eq 'COMPLETE' -and $wordEvidence.ConfidenceEvidence -eq 'OBSERVED' -and ($wordEvidence.Thresholds.Threshold -join ',') -eq '0,50,80,90,95') 'Words must evaluate fixed confidence candidates'
+$noSeparation=Get-P43a2ConfidenceDecision -Clear @($wordEvidence) -Mild $wordEvidence
+Require ($noSeparation.Code -eq 'GATE_A_CONFIDENCE_REJECTED' -and $null -eq $noSeparation.SelectedConfidenceThreshold) 'No safe qualifying threshold must explicitly reject'
+foreach($word in $calibrationWords){$word.Confidence=95}
+$clearEvidence=New-P43a2OcrAcceptanceEvidence -Cells $calibrationCells -Ocr $wordOcr -SameRegionRatio 0.25
+foreach($word in $calibrationWords){$word.Confidence=45}
+$mildEvidence=New-P43a2OcrAcceptanceEvidence -Cells $calibrationCells -Ocr $wordOcr -SameRegionRatio 0.25
+$separation=Get-P43a2ConfidenceDecision -Clear @($clearEvidence) -Mild $mildEvidence
+Require ($null -eq $separation.Code -and $separation.SelectedConfidenceThreshold -eq 50) 'Select lowest approved threshold only when separation is confidence-only'
+foreach($word in $calibrationWords){$word.Confidence=95}
+# A data-row phone cell is not the required header/name/benefit separation control.
+$calibrationWords[6].Confidence=45
+$irrelevantLow=New-P43a2OcrAcceptanceEvidence -Cells $calibrationCells -Ocr $wordOcr -SameRegionRatio 0.25
+$irrelevantDecision=Get-P43a2ConfidenceDecision -Clear @($clearEvidence) -Mild $irrelevantLow
+Require ($irrelevantDecision.Code -eq 'GATE_A_CONFIDENCE_REJECTED' -and $null -eq $irrelevantDecision.SelectedConfidenceThreshold) 'Unrequired phone-word confidence must not prove required-text separation'
+Assert-P43a2FixtureSet -Directory (Join-Path $PSScriptRoot 'fixtures')
 $repo=[IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../../../..'))
 $historical=Join-Path $PSScriptRoot '../p4-3a-ocr'
 & dotnet restore (Join-Path $historical 'Milimap.P4_3A.OcrEval.csproj') --locked-mode | Out-Host
@@ -67,6 +126,8 @@ $header="level`tpage_num`tblock_num`tpar_num`tline_num`tword_num`tleft`ttop`twid
 $valid="$header`n5`t1`t4`t2`t3`t7`t10`t20`t30`t40`t92.5`t가상 식당"
 $words=@(ConvertFrom-P43a2Tsv -Text $valid)
 Require ($words.Count -eq 1) 'Valid TSV lost word'
+$gridWhitespace="$valid`n5`t1`t5`t1`t1`t1`t48`t69`t1504`t3`t95.0`t "
+Require (@(ConvertFrom-P43a2Tsv -Text $gridWhitespace).Count -eq 1) 'Tesseract whitespace-only grid decoration must not become a text word'
 $word=$words[0]
 Require ($word.Page -eq 1 -and $word.Block -eq 4 -and $word.Paragraph -eq 2 -and $word.Line -eq 3 -and $word.Word -eq 7) 'TSV hierarchy renumbered/lost'
 Require ($word.Left -eq 10 -and $word.Top -eq 20 -and $word.Width -eq 30 -and $word.Height -eq 40 -and $word.Confidence -eq 92.5 -and $word.Text -ceq '가상 식당') 'TSV physical/text values changed'
@@ -89,6 +150,14 @@ foreach($version in @('tesseract 5.5.2','tesseract 5.5.30','tesseract v5.5.3.unk
 $scratch=Join-Path ([IO.Path]::GetTempPath()) ('milimap-p43a2-contract-'+[guid]::NewGuid().ToString('N'))
 [void][IO.Directory]::CreateDirectory($scratch)
 try{
+    $bounded=Join-Path $scratch 'bounded-fixtures';[void][IO.Directory]::CreateDirectory($bounded)
+    Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'fixtures/manifest.json') -Destination $bounded
+    foreach($name in @('degraded-gray','degraded-rgb','mild-degraded-gray')){Copy-Item -LiteralPath (Join-Path $PSScriptRoot "fixtures/$name.pdf") -Destination $bounded}
+    Assert-P43a2FixtureSet -Directory $bounded
+    Copy-Item -LiteralPath (Join-Path $bounded 'mild-degraded-gray.pdf') -Destination (Join-Path $bounded 'second-mild.pdf')
+    $expandedRejected=$false
+    try{Assert-P43a2FixtureSet -Directory $bounded}catch{if($_.Exception.Message -ne 'A2_FIXTURE_EXPANSION_FORBIDDEN'){throw};$expandedRejected=$true}
+    Require $expandedRejected 'A second mild fixture must be rejected'
     $model=Join-Path $scratch 'kor.traineddata';[IO.File]::WriteAllBytes($model,[byte[]]@(1,2,3))
     $exe=(Get-Command pwsh).Source
     $missing=Invoke-P43a2TesseractEvaluation -Executable (Join-Path $scratch 'missing.exe') -ModelPath $model -Inputs @($model)

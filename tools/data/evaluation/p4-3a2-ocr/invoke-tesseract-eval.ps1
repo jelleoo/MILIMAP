@@ -24,7 +24,10 @@ function ConvertFrom-P43a2Tsv {
         if(-not [double]::TryParse($parts[10],[Globalization.NumberStyles]::Float,[Globalization.CultureInfo]::InvariantCulture,[ref]$confidence) -or -not [double]::IsFinite($confidence) -or $confidence -lt -1 -or $confidence -gt 100){throw 'P43A2_TSV_CONFIDENCE'}
         if($ints[0] -lt 1 -or $ints[0] -gt 5 -or $ints[1] -ne 1){throw 'P43A2_TSV_PAGE_OR_LEVEL'}
         if($ints[0] -eq 5){
-            if($ints[2] -eq 0 -or $ints[3] -eq 0 -or $ints[4] -eq 0 -or $ints[5] -eq 0 -or $ints[8] -eq 0 -or $ints[9] -eq 0 -or $confidence -lt 0 -or [string]::IsNullOrWhiteSpace($parts[11])){throw 'P43A2_TSV_WORD_HIERARCHY_OR_VALUE'}
+            if($ints[2] -eq 0 -or $ints[3] -eq 0 -or $ints[4] -eq 0 -or $ints[5] -eq 0 -or $ints[8] -eq 0 -or $ints[9] -eq 0 -or $confidence -lt 0){throw 'P43A2_TSV_WORD_HIERARCHY_OR_VALUE'}
+            # Tesseract reports ruled-line decoration as whitespace level-5 records.
+            # They contain no text. All-whitespace output still fails EMPTY_WORD_OUTPUT.
+            if([string]::IsNullOrWhiteSpace($parts[11])){continue}
             $words.Add([pscustomobject]@{Page=$ints[1];Block=$ints[2];Paragraph=$ints[3];Line=$ints[4];Word=$ints[5];Left=$ints[6];Top=$ints[7];Width=$ints[8];Height=$ints[9];Confidence=$confidence;Text=$parts[11]})
         }
     }

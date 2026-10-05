@@ -1,0 +1,104 @@
+{
+  "generator": "MILIMAP_P43A2_TEXT_ONLY_V1",
+  "pillowVersion": "12.3.0",
+  "fontSha256": "7a183cf1c6c56b9609fcc16eda8b5229fbc11758a21e669ec00343239b02192f",
+  "gridPolicy": "EVAL_PIXEL_GRID_V1_BLACK32_H800_V400_FULL_BORDER_INSET3",
+  "degradation": "text-only resize 400x225 then 1600x900; GaussianBlur 2; exact black grid drawn last",
+  "fixtures": [
+    {
+      "name": "degraded-gray",
+      "sha256": "ea26ae1430a7848d2bb6a4d82772fb416fabad9c6027bd05df94a8ee05c58476",
+      "pixelHash": "8451ce2d15727cfbf4600b24efc8a627483272ed25b6269cacf883411f0953d9",
+      "expectedGrid": "COMPLETE",
+      "purpose": "fictional safe-grid text-only degradation",
+      "expectedRows": [
+        [
+          "업체명",
+          "주소",
+          "전화번호",
+          "혜택"
+        ],
+        [
+          "가상 가람 식당",
+          "가상시 가람로 12",
+          "031-123-4567",
+          "시험 할인 10%"
+        ],
+        [
+          "가상 누리 식당",
+          "가상시 누리로 23",
+          "031-234-5678",
+          "시험 할인 20%\n방문 시 적용"
+        ]
+      ],
+      "license": "CC0-1.0"
+    },
+    {
+      "name": "degraded-rgb",
+      "sha256": "8d04228cad7b37a3b573987d03c0f5b5a7681163b43702b4b7219abbf957a2bc",
+      "pixelHash": "1202030b075481c499005f60444f50b792651f0d45f2c2b4ec719bbd395ae5b3",
+      "expectedGrid": "COMPLETE",
+      "purpose": "fictional safe-grid text-only degradation",
+      "expectedRows": [
+        [
+          "업체명",
+          "주소",
+          "전화번호",
+          "혜택"
+        ],
+        [
+          "가상 가람 식당",
+          "가상시 가람로 12",
+          "031-123-4567",
+          "시험 할인 10%"
+        ],
+        [
+          "가상 누리 식당",
+          "가상시 누리로 23",
+          "031-234-5678",
+          "시험 할인 20%\n방문 시 적용"
+        ]
+      ],
+      "license": "CC0-1.0"
+    },
+    {
+      "name": "mild-degraded-gray",
+      "sha256": "a8679aa5450789cb706b15670036db02101a40e88349d8a2f917d9a593401945",
+      "pixelHash": "cafa9e4cb35b6f60d778b225cc595ff3fd1f3ea9bd57fde4c4c724f1d2f12f33",
+      "expectedGrid": "COMPLETE",
+      "purpose": "single approved fictional mild confidence control",
+      "expectedRows": [
+        [
+          "업체명",
+          "주소",
+          "전화번호",
+          "혜택"
+        ],
+        [
+          "가상 가람 식당",
+          "가상시 가람로 12",
+          "031-123-4567",
+          "시험 할인 10%"
+        ],
+        [
+          "가상 누리 식당",
+          "가상시 누리로 23",
+          "031-234-5678",
+          "시험 할인 20%\n방문 시 적용"
+        ]
+      ],
+      "license": "CC0-1.0",
+      "degradation": {
+        "textOnly": true,
+        "operation": "GaussianBlur",
+        "radius": 0.6,
+        "resize": false
+      },
+      "gridProof": {
+        "gridPixelCount": 28097,
+        "gridPixelsSha256": "b590dd27cfc812007744e443421cfcf2ec05e925d3d8f2637f0769f8643d917e",
+        "clearGridPixelsSha256": "b590dd27cfc812007744e443421cfcf2ec05e925d3d8f2637f0769f8643d917e"
+      }
+    }
+  ]
+}

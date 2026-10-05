@@ -58,6 +58,7 @@ Requested official URL:
 - Final requested host remains `www.suwon.go.kr`; firewall redirect **not followed**.
 - Content-Type absent; body **0 bytes**; no `%PDF` signature, snapshot or PDF content hash.
 - Fetch measurement **94 ms**. Current PDF parse/physical identity check **NOT_OBSERVED**; source drift **NOT_DETERMINED**.
+- Live-control applicability for P4-2 closeout: **`NOT_APPLICABLE_SOURCE_UNAVAILABLE`**. The approved design requires the current Suwon PDF as a representative native-layout control only when it remains available; the official endpoint did not provide PDF bytes in this observation. This does not convert the current layout into PASS, and no current Suwon layout claim is made.
 - Initial request's harness failed on absent Content-Type before persisting response metadata; one capture-only retry followed an offline null-header serialization check. Retry preserved the above HTTP metadata; attempting the PDF byte-hash helper on empty bytes was a capture harness error, not a native parser/source finding. No further requests were made.
 - Original bytes were never committed. No historical hash/bytes replaced current evidence. No current claim for 고려이발관/name/address/phone cell location can be made from this blocked request.
 - P4-2A's separate previously observed identity/layout evidence remains historical only. No BenefitDescription, discount, eligibility, validity, ACTIVE or currentness was inferred.
@@ -87,7 +88,7 @@ Duplicate-name control was corrected to strong + same-name name-only alternative
 - Android `gradlew.bat assembleDebugUnitTest testDebugUnitTest --stacktrace`: **PASS**, 37 seconds.
 - Android `gradlew.bat lintDebug assembleDebug --stacktrace`: **PASS**, 32 seconds; debug APK produced. Existing native-library strip warning is not a build failure.
 - `git diff --check origin/dev...HEAD` **PASS**; protected path diff (`data/canonical`, `data/seed`, `apps`) **empty**. Temp outputs/helper binaries remain ignored.
-- Exact final PR HEAD `verify-data` and Android `verify` must both succeed; final results/URLs are recorded in the PR check surface and final report, not presumed from local results or earlier HEADs.
+- Runtime/review HEAD `84a47fc77b55d2489c4811f2832a12fb22203a81` passed exact-head `verify-data` and Android `verify` in run `37287580653`. Any later docs-only closeout HEAD must also pass both jobs before merge.
 
 Not run/available: current Suwon physical identity/benefit verification (firewall redirect, no PDF); OCR, arbitrary PDF families, portable hard-memory enforcement. No population precision/recall claim. Existing historical sources and deterministic controls are not current live truth.
 
@@ -105,9 +106,10 @@ Review exclusions remain explicit limitations, not hidden PASS claims: current S
 
 Initial exact HEAD `9901749e4d0e0c3f24c05596f5849342bb2a4f55` passed both jobs in [run 37267090989](https://github.com/jelleoo/MILIMAP/actions/runs/37267090989). That run is **not** final-fix CI evidence. [PR #118](https://github.com/jelleoo/MILIMAP/pull/118) must show both jobs successful on the new final HEAD after this fix pass. Local full suite and Android gates are re-executed after the fix pass; final report/check surface records their result.
 
-- Current official PDF live layout remains unobserved from this environment; human/current-source confirmation is still needed for a Suwon live-control claim.
+- Current official PDF live layout remains **NOT_OBSERVED** from this environment. A future available official PDF is still required before making any current Suwon native-layout claim, but the present live-control gate is **`NOT_APPLICABLE_SOURCE_UNAVAILABLE`** and does not block merging the bounded adapter implementation.
 - Native parser can allocate before observable count checks; child isolation/deadline/output limits are not an OS memory sandbox.
 - Fixed geometry supports only tested ruled-grid subsets; unsafe/unknown structures must stay operationally unresolved, never semantic absence.
 - Strict repeated PDF hashing is an observed downstream overhead; optimization requires its own safety proof, not another cache.
-- Linux exact-head CI and whole-branch review are mandatory before merge readiness. No auto-merge.
+- Whole-branch review is complete with Critical 0 / Important 0 after fixes. A final docs-only exact-head CI pass is the remaining merge gate.
+- P4-2 bounded native adapter closeout status: **COMPLETE subject to final docs-only exact-head CI before merge**. Current Suwon native layout remains NOT_OBSERVED because the source was unavailable; this is not a positive live validation claim.
 - Next: **P4-3 OCR fallback only after P4-2B merge**. Phase 4 is not COMPLETE.

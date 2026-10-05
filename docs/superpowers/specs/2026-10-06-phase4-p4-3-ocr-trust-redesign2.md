@@ -40,8 +40,8 @@ In scope:
 - PDF-only OCR fallback;
 - the existing image-only `OCR_FALLBACK_CANDIDATE` entry point;
 - local/offline execution;
-- Tesseract 5.5.3 family already evaluated by P4-3A/P4-3A2;
-- official `tessdata_fast/kor.traineddata` already evaluated;
+- Tesseract 5.5.3 semantics/config already evaluated by P4-3A/P4-3A2; the Windows evaluation identity remains `v5.5.3.20260724` / 5.5.3, and Ubuntu must use exact upstream 5.5.3 rather than a version substitute;
+- official `tessdata_fast/kor.traineddata` from commit `87416418657359cb625c412a48b6e1d6d41c29bd`, SHA-256 `6b85e11d9bbf07863b97b3523b1b112844c43e713df8b66418a081fd1060b3b2`;
 - Korean, OEM 1, DPI 300;
 - PSM11 as the positive path;
 - PSM3/4/6 as regression controls;
@@ -349,7 +349,7 @@ Exact internal names remain an implementation-plan decision.
 
 The future material execution/extraction identity must include:
 
-- exact Tesseract build/version;
+- exact Tesseract version plus OS-specific build/package identity;
 - exact Korean model source/version/hash;
 - language/OEM/DPI/PSM role;
 - supported image eligibility version;
@@ -462,6 +462,8 @@ Compare at least:
 - reconstructed cell text;
 - reconstructed technical rows;
 - final adapter status.
+
+OS-specific executable/DLL/package hashes may differ when the OS supply differs, but version substitution is forbidden. Runtime identity and supply provenance must be recorded separately from semantic determinism.
 
 Classification:
 

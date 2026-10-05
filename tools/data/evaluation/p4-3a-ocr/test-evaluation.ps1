@@ -33,3 +33,30 @@ if($Group -in @('Contract','All')){
     }finally{[IO.Directory]::Delete($scratch,$true)}
     Write-Host 'Contract PASS'
 }
+if($Group -in @('ImageEligibility','All')){
+    $dll=Join-Path $PSScriptRoot 'bin/Release/net8.0/Milimap.P4_3A.OcrEval.dll'
+    $manifest=Get-Content (Join-Path $PSScriptRoot 'fixtures/manifest.json') -Raw | ConvertFrom-Json
+    foreach($name in @('gray','rgb','multi-image','partial-image','one-bit','cmyk','undecodable','multipage')){
+        $fixture=@($manifest.fixtures | Where-Object name -eq $name)[0]
+        $pdf=Join-Path $PSScriptRoot ('fixtures/'+$name+'.pdf')
+        Require ((Get-FileHash $pdf).Hash.ToLowerInvariant() -ceq $fixture.sha256) 'Fixture bytes changed'
+        $scratch=Join-Path ([IO.Path]::GetTempPath()) ('p43a-image-'+[guid]::NewGuid().ToString('N'))
+        [void][IO.Directory]::CreateDirectory($scratch)
+        try{
+            $result=& dotnet $dll inspect --input $pdf --artifact-dir $scratch | ConvertFrom-Json
+            Require ($result.OpenCount -eq 1) "$name must open once"
+            Require ($result.PageReadCount -eq $result.Pages.Count -or $result.Status -in @('UNSUPPORTED','FAILED')) 'Eligible pages must not be parsed twice for image handoff'
+            Require ($result.Status -ceq $fixture.expectedEligibility) "$name image eligibility: expected $($fixture.expectedEligibility), got $($result.Status)"
+            if($fixture.expectedEligibility -eq 'ELIGIBLE'){
+                Require ($result.Images.Count -eq $result.Pages.Count) "$name one image per page"
+                foreach($image in $result.Images){
+                    Require (Test-Path $image.ArtifactPath) 'Missing bounded pixel artifact'
+                    Require ($image.PixelSha256 -eq (Get-FileHash $image.ArtifactPath).Hash.ToLowerInvariant()) 'Pixel artifact provenance mismatch'
+                    Require ($image.PixelSha256 -ceq $fixture.expectedPixelHashes[$image.PageNumber-1]) 'Decoded pixels differ from independently authored source'
+                    Require ($image.Width -eq 1600 -and $image.Height -eq 900) 'Wrong decoded dimensions'
+                }
+            }else{Require (@(Get-ChildItem $scratch -File).Count -eq 0) 'Rejected document leaked pixel artifact'}
+        }finally{[IO.Directory]::Delete($scratch,$true)}
+    }
+    Write-Host 'ImageEligibility PASS'
+}

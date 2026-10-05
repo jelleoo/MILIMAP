@@ -1,0 +1,237 @@
+{
+  "generator": "MILIMAP_P43A_FIXTURE_V1",
+  "pillowVersion": "12.3.0",
+  "fontName": "Malgun Gothic",
+  "fontSha256": "7a183cf1c6c56b9609fcc16eda8b5229fbc11758a21e669ec00343239b02192f",
+  "fixtures": [
+    {
+      "name": "gray",
+      "purpose": "fictional technical clear",
+      "sha256": "07182f75f5305bb4611458aeaea880aa57fa78d120030b0f9b6446bd56e5ec17",
+      "imageClass": "L",
+      "gridClass": "clear",
+      "expectedEligibility": "ELIGIBLE",
+      "license": "CC0-1.0",
+      "expectedNames": [
+        "가상 가람 식당",
+        "가상 누리 식당"
+      ],
+      "expectedRows": 2,
+      "expectedPixelHashes": [
+        "61855a7d1b3a31365bd44fd7b57a5386df069605572f6e7838cb1488888864cb"
+      ]
+    },
+    {
+      "name": "rgb",
+      "purpose": "fictional technical clear",
+      "sha256": "415645682f805899bdc0852feefec37ae596a3821b97a7ab344fc7d267c61c24",
+      "imageClass": "RGB",
+      "gridClass": "clear",
+      "expectedEligibility": "ELIGIBLE",
+      "license": "CC0-1.0",
+      "expectedNames": [
+        "가상 가람 식당",
+        "가상 누리 식당"
+      ],
+      "expectedRows": 2,
+      "expectedPixelHashes": [
+        "fc1d933a8a605bd4bb2d4ce73fb640188806ed1197f427a61cc1c7368c319218"
+      ]
+    },
+    {
+      "name": "multi-image",
+      "purpose": "fictional technical clear",
+      "sha256": "497fd99ba39b3ed6926762834e39138c1ff6f07b69dfbf72a114ca840962904f",
+      "imageClass": "L",
+      "gridClass": "clear",
+      "expectedEligibility": "UNSUPPORTED",
+      "license": "CC0-1.0",
+      "expectedNames": [
+        "가상 가람 식당",
+        "가상 누리 식당"
+      ],
+      "expectedRows": 2,
+      "expectedPixelHashes": []
+    },
+    {
+      "name": "partial-image",
+      "purpose": "fictional technical clear",
+      "sha256": "a12b56ea7af17f7b34891ab405e42cf825f01d3596ea86512284d223503b683a",
+      "imageClass": "L",
+      "gridClass": "clear",
+      "expectedEligibility": "UNSUPPORTED",
+      "license": "CC0-1.0",
+      "expectedNames": [
+        "가상 가람 식당",
+        "가상 누리 식당"
+      ],
+      "expectedRows": 2,
+      "expectedPixelHashes": []
+    },
+    {
+      "name": "one-bit",
+      "purpose": "fictional technical clear",
+      "sha256": "a8e35cfea1c0ebf6159fa08d5778cd717a338df1f4e2155f3120bf0c2553c025",
+      "imageClass": "L",
+      "gridClass": "clear",
+      "expectedEligibility": "UNSUPPORTED",
+      "license": "CC0-1.0",
+      "expectedNames": [
+        "가상 가람 식당",
+        "가상 누리 식당"
+      ],
+      "expectedRows": 2,
+      "expectedPixelHashes": []
+    },
+    {
+      "name": "cmyk",
+      "purpose": "fictional technical clear",
+      "sha256": "1fbce46f28f7fe8a3966bb187137f009921518781c3f23a320bb95fc8781d230",
+      "imageClass": "CMYK",
+      "gridClass": "clear",
+      "expectedEligibility": "UNSUPPORTED",
+      "license": "CC0-1.0",
+      "expectedNames": [
+        "가상 가람 식당",
+        "가상 누리 식당"
+      ],
+      "expectedRows": 2,
+      "expectedPixelHashes": []
+    },
+    {
+      "name": "undecodable",
+      "purpose": "fictional technical clear",
+      "sha256": "baad5ca41108ad87c91e296864aed9e223c72256be0a4e38414d603fadffa398",
+      "imageClass": "L",
+      "gridClass": "clear",
+      "expectedEligibility": "FAILED",
+      "license": "CC0-1.0",
+      "expectedNames": [
+        "가상 가람 식당",
+        "가상 누리 식당"
+      ],
+      "expectedRows": 2,
+      "expectedPixelHashes": []
+    },
+    {
+      "name": "borderless",
+      "purpose": "fictional technical borderless",
+      "sha256": "bb6d3819f9f44b92e83b752a8b173e2648932a6d5519866504719c9ad25c83c8",
+      "imageClass": "L",
+      "gridClass": "borderless",
+      "expectedEligibility": "ELIGIBLE",
+      "license": "CC0-1.0",
+      "expectedNames": [
+        "가상 가람 식당",
+        "가상 누리 식당"
+      ],
+      "expectedRows": 2,
+      "expectedPixelHashes": [
+        "364709b740c505f9dd4d9eef4ed5d4249760cb7d2f102298ec1e4fded27b1969"
+      ]
+    },
+    {
+      "name": "broken",
+      "purpose": "fictional technical broken",
+      "sha256": "2226663ebc5c4e8826439f796c4ff6d74f410b4eeeaa84701493c218ba8dd682",
+      "imageClass": "L",
+      "gridClass": "broken",
+      "expectedEligibility": "ELIGIBLE",
+      "license": "CC0-1.0",
+      "expectedNames": [
+        "가상 가람 식당",
+        "가상 누리 식당"
+      ],
+      "expectedRows": 2,
+      "expectedPixelHashes": [
+        "d1c878a81210a58c8643ff73611f6116cc5ead53d538e11be081b7e08e8935d8"
+      ]
+    },
+    {
+      "name": "merged",
+      "purpose": "fictional technical merged",
+      "sha256": "ab9d3d3d1ffd324992c1e775c1a399412ac18b3f5bbcc7542f9a12513a804895",
+      "imageClass": "L",
+      "gridClass": "merged",
+      "expectedEligibility": "ELIGIBLE",
+      "license": "CC0-1.0",
+      "expectedNames": [
+        "가상 가람 식당",
+        "가상 누리 식당"
+      ],
+      "expectedRows": 2,
+      "expectedPixelHashes": [
+        "c6814d3d29c1830d9c48db99add840d740aaeffa4fe782fb32dba188397e82d3"
+      ]
+    },
+    {
+      "name": "missing-header",
+      "purpose": "fictional technical missing-header",
+      "sha256": "5a567c269564680b46c1348983851c96a8a8fb4c6ceebf968c62518397d23853",
+      "imageClass": "L",
+      "gridClass": "missing-header",
+      "expectedEligibility": "ELIGIBLE",
+      "license": "CC0-1.0",
+      "expectedNames": [
+        "가상 가람 식당",
+        "가상 누리 식당"
+      ],
+      "expectedRows": 2,
+      "expectedPixelHashes": [
+        "ff619d513a68cdc347b337792936571fd54b8c5f72049b9ed8451ade57febe55"
+      ]
+    },
+    {
+      "name": "duplicate-header",
+      "purpose": "fictional technical duplicate-header",
+      "sha256": "9d8e1d35f48c9b95ba1f5fc598c4ddedc37038ec72c9866f4aeedef598fb2ca5",
+      "imageClass": "L",
+      "gridClass": "duplicate-header",
+      "expectedEligibility": "ELIGIBLE",
+      "license": "CC0-1.0",
+      "expectedNames": [
+        "가상 가람 식당",
+        "가상 누리 식당"
+      ],
+      "expectedRows": 2,
+      "expectedPixelHashes": [
+        "148a11fc42e7f41b0408b56b99966f881f318f7a2d1907b3fc6a35f5893a3d14"
+      ]
+    },
+    {
+      "name": "degraded",
+      "purpose": "fictional technical degraded",
+      "sha256": "920249969709ec17f5294e314b978bd094a5111018f01b39489414b16d6b5861",
+      "imageClass": "L",
+      "gridClass": "degraded",
+      "expectedEligibility": "ELIGIBLE",
+      "license": "CC0-1.0",
+      "expectedNames": [
+        "가상 가람 식당",
+        "가상 누리 식당"
+      ],
+      "expectedRows": 2,
+      "expectedPixelHashes": [
+        "cee3db59c6485bdfcfae5666b5cd53e68cb4f24be0e15c8c60e664e7d393ba99"
+      ]
+    },
+    {
+      "name": "multipage",
+      "purpose": "fictional technical clear",
+      "sha256": "e55980c64beb739de6966a1ec9408d69d40e3d47558ea3527ad2fad54b6a5c0e",
+      "imageClass": "L",
+      "gridClass": "clear",
+      "expectedEligibility": "ELIGIBLE",
+      "license": "CC0-1.0",
+      "expectedNames": [
+        "가상 가람 식당",
+        "가상 누리 식당"
+      ],
+      "expectedRows": 2,
+      "expectedPixelHashes": [
+        "61855a7d1b3a31365bd44fd7b57a5386df069605572f6e7838cb1488888864cb",
+        "61855a7d1b3a31365bd44fd7b57a5386df069605572f6e7838cb1488888864cb"
+      ]
+    }
+  ]
+}

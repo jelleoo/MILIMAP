@@ -7,5 +7,10 @@ Tesseract 5.5.3 and an official Korean model must be externally supplied;
 the wrapper rejects engine/model identity mismatches before OCR.
 
 Run `pwsh -NoProfile -File test-evaluation.ps1 -Group Contract` with .NET 8 on PATH.
-Current stage: Task 1 contract; image/grid/OCR stages are not yet implemented.
+Image handoff: a single PdfDocument open and one page materialization; the same
+page objects are used for native inspection and image decoding. Only full-page,
+axis-aligned, unmasked 8-bit DeviceGray/RGB Flate pixels are accepted. Synthetic
+coverage tolerance is zero. Other image shapes fail closed. Original PDF hash,
+page/image placement and independent decoded PNM hashes bind the handoff.
+Current stage: Tasks 1–2; grid/OCR stages are not yet implemented.
 No approval verdict is inferred from contract tests.

@@ -31,7 +31,7 @@ P4-3 remains:
 - entered only from the existing image-only `OCR_FALLBACK_CANDIDATE`
 - local/offline
 - based on PdfPig single-open image handoff
-- limited to safely decoded full-page scan images
+- limited to exactly one clearly mapped full-page embedded scan image per page, with PdfPig-decoded 8-bit `DeviceGray` or `DeviceRGB` pixels
 - ruled-grid only
 - fail-closed
 - `ProductionAction=NONE`
@@ -117,6 +117,20 @@ Confidence must not choose the winner.
 ### ORDERING_UNSAFE
 
 If hierarchy and physical ordering cannot produce one deterministic cell text sequence, the cell is unsafe.
+
+### Classifier threshold policy
+
+This redesign does **not** preselect an overlap-area, IoU, pixel-distance, center-distance, or spatial-similarity threshold for distinguishing `SAFE_ADJACENT`, `DUPLICATE`, and `CONFLICTING`.
+
+P4-3A2 may evaluate only a bounded, documented set of fixed candidate rules against the approved positive/negative controls. Any rule that is accepted must be:
+
+- deterministic;
+- versioned as material execution/extraction configuration;
+- independent of business identity and expected text;
+- non-adaptive at runtime;
+- unable to weaken exact word-to-cell containment.
+
+No implementation may invent an unreviewed tolerance merely to convert a rejected control to `SAFE_ADJACENT`.
 
 ## 5. OCR hierarchy usage
 

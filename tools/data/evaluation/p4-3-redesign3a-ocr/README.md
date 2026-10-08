@@ -161,8 +161,10 @@ acceptance. No tuning or rescue experiment followed.
 Branch: `codex/phase4-p4-3-redesign3a-cell-crop-consensus`.
 Worktree: `C:/Users/PC/AndroidStudioProjects/MILIMAP/.worktrees/phase4-p4-3-redesign3a-ocr`.
 Clean code HEAD at final measurement:
-`c0d19e5e2f84f306b36368e485a22d6fd47a4083`. The subsequent result-recording commit
-changes documentation only; these measurements belong to that code HEAD.
+`c0d19e5e2f84f306b36368e485a22d6fd47a4083`. Initial result-recording commit
+`af5bd94` changed documentation only. The later review reporting fix described
+below has separate no-OCR checks; actual OCR and 62-test measurements belong to
+the original clean code HEAD, not the subsequent reporting fix.
 Task commits: 1 `befbd07`, 2 `24d1885`, 3 `5561a1b` plus fix `d3dfea7`,
 4 `NOT_RUN_GATE_C_FAILED`, 5 verification wrapper `c0d19e5` plus this result record.
 
@@ -275,3 +277,16 @@ validation or current-benefit truth; ruled-grid limitations persist; correlated
 same-engine errors and degraded crop behavior remain unevaluated after rejection.
 Product dependency `NOT_APPROVED`; P4-3B `BLOCKED`; `ProductionAction=NONE`;
 P4-3 / Phase 4 `NOT COMPLETE`. Stop for human review; no subsequent quality work.
+
+Task 5 review fix: AllReached output/assertions now branch on the actually reached
+gate, so failed A reports null B/C as blocked and unavailable/failed B reports
+null C as blocked. No candidate, runner, crop, OCR or fidelity decisions changed.
+New `-Group ReachedReporting` verifies the real public child CLI with explicit
+nonexistent executable/model paths, plus A-block rendering from an unproven
+preparation. `-Group ClearFidelity` checks synthetic unavailable-model and observed
+mapping-failure rendering, as well as unchanged reached-C rejection rendering.
+Both targeted commands PASS after the reporting fix, with **zero actual OCR**.
+The supply was not reacquired; actual quality measurements and the full 62-test
+suite were not rerun during this fix. The controller owns final post-review
+verification and whole-branch review. Full-suite historical JSON parser object
+table output was pre-existing diagnostic noise; it did not invalidate 62/62 PASS.

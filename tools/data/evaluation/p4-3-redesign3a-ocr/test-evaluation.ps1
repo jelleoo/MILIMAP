@@ -1,4 +1,4 @@
-param([ValidateSet('CropProvenance','BatchMapping','ClearFidelity','AllReached')][string]$Group='CropProvenance',
+param([ValidateSet('CropProvenance','BatchMapping','ClearFidelity','AllReached','ReachedReporting')][string]$Group='CropProvenance',
     [Alias('TesseractExecutable')][string]$Executable,[Alias('KoreanModelPath')][string]$ModelPath,[switch]$RunRealGateB,[switch]$RunRealGateC)
 Set-StrictMode -Version Latest
 $ErrorActionPreference='Stop'
@@ -10,6 +10,55 @@ function Reject([scriptblock]$Action,[string]$Code){
 $runner=Join-Path $PSScriptRoot 'run-evaluation.ps1'
 Require (Test-Path -LiteralPath $runner) 'FAIL: Redesign 3A crop functions do not exist'
 . $runner
+function Assert-P43R3aReachedVerification {
+    param([object]$Reached)
+    $gateB=if($null -eq $Reached.GateB){$Reached.GateD}else{$Reached.GateB.Status}
+    $gateC=if($null -eq $Reached.GateC){$Reached.GateD}else{$Reached.GateC.Status}
+    $code=if($null -eq $Reached.GateB){$null}else{$Reached.GateB.Code}
+    Write-Host "Reached GateA=$($Reached.GateA); GateB=$gateB; Code=$code; GateC=$gateC"
+    Require ($Reached.SafetyInvocationCount -eq 0 -and $Reached.ProductionAction -ceq 'NONE') 'Reached verification cannot invoke safety or product actions'
+    if($Reached.GateA -cne 'GATE_A_CROP_PROVENANCE_PASS'){
+        Require ($null -eq $Reached.GateB -and $null -eq $Reached.GateC -and $Reached.GateD -ceq 'NOT_RUN_GATE_A_FAILED' -and $Reached.Verdict -ceq 'P4_3_REDESIGN3A_REJECTED') 'Failed A must leave B/C unrun and reject'
+        Require ($Reached.MappingInvocationCount -eq 0 -and $Reached.QualityInvocationCount -eq 0 -and $Reached.TotalOcrInvocationCount -eq 0) 'Failed A must invoke no OCR'
+    }else{
+        Require ($null -ne $Reached.GateB) 'Passed A requires reached B evidence'
+        foreach($batch in $Reached.GateB.Batches){Write-Host "Mapping PSM$($batch.Psm): status=$($batch.Status) calls=$($batch.InvocationCount) pages=$($batch.Pages.Count) words=$($batch.Words.Count) elapsedMs=$($batch.ElapsedMilliseconds) page/ordinal/CellId=$(@($batch.Pages | ForEach-Object {"$($_.Page)/$($_.CropOrdinal)/$($_.CellId)"}) -join ',')"}
+        if($Reached.GateB.Status -cne 'GATE_B_BATCH_MAPPING_PASS'){
+            Require ($Reached.GateB.Status -cin @('GATE_B_BATCH_MAPPING_FAILED','GATE_B_BATCH_MAPPING_NOT_EVALUATED') -and $null -eq $Reached.GateC -and $Reached.GateD -ceq 'NOT_RUN_GATE_B_FAILED') 'Blocked B must leave C/D unrun'
+            $verdict=if($Reached.GateB.Status -ceq 'GATE_B_BATCH_MAPPING_NOT_EVALUATED'){'PRE_BUSINESS_TRUST_NOT_PROVEN'}else{'P4_3_REDESIGN3A_REJECTED'}
+            Require ($Reached.Verdict -ceq $verdict -and $Reached.QualityInvocationCount -eq 0 -and $Reached.TotalOcrInvocationCount -eq $Reached.MappingInvocationCount) 'Blocked B must preserve factual verdict and no clear OCR'
+        }else{
+            Require ($null -ne $Reached.GateC) 'Passed B requires reached C evidence'
+            foreach($run in $Reached.GateC.Runs){
+                Write-Host "Clear $($run.Fixture) PSM$($run.Psm) repeat$($run.Repetition): status=$($run.Batch.Status) mandatory=$($run.Fidelity.MandatoryMatchCount)/8 all=$($run.Fidelity.AllCellMatchCount)/12 words=$($run.Batch.Words.Count) elapsedMs=$($run.Batch.ElapsedMilliseconds)"
+                foreach($cell in @($run.Fidelity.Cells | Where-Object Status -CNE 'FIDELITY_MATCH')){Write-Host ('Nonmatch: '+($cell | ConvertTo-Json -Depth 8 -Compress))}
+            }
+            Write-Host ('Preparation: '+($Reached.GateC.PreparationCounts | ConvertTo-Json -Compress))
+            Write-Host ('Determinism: '+($Reached.GateC.Determinism | ConvertTo-Json -Compress))
+            Require ($Reached.GateC.Status -ceq 'GATE_C_CLEAR_FIDELITY_FAILED' -and $Reached.GateD -ceq 'NOT_RUN_GATE_C_FAILED' -and $Reached.Verdict -ceq 'P4_3_REDESIGN3A_REJECTED') 'Reached rejection must remain factual and block D'
+            Require ($Reached.MappingInvocationCount -eq 2 -and $Reached.QualityInvocationCount -eq 8 -and $Reached.TotalOcrInvocationCount -eq 10) 'Reached C verification requires two mapping plus eight clear OCR calls'
+            foreach($counts in $Reached.GateC.PreparationCounts){Require ($counts.PdfOpenCount -eq 1 -and $counts.PageReadCount -eq 1 -and $counts.ImageDecodeCount -eq 1 -and $counts.GridBuildCount -eq 1 -and $counts.CropBuildCount -eq 1) 'Reached fixtures must reuse one preparation'}
+            foreach($repeat in $Reached.GateC.Determinism){Require ($repeat.WordsIdentical -and $repeat.TextsIdentical -and $repeat.FidelityIdentical -and $repeat.DiagnosticsIdentical) 'Reached repeated evidence must be identical'}
+        }
+    }
+    Write-Host "AllReached verification assertions PASS; actual acceptance=$($Reached.Verdict); GateD=$($Reached.GateD); mapping=$($Reached.MappingInvocationCount) clear=$($Reached.QualityInvocationCount) safety=$($Reached.SafetyInvocationCount) total=$($Reached.TotalOcrInvocationCount)"
+}
+if($Group -ceq 'ReachedReporting'){
+    # Run the real public CLI with absent supply; helper preparation remains real.
+    $missing=Join-Path ([IO.Path]::GetTempPath()) ('milimap-p43r3a-absent-'+[guid]::NewGuid().ToString('N'))
+    Require (-not (Test-Path -LiteralPath $missing)) 'Absent-supply test must not acquire runtime/model'
+    $cli=Invoke-InternalP43R3aProcess -Executable (Get-Command pwsh).Source -Arguments @('-NoProfile','-File',$PSCommandPath,'-Group','AllReached','-TesseractExecutable',(Join-Path $missing 'tesseract.exe'),'-KoreanModelPath',(Join-Path $missing 'kor.traineddata')) -DeadlineMilliseconds 10000
+    Write-Host $cli.Text
+    Write-Host $cli.ErrorText
+    Require ($cli.ExitCode -eq 0) 'AllReached CLI must report unavailable B and null C without property errors'
+    Require ($cli.Text.Contains('GateB=GATE_B_BATCH_MAPPING_NOT_EVALUATED') -and $cli.Text.Contains('Code=EXECUTABLE_MISSING') -and $cli.Text.Contains('GateC=NOT_RUN_GATE_B_FAILED') -and $cli.Text.Contains('mapping=0 clear=0 safety=0 total=0')) 'CLI must report observed unavailable supply and downstream block, not fabricated acceptance'
+    $blocked=Invoke-P43R3aAllReached ([pscustomobject]@{}) ([pscustomobject]@{}) 'absent-exe' 'absent-model'
+    $rendered=@(Assert-P43R3aReachedVerification $blocked 6>&1) -join "`n"
+    Write-Host $rendered
+    Require ($rendered.Contains('GateB=NOT_RUN_GATE_A_FAILED') -and $rendered.Contains('GateC=NOT_RUN_GATE_A_FAILED') -and $rendered.Contains('actual acceptance=P4_3_REDESIGN3A_REJECTED') -and $rendered.Contains('mapping=0 clear=0 safety=0 total=0')) 'A boundary rendering must accept null B/C and explicitly block every downstream gate'
+    Write-Host 'ReachedReporting PASS: real absent-supply CLI and unproven-preparation rendering; actual OCR calls=0'
+    return
+}
 if($Group -ceq 'AllReached'){
     Require ($Executable -and $ModelPath) 'AllReached requires exact verified runtime and Korean model paths'
     $scratch=Join-Path ([IO.Path]::GetTempPath()) ('milimap-p43r3a-reached-'+[guid]::NewGuid().ToString('N'))
@@ -18,20 +67,7 @@ if($Group -ceq 'AllReached'){
         $gray=Prepare-P43R3aFixture -PdfPath (Join-Path $PSScriptRoot '../p4-3a-ocr/fixtures/gray.pdf') -ArtifactDirectory (Join-Path $scratch 'gray')
         $rgb=Prepare-P43R3aFixture -PdfPath (Join-Path $PSScriptRoot '../p4-3a-ocr/fixtures/rgb.pdf') -ArtifactDirectory (Join-Path $scratch 'rgb')
         $reached=Invoke-P43R3aAllReached $gray $rgb $Executable $ModelPath
-        Write-Host "Reached GateA=$($reached.GateA); GateB=$($reached.GateB.Status)"
-        foreach($batch in $reached.GateB.Batches){Write-Host "Mapping PSM$($batch.Psm): status=$($batch.Status) calls=$($batch.InvocationCount) pages=$($batch.Pages.Count) words=$($batch.Words.Count) elapsedMs=$($batch.ElapsedMilliseconds) page/ordinal/CellId=$(@($batch.Pages | ForEach-Object {"$($_.Page)/$($_.CropOrdinal)/$($_.CellId)"}) -join ',')"}
-        foreach($run in $reached.GateC.Runs){
-            Write-Host "Clear $($run.Fixture) PSM$($run.Psm) repeat$($run.Repetition): status=$($run.Batch.Status) mandatory=$($run.Fidelity.MandatoryMatchCount)/8 all=$($run.Fidelity.AllCellMatchCount)/12 words=$($run.Batch.Words.Count) elapsedMs=$($run.Batch.ElapsedMilliseconds)"
-            foreach($cell in @($run.Fidelity.Cells | Where-Object Status -CNE 'FIDELITY_MATCH')){Write-Host ('Nonmatch: '+($cell | ConvertTo-Json -Depth 8 -Compress))}
-        }
-        Write-Host ('Preparation: '+($reached.GateC.PreparationCounts | ConvertTo-Json -Compress))
-        Write-Host ('Determinism: '+($reached.GateC.Determinism | ConvertTo-Json -Compress))
-        Require ($reached.GateA -ceq 'GATE_A_CROP_PROVENANCE_PASS' -and $reached.GateB.Status -ceq 'GATE_B_BATCH_MAPPING_PASS') 'Reached A/B verification failed'
-        Require ($reached.GateC.Status -ceq 'GATE_C_CLEAR_FIDELITY_FAILED' -and $reached.GateD -ceq 'NOT_RUN_GATE_C_FAILED' -and $reached.Verdict -ceq 'P4_3_REDESIGN3A_REJECTED') 'Reached rejection must remain factual and block D'
-        Require ($reached.MappingInvocationCount -eq 2 -and $reached.QualityInvocationCount -eq 8 -and $reached.TotalOcrInvocationCount -eq 10 -and $reached.SafetyInvocationCount -eq 0) 'Reached verification requires two mapping plus eight clear OCR calls'
-        foreach($counts in $reached.GateC.PreparationCounts){Require ($counts.PdfOpenCount -eq 1 -and $counts.PageReadCount -eq 1 -and $counts.ImageDecodeCount -eq 1 -and $counts.GridBuildCount -eq 1 -and $counts.CropBuildCount -eq 1) 'Reached fixtures must reuse one preparation'}
-        foreach($repeat in $reached.GateC.Determinism){Require ($repeat.WordsIdentical -and $repeat.TextsIdentical -and $repeat.FidelityIdentical -and $repeat.DiagnosticsIdentical) 'Reached repeated evidence must be identical'}
-        Write-Host "AllReached verification assertions PASS; actual acceptance=$($reached.Verdict); GateD=$($reached.GateD); mapping=2 clear=8 safety=0 total=10"
+        Assert-P43R3aReachedVerification $reached
     }finally{[IO.Directory]::Delete($scratch,$true)}
     return
 }
@@ -133,6 +169,9 @@ if($Group -ceq 'ClearFidelity'){
         for($i=0;$i -lt 12;$i++){Require ([object]::ReferenceEquals(@($Crops)[$i],$expectedCrops[$i])) 'Matrix retains every prepared crop object in order'}
         Require ($Psm -eq $(if($mapping){if($script:reachedMappingCalls -eq 0){6}else{11}}elseif($script:matrixCalls%4 -lt 2){6}else{11})) 'Fixed mapping pair then PSM6 twice and PSM11 twice'
         if($mapping){$script:reachedMappingCalls++}else{$script:matrixCalls++}
+        if($mapping -and $script:matrixMode -ceq 'mapping-failed'){
+            return [pscustomobject]@{Status='FAILED';Code='BATCH_PAGE_MAPPING_INVALID';InvocationCount=1;Psm=$Psm;EngineVersion='5.5.3';EngineBuild='tesseract v5.5.3.20260724';ModelSha256='6b85e11d9bbf07863b97b3523b1b112844c43e713df8b66418a081fd1060b3b2';Pages=@();Words=@();Diagnostics=@([pscustomobject]@{Code='BATCH_PAGE_MAPPING_INVALID'});ElapsedMilliseconds=1;ProductionAction='NONE'}
+        }
         if($script:matrixMode -ceq 'unavailable-supply'){
             return [pscustomobject]@{Status='FAILED';Code='MODEL_MISSING';InvocationCount=0;Psm=$Psm;EngineVersion=$null;EngineBuild=$null;ModelSha256=$null;Pages=@();Words=@();Diagnostics=@([pscustomobject]@{Code='MODEL_MISSING'});ElapsedMilliseconds=0;ProductionAction='NONE'}
         }
@@ -175,6 +214,8 @@ if($Group -ceq 'ClearFidelity'){
         Require ($reached.GateC.Status -ceq 'GATE_C_CLEAR_FIDELITY_FAILED' -and $reached.GateD -ceq 'NOT_RUN_GATE_C_FAILED' -and $reached.Verdict -ceq 'P4_3_REDESIGN3A_REJECTED') 'Reached mandatory PARTIAL must reject and block D'
         Require ($reached.MappingInvocationCount -eq 2 -and $reached.QualityInvocationCount -eq 8 -and $reached.TotalOcrInvocationCount -eq 10 -and $script:matrixCalls -eq 8) 'Reached mapping two plus clear eight, no extra quality or degraded calls'
         Require ($reached.SafetyInvocationCount -eq 0 -and $reached.ProductionAction -ceq 'NONE') 'Rejected reached path must not invoke safety or business OCR'
+        $rendered=@(Assert-P43R3aReachedVerification $reached 6>&1) -join "`n"
+        Require ($rendered.Contains('GateC=GATE_C_CLEAR_FIDELITY_FAILED') -and $rendered.Contains('actual acceptance=P4_3_REDESIGN3A_REJECTED') -and $rendered.Contains('mapping=2 clear=8 safety=0 total=10')) 'Reached-C reporting preserves the rejection and measured-matrix counters'
         Set-Item Function:Invoke-P43R3aGateA $originalGateA
         $blocked=Invoke-P43R3aAllReached $script:testGray $script:testRgb 'test-exe' 'test-model'
         Require ($blocked.GateA -ceq 'GATE_A_CROP_PROVENANCE_FAILED' -and $null -eq $blocked.GateB -and $null -eq $blocked.GateC -and $blocked.GateD -ceq 'NOT_RUN_GATE_A_FAILED' -and $blocked.TotalOcrInvocationCount -eq 0) 'Unproven preparation blocks every OCR invocation'
@@ -182,6 +223,14 @@ if($Group -ceq 'ClearFidelity'){
         $script:matrixMode='unavailable-supply';$script:reachedMappingCalls=0;$script:matrixCalls=0
         $blocked=Invoke-P43R3aAllReached $script:testGray $script:testRgb 'test-exe' 'test-model'
         Require ($blocked.GateB.Status -ceq 'GATE_B_BATCH_MAPPING_NOT_EVALUATED' -and $null -eq $blocked.GateC -and $blocked.GateD -ceq 'NOT_RUN_GATE_B_FAILED' -and $blocked.Verdict -ceq 'PRE_BUSINESS_TRUST_NOT_PROVEN' -and $blocked.TotalOcrInvocationCount -eq 0) 'Unavailable supply cannot fabricate acceptance or run clear quality'
+        $rendered=@(Assert-P43R3aReachedVerification $blocked 6>&1) -join "`n"
+        Write-Host $rendered
+        Require ($rendered.Contains('Code=MODEL_MISSING') -and $rendered.Contains('GateC=NOT_RUN_GATE_B_FAILED') -and $rendered.Contains('actual acceptance=PRE_BUSINESS_TRUST_NOT_PROVEN') -and $rendered.Contains('mapping=0 clear=0 safety=0 total=0')) 'Unavailable model rendering must preserve unobserved evidence and null C'
+        $script:matrixMode='mapping-failed';$script:reachedMappingCalls=0;$script:matrixCalls=0
+        $blocked=Invoke-P43R3aAllReached $script:testGray $script:testRgb 'test-exe' 'test-model'
+        $rendered=@(Assert-P43R3aReachedVerification $blocked 6>&1) -join "`n"
+        Write-Host $rendered
+        Require ($rendered.Contains('GateB=GATE_B_BATCH_MAPPING_FAILED') -and $rendered.Contains('Code=BATCH_PAGE_MAPPING_INVALID') -and $rendered.Contains('GateC=NOT_RUN_GATE_B_FAILED') -and $rendered.Contains('actual acceptance=P4_3_REDESIGN3A_REJECTED') -and $rendered.Contains('mapping=2 clear=0 safety=0 total=2') -and $script:matrixCalls -eq 0) 'Observed mapping failure rendering rejects with mapping-only counters and null C'
         $script:reachedMapping=$false
         $script:matrixMode='unavailable-supply';$script:matrixCalls=0
         $unavailable=Invoke-P43R3aGateC $script:testGray $script:testRgb 'test-exe' 'test-model'

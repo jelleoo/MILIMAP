@@ -84,6 +84,17 @@ Issue #117: isolated .NET 8 / locked PdfPig 0.1.16(승인된 Apache-2.0 dependen
 - Product dependency: `NOT_APPROVED`; P4-3B: `BLOCKED`; P4-3 / Phase 4: `NOT COMPLETE`. 다음 단계는 별도 승인에 따른 OCR fallback design 재검토이며 추가 실험/구현은 시작하지 않는다.
 - [P4-3A2 rejected handover](handover/2026-10-05-phase4-p4-3a2-overlap-safety-evaluation.md)
 
+## Phase 4 P4-3 Redesign 2 — Structural Trust Evaluation
+
+- Human-approved final verdict: `P4_3_REDESIGN2_REJECTED`; reason: `GATE_A2_TEXT_FIDELITY_REJECTED`.
+- Gate A1: `GATE_A1_STRUCTURAL_PASS`, fixed same-cell overlap ratio `0.25`. Clear Gray/RGB PSM11 각각 40 words / structural COMPLETE / 2 technical rows이며 2회 반복 동일하다.
+- Gate A2: Gray/RGB 모두 mandatory `6/8`, all-cell `8/12` MATCH. 필수 header `주소`가 `즈 ㅅ\n구수`, `전화번호`가 `전 화 번 호`로 재구성되어 fidelity에서 거절됐다. Auxiliary mismatch는 독립 rejection 원인이 아니다.
+- Confidence는 `DIAGNOSTIC_ONLY_V1`이며 낮은 confidence 자체가 rejection 원인이 아니다. Physical provenance와 deterministic reconstruction만으로 OCR text fidelity는 입증되지 않았다.
+- Gates B/C/D/E 및 Windows/Ubuntu determinism: `NOT_RUN_GATE_A2_FAILED`. Task 3~5는 실행하지 않았다.
+- Product dependency: `NOT_APPROVED`; P4-3B: `BLOCKED`; `PRE_BUSINESS_TRUST_PASS = NO`; `ProductionAction=NONE`. P4-3 / Phase 4는 `NOT COMPLETE`다.
+- Historical P4-3A / P4-3A2 rejection은 별도 cycle로 그대로 유지한다. 다음 단계는 **separately approved OCR strategy redesign**이며 closeout에서 새 전략을 선택하거나 구현하지 않는다.
+- [Redesign 2 rejection handover](handover/2026-10-06-phase4-p4-3-redesign2-structural-trust-evaluation.md)
+
 ## Phase 2 closeout (2026-09-26)
 
 Phase 2 Benefit Verification Core의 scoped HTML, MMA JSONP, XLSX 경로와 fixed representative closeout **evidence matrix**를 완료했다(Issue #92 / PR #93 merged). current-code fixed-12 live replay는 replayable raw capture가 없어 `NOT_RUN_NO_REPLAYABLE_RAW_CAPTURE`이며, Phase 2는 현재 구현된 source-family 경계 안에서 `COMPLETE`다.

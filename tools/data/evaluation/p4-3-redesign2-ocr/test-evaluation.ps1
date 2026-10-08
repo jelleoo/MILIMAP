@@ -76,6 +76,17 @@ if($Group -eq 'TextFidelity'){
     foreach($case in @(@{Code='GATE_A2_TEXT_FIDELITY_PASS';Want='PRE_BUSINESS_TRUST_PASS'},@{Code='GATE_A2_TEXT_FIDELITY_REJECTED';Want='P4_3_REDESIGN2_REJECTED'},@{Code='GATE_A2_TEXT_FIDELITY_NOT_EVALUATED';Want='PRE_BUSINESS_TRUST_NOT_PROVEN'})){
         Require ((Get-P43R2PreBusinessTrustDecision -GateA1 $a1 -GateA2 ([pscustomobject]@{Code=$case.Code})).Verdict -ceq $case.Want) 'Pre-business trust decision incorrect'
     }
+    # Rejection closeout: exercise the existing decision, not a new final-gate implementation.
+    $rejectedDecision=Get-P43R2PreBusinessTrustDecision -GateA1 $a1 -GateA2 ([pscustomobject]@{Code='GATE_A2_TEXT_FIDELITY_REJECTED'})
+    Require ($rejectedDecision.Verdict -ceq 'P4_3_REDESIGN2_REJECTED' -and $rejectedDecision.Verdict -cne 'PRE_BUSINESS_TRUST_PASS' -and $rejectedDecision.Reason -ceq 'GATE_A2_TEXT_FIDELITY_REJECTED') 'A2 rejection lost in closeout'
+    Require ($rejectedDecision.Task3 -ceq 'HUMAN_REVIEW_STOP' -and $rejectedDecision.ProductDependency -ceq 'NOT_APPROVED' -and $rejectedDecision.P43B -ceq 'BLOCKED' -and $rejectedDecision.ProductionAction -ceq 'NONE') 'Rejected candidate advanced or approved dependency'
+    foreach($gateName in @('GateB','GateC','GateD','GateE','WindowsUbuntuDeterminism')){
+        $property=$rejectedDecision.PSObject.Properties[$gateName]
+        Require ($null -eq $property -or $property.Value -ceq 'NOT_RUN_GATE_A2_FAILED') 'Skipped gate fabricated as evaluated'
+    }
+    $confidenceOnly=Get-P43R2PreBusinessTrustDecision -GateA1 $a1 -GateA2 $exact
+    Require ($confidenceOnly.Verdict -ceq 'PRE_BUSINESS_TRUST_PASS') 'Low confidence alone became rejection authority'
+    Write-Host 'Rejection-specific assertions PASS: A1 PASS + A2 REJECTED; no downstream PASS/dependency approval/production action'
     Require ((Get-P43R2PreBusinessTrustDecision -GateA1 ([pscustomobject]@{Verdict='P4_3_REDESIGN2_REJECTED'}) -GateA2 ([pscustomobject]@{Code='GATE_A2_TEXT_FIDELITY_PASS'})).Verdict -cne 'PRE_BUSINESS_TRUST_PASS') 'A2 rescues failed A1'
     if($TesseractExecutable -or $KoreanModelPath){
         $gate=Invoke-P43R2GateA2 -Executable $TesseractExecutable -ModelPath $KoreanModelPath

@@ -106,18 +106,23 @@ if($Group -ceq 'ClearFidelity'){
         for($i=0;$i -lt 12;$i++){Require ([object]::ReferenceEquals(@($Crops)[$i],$expectedCrops[$i])) 'Matrix retains every prepared crop object in order'}
         Require ($Psm -eq $(if($script:matrixCalls%4 -lt 2){6}else{11})) 'Fixed PSM6 twice then PSM11 twice'
         $script:matrixCalls++
+        if($script:matrixMode -ceq 'unavailable-supply'){
+            return [pscustomobject]@{Status='FAILED';Code='MODEL_MISSING';InvocationCount=0;Psm=$Psm;EngineVersion=$null;EngineBuild=$null;ModelSha256=$null;Pages=@();Words=@();Diagnostics=@([pscustomobject]@{Code='MODEL_MISSING'});ElapsedMilliseconds=0;ProductionAction='NONE'}
+        }
         $words=@(for($i=0;$i -lt 12;$i++){
             $word=New-TestWord 0 0 $authored[$i]
             $word.Page=$i+1;$word.CropOrdinal=$i+1;$word.CellId=[string]($i+1)
             if($i -eq 0 -and $Psm -eq 11 -and $script:matrixMode -ceq 'mismatch'){$word.Text='업체'}
             if($i -eq 5 -and $script:matrixCalls -eq 2 -and $script:matrixMode -ceq 'nondeterministic'){$word.Text='다른 주소'}
             $word
+            if($i -eq 0 -and $script:matrixMode -ceq 'mandatory-partial'){$duplicate=$word.PSObject.Copy();$duplicate.Word=2;$duplicate}
         })
         $pages=@(for($i=1;$i -le 12;$i++){[pscustomobject]@{Page=$i;CropOrdinal=$i;CellId=[string]$i;Left=0;Top=0;Width=400;Height=150;WordCount=1}})
+        if($script:matrixMode -ceq 'mandatory-partial'){$pages[0].WordCount=2}
         [pscustomobject]@{Status='COMPLETE';Code=$null;InvocationCount=1;Psm=$Psm;EngineVersion='5.5.3';EngineBuild='tesseract v5.5.3.20260724';ModelSha256='6b85e11d9bbf07863b97b3523b1b112844c43e713df8b66418a081fd1060b3b2';Pages=$pages;Words=$words;Diagnostics=@();ElapsedMilliseconds=$script:matrixCalls;ProductionAction='NONE'}
     }
     try{
-        foreach($mode in @('exact','mismatch','nondeterministic')){
+        foreach($mode in @('exact','mismatch','nondeterministic','mandatory-partial')){
             $script:matrixMode=$mode;$script:matrixCalls=0
             $controlled=Invoke-P43R3aGateC $script:testGray $script:testRgb 'test-exe' 'test-model'
             Require ($controlled.Runs.Count -eq 8 -and $controlled.QualityInvocationCount -eq 8 -and $script:matrixCalls -eq 8) 'No retry or extra quality calls'
@@ -127,10 +132,17 @@ if($Group -ceq 'ClearFidelity'){
             }elseif($mode -ceq 'mismatch'){
                 Require ($controlled.Status -ceq 'GATE_C_CLEAR_FIDELITY_FAILED' -and $controlled.Verdict -ceq 'P4_3_REDESIGN3A_REJECTED' -and $controlled.Task4 -ceq 'BLOCKED') 'Exact PSM6 cannot rescue wrong PSM11'
                 Require (@($controlled.Runs | Where-Object {$_.Psm -eq 6 -and $_.Fidelity.MandatoryMatchCount -eq 8}).Count -eq 4 -and @($controlled.Runs | Where-Object {$_.Psm -eq 11 -and $_.Fidelity.MandatoryMatchCount -eq 7}).Count -eq 4) 'Every repetition independently evaluated'
-            }else{
+            }elseif($mode -ceq 'nondeterministic'){
                 Require ($controlled.Status -ceq 'GATE_C_CLEAR_FIDELITY_FAILED' -and -not $controlled.Determinism[0].WordsIdentical -and -not $controlled.Determinism[0].TextsIdentical -and -not $controlled.Determinism[0].FidelityIdentical) 'Auxiliary-only repeat change still fails determinism'
+            }else{
+                Require (@($controlled.Runs | Where-Object {$_.Batch.Status -cne 'COMPLETE' -or $_.Fidelity.Status -cne 'NOT_EVALUATED' -or $_.Fidelity.MandatoryMatchCount -ne 7 -or $_.CellTexts[0].Status -cne 'PARTIAL'}).Count -eq 0) 'Observed mandatory incompleteness with eight complete batches'
+                Require (@($controlled.Runs | ForEach-Object {$_.Fidelity.Cells} | Where-Object Status -CEQ 'FIDELITY_MISMATCH').Count -eq 0) 'Partial-only regression has no evaluated text mismatch'
+                Require ($controlled.Status -ceq 'GATE_C_CLEAR_FIDELITY_FAILED' -and $controlled.Verdict -ceq 'P4_3_REDESIGN3A_REJECTED' -and $controlled.Task4 -ceq 'BLOCKED') 'Completed matrix with mandatory PARTIAL must reject candidate'
             }
         }
+        $script:matrixMode='unavailable-supply';$script:matrixCalls=0
+        $unavailable=Invoke-P43R3aGateC $script:testGray $script:testRgb 'test-exe' 'test-model'
+        Require ($unavailable.Status -ceq 'GATE_C_CLEAR_FIDELITY_NOT_EVALUATED' -and $unavailable.Verdict -ceq 'PRE_BUSINESS_TRUST_NOT_PROVEN' -and $unavailable.Code -ceq 'MODEL_MISSING' -and $unavailable.QualityInvocationCount -eq 0 -and $unavailable.Runs.Count -eq 0 -and $script:matrixCalls -eq 1) 'Unavailable supply without observed batch evidence remains NOT_EVALUATED'
     }finally{Set-Item Function:Invoke-P43R3aGateA $originalGateA;Set-Item Function:Invoke-P43R3aTesseractBatch $originalBatch}
     Write-Host 'ClearFidelity synthetic reconstruction/authority/fidelity assertions PASS; actual quality OCR calls=0'
     if($RunRealGateC){

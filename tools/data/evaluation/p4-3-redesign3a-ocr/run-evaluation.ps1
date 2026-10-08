@@ -265,7 +265,7 @@ function Invoke-P43R3aGateC {
             $result.Determinism+=[pscustomobject]@{Fixture=$pair.Name;Psm=$psm;WordsIdentical=$words;TextsIdentical=$texts;FidelityIdentical=$fidelity;DiagnosticsIdentical=$diagnostics}
         }
     }
-    if(@($result.Runs | Where-Object {$_.Batch.Status -cne 'COMPLETE' -or $_.Fidelity.Status -ceq 'FAILED'}).Count -gt 0 -or @($result.Determinism | Where-Object {-not $_.WordsIdentical -or -not $_.TextsIdentical -or -not $_.FidelityIdentical -or -not $_.DiagnosticsIdentical}).Count -gt 0){
+    if(@($result.Runs | Where-Object {$_.Batch.Status -cne 'COMPLETE' -or $_.Fidelity.Status -ceq 'FAILED' -or $_.Fidelity.MandatoryMatchCount -ne 8}).Count -gt 0 -or @($result.Determinism | Where-Object {-not $_.WordsIdentical -or -not $_.TextsIdentical -or -not $_.FidelityIdentical -or -not $_.DiagnosticsIdentical}).Count -gt 0){
         $result.Status='GATE_C_CLEAR_FIDELITY_FAILED';$result.Verdict='P4_3_REDESIGN3A_REJECTED'
     }elseif(@($result.Runs | Where-Object {$_.Fidelity.Status -cne 'PASS' -or $_.Fidelity.MandatoryMatchCount -ne 8}).Count -eq 0){
         $result.Status='GATE_C_CLEAR_FIDELITY_PASS';$result.Verdict='GATE_C_CLEAR_FIDELITY_PASS';$result.Task4='READY'

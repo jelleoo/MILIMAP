@@ -34,8 +34,8 @@ crop hashes, 12 crops, and PDF open/page read/decode/grid/crop build counts of o
 Synthetic byte controls prove orientation and exclusive ends; negative controls
 cover invalid coordinates, count/identity collisions, source hash and preparation
 tampering. Artifacts stay temporary; no new fixture/dependency is introduced.
-Task 3 adds crop-local fidelity; consensus and the final technical verdict remain
-unreached after the measured Gate C failure below.
+Task 3 adds crop-local fidelity; the final verdict is rejection at Gate C.
+Consensus remains unreached after that measured failure.
 Gate A failure blocks later evaluation.
 
 Measured Task 1 (2026-10-09): Gray and RGB each
@@ -149,3 +149,129 @@ Synthetic controls and the measured-decision assertions PASS; the actual Gate C
 is FAILED. First failing reached gate is C; Task 4 remains BLOCKED and
 Gate D is `NOT_RUN_GATE_C_FAILED`.
 Product dependency remains NOT_APPROVED, P4-3B BLOCKED, ProductionAction NONE.
+
+## Task 5 final reached verification (2026-10-09)
+
+Final first-cycle verdict: `P4_3_REDESIGN3A_REJECTED`, first failing reached gate
+`GATE_C_CLEAR_FIDELITY_FAILED`. `HUMAN_REVIEW_STOP` applies. Task 4 never started;
+the final verification repeats only reached A/B/C and asserts blocked D. Executable
+and synthetic assertions PASS describes verification correctness, not candidate
+acceptance. No tuning or rescue experiment followed.
+
+Branch: `codex/phase4-p4-3-redesign3a-cell-crop-consensus`.
+Worktree: `C:/Users/PC/AndroidStudioProjects/MILIMAP/.worktrees/phase4-p4-3-redesign3a-ocr`.
+Clean code HEAD at final measurement:
+`c0d19e5e2f84f306b36368e485a22d6fd47a4083`. The subsequent result-recording commit
+changes documentation only; these measurements belong to that code HEAD.
+Task commits: 1 `befbd07`, 2 `24d1885`, 3 `5561a1b` plus fix `d3dfea7`,
+4 `NOT_RUN_GATE_C_FAILED`, 5 verification wrapper `c0d19e5` plus this result record.
+
+Exact identities were rechecked before final verification:
+
+| Artifact | SHA256 |
+| --- | --- |
+| Retained installer | `bee9e3434bd94fd65387d9be28cd467a41f61b1275383b55b0f59a1331270ae4` |
+| tesseract.exe | `c66f0f12ed76f6aa455dac97684bbc86756d6a732380bee09122454cfda3f420` |
+| libtesseract-5.dll | `54d54528b453ce3a5ba79487687f8df43e7b194b9ea97beba74200453fe1fb46` |
+| libleptonica-6.dll | `1869b44e3d46fd830620b042477e5d60a950779582f38f60291547efb27792f1` |
+| official tessdata_fast/kor.traineddata | `6b85e11d9bbf07863b97b3523b1b112844c43e713df8b66418a081fd1060b3b2` |
+
+Runtime observed `tesseract v5.5.3.20260724`, engine 5.5.3 / Leptonica 1.87.0.
+Model source commit is `87416418657359cb625c412a48b6e1d6d41c29bd`.
+Fixed language `kor`, OEM 1, PSM 6/11, DPI 300, overlap ratio 0.25,
+`DIAGNOSTIC_ONLY_V1` and `TEXT_FIDELITY_NORMALIZATION_V1` remain unchanged.
+Executable came from the dedicated supply's `runtime/tesseract.exe`; model came
+from sibling `tessdata/kor.traineddata`, not `runtime/tessdata`.
+
+```powershell
+pwsh -NoProfile -File tools/data/evaluation/p4-3-redesign3a-ocr/test-evaluation.ps1 -Group AllReached -TesseractExecutable <absolute-exe> -KoreanModelPath <absolute-kor.traineddata>
+```
+
+`AllReached` is a reached-rejection verification interface, not a Task 4 runner.
+It prepares clear Gray/RGB once each, validates Gate A, runs the Gray Gate B pair,
+then passes the same original preparations/crops into Gate C. Earlier authority
+or mapping failure blocks the clear matrix. It never invokes consensus or later
+gates. The approved CLI names are aliases of the existing Executable/ModelPath.
+
+Final actual Gate A: Gray/RGB `GATE_A_CROP_PROVENANCE_PASS`.
+Final actual Gate B: `GATE_B_BATCH_MAPPING_PASS`; Gray PSM6/11 each one invocation,
+12 pages exactly mapped page/ordinal/CellId 1..12, words 41/40, elapsed 193/206 ms.
+Final actual Gate C: `GATE_C_CLEAR_FIDELITY_FAILED`:
+
+| Fixture | PSM | Repeat 1 mandatory / all | Repeat 2 mandatory / all | Words per batch | Final verification elapsed ms (1, 2) |
+| --- | --- | --- | --- | --- | --- |
+| Gray | 6 | 5/8 / 7/12 | 5/8 / 7/12 | 41 | 204, 190 |
+| Gray | 11 | 6/8 / 8/12 | 6/8 / 8/12 | 40 | 206, 205 |
+| RGB | 6 | 5/8 / 7/12 | 5/8 / 7/12 | 41 | 237, 238 |
+| RGB | 11 | 6/8 / 8/12 | 6/8 / 8/12 | 40 | 237, 253 |
+
+All eight batches are COMPLETE for mapping. Every fixture/PSM repetition has
+identical mapped words, reconstructed text, fidelity and diagnostics. All 36
+nonmatch observations, including every mandatory mismatch/NOT_EVALUATED, exactly
+repeat the preceding cell table; normalized expected/actual equal those literal
+values (LF preserved). PSM6 per run: mandatory 5 matches, 1 mismatch, 2 not evaluated;
+all cells 7 matches, 3 mismatches, 2 not evaluated. PSM11 per run: mandatory 6 matches,
+2 mismatches; all cells 8 matches, 4 mismatches. High confidence cannot rescue
+cell 3 `전화번호` -> `전 화 번 호` in both PSMs. Cell 2 has different reconstructed
+text and PSM6 is untrusted; cell 9 is PSM6 untrusted while PSM11 matches authored
+text. These are Gate C diagnostic observations, not evaluated consensus states.
+
+Gate D clear consensus, mild-degraded safety and original degraded Gray/RGB:
+`NOT_RUN_GATE_C_FAILED`. Per-cell `CELL_DISAGREEMENT` / `FALSE_CONSENSUS` classifications
+are `NOT_EVALUATED`; no Gate D PASS or safe-consensus claim exists. Whether cropping
+recovers the historical empty degraded output is UNKNOWN because degraded OCR
+was not run. Gates E-H and Windows/Ubuntu semantic determinism remain
+`NOT_RUN_GATE_C_FAILED`, with no business lookup OCR path implemented.
+
+Efficiency counts distinguish original measurement from authorized final verification:
+
+| Actual OCR processes | First measurement (Tasks 2/3) | Task 5 final verification | Overall cycle |
+| --- | --- | --- | --- |
+| Gray mapping pair (B) | 2 | 2 | 4 |
+| Clear Gray/RGB quality matrix (C) | 8 | 8 | 16 |
+| Mild/original degraded safety (D) | 0 | 0 | 0 |
+| Total OCR | 10 | 10 | 20 |
+
+The clear target is exactly 8 **per matrix**; overall clear 16 includes the
+separately authorized final verification. Task 5 has no duplicate actual clear
+matrix outside AllReached. Each final Gray/RGB preparation has PDF open/page read/
+decode/grid/crop-build `1/1/1/1/1`, 12 crops; the same Gray crops serve B and C.
+Separate CropProvenance controls create their own preparations with zero OCR.
+Synthetic process seams launch zero actual OCR. Bounded version probes are identity
+checks, not OCR: 10 probes accompany the 10 final OCR batches, plus one standalone
+`--version` recheck. No per-cell OCR fallback or per-business OCR exists.
+
+Verification at the clean measured code HEAD:
+
+- Historical helper `dotnet restore --locked-mode` and Release build `--no-restore`
+  PASS, zero warnings/errors; shared SDK used through process-local PATH.
+- Historical P4-3A / P4-3A2 / Redesign 2 `-Group Contract` PASS. Initial Redesign 2
+  invocation omitted its required model path and failed that prerequisite; corrected
+  exact-model invocation PASS, no actual OCR and no historical edits.
+- CropProvenance, BatchMapping synthetic, ClearFidelity synthetic and actual
+  AllReached verification PASS; actual C acceptance FAILED.
+- Current sorted `tools/data/test-*.ps1` suite run once with failure propagation:
+  **62/62 PASS**. Complete commands/output retained in ignored task-5-report.md.
+- `git diff --check` PASS; historical A/A2/Redesign2 and protected pdf-native/lib/
+  canonical/seed/apps diff and untracked counts all zero against origin/dev.
+
+Not run: ConsensusSafety/Task 4 and degraded OCR (Gate C failure); later Gates E-H,
+product business isolation, multipage and Windows/Ubuntu semantic validation;
+Android `NOT_RUN_EVALUATION_ONLY` because product/protected paths did not change;
+CI, push, PR and merge. No preprocessing, additional engine/model or parameter search.
+
+Cleanup completed after evidence preservation: exact dedicated directory
+`C:/Users/PC/AppData/Local/Temp/milimap-p43r3a-supply-a8d080c784684f9c8a3d15571afa0359`
+was resolved and validated (61 entries, reparse points 0), then removed with native
+PowerShell `Remove-Item -LiteralPath`. Installer, portable runtime and model are
+absent; a future authorized measurement requires reacquisition. Invocation-owned
+crop/list/reached scratch cleaned in finally paths; final R3A temporary-directory
+inventory is zero. No broad temporary glob was deleted. Shared SDK remains present
+and unrelated local tools were untouched. Git status contains no runtime/model,
+images or raw TSV/list/probe outputs; no such artifacts are committed.
+
+Remaining risks: synthetic controls do not measure population accuracy, live-source
+validation or current-benefit truth; ruled-grid limitations persist; correlated
+same-engine errors and degraded crop behavior remain unevaluated after rejection.
+Product dependency `NOT_APPROVED`; P4-3B `BLOCKED`; `ProductionAction=NONE`;
+P4-3 / Phase 4 `NOT COMPLETE`. Stop for human review; no subsequent quality work.

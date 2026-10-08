@@ -2,6 +2,33 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference='Stop'
 . (Join-Path $PSScriptRoot 'invoke-tesseract-eval.ps1')
 
+function Get-P43R2ClearFixtureGroundTruth {
+    # Evaluation-only copy of pre-existing authored literals, never OCR-derived.
+    $root=Join-Path $PSScriptRoot '../p4-3a-ocr/fixtures'
+    $generatorBlob='6231ed473349063ce3b0d12fc7b2cff0bef1d114'
+    $manifestBlob='cde2a581ec2c4a1fb26481992908b5dcab2740ac'
+    foreach($authority in @(@{File='generate-fixtures.py';Blob=$generatorBlob},@{File='manifest.json';Blob=$manifestBlob})){
+        $blob=& git hash-object -- (Join-Path $root $authority.File)
+        if($LASTEXITCODE -ne 0 -or $blob -cne $authority.Blob){throw 'R2_GROUND_TRUTH_IDENTITY_MISMATCH'}
+    }
+    $hashes=@{ 'gray.pdf'='07182f75f5305bb4611458aeaea880aa57fa78d120030b0f9b6446bd56e5ec17'; 'rgb.pdf'='415645682f805899bdc0852feefec37ae596a3821b97a7ab344fc7d267c61c24' }
+    foreach($name in $hashes.Keys){
+        if((Get-FileHash -LiteralPath (Join-Path $root $name)).Hash.ToLowerInvariant() -cne $hashes[$name]){throw 'R2_GROUND_TRUTH_FIXTURE_MISMATCH'}
+    }
+    $text=@('업체명','주소','전화번호','혜택','가상 가람 식당','가상시 가람로 12','031-123-4567','시험 할인 10%','가상 누리 식당','가상시 누리로 23','031-234-5678',"시험 할인 20%`n방문 시 적용")
+    $cells=@(for($i=0;$i -lt 12;$i++){
+        $row=[int][Math]::Floor($i/4)+1;$column=$i%4+1
+        $role=if($row -eq 1){'HEADER'}elseif($column -eq 1){'BUSINESS_NAME'}elseif($column -eq 4){'BENEFIT'}else{'AUXILIARY'}
+        [pscustomobject]@{CellId="cell$($i+1)";Row=$row;Column=$column;FieldRole=$role;ExpectedText=$text[$i]}
+    })
+    return [pscustomobject]@{Policy='TEXT_FIDELITY_GROUND_TRUTH_V1';GeneratorBlob=$generatorBlob;ManifestBlob=$manifestBlob;FixtureHashes=$hashes;Cells=$cells}
+}
+
+function Normalize-P43R2FidelityText {
+    param([string]$Text)
+    return [regex]::Replace($Text.Replace("`r`n","`n").Trim(),'[^\S\r\n]+',' ')
+}
+
 function Get-P43R2CellMembership {
     param([object[]]$Cells,[object]$Word)
     $contained=@();$intersected=@()

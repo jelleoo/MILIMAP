@@ -1,4 +1,4 @@
-param([ValidateSet('Contract','StructuralTrust','Isolation','Safety','DeterminismContract','All')][string]$Group='Contract',
+param([ValidateSet('Contract','StructuralTrust','TextFidelity','Isolation','Safety','DeterminismContract','All')][string]$Group='Contract',
     [string]$TesseractExecutable,[string]$KoreanModelPath)
 Set-StrictMode -Version Latest
 $ErrorActionPreference='Stop'
@@ -12,6 +12,28 @@ function Assert-FrozenPaths {
 Assert-FrozenPaths
 Require (Test-Path (Join-Path $PSScriptRoot 'invoke-tesseract-eval.ps1')) 'Missing Redesign 2 runtime boundary'
 . (Join-Path $PSScriptRoot 'invoke-tesseract-eval.ps1')
+if($Group -eq 'TextFidelity'){
+    . (Join-Path $PSScriptRoot 'run-evaluation.ps1')
+    $truth=Get-P43R2ClearFixtureGroundTruth
+    Require ($truth.Policy -ceq 'TEXT_FIDELITY_GROUND_TRUTH_V1' -and $truth.Cells.Count -eq 12) 'Ground truth contract missing'
+    Require ($truth.GeneratorBlob -ceq '6231ed473349063ce3b0d12fc7b2cff0bef1d114' -and $truth.ManifestBlob -ceq 'cde2a581ec2c4a1fb26481992908b5dcab2740ac') 'Historical authority changed'
+    $literal=@('업체명','주소','전화번호','혜택','가상 가람 식당','가상시 가람로 12','031-123-4567','시험 할인 10%','가상 누리 식당','가상시 누리로 23','031-234-5678',"시험 할인 20%`n방문 시 적용")
+    for($i=0;$i -lt 12;$i++){
+        Require ($truth.Cells[$i].CellId -ceq "cell$($i+1)" -and $truth.Cells[$i].ExpectedText -ceq $literal[$i] -and $truth.Cells[$i].Row -eq ([Math]::Floor($i/4)+1) -and $truth.Cells[$i].Column -eq ($i%4+1)) 'Authored table changed'
+    }
+    foreach($role in @(@{Name='HEADER';Count=4},@{Name='BUSINESS_NAME';Count=2},@{Name='BENEFIT';Count=2},@{Name='AUXILIARY';Count=4})){
+        Require (@($truth.Cells | Where-Object FieldRole -CEQ $role.Name).Count -eq $role.Count) 'Mandatory role coverage changed'
+    }
+    Require ((Normalize-P43R2FidelityText "  시험`t  할인 20%`r`n방문  시 적용  ") -ceq "시험 할인 20%`n방문 시 적용") 'Whitespace normalization incorrect'
+    foreach($pair in @(@('업체명','업쳬명'),@('10%','10'),@('031-123-4567','031-123-4568'),@('가상','가샹'))){
+        Require ((Normalize-P43R2FidelityText $pair[0]) -cne (Normalize-P43R2FidelityText $pair[1])) 'Material character silently repaired'
+    }
+    Require ((Get-Command Normalize-P43R2FidelityText).Parameters.Count -eq 1) 'Fuzzy normalization exposed'
+    Require (-not (Get-Command Resolve-P43R2OcrCells).Parameters.ContainsKey('ExpectedText')) 'Ground truth leaked into resolver'
+    Assert-FrozenPaths
+    Write-Host 'Redesign2 TextFidelity contract PASS'
+    return
+}
 if($Group -eq 'StructuralTrust'){
     Require (Test-Path (Join-Path $PSScriptRoot 'run-evaluation.ps1')) 'Missing Redesign 2 structural trust functions'
     . (Join-Path $PSScriptRoot 'run-evaluation.ps1')

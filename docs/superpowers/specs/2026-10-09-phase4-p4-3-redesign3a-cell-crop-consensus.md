@@ -1,7 +1,7 @@
 # Phase 4 P4-3 — OCR Redesign 3A: Proven Cell-Crop OCR + Dual-PSM Consensus
 
-Date: 2026-10-09  
-Status: DESIGN APPROVED IN CHAT / WRITTEN SPEC REVIEW REQUIRED  
+Date: 2026-10-09<br>
+Status: DESIGN APPROVED IN CHAT / WRITTEN SPEC REVIEW REQUIRED<br>
 Base: `dev` at `4b57a4fbf45b730033f63d7de90d7030791b8c79`
 
 ## 1. Purpose
@@ -66,15 +66,12 @@ Redesign 3A keeps the exact previously evaluated candidate:
 - official `tessdata_fast/kor.traineddata`;
 - model source commit:
   `87416418657359cb625c412a48b6e1d6d41c29bd`;
-- model SHA-256:
-  `6b85e11d9bbf07863b97b3523b1b112844c43e7b194b9ea97beba74200453fe1fb46` is **not** the model hash and must never be used as one;
-- authoritative Korean model SHA-256:
+- Korean model SHA-256:
   `6b85e11d9bbf07863b97b3523b1b112844c43e713df8b66418a081fd1060b3b2`;
 - language `kor`;
 - OEM 1;
 - DPI 300.
 
-The duplicated hash line above intentionally distinguishes the DLL hash from the Korean-model hash. Implementations must assert the authoritative model hash ending in `...60b3b2`.
 
 No runtime/model substitution is allowed. A different engine/model requires a separate redesign.
 

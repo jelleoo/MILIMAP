@@ -90,6 +90,31 @@ function Invoke-P43R3aGateB {
     return $result
 }
 
+function Invoke-P43R3aAllReached {
+    param([object]$GrayPrepared,[object]$RgbPrepared,[string]$Executable,[string]$ModelPath)
+    # Verification only: compose the already implemented gates; never run Task 4.
+    $result=[pscustomobject]@{GateA='GATE_A_CROP_PROVENANCE_FAILED';GateB=$null;GateC=$null;GateD='NOT_RUN_GATE_A_FAILED';
+        Verdict='P4_3_REDESIGN3A_REJECTED';MappingInvocationCount=0;QualityInvocationCount=0;SafetyInvocationCount=0;TotalOcrInvocationCount=0;ProductionAction='NONE'}
+    foreach($prepared in @($GrayPrepared,$RgbPrepared)){
+        if((Invoke-P43R3aGateA $prepared) -cne 'GATE_A_CROP_PROVENANCE_PASS'){return $result}
+    }
+    $result.GateA='GATE_A_CROP_PROVENANCE_PASS'
+    $result.GateB=Invoke-P43R3aGateB $GrayPrepared $Executable $ModelPath
+    foreach($batch in $result.GateB.Batches){$result.MappingInvocationCount+=$batch.InvocationCount}
+    $result.TotalOcrInvocationCount=$result.MappingInvocationCount
+    if($result.GateB.Status -cne 'GATE_B_BATCH_MAPPING_PASS'){
+        $result.GateD='NOT_RUN_GATE_B_FAILED'
+        if($result.GateB.Status -ceq 'GATE_B_BATCH_MAPPING_NOT_EVALUATED'){$result.Verdict='PRE_BUSINESS_TRUST_NOT_PROVEN'}
+        return $result
+    }
+    $result.GateC=Invoke-P43R3aGateC $GrayPrepared $RgbPrepared $Executable $ModelPath
+    $result.QualityInvocationCount=$result.GateC.QualityInvocationCount
+    $result.TotalOcrInvocationCount+=$result.QualityInvocationCount
+    $result.Verdict=$result.GateC.Verdict
+    $result.GateD=if($result.GateC.Status -ceq 'GATE_C_CLEAR_FIDELITY_FAILED'){'NOT_RUN_GATE_C_FAILED'}elseif($result.GateC.Status -ceq 'GATE_C_CLEAR_FIDELITY_NOT_EVALUATED'){'NOT_RUN_GATE_C_NOT_EVALUATED'}else{'NOT_RUN_TASK4_NOT_IMPLEMENTED'}
+    return $result
+}
+
 function Get-P43R3aOverlapClass {
     param([object]$A,[object]$B)
     if($A.CellId -cne $B.CellId -or $A.Page -ne $B.Page){return 'ORDERING_UNSAFE'}

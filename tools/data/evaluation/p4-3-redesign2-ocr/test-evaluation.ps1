@@ -30,6 +30,42 @@ if($Group -eq 'TextFidelity'){
     }
     Require ((Get-Command Normalize-P43R2FidelityText).Parameters.Count -eq 1) 'Fuzzy normalization exposed'
     Require (-not (Get-Command Resolve-P43R2OcrCells).Parameters.ContainsKey('ExpectedText')) 'Ground truth leaked into resolver'
+    function FreshCellText { @($literal | ForEach-Object -Begin {$id=0} -Process {$id++;[pscustomobject]@{CellId="cell$id";Text=$_}}) }
+    function Fidelity($Texts=(FreshCellText),$Status='COMPLETE',$Hash=$truth.FixtureHashes['gray.pdf'],$Words=@()) {
+        Evaluate-P43R2TextFidelity -Fixture 'gray.pdf' -FixtureHash $Hash -StructuralStatus $Status -CellText $Texts -WordEvidence $Words
+    }
+    $low=[pscustomobject]@{Membership=[pscustomobject]@{Status='UNIQUE';CellId='cell1'};Record=[pscustomobject]@{Confidence=22;Text='업체명'}}
+    $exact=Fidelity -Words @($low)
+    Require ($exact.Code -ceq 'GATE_A2_TEXT_FIDELITY_PASS' -and $exact.MandatoryMatchCount -eq 8 -and $exact.AllCellMatchCount -eq 12 -and $exact.Cells[0].RawWordConfidences[0] -eq 22) 'Exact low-confidence text fails fidelity'
+    foreach($change in @(@{Index=0;Text='업쳬명'},@{Index=7;Text='시험 할인 11%'},@{Index=7;Text='시험 할인 10'})){
+        $actual=FreshCellText;$actual[$change.Index].Text=$change.Text
+        $high=[pscustomobject]@{Membership=[pscustomobject]@{Status='UNIQUE';CellId=$actual[$change.Index].CellId};Record=[pscustomobject]@{Confidence=97;Text=$change.Text}}
+        $bad=Fidelity -Texts $actual -Words @($high)
+        Require ($bad.Status -eq 'REJECTED' -and $bad.Cells[$change.Index].Status -eq 'FIDELITY_MISMATCH' -and $bad.Cells[$change.Index].RawWordConfidences[0] -eq 97) 'High-confidence wrong text rescued'
+    }
+    $spaces=FreshCellText;$spaces[11].Text="  시험`t  할인 20%`r`n방문  시 적용  "
+    Require ((Fidelity -Texts $spaces).Status -eq 'PASS') 'Allowed whitespace rejected'
+    $aux=FreshCellText;$aux[6].Text='031-123-4568'
+    $auxResult=Fidelity -Texts $aux
+    Require ($auxResult.Status -eq 'PASS' -and $auxResult.AllCellMatchCount -eq 11 -and $auxResult.Cells[6].Status -eq 'FIDELITY_MISMATCH') 'Auxiliary mismatch hidden or independently blocks'
+    foreach($status in @('PARTIAL','FAILED','UNSUPPORTED')){Require ((Fidelity -Status $status).Status -eq 'NOT_EVALUATED') 'Unsafe structural input evaluated'}
+    Require ((Fidelity -Hash 'wrong').Status -eq 'NOT_EVALUATED') 'Wrong fixture hash evaluated'
+    Require ((Evaluate-P43R2TextFidelity -Fixture 'unknown.pdf' -FixtureHash $truth.FixtureHashes['gray.pdf'] -StructuralStatus COMPLETE -CellText (FreshCellText) -WordEvidence @()).Status -eq 'NOT_EVALUATED') 'Unknown fixture evaluated'
+    foreach($cells in @(@((FreshCellText)[0..10]),@((FreshCellText)+(FreshCellText)[0]),@())){
+        $invalid=Fidelity -Texts $cells
+        Require ($invalid.Status -eq 'NOT_EVALUATED' -and @($invalid.Cells | Where-Object Status -ne 'FIDELITY_NOT_EVALUATED').Count -eq 0) 'Missing/duplicate reconstructed cell silently dropped'
+    }
+    $originalTruth=(Get-Command Get-P43R2ClearFixtureGroundTruth).ScriptBlock
+    try {
+        $script:badTruth=$truth | ConvertTo-Json -Depth 8 | ConvertFrom-Json -AsHashtable
+        $script:badTruth.Cells=@($truth.Cells[0..10])
+        function Get-P43R2ClearFixtureGroundTruth { [pscustomobject]$script:badTruth }
+        Require ((Fidelity).Status -eq 'NOT_EVALUATED') 'Missing expected cell accepted'
+        $script:badTruth.Cells=@($truth.Cells+$truth.Cells[0])
+        Require ((Fidelity).Status -eq 'NOT_EVALUATED') 'Duplicate expected cell accepted'
+        function Get-P43R2ClearFixtureGroundTruth { throw 'R2_GROUND_TRUTH_IDENTITY_MISMATCH' }
+        Require ((Fidelity).Status -eq 'NOT_EVALUATED') 'Corrupt ground truth evaluated'
+    } finally { Set-Item Function:Get-P43R2ClearFixtureGroundTruth $originalTruth }
     Assert-FrozenPaths
     Write-Host 'Redesign2 TextFidelity contract PASS'
     return

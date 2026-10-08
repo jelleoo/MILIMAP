@@ -29,6 +29,36 @@ function Normalize-P43R2FidelityText {
     return [regex]::Replace($Text.Replace("`r`n","`n").Trim(),'[^\S\r\n]+',' ')
 }
 
+function Evaluate-P43R2TextFidelity {
+    param([string]$Fixture,[string]$FixtureHash,[string]$StructuralStatus,[object[]]$CellText,[object[]]$WordEvidence)
+    $cells=@();$trusted=$false
+    try {
+        $truth=Get-P43R2ClearFixtureGroundTruth
+        $cells=@($truth.Cells)
+        $trusted=$StructuralStatus -ceq 'COMPLETE' -and $truth.Policy -ceq 'TEXT_FIDELITY_GROUND_TRUTH_V1' -and $truth.FixtureHashes.ContainsKey($Fixture) -and $FixtureHash -ceq $truth.FixtureHashes[$Fixture] -and $cells.Count -eq 12 -and $CellText.Count -eq 12
+        for($i=1;$trusted -and $i -le 12;$i++){
+            $expected=@($cells | Where-Object CellId -CEQ "cell$i")
+            $actual=@($CellText | Where-Object CellId -CEQ "cell$i")
+            $trusted=$expected.Count -eq 1 -and $actual.Count -eq 1 -and $null -ne $expected[0].ExpectedText -and $null -ne $actual[0].Text
+        }
+    } catch { $trusted=$false }
+    $evidence=@(foreach($cell in $cells){
+        $actual=@($CellText | Where-Object CellId -CEQ $cell.CellId)
+        $text=if($actual.Count -eq 1 -and $actual[0].PSObject.Properties['Text']){$actual[0].Text}else{$null}
+        $normalizedExpected=Normalize-P43R2FidelityText $cell.ExpectedText
+        $normalizedActual=Normalize-P43R2FidelityText $text
+        $status=if(-not $trusted){'FIDELITY_NOT_EVALUATED'}elseif($normalizedExpected -ceq $normalizedActual){'FIDELITY_MATCH'}else{'FIDELITY_MISMATCH'}
+        [pscustomobject]@{Fixture=$Fixture;CellId=$cell.CellId;FieldRole=$cell.FieldRole;ExpectedText=$cell.ExpectedText;ReconstructedText=$text;
+            NormalizedExpected=$normalizedExpected;NormalizedActual=$normalizedActual;Status=$status;
+            RawWordConfidences=@($WordEvidence | Where-Object {$_.Membership.CellId -ceq $cell.CellId} | ForEach-Object {$_.Record.Confidence})}
+    })
+    $mandatory=@($evidence | Where-Object FieldRole -ne 'AUXILIARY')
+    $status=if(-not $trusted){'NOT_EVALUATED'}elseif(@($mandatory | Where-Object Status -eq 'FIDELITY_MISMATCH').Count -gt 0){'REJECTED'}else{'PASS'}
+    return [pscustomobject]@{Gate='A2_TEXT_FIDELITY';NormalizationPolicy='TEXT_FIDELITY_NORMALIZATION_V1';Status=$status;Code="GATE_A2_TEXT_FIDELITY_$status";
+        MandatoryMatchCount=@($mandatory | Where-Object Status -eq 'FIDELITY_MATCH').Count;MandatoryCellCount=8;
+        AllCellMatchCount=@($evidence | Where-Object Status -eq 'FIDELITY_MATCH').Count;AllCellCount=12;Cells=$evidence;ProductionAction='NONE'}
+}
+
 function Get-P43R2CellMembership {
     param([object[]]$Cells,[object]$Word)
     $contained=@();$intersected=@()

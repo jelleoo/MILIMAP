@@ -1,5 +1,5 @@
-param([ValidateSet('CropProvenance','BatchMapping')][string]$Group='CropProvenance',
-    [string]$Executable,[string]$ModelPath,[switch]$RunRealGateB)
+param([ValidateSet('CropProvenance','BatchMapping','ClearFidelity')][string]$Group='CropProvenance',
+    [string]$Executable,[string]$ModelPath,[switch]$RunRealGateB,[switch]$RunRealGateC)
 Set-StrictMode -Version Latest
 $ErrorActionPreference='Stop'
 function Require($Condition,[string]$Message){if(-not $Condition){throw $Message}}
@@ -10,6 +10,153 @@ function Reject([scriptblock]$Action,[string]$Code){
 $runner=Join-Path $PSScriptRoot 'run-evaluation.ps1'
 Require (Test-Path -LiteralPath $runner) 'FAIL: Redesign 3A crop functions do not exist'
 . $runner
+if($Group -ceq 'ClearFidelity'){
+    foreach($name in @('Get-P43R3aOverlapClass','Resolve-P43R3aCropText','ConvertTo-P43R3aCellTexts','Get-P43R3aFixtureGroundTruth','Normalize-P43R3aFidelityText','Evaluate-P43R3aFidelity','Invoke-P43R3aGateC')){
+        Require ($null -ne (Get-Command $name -ErrorAction SilentlyContinue)) "FAIL: Missing reconstruction/fidelity function: $name"
+    }
+    foreach($name in @('Resolve-P43R3aCropText','ConvertTo-P43R3aCellTexts','Get-P43R3aOverlapClass')){
+        Require (-not (Get-Command $name).Parameters.ContainsKey('ExpectedText')) "$name must not consume expected text"
+        Require (-not (Get-Command $name).Parameters.ContainsKey('OverlapRatio')) 'Overlap ratio is fixed, not a search parameter'
+    }
+    function New-TestWord([int]$Left,[int]$Top,[string]$Text,[int]$Word=1,[int]$Height=10,[int]$Width=20,[int]$Line=1,[double]$Confidence=1){
+        [pscustomobject]@{Page=1;Block=1;Paragraph=1;Line=$Line;Word=$Word;Left=$Left;Top=$Top;Width=$Width;Height=$Height;Text=$Text;Confidence=$Confidence;CropOrdinal=1;CellId='1'}
+    }
+    $adjacent=@((New-TestWord 0 0 '가' 1),(New-TestWord 16 0 '나' 2))
+    Require ((Get-P43R3aOverlapClass $adjacent[0] $adjacent[1]) -ceq 'SAFE_ADJACENT') '20 percent overlap is safe'
+    $boundary=New-TestWord 15 0 '나' 2
+    Require ((Get-P43R3aOverlapClass $adjacent[0] $boundary) -ceq 'CONFLICTING') 'Exactly 25 percent overlap is conflicting'
+    $safe=Resolve-P43R3aCropText -PageWords $adjacent -CellId '1'
+    $shuffled=Resolve-P43R3aCropText -PageWords @($adjacent[1],$adjacent[0]) -CellId '1'
+    Require ($safe.Status -ceq 'COMPLETE' -and $safe.Text -ceq '가 나' -and ($safe.RawWordConfidences -join ',') -ceq '1,1') 'Safe adjacent words and confidence 1 remain usable'
+    Require (($safe | ConvertTo-Json -Depth 12 -Compress) -ceq ($shuffled | ConvertTo-Json -Depth 12 -Compress)) 'Enumeration must not affect reconstructed evidence'
+    foreach($case in @(
+        @{Words=@((New-TestWord 0 0 '가'),(New-TestWord 0 0 '가'));Code='DUPLICATE'},
+        @{Words=@((New-TestWord 0 0 '가'),(New-TestWord 0 0 '나'));Code='CONFLICTING'},
+        @{Words=@((New-TestWord 0 0 '가' 2),(New-TestWord 30 0 '나' 1));Code='ORDERING_UNSAFE'},
+        @{Words=@((New-TestWord 0 0 '가' 1),(New-TestWord 30 8 '나' 2),(New-TestWord 60 16 '다' 3));Code='ORDERING_UNSAFE'})){
+        $resolved=Resolve-P43R3aCropText -PageWords $case.Words -CellId '1'
+        Require ($resolved.Status -ceq 'PARTIAL' -and @($resolved.Diagnostics | Where-Object Code -CEQ $case.Code).Count -gt 0) "Unsafe geometry: $($case.Code)"
+        $reverse=Resolve-P43R3aCropText -PageWords @($case.Words | Sort-Object Text -Descending) -CellId '1'
+        Require (($resolved | ConvertTo-Json -Depth 12 -Compress) -ceq ($reverse | ConvertTo-Json -Depth 12 -Compress)) 'Unsafe diagnostics must also be deterministic'
+    }
+    $multiline=@((New-TestWord 30 30 '라' 2 10 20 2),(New-TestWord 0 0 '가' 1),(New-TestWord 0 30 '다' 1 10 20 2),(New-TestWord 30 0 '나' 2))
+    $multi=Resolve-P43R3aCropText $multiline '1'
+    Require ($multi.Status -ceq 'COMPLETE' -and $multi.Text -ceq "가 나`n다 라") 'Physical multiline reconstruction'
+    $empty=Resolve-P43R3aCropText @() '1'
+    Require ($empty.Status -ceq 'PARTIAL') 'Empty crop cannot be complete'
+    $foreign=Resolve-P43R3aCropText @((New-TestWord 0 0 '가')) '2'
+    Require ($foreign.Status -ceq 'PARTIAL') 'Foreign mapped CellId must fail closed'
+    $batch=[pscustomobject]@{Status='COMPLETE';Pages=@([pscustomobject]@{Page=1;CropOrdinal=1;CellId='1'});Words=$adjacent}
+    $converted=@(ConvertTo-P43R3aCellTexts $batch)
+    Require ($converted.Count -eq 1 -and $converted[0].CellId -ceq '1' -and $converted[0].Text -ceq '가 나') 'One cell result per mapped crop'
+    $truth=Get-P43R3aFixtureGroundTruth
+    Require ($truth.GeneratorBlob -ceq '6231ed473349063ce3b0d12fc7b2cff0bef1d114' -and $truth.ManifestBlob -ceq 'cde2a581ec2c4a1fb26481992908b5dcab2740ac' -and $truth.A2ManifestBlob -ceq 'ede9c602fbea2ae5a76e7dcfdc067f242c1929b7') 'Historical authority identities'
+    $authored=@('업체명','주소','전화번호','혜택','가상 가람 식당','가상시 가람로 12','031-123-4567','시험 할인 10%','가상 누리 식당','가상시 누리로 23','031-234-5678',"시험 할인 20%`n방문 시 적용")
+    Require ($truth.FixtureHashes.Count -eq 5) 'Clear and all three A2 fixtures covered'
+    foreach($fixture in @('gray.pdf','rgb.pdf','mild-degraded-gray.pdf','degraded-gray.pdf','degraded-rgb.pdf')){
+        $cells=$truth.FixtureCells[$fixture]
+        Require ($cells.Count -eq 12 -and ($cells.ExpectedText -join '|') -ceq ($authored -join '|')) "$fixture authored 3x4 table independent of OCR"
+        Require (@($cells | Where-Object FieldRole -CEQ 'HEADER').Count -eq 4 -and @($cells | Where-Object FieldRole -CEQ 'BUSINESS_NAME').Count -eq 2 -and @($cells | Where-Object FieldRole -CEQ 'BENEFIT').Count -eq 2) 'Eight mandatory roles'
+    }
+    # Corrupt identity responses only: immutable historical files are never edited.
+    $originalHash=${function:Get-FileHash}
+    function Get-FileHash { param($LiteralPath,$Algorithm) if($LiteralPath -like '*p4-3a2-ocr*degraded-gray.pdf'){[pscustomobject]@{Hash=('0'*64)}}else{Microsoft.PowerShell.Utility\Get-FileHash -LiteralPath $LiteralPath -Algorithm SHA256} }
+    try{Reject {Get-P43R3aFixtureGroundTruth} 'GROUND_TRUTH_FIXTURE_MISMATCH'}finally{
+        if($null -eq $originalHash){Remove-Item Function:Get-FileHash}else{Set-Item Function:Get-FileHash $originalHash}
+    }
+    $originalGit=Get-Item Function:git -ErrorAction SilentlyContinue
+    function git { if($args[-1] -like '*p4-3a2-ocr*manifest.json'){$global:LASTEXITCODE=0;'0000000000000000000000000000000000000000'}else{& git.exe @args} }
+    try{Reject {Get-P43R3aFixtureGroundTruth} 'GROUND_TRUTH_IDENTITY_MISMATCH'}finally{
+        if($null -eq $originalGit){Remove-Item Function:git}else{Set-Item Function:git $originalGit.ScriptBlock}
+    }
+    Require ((Normalize-P43R3aFidelityText " `t가상`u{00a0}  식당`r`n방문 `t") -ceq "가상 식당`n방문") 'Allowed horizontal whitespace, CRLF and outer trim only'
+    foreach($different in @('각'.Normalize([Text.NormalizationForm]::FormD),'가상 식당 11%','가상 식당 10!','가상 식탕 10%')){
+        $expected=if($different -ceq '각'.Normalize([Text.NormalizationForm]::FormD)){'각'}else{'가상 식당 10%'}
+        Require (-not [string]::Equals((Normalize-P43R3aFidelityText $expected),(Normalize-P43R3aFidelityText $different),[StringComparison]::Ordinal)) 'Character, number, punctuation and Unicode decomposition remain unequal'
+    }
+    Require ((Normalize-P43R3aFidelityText "가`n 나") -ceq "가`n 나" -and (Normalize-P43R3aFidelityText "가`r나") -ceq "가`r나") 'Internal newline, line space and lone CR not repaired'
+    $exact=@(for($i=0;$i -lt 12;$i++){[pscustomobject]@{CellId=[string]($i+1);Status='COMPLETE';Text=$authored[$i];Diagnostics=@();RawWordConfidences=@(1)}})
+    $good=Evaluate-P43R3aFidelity 'gray.pdf' $truth.FixtureHashes['gray.pdf'] 6 $exact
+    Require ($good.Status -ceq 'PASS' -and $good.MandatoryMatchCount -eq 8 -and $good.AllCellMatchCount -eq 12 -and $good.Cells[0].RawWordConfidences[0] -eq 1) 'Exact low confidence text passes'
+    $wrong=@($exact | ForEach-Object {$_.PSObject.Copy()});$wrong[0].Text='업체';$wrong[0].RawWordConfidences=@(100)
+    $bad=Evaluate-P43R3aFidelity 'gray.pdf' $truth.FixtureHashes['gray.pdf'] 11 $wrong
+    Require ($bad.Status -ceq 'FAILED' -and $bad.MandatoryMatchCount -eq 7 -and $bad.AllCellMatchCount -eq 11 -and $bad.Cells[0].Status -ceq 'FIDELITY_MISMATCH') 'High confidence wrong mandatory text fails'
+    $wrong[0].Status='PARTIAL'
+    Require ((Evaluate-P43R3aFidelity 'gray.pdf' $truth.FixtureHashes['gray.pdf'] 6 $wrong).Status -ceq 'NOT_EVALUATED') 'Unsafe mandatory structure cannot pass fidelity'
+    Require ((Evaluate-P43R3aFidelity 'gray.pdf' ('0'*64) 6 $exact).Status -ceq 'NOT_EVALUATED') 'Caller fixture hash mismatch cannot evaluate'
+    Require ((Evaluate-P43R3aFidelity 'gray.pdf' $truth.FixtureHashes['gray.pdf'] 6 @($exact[0..10])).Status -ceq 'NOT_EVALUATED') 'Missing mapped cell cannot evaluate'
+    $forged=[pscustomobject]@{Crops=@()}
+    $blocked=Invoke-P43R3aGateC $forged $forged 'missing' 'missing'
+    Require ($blocked.Status -ceq 'GATE_C_CLEAR_FIDELITY_NOT_EVALUATED' -and $blocked.Runs.Count -eq 0 -and $blocked.QualityInvocationCount -eq 0) 'Gate A failure prevents quality calls'
+    # Matrix orchestration controls isolate the external OCR boundary. Reconstruction
+    # and fidelity stay real; authored words are test-only, never OCR inputs.
+    $originalGateA=${function:Invoke-P43R3aGateA};$originalBatch=${function:Invoke-P43R3aTesseractBatch}
+    function New-TestPrepared([string]$Fixture){
+        [pscustomobject]@{FixtureHash=$truth.FixtureHashes[$Fixture];Crops=@(for($i=1;$i -le 12;$i++){
+            [pscustomobject]@{Ordinal=$i;CellId=[string]$i;Row=[int][Math]::Floor(($i-1)/4)+1;Column=($i-1)%4+1;X0=0;Y0=0;X1=400;Y1=150;Width=400;Height=150;Components=1;ArtifactPath="test-$Fixture-$i.pgm";CropSha256=('0'*64)}
+        });PdfOpenCount=1;PageReadCount=1;ImageDecodeCount=1;GridBuildCount=1;CropBuildCount=1}
+    }
+    $script:testGray=New-TestPrepared 'gray.pdf';$script:testRgb=New-TestPrepared 'rgb.pdf'
+    function Invoke-P43R3aGateA { param($PreparedFixture) 'GATE_A_CROP_PROVENANCE_PASS' }
+    function Invoke-P43R3aTesseractBatch {
+        param($Executable,$ModelPath,$Crops,$Psm)
+        Require ($Executable -ceq 'test-exe' -and $ModelPath -ceq 'test-model') 'Matrix forwards exact supply'
+        $expectedCrops=if($script:matrixCalls -lt 4){$script:testGray.Crops}else{$script:testRgb.Crops}
+        Require (@($Crops).Count -eq 12) 'Every batch must retain all 12 prepared crops'
+        for($i=0;$i -lt 12;$i++){Require ([object]::ReferenceEquals(@($Crops)[$i],$expectedCrops[$i])) 'Matrix retains every prepared crop object in order'}
+        Require ($Psm -eq $(if($script:matrixCalls%4 -lt 2){6}else{11})) 'Fixed PSM6 twice then PSM11 twice'
+        $script:matrixCalls++
+        $words=@(for($i=0;$i -lt 12;$i++){
+            $word=New-TestWord 0 0 $authored[$i]
+            $word.Page=$i+1;$word.CropOrdinal=$i+1;$word.CellId=[string]($i+1)
+            if($i -eq 0 -and $Psm -eq 11 -and $script:matrixMode -ceq 'mismatch'){$word.Text='업체'}
+            if($i -eq 5 -and $script:matrixCalls -eq 2 -and $script:matrixMode -ceq 'nondeterministic'){$word.Text='다른 주소'}
+            $word
+        })
+        $pages=@(for($i=1;$i -le 12;$i++){[pscustomobject]@{Page=$i;CropOrdinal=$i;CellId=[string]$i;Left=0;Top=0;Width=400;Height=150;WordCount=1}})
+        [pscustomobject]@{Status='COMPLETE';Code=$null;InvocationCount=1;Psm=$Psm;EngineVersion='5.5.3';EngineBuild='tesseract v5.5.3.20260724';ModelSha256='6b85e11d9bbf07863b97b3523b1b112844c43e713df8b66418a081fd1060b3b2';Pages=$pages;Words=$words;Diagnostics=@();ElapsedMilliseconds=$script:matrixCalls;ProductionAction='NONE'}
+    }
+    try{
+        foreach($mode in @('exact','mismatch','nondeterministic')){
+            $script:matrixMode=$mode;$script:matrixCalls=0
+            $controlled=Invoke-P43R3aGateC $script:testGray $script:testRgb 'test-exe' 'test-model'
+            Require ($controlled.Runs.Count -eq 8 -and $controlled.QualityInvocationCount -eq 8 -and $script:matrixCalls -eq 8) 'No retry or extra quality calls'
+            if($mode -ceq 'exact'){
+                Require ($controlled.Status -ceq 'GATE_C_CLEAR_FIDELITY_PASS' -and @($controlled.Runs | Where-Object {$_.Fidelity.MandatoryMatchCount -ne 8 -or $_.Fidelity.AllCellMatchCount -ne 12}).Count -eq 0) 'All independent PSM paths must match'
+                Require (@($controlled.Determinism | Where-Object {-not $_.WordsIdentical -or -not $_.TextsIdentical -or -not $_.FidelityIdentical -or -not $_.DiagnosticsIdentical}).Count -eq 0) 'Elapsed time excluded from determinism'
+            }elseif($mode -ceq 'mismatch'){
+                Require ($controlled.Status -ceq 'GATE_C_CLEAR_FIDELITY_FAILED' -and $controlled.Verdict -ceq 'P4_3_REDESIGN3A_REJECTED' -and $controlled.Task4 -ceq 'BLOCKED') 'Exact PSM6 cannot rescue wrong PSM11'
+                Require (@($controlled.Runs | Where-Object {$_.Psm -eq 6 -and $_.Fidelity.MandatoryMatchCount -eq 8}).Count -eq 4 -and @($controlled.Runs | Where-Object {$_.Psm -eq 11 -and $_.Fidelity.MandatoryMatchCount -eq 7}).Count -eq 4) 'Every repetition independently evaluated'
+            }else{
+                Require ($controlled.Status -ceq 'GATE_C_CLEAR_FIDELITY_FAILED' -and -not $controlled.Determinism[0].WordsIdentical -and -not $controlled.Determinism[0].TextsIdentical -and -not $controlled.Determinism[0].FidelityIdentical) 'Auxiliary-only repeat change still fails determinism'
+            }
+        }
+    }finally{Set-Item Function:Invoke-P43R3aGateA $originalGateA;Set-Item Function:Invoke-P43R3aTesseractBatch $originalBatch}
+    Write-Host 'ClearFidelity synthetic reconstruction/authority/fidelity assertions PASS; actual quality OCR calls=0'
+    if($RunRealGateC){
+        $scratch=Join-Path ([IO.Path]::GetTempPath()) ('milimap-p43r3a-clear-'+[guid]::NewGuid().ToString('N'))
+        [void][IO.Directory]::CreateDirectory($scratch)
+        try{
+            $gray=Prepare-P43R3aFixture -PdfPath (Join-Path $PSScriptRoot '../p4-3a-ocr/fixtures/gray.pdf') -ArtifactDirectory (Join-Path $scratch 'gray')
+            $rgb=Prepare-P43R3aFixture -PdfPath (Join-Path $PSScriptRoot '../p4-3a-ocr/fixtures/rgb.pdf') -ArtifactDirectory (Join-Path $scratch 'rgb')
+            $gate=Invoke-P43R3aGateC $gray $rgb $Executable $ModelPath
+            foreach($run in $gate.Runs){
+                Write-Host ("{0} PSM{1} repeat{2}: batch={3}/{4}; mandatory={5}/8 all={6}/12 fidelity={7}; words={8}; elapsedMs={9}" -f $run.Fixture,$run.Psm,$run.Repetition,$run.Batch.Status,$run.Batch.Code,$run.Fidelity.MandatoryMatchCount,$run.Fidelity.AllCellMatchCount,$run.Fidelity.Status,$run.Batch.Words.Count,$run.Batch.ElapsedMilliseconds)
+                foreach($cell in @($run.Fidelity.Cells | Where-Object Status -CNE 'FIDELITY_MATCH')){Write-Host ("Mismatch: {0} PSM{1} repeat{2} cell={3} role={4} state={5} expected={6} actual={7} conf={8}" -f $run.Fixture,$run.Psm,$run.Repetition,$cell.CellId,$cell.FieldRole,$cell.Status,($cell.ExpectedText | ConvertTo-Json -Compress),($cell.ReconstructedText | ConvertTo-Json -Compress),($cell.RawWordConfidences -join ','))}
+            }
+            Write-Host ($gate.PreparationCounts | ConvertTo-Json -Compress)
+            Write-Host ($gate.Determinism | ConvertTo-Json -Compress)
+            Write-Host "Measured GateC=$($gate.Status); Code=$($gate.Code); Verdict=$($gate.Verdict); qualityCalls=$($gate.QualityInvocationCount); Task4=$($gate.Task4)"
+            Require ($gate.QualityInvocationCount -eq 8 -and $gate.Runs.Count -eq 8) 'Fixed matrix must perform exactly eight quality calls'
+            foreach($counts in $gate.PreparationCounts){Require ($counts.PdfOpenCount -eq 1 -and $counts.PageReadCount -eq 1 -and $counts.ImageDecodeCount -eq 1 -and $counts.GridBuildCount -eq 1 -and $counts.CropBuildCount -eq 1) 'Prepare each fixture once'}
+            $pass=@($gate.Runs | Where-Object {$_.Fidelity.MandatoryMatchCount -ne 8 -or $_.Fidelity.Status -cne 'PASS'}).Count -eq 0 -and @($gate.Determinism | Where-Object {-not $_.WordsIdentical -or -not $_.TextsIdentical -or -not $_.FidelityIdentical -or -not $_.DiagnosticsIdentical}).Count -eq 0
+            Require (($gate.Status -ceq 'GATE_C_CLEAR_FIDELITY_PASS') -eq $pass) 'Executable gate assertions must agree with measured mandatory evidence'
+            if(-not $pass){Require ($gate.Verdict -ceq 'P4_3_REDESIGN3A_REJECTED' -and $gate.Task4 -ceq 'BLOCKED') 'Measured failure rejects candidate and stops Task4'}
+            Write-Host "ClearFidelity executable assertions PASS; actual acceptance=$($gate.Status)"
+        }finally{[IO.Directory]::Delete($scratch,$true)}
+    }else{Write-Host 'Actual Gate C NOT_RUN; synthetic PASS is not measured fidelity acceptance'}
+    return
+}
 if($Group -ceq 'BatchMapping'){
     foreach($name in @('ConvertFrom-P43R3aBatchTsv','Invoke-P43R3aTesseractBatch','Invoke-P43R3aGateB')){
         Require ($null -ne (Get-Command $name -ErrorAction SilentlyContinue)) "FAIL: Missing batch function: $name"

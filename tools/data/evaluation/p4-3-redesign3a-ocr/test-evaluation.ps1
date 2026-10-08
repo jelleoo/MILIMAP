@@ -1,4 +1,5 @@
-param([ValidateSet('CropProvenance')][string]$Group='CropProvenance')
+param([ValidateSet('CropProvenance','BatchMapping')][string]$Group='CropProvenance',
+    [string]$Executable,[string]$ModelPath,[switch]$RunRealGateB)
 Set-StrictMode -Version Latest
 $ErrorActionPreference='Stop'
 function Require($Condition,[string]$Message){if(-not $Condition){throw $Message}}
@@ -9,6 +10,106 @@ function Reject([scriptblock]$Action,[string]$Code){
 $runner=Join-Path $PSScriptRoot 'run-evaluation.ps1'
 Require (Test-Path -LiteralPath $runner) 'FAIL: Redesign 3A crop functions do not exist'
 . $runner
+if($Group -ceq 'BatchMapping'){
+    foreach($name in @('ConvertFrom-P43R3aBatchTsv','Invoke-P43R3aTesseractBatch','Invoke-P43R3aGateB')){
+        Require ($null -ne (Get-Command $name -ErrorAction SilentlyContinue)) "FAIL: Missing batch function: $name"
+    }
+    Require (-not (Get-Command Invoke-P43R3aTesseractBatch).Parameters.ContainsKey('ConfidenceThreshold')) 'No confidence threshold API'
+    Require (-not (Get-Command Invoke-P43R3aTesseractBatch).Parameters.ContainsKey('Inputs')) 'No single-cell fallback API'
+    function New-TestBatchTsv([int]$Count){
+        $rows=[Collections.Generic.List[string]]::new()
+        $rows.Add("level`tpage_num`tblock_num`tpar_num`tline_num`tword_num`tleft`ttop`twidth`theight`tconf`ttext")
+        for($page=1;$page -le $Count;$page++){
+            foreach($row in @("1`t$page`t0`t0`t0`t0`t0`t0`t2`t2`t-1`t","2`t$page`t1`t0`t0`t0`t0`t0`t2`t2`t-1`t","3`t$page`t1`t1`t0`t0`t0`t0`t2`t2`t-1`t","4`t$page`t1`t1`t1`t0`t0`t0`t2`t2`t-1`t","5`t$page`t1`t1`t1`t1`t0`t0`t1`t1`t0`t가","5`t$page`t1`t1`t1`t2`t1`t1`t1`t1`t100`t나")){$rows.Add($row)}
+        }
+        return $rows -join "`n"
+    }
+    $valid=New-TestBatchTsv 2
+    $parsed=ConvertFrom-P43R3aBatchTsv -Text $valid -ExpectedPageCount 2
+    Require ($parsed.Pages.Count -eq 2 -and $parsed.Words.Count -eq 4 -and ($parsed.Pages.Page -join ',') -ceq '1,2') 'Multiple words per page remain valid'
+    $word=$parsed.Words[1]
+    Require ($word.Page -eq 1 -and $word.Block -eq 1 -and $word.Paragraph -eq 1 -and $word.Line -eq 1 -and $word.Word -eq 2 -and $word.Left -eq 1 -and $word.Top -eq 1 -and $word.Width -eq 1 -and $word.Height -eq 1 -and $word.Confidence -eq 100 -and $word.Text -ceq '나') 'Preserve exact word fields'
+    $pageRecord="1`t1`t0`t0`t0`t0`t0`t0`t2`t2`t-1`t"
+    Reject {ConvertFrom-P43R3aBatchTsv -Text ($valid.Replace($pageRecord+"`n",'')) -ExpectedPageCount 2} 'BATCH_PAGE_MAPPING_INVALID'
+    Reject {ConvertFrom-P43R3aBatchTsv -Text ($valid+"`n"+$pageRecord) -ExpectedPageCount 2} 'BATCH_PAGE_MAPPING_INVALID'
+    Reject {ConvertFrom-P43R3aBatchTsv -Text $valid -ExpectedPageCount 1} 'BATCH_PAGE_MAPPING_INVALID'
+    Reject {ConvertFrom-P43R3aBatchTsv -Text $valid -ExpectedPageCount 3} 'BATCH_PAGE_MAPPING_INVALID'
+    foreach($bad in @($valid.Replace('level','wrong'),$valid.Replace("5`t1`t1`t1`t1`t1`t0`t0`t1`t1`t0`t가","5`t1`t1`t1`t1`t1`t0`t0`t0`t1`t0`t가"),$valid.Replace("`t100`t나","`tNaN`t나"),$valid.Replace("`t100`t나","`t101`t나"),$valid.Replace("`t0`t가","`t-1`t가"),$valid.Replace("5`t1`t1`t1`t1`t2`t1`t1","5`t1`t1`t1`t1`t2`t2`t1"),$valid.Replace("4`t1`t1`t1`t1`t0`t0`t0`t2`t2`t-1`t`n",''))){
+        Reject {ConvertFrom-P43R3aBatchTsv -Text $bad -ExpectedPageCount 2} 'BATCH_TSV_INVALID'
+    }
+    $empty=($valid -split "`n" | Where-Object {$_ -cnotmatch '^5\t2\t'}) -join "`n"
+    Reject {ConvertFrom-P43R3aBatchTsv -Text $empty -ExpectedPageCount 2} 'BATCH_REQUIRED_PAGE_EMPTY'
+    $scratch=Join-Path ([IO.Path]::GetTempPath()) ('milimap-p43r3a-batch-test-'+[guid]::NewGuid().ToString('N'))
+    [void][IO.Directory]::CreateDirectory($scratch)
+    try{
+        if(-not $Executable -or -not $ModelPath){throw 'BatchMapping requires exact verified -Executable and -ModelPath'}
+        $path=Join-Path $scratch 'source.pgm'
+        [IO.File]::WriteAllBytes($path,[byte[]]([Text.Encoding]::ASCII.GetBytes("P5`n8 6`n255`n")+[byte[]](0..47)))
+        $cells=@(for($id=1;$id -le 12;$id++){
+            $row=[int][Math]::Floor(($id-1)/4)+1;$column=($id-1)%4+1
+            [pscustomobject]@{CellId=[string]$id;Row=$row;Column=$column;X0=($column-1)*2;Y0=($row-1)*2;X1=$column*2;Y1=$row*2}
+        })
+        $crops=(New-P43R3aCellCropSet -ImagePath $path -ImageSha256 (Get-FileHash $path).Hash.ToLowerInvariant() -Cells $cells -OutputDirectory (Join-Path $scratch 'crops')).Crops
+        $originalProcess=(Get-Item Function:Invoke-InternalP43R3aProcess).ScriptBlock
+        $script:batchMode='valid';$script:batchCalls=0;$script:listPath=$null
+        $script:expectedCropPaths=$crops.ArtifactPath -join ','
+        function Invoke-InternalP43R3aProcess {
+            param($Executable,$Arguments,$DeadlineMilliseconds)
+            if($Arguments[0] -ceq '--version'){
+                $version=if($script:batchMode -ceq 'version'){'tesseract 5.5.3'}else{'tesseract v5.5.3.20260724'}
+                return [pscustomobject]@{ExitCode=0;Text=$version;ErrorText='';ElapsedMilliseconds=1}
+            }
+            $script:batchCalls++;$script:listPath=$Arguments[0]
+            Require (([IO.File]::ReadAllLines($Arguments[0]) -join ',') -ceq $script:expectedCropPaths) 'Image list must use crop ordinal order'
+            Require (($Arguments[1..($Arguments.Count-1)] -join '|') -ceq ('stdout|--tessdata-dir|'+[IO.Path]::GetDirectoryName([IO.Path]::GetFullPath($ModelPath))+'|-l|kor|--oem|1|--psm|6|--dpi|300|-c|tessedit_create_tsv=1')) 'Exact batch arguments'
+            if($script:batchMode -ceq 'timeout'){throw 'BATCH_PROCESS_TIMEOUT'}
+            $text=New-TestBatchTsv 12
+            if($script:batchMode -ceq 'oversized'){$text='x'*1048577}
+            if($script:batchMode -ceq 'missing'){$text=$text.Replace("1`t12`t0`t0`t0`t0`t0`t0`t2`t2`t-1`t`n",'')}
+            if($script:batchMode -ceq 'empty'){$text=($text -split "`n" | Where-Object {$_ -cnotmatch '^5\t12\t'}) -join "`n"}
+            return [pscustomobject]@{ExitCode=$(if($script:batchMode -ceq 'exit'){1}else{0});Text=$text;ErrorText='';ElapsedMilliseconds=1}
+        }
+        try{
+            try{Invoke-P43R3aTesseractBatch -Executable $Executable -ModelPath $ModelPath -Crops $crops -Psm 3;throw 'Invalid PSM accepted'}catch{Require ($_.Exception.Message -like '*ValidateSet*' -or $_.Exception.Message -like '*6,11*') 'PSM 3 must reject at API boundary'}
+            $result=Invoke-P43R3aTesseractBatch -Executable $Executable -ModelPath $ModelPath -Crops @($crops | Sort-Object Ordinal -Descending) -Psm 6
+            Require ($result.Status -ceq 'COMPLETE' -and $result.InvocationCount -eq 1 -and $result.Pages.Count -eq 12 -and $result.Words.Count -eq 24 -and $script:batchCalls -eq 1 -and $result.ProductionAction -ceq 'NONE') "One exact batch publishes all 12 logical pages; code=$($result.Code)"
+            Require (-not [IO.File]::Exists($script:listPath)) 'Success cleans list scratch'
+            Require (($result.Pages.CropOrdinal -join ',') -ceq '1,2,3,4,5,6,7,8,9,10,11,12' -and ($result.Pages.CellId -join ',') -ceq '1,2,3,4,5,6,7,8,9,10,11,12' -and $result.Words[23].CropOrdinal -eq 12 -and $result.Words[23].CellId -ceq '12' -and $result.Words[0].Confidence -eq 0) 'Exact identity mapping; confidence zero retained'
+            foreach($kind in @('ordinal','cell-id','crop-hash')){
+                $badCrops=@($crops | ForEach-Object {$_.PSObject.Copy()})
+                switch($kind){'ordinal'{$badCrops[0].Ordinal=2};'cell-id'{$badCrops[0].CellId='2'};'crop-hash'{$badCrops[0].CropSha256='0'*64}}
+                $bad=Invoke-P43R3aTesseractBatch -Executable $Executable -ModelPath $ModelPath -Crops $badCrops -Psm 6
+                Require ($bad.Status -ceq 'FAILED' -and $bad.InvocationCount -eq 0 -and $bad.Pages.Count -eq 0 -and $bad.Words.Count -eq 0) "$kind must reject before OCR"
+            }
+            $mismatch=Join-Path $scratch 'kor.traineddata';[IO.File]::WriteAllBytes($mismatch,[byte[]]@(1))
+            foreach($case in @(@{Executable=$mismatch;ModelPath=$ModelPath;Code='ENGINE_HASH_MISMATCH'},@{Executable=$Executable;ModelPath=$mismatch;Code='MODEL_HASH_MISMATCH'})){
+                $bad=Invoke-P43R3aTesseractBatch -Executable $case.Executable -ModelPath $case.ModelPath -Crops $crops -Psm 6
+                Require ($bad.Code -ceq $case.Code -and $bad.InvocationCount -eq 0) 'Exact supply is mandatory'
+            }
+            foreach($case in @(@('version','ENGINE_VERSION_MISMATCH'),@('timeout','BATCH_PROCESS_TIMEOUT'),@('exit','BATCH_EXIT_FAILED'),@('oversized','BATCH_PROCESS_OUTPUT_LIMIT'),@('missing','BATCH_PAGE_MAPPING_INVALID'),@('empty','BATCH_REQUIRED_PAGE_EMPTY'))){
+                $script:batchMode=$case[0]
+                $bad=Invoke-P43R3aTesseractBatch -Executable $Executable -ModelPath $ModelPath -Crops $crops -Psm 6
+                Require ($bad.Status -ceq 'FAILED' -and $bad.Code -ceq $case[1] -and $bad.Pages.Count -eq 0 -and $bad.Words.Count -eq 0 -and $bad.InvocationCount -eq $(if($case[0] -ceq 'version'){0}else{1})) "Fail closed: $($case[0]), got $($bad.Code)"
+                Require (-not [IO.File]::Exists($script:listPath)) 'Failure cleans list scratch'
+            }
+            $forged=[pscustomobject]@{Crops=$crops}
+            $blocked=Invoke-P43R3aGateB -PreparedFixture $forged -Executable $Executable -ModelPath $ModelPath
+            Require ($blocked.Status -ceq 'GATE_B_BATCH_MAPPING_NOT_EVALUATED' -and $blocked.Batches.Count -eq 0) 'Gate A authority required before Gate B'
+            Write-Host 'BatchMapping synthetic controls PASS; real OCR invocations=0 (process seam)'
+        }finally{Set-Item Function:Invoke-InternalP43R3aProcess $originalProcess}
+        if($RunRealGateB){
+            $prepared=Prepare-P43R3aFixture -PdfPath (Join-Path $PSScriptRoot '../p4-3a-ocr/fixtures/gray.pdf') -ArtifactDirectory (Join-Path $scratch 'gray')
+            $real=Invoke-P43R3aGateB -PreparedFixture $prepared -Executable $Executable -ModelPath $ModelPath
+            Write-Host ("Real Gray: GateA={0}, GateB={1}, Code={2}; prepare counts={3}/{4}/{5}/{6}/{7}" -f (Invoke-P43R3aGateA $prepared),$real.Status,$real.Code,$prepared.PdfOpenCount,$prepared.PageReadCount,$prepared.ImageDecodeCount,$prepared.GridBuildCount,$prepared.CropBuildCount)
+            foreach($batch in $real.Batches){
+                Write-Host ("PSM{0}: Status={1}, Code={2}, invocations={3}, pages={4}, words={5}, elapsedMs={6}, page/ordinal/CellId={7}" -f $batch.Psm,$batch.Status,$batch.Code,$batch.InvocationCount,$batch.Pages.Count,$batch.Words.Count,$batch.ElapsedMilliseconds,(@($batch.Pages | ForEach-Object {"$($_.Page)/$($_.CropOrdinal)/$($_.CellId)"}) -join ','))
+            }
+            Require ($real.Status -ceq 'GATE_B_BATCH_MAPPING_PASS') "Real Gate B failed: $($real.Code)"
+            Write-Host 'BatchMapping PASS: synthetic controls and actual exact-runtime Gray Gate B PASS'
+        }else{Write-Host 'Real Gate B NOT_RUN in this invocation; synthetic PASS does not establish real mapping'}
+    }finally{[IO.Directory]::Delete($scratch,$true)}
+    return
+}
 foreach($name in @('Get-P43R3aPnmDescriptor','New-P43R3aCellCropSet','Prepare-P43R3aFixture','Invoke-P43R3aGateA')){
     Require ($null -ne (Get-Command $name -ErrorAction SilentlyContinue)) "Missing crop function: $name"
 }

@@ -1,6 +1,7 @@
 Set-StrictMode -Version Latest
 $ErrorActionPreference='Stop'
 . (Join-Path $PSScriptRoot 'crop-cells.ps1')
+. (Join-Path $PSScriptRoot 'invoke-tesseract-batch.ps1')
 # Reference-bound process-local authority: caller-authored hashes/metadata are not proof.
 $script:P43R3aPreparedProofs=[Runtime.CompilerServices.ConditionalWeakTable[object,object]]::new()
 
@@ -64,4 +65,27 @@ function Invoke-P43R3aGateA {
         }
         return 'GATE_A_CROP_PROVENANCE_PASS'
     }catch{return 'GATE_A_CROP_PROVENANCE_FAILED'}
+}
+
+function Invoke-P43R3aGateB {
+    param([Parameter(Mandatory)][object]$PreparedFixture,[Parameter(Mandatory)][string]$Executable,[Parameter(Mandatory)][string]$ModelPath)
+    $result=[pscustomobject]@{Status='GATE_B_BATCH_MAPPING_NOT_EVALUATED';Code=$null;Batches=@();ProductionAction='NONE'}
+    if((Invoke-P43R3aGateA -PreparedFixture $PreparedFixture) -cne 'GATE_A_CROP_PROVENANCE_PASS'){$result.Code='GATE_A_CROP_PROVENANCE_FAILED';return $result}
+    foreach($psm in @(6,11)){
+        $batch=Invoke-P43R3aTesseractBatch -Executable $Executable -ModelPath $ModelPath -Crops $PreparedFixture.Crops -Psm $psm
+        $result.Batches+= $batch
+        if($batch.Status -cne 'COMPLETE' -and $batch.InvocationCount -eq 0){$result.Code=$batch.Code;return $result}
+    }
+    $result.Status='GATE_B_BATCH_MAPPING_FAILED'
+    foreach($batch in $result.Batches){
+        if($batch.Status -cne 'COMPLETE'){$result.Code=$batch.Code;return $result}
+        if($batch.InvocationCount -ne 1 -or $batch.Pages.Count -ne 12){$result.Code='BATCH_PAGE_MAPPING_INVALID';return $result}
+    }
+    for($i=0;$i -lt 12;$i++){
+        foreach($field in @('Page','CropOrdinal','CellId')){
+            if($result.Batches[0].Pages[$i].$field -cne $result.Batches[1].Pages[$i].$field){$result.Code='BATCH_PAGE_MAPPING_INVALID';return $result}
+        }
+    }
+    $result.Status='GATE_B_BATCH_MAPPING_PASS'
+    return $result
 }

@@ -57,8 +57,7 @@ Redesign 2 proved that full-page OCR can be structurally safe while mandatory re
   - `libleptonica-6.dll` SHA-256 `1869b44e3d46fd830620b042477e5d60a950779582f38f60291547efb27792f1`.
 - Exact Korean model:
   - official `tessdata_fast` commit `87416418657359cb625c412a48b6e1d6d41c29bd`;
-  - `kor.traineddata` SHA-256 `6b85e11d9bbf07863b97b3523b1b112844c43e7b194b9ea97beba74200453fe1fb46` is not authoritative and must not be used;
-  - authoritative model SHA-256 is `6b85e11d9bbf07863b97b3523b1b112844c43e713df8b66418a081fd1060b3b2`.
+  - `kor.traineddata` SHA-256 `6b85e11d9bbf07863b97b3523b1b112844c43e713df8b66418a081fd1060b3b2`.
 - Language `kor`, OEM 1, DPI 300.
 - PSM roles fixed: PSM 6 primary, PSM 11 verifier.
 - Crop policy fixed: `PROVEN_CELL_CROP_V1`.

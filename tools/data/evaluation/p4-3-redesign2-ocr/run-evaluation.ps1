@@ -19,14 +19,14 @@ function Get-P43R2ClearFixtureGroundTruth {
     $cells=@(for($i=0;$i -lt 12;$i++){
         $row=[int][Math]::Floor($i/4)+1;$column=$i%4+1
         $role=if($row -eq 1){'HEADER'}elseif($column -eq 1){'BUSINESS_NAME'}elseif($column -eq 4){'BENEFIT'}else{'AUXILIARY'}
-        [pscustomobject]@{CellId="cell$($i+1)";Row=$row;Column=$column;FieldRole=$role;ExpectedText=$text[$i]}
+        [pscustomobject]@{CellId=[string]($i+1);Row=$row;Column=$column;FieldRole=$role;ExpectedText=$text[$i]}
     })
     return [pscustomobject]@{Policy='TEXT_FIDELITY_GROUND_TRUTH_V1';GeneratorBlob=$generatorBlob;ManifestBlob=$manifestBlob;FixtureHashes=$hashes;Cells=$cells}
 }
 
 function Normalize-P43R2FidelityText {
     param([string]$Text)
-    return [regex]::Replace($Text.Replace("`r`n","`n").Trim(),'[^\S\r\n]+',' ')
+    return [regex]::Replace($Text.Replace("`r`n","`n").Trim(),'[\p{Zs}\t]+',' ')
 }
 
 function Evaluate-P43R2TextFidelity {
@@ -37,8 +37,8 @@ function Evaluate-P43R2TextFidelity {
         $cells=@($truth.Cells)
         $trusted=$StructuralStatus -ceq 'COMPLETE' -and $truth.Policy -ceq 'TEXT_FIDELITY_GROUND_TRUTH_V1' -and $truth.FixtureHashes.ContainsKey($Fixture) -and $FixtureHash -ceq $truth.FixtureHashes[$Fixture] -and $cells.Count -eq 12 -and $CellText.Count -eq 12
         for($i=1;$trusted -and $i -le 12;$i++){
-            $expected=@($cells | Where-Object CellId -CEQ "cell$i")
-            $actual=@($CellText | Where-Object CellId -CEQ "cell$i")
+            $expected=@($cells | Where-Object CellId -CEQ ([string]$i))
+            $actual=@($CellText | Where-Object CellId -CEQ ([string]$i))
             $trusted=$expected.Count -eq 1 -and $actual.Count -eq 1 -and $null -ne $expected[0].ExpectedText -and $null -ne $actual[0].Text
         }
     } catch { $trusted=$false }
@@ -47,7 +47,7 @@ function Evaluate-P43R2TextFidelity {
         $text=if($actual.Count -eq 1 -and $actual[0].PSObject.Properties['Text']){$actual[0].Text}else{$null}
         $normalizedExpected=Normalize-P43R2FidelityText $cell.ExpectedText
         $normalizedActual=Normalize-P43R2FidelityText $text
-        $status=if(-not $trusted){'FIDELITY_NOT_EVALUATED'}elseif($normalizedExpected -ceq $normalizedActual){'FIDELITY_MATCH'}else{'FIDELITY_MISMATCH'}
+        $status=if(-not $trusted){'FIDELITY_NOT_EVALUATED'}elseif([string]::Equals($normalizedExpected,$normalizedActual,[StringComparison]::Ordinal)){'FIDELITY_MATCH'}else{'FIDELITY_MISMATCH'}
         [pscustomobject]@{Fixture=$Fixture;CellId=$cell.CellId;FieldRole=$cell.FieldRole;ExpectedText=$cell.ExpectedText;ReconstructedText=$text;
             NormalizedExpected=$normalizedExpected;NormalizedActual=$normalizedActual;Status=$status;
             RawWordConfidences=@($WordEvidence | Where-Object {$_.Membership.CellId -ceq $cell.CellId} | ForEach-Object {$_.Record.Confidence})}
@@ -57,6 +57,31 @@ function Evaluate-P43R2TextFidelity {
     return [pscustomobject]@{Gate='A2_TEXT_FIDELITY';NormalizationPolicy='TEXT_FIDELITY_NORMALIZATION_V1';Status=$status;Code="GATE_A2_TEXT_FIDELITY_$status";
         MandatoryMatchCount=@($mandatory | Where-Object Status -eq 'FIDELITY_MATCH').Count;MandatoryCellCount=8;
         AllCellMatchCount=@($evidence | Where-Object Status -eq 'FIDELITY_MATCH').Count;AllCellCount=12;Cells=$evidence;ProductionAction='NONE'}
+}
+
+function Get-P43R2PreBusinessTrustDecision {
+    param([object]$GateA1,[object]$GateA2)
+    $verdict=if($GateA2.Code -ceq 'GATE_A2_TEXT_FIDELITY_REJECTED' -or $GateA1.Verdict -ceq 'P4_3_REDESIGN2_REJECTED'){'P4_3_REDESIGN2_REJECTED'}
+        elseif($GateA1.Verdict -ceq 'GATE_A1_STRUCTURAL_PASS' -and $GateA2.Code -ceq 'GATE_A2_TEXT_FIDELITY_PASS'){'PRE_BUSINESS_TRUST_PASS'}else{'PRE_BUSINESS_TRUST_NOT_PROVEN'}
+    return [pscustomobject]@{Verdict=$verdict;Reason=$GateA2.Code;Task3='HUMAN_REVIEW_STOP';ProductDependency='NOT_APPROVED';P43B='BLOCKED';ProductionAction='NONE'}
+}
+
+function Invoke-P43R2GateA2 {
+    param([string]$Executable,[string]$ModelPath)
+    $runs=@(foreach($name in @('gray.pdf','rgb.pdf')){
+        for($repeat=1;$repeat -le 2;$repeat++){
+            $structural=Invoke-InternalP43R2StructuralProbe -PdfPath (Join-Path $PSScriptRoot "../p4-3a-ocr/fixtures/$name") -Executable $Executable -ModelPath $ModelPath -Psm 11
+            $fidelity=Evaluate-P43R2TextFidelity -Fixture $name -FixtureHash $structural.FixtureHash -StructuralStatus $structural.Status -CellText $structural.CellText -WordEvidence $structural.AcceptedWords
+            [pscustomobject]@{Fixture=$name;Repetition=$repeat;Structural=$structural;Fidelity=$fidelity}
+        }
+    })
+    $identical=$true
+    foreach($offset in @(0,2)){
+        if(($runs[$offset].Fidelity | ConvertTo-Json -Depth 12 -Compress) -cne ($runs[$offset+1].Fidelity | ConvertTo-Json -Depth 12 -Compress)){$identical=$false}
+    }
+    $status=if(-not $identical -or @($runs | Where-Object {$_.Fidelity.Status -eq 'NOT_EVALUATED'}).Count -gt 0){'NOT_EVALUATED'}
+        elseif(@($runs | Where-Object {$_.Fidelity.Status -eq 'REJECTED'}).Count -gt 0){'REJECTED'}else{'PASS'}
+    return [pscustomobject]@{Gate='A2_TEXT_FIDELITY';Status=$status;Code="GATE_A2_TEXT_FIDELITY_$status";RepetitionsIdentical=$identical;Runs=$runs;ProductionAction='NONE'}
 }
 
 function Get-P43R2CellMembership {
@@ -207,5 +232,5 @@ function Invoke-P43R2GateAMatrix {
     $old=@($runs | Where-Object {$_.Fixture -in @('degraded-gray.pdf','degraded-rgb.pdf')})
     $pass=$pass -and @($old | Where-Object {$_.OperationalStatus -ne 'FAILED' -or $_.OperationalCode -ne 'EMPTY_WORD_OUTPUT'}).Count -eq 0
     return [pscustomobject]@{ProbeId='MILIMAP_P4_3_REDESIGN2_OCR_EVAL';TrustModelVersion='STRUCTURAL_TRUST_V1';ConfidencePolicy='DIAGNOSTIC_ONLY_V1';SameRegionRatio=0.25;
-        Verdict=$(if($pass){'GATE_A_PASS'}else{'P4_3_REDESIGN2_REJECTED'});RepetitionsIdentical=$repeat;Runs=$runs.ToArray();ProductionAction='NONE'}
+        Verdict=$(if($pass){'GATE_A1_STRUCTURAL_PASS'}else{'P4_3_REDESIGN2_REJECTED'});RepetitionsIdentical=$repeat;Runs=$runs.ToArray();ProductionAction='NONE'}
 }

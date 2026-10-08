@@ -19,7 +19,7 @@ if($Group -eq 'TextFidelity'){
     Require ($truth.GeneratorBlob -ceq '6231ed473349063ce3b0d12fc7b2cff0bef1d114' -and $truth.ManifestBlob -ceq 'cde2a581ec2c4a1fb26481992908b5dcab2740ac') 'Historical authority changed'
     $literal=@('업체명','주소','전화번호','혜택','가상 가람 식당','가상시 가람로 12','031-123-4567','시험 할인 10%','가상 누리 식당','가상시 누리로 23','031-234-5678',"시험 할인 20%`n방문 시 적용")
     for($i=0;$i -lt 12;$i++){
-        Require ($truth.Cells[$i].CellId -ceq "cell$($i+1)" -and $truth.Cells[$i].ExpectedText -ceq $literal[$i] -and $truth.Cells[$i].Row -eq ([Math]::Floor($i/4)+1) -and $truth.Cells[$i].Column -eq ($i%4+1)) 'Authored table changed'
+        Require ($truth.Cells[$i].CellId -ceq ([string]($i+1)) -and $truth.Cells[$i].ExpectedText -ceq $literal[$i] -and $truth.Cells[$i].Row -eq ([Math]::Floor($i/4)+1) -and $truth.Cells[$i].Column -eq ($i%4+1)) 'Authored table changed'
     }
     foreach($role in @(@{Name='HEADER';Count=4},@{Name='BUSINESS_NAME';Count=2},@{Name='BENEFIT';Count=2},@{Name='AUXILIARY';Count=4})){
         Require (@($truth.Cells | Where-Object FieldRole -CEQ $role.Name).Count -eq $role.Count) 'Mandatory role coverage changed'
@@ -30,13 +30,19 @@ if($Group -eq 'TextFidelity'){
     }
     Require ((Get-Command Normalize-P43R2FidelityText).Parameters.Count -eq 1) 'Fuzzy normalization exposed'
     Require (-not (Get-Command Resolve-P43R2OcrCells).Parameters.ContainsKey('ExpectedText')) 'Ground truth leaked into resolver'
-    function FreshCellText { @($literal | ForEach-Object -Begin {$id=0} -Process {$id++;[pscustomobject]@{CellId="cell$id";Text=$_}}) }
+    function FreshCellText { @($literal | ForEach-Object -Begin {$id=0} -Process {$id++;[pscustomobject]@{CellId=[string]$id;Text=$_}}) }
     function Fidelity($Texts=(FreshCellText),$Status='COMPLETE',$Hash=$truth.FixtureHashes['gray.pdf'],$Words=@()) {
         Evaluate-P43R2TextFidelity -Fixture 'gray.pdf' -FixtureHash $Hash -StructuralStatus $Status -CellText $Texts -WordEvidence $Words
     }
-    $low=[pscustomobject]@{Membership=[pscustomobject]@{Status='UNIQUE';CellId='cell1'};Record=[pscustomobject]@{Confidence=22;Text='업체명'}}
+    $low=[pscustomobject]@{Membership=[pscustomobject]@{Status='UNIQUE';CellId='1'};Record=[pscustomobject]@{Confidence=22;Text='업체명'}}
     $exact=Fidelity -Words @($low)
     Require ($exact.Code -ceq 'GATE_A2_TEXT_FIDELITY_PASS' -and $exact.MandatoryMatchCount -eq 8 -and $exact.AllCellMatchCount -eq 12 -and $exact.Cells[0].RawWordConfidences[0] -eq 22) 'Exact low-confidence text fails fidelity'
+    $decomposed=FreshCellText;$decomposed[0].Text='업체명'.Normalize([Text.NormalizationForm]::FormD)
+    Require ((Fidelity -Texts $decomposed).Status -eq 'REJECTED') 'Ordinally different decomposed Korean accepted'
+    foreach($separator in @([char]0x000b,[char]0x000c,[char]0x0085,[char]0x2028,[char]0x2029)){
+        $vertical=FreshCellText;$vertical[7].Text="시험${separator}할인 10%"
+        Require ((Fidelity -Texts $vertical).Status -eq 'REJECTED') 'Non-horizontal separator normalized into authored space'
+    }
     foreach($change in @(@{Index=0;Text='업쳬명'},@{Index=7;Text='시험 할인 11%'},@{Index=7;Text='시험 할인 10'})){
         $actual=FreshCellText;$actual[$change.Index].Text=$change.Text
         $high=[pscustomobject]@{Membership=[pscustomobject]@{Status='UNIQUE';CellId=$actual[$change.Index].CellId};Record=[pscustomobject]@{Confidence=97;Text=$change.Text}}
@@ -66,6 +72,30 @@ if($Group -eq 'TextFidelity'){
         function Get-P43R2ClearFixtureGroundTruth { throw 'R2_GROUND_TRUTH_IDENTITY_MISMATCH' }
         Require ((Fidelity).Status -eq 'NOT_EVALUATED') 'Corrupt ground truth evaluated'
     } finally { Set-Item Function:Get-P43R2ClearFixtureGroundTruth $originalTruth }
+    $a1=[pscustomobject]@{Verdict='GATE_A1_STRUCTURAL_PASS'}
+    foreach($case in @(@{Code='GATE_A2_TEXT_FIDELITY_PASS';Want='PRE_BUSINESS_TRUST_PASS'},@{Code='GATE_A2_TEXT_FIDELITY_REJECTED';Want='P4_3_REDESIGN2_REJECTED'},@{Code='GATE_A2_TEXT_FIDELITY_NOT_EVALUATED';Want='PRE_BUSINESS_TRUST_NOT_PROVEN'})){
+        Require ((Get-P43R2PreBusinessTrustDecision -GateA1 $a1 -GateA2 ([pscustomobject]@{Code=$case.Code})).Verdict -ceq $case.Want) 'Pre-business trust decision incorrect'
+    }
+    Require ((Get-P43R2PreBusinessTrustDecision -GateA1 ([pscustomobject]@{Verdict='P4_3_REDESIGN2_REJECTED'}) -GateA2 ([pscustomobject]@{Code='GATE_A2_TEXT_FIDELITY_PASS'})).Verdict -cne 'PRE_BUSINESS_TRUST_PASS') 'A2 rescues failed A1'
+    if($TesseractExecutable -or $KoreanModelPath){
+        $gate=Invoke-P43R2GateA2 -Executable $TesseractExecutable -ModelPath $KoreanModelPath
+        $gate | ConvertTo-Json -Depth 16 | Write-Host
+        Require ($gate.Runs.Count -eq 4 -and $gate.RepetitionsIdentical) 'Clear fidelity repetition changed'
+        foreach($run in $gate.Runs){
+            Require ($run.Structural.Status -ceq 'COMPLETE' -and $run.Structural.Psm -eq 11 -and $run.Structural.WordCount -eq 40 -and $run.Structural.UsableRows -eq 2) 'Fixed clear structure changed'
+            Require ($run.Fidelity.MandatoryCellCount -eq 8 -and $run.Fidelity.AllCellCount -eq 12 -and $run.Fidelity.Cells.Count -eq 12 -and @($run.Fidelity.Cells | Where-Object Status -eq 'FIDELITY_NOT_EVALUATED').Count -eq 0) 'Not all clear cells evaluated'
+            foreach($cell in $run.Fidelity.Cells){Require ($cell.RawWordConfidences.Count -gt 0) 'Contributing confidence lost'}
+            $header=$run.Fidelity.Cells[1]
+            if($header.ReconstructedText -cne '주소'){Require ($header.Status -ceq 'FIDELITY_MISMATCH') 'Wrong header classified as confidence failure'}
+            Require (-not $run.Fidelity.PSObject.Properties['ConfidenceThreshold']) 'Fidelity confidence threshold exposed'
+        }
+        $mismatchCount=@($gate.Runs.Fidelity.Cells | Where-Object {$_.FieldRole -ne 'AUXILIARY' -and $_.Status -eq 'FIDELITY_MISMATCH'}).Count
+        $wanted=if($mismatchCount -gt 0){'GATE_A2_TEXT_FIDELITY_REJECTED'}else{'GATE_A2_TEXT_FIDELITY_PASS'}
+        Require ($gate.Code -ceq $wanted) 'Gate hides mandatory mismatches'
+        $decision=Get-P43R2PreBusinessTrustDecision -GateA1 $a1 -GateA2 $gate
+        $decision | ConvertTo-Json | Write-Host
+        Require ($decision.ProductionAction -eq 'NONE' -and $decision.Task3 -eq 'HUMAN_REVIEW_STOP') 'Gate advanced into Task3'
+    }
     Assert-FrozenPaths
     Write-Host 'Redesign2 TextFidelity contract PASS'
     return
@@ -105,7 +135,7 @@ if($Group -eq 'StructuralTrust'){
     Require ($failed.OperationalStatus -eq 'FAILED' -and $failed.OperationalCode -eq 'EMPTY_WORD_OUTPUT' -and $failed.AcceptanceStatus -eq 'NOT_EVALUATED' -and $failed.AcceptedWords.Count -eq 0) 'Empty output becomes structural absence'
     $matrix=Invoke-P43R2GateAMatrix -Executable $TesseractExecutable -ModelPath $KoreanModelPath
     $matrix | ConvertTo-Json -Depth 16 | Write-Host
-    Require ($matrix.Verdict -eq 'GATE_A_PASS' -and $matrix.RepetitionsIdentical -and $matrix.Runs.Count -eq 13) 'Gate A structural matrix failed'
+    Require ($matrix.Verdict -eq 'GATE_A1_STRUCTURAL_PASS' -and $matrix.RepetitionsIdentical -and $matrix.Runs.Count -eq 13) 'Gate A1 structural matrix failed'
     $clear=@($matrix.Runs | Where-Object {$_.Psm -eq 11 -and $_.Fixture -in @('gray.pdf','rgb.pdf')})
     foreach($run in $clear){Require ($run.WordCount -eq 40 -and $run.Status -eq 'COMPLETE' -and $run.UsableRows -eq 2 -and $run.AcceptedBelow50.Count -gt 0 -and $run.ExactMembership -and $run.RequiredCoverage) 'Clear physical/low-confidence positive failed'}
     $mild=@($matrix.Runs | Where-Object Fixture -eq 'mild-degraded-gray.pdf')[0]
@@ -118,7 +148,7 @@ if($Group -eq 'StructuralTrust'){
         Require ($run.WordCount -eq 0 -and $run.OperationalStatus -eq 'FAILED' -and $run.OperationalCode -eq 'EMPTY_WORD_OUTPUT' -and $run.Status -eq 'NOT_EVALUATED' -and $run.UsableRows -eq 0) 'Old degraded failure rescued'
     }
     Assert-FrozenPaths
-    Write-Host 'Redesign2 StructuralTrust PASS; GATE_A_PASS; HUMAN REVIEW STOP before Task3'
+    Write-Host 'Redesign2 StructuralTrust PASS; GATE_A1_STRUCTURAL_PASS; HUMAN REVIEW STOP before Task3'
     return
 }
 if($Group -ne 'Contract'){throw 'REDESIGN2_GROUP_NOT_IMPLEMENTED'}

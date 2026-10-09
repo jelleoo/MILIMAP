@@ -98,8 +98,9 @@
 
 **Interfaces:**
 - `Get-P43R3bGitBlobSha1 -Path <string>` -> lowercase Git blob object SHA-1 calculated as SHA1("blob <length>\0" + exact bytes).
-- `Get-P43R3bModelDescriptor -ModelPath <string>` -> `Status, Code, Filename, SizeBytes, GitBlobSha1, Sha256, SourceRepository, SourceTag, SourceTagObject, SourceCommit, License, FrozenAtUtc`.
-- `Invoke-P43R3bGateA -Executable <string> -ModelPath <string>` -> `GATE_A_MODEL_SUPPLY_PASS|GATE_A_MODEL_SUPPLY_NOT_EVALUATED`, plus frozen descriptor and runtime identity.
+- `Get-P43R3bModelDescriptor -ModelPath <string>` -> `Status, Code, Filename, SizeBytes, GitBlobSha1, Sha256, SourceRepository, SourceTag, SourceTagObject, SourceTagVerification, SourceCommit, SourceTree, License, FrozenAtUtc`.
+- `Invoke-P43R3bGateA -Executable <string> -ModelPath <string>` -> `GATE_A_MODEL_SUPPLY_PASS|GATE_A_MODEL_SUPPLY_NOT_EVALUATED`, plus runtime identity and the exact descriptor object registered in process-local authority.
+- Only the exact descriptor object returned by successful Gate A is authorized for quality OCR; copied/re-authored descriptors fail closed.
 
 - [ ] **Step 1: Write failing `ModelSupply` tests**
 
@@ -111,7 +112,8 @@ Assert:
 - size other than `12528128` -> NOT_EVALUATED;
 - Git blob SHA other than `c82615b5228c9981c33a0985b32224d97b7fb43a` -> NOT_EVALUATED;
 - SHA-256 is lowercase 64-hex and is calculated only after blob identity succeeds;
-- descriptor contains the exact pinned repository/tag/tag-object/commit/license values;
+- descriptor contains the exact pinned repository/tag/tag-object/valid-verification/commit/tree/license values;
+- copied or caller-authored descriptor objects cannot gain Gate A authority;
 - runtime EXE/DLL hashes and version remain exact Redesign 3A identities;
 - candidate bytes modified after descriptor creation are detected before OCR;
 - no OCR process seam is called by Gate A.
@@ -304,7 +306,7 @@ git commit -m "test: evaluate P4-3 redesign3b Gray fidelity"
 
 **Interfaces:**
 - `Invoke-P43R3bGateB2 -RgbPrepared <object> -Executable <string> -ModelDescriptor <object>`
-  -> RGB fidelity status/evidence.
+  -> `GATE_B2_CLEAR_RGB_FIDELITY_PASS|GATE_B2_CLEAR_RGB_FIDELITY_FAILED|GATE_B2_CLEAR_RGB_FIDELITY_NOT_EVALUATED` plus RGB fidelity evidence.
 - `Compare-P43R3bCellConsensus -Psm6Cells <object[]> -Psm11Cells <object[]>`
   -> `CELL_CONSENSUS|CELL_DISAGREEMENT|CELL_NOT_EVALUATED`.
 - `Invoke-P43R3bGateC -GrayGate <object> -RgbGate <object>`
@@ -376,10 +378,12 @@ git commit -m "test: evaluate P4-3 redesign3b RGB fidelity and consensus"
 
 Assert:
 
-- both PSMs same authored truth -> correct consensus;
-- disagreement -> fail closed, never select a winner;
+- both PSMs same authored truth -> `CORRECT_CONSENSUS`;
+- disagreement -> `CELL_DISAGREEMENT`, safe fail-closed evidence and never a winner selection;
 - same wrong mandatory text -> `FALSE_CONSENSUS` and hard rejection;
-- missing/untrusted -> NOT_EVALUATED, no semantic absence;
+- missing/untrusted -> `CELL_NOT_EVALUATED`, no semantic absence;
+- Gate D overall PASS requires zero `FALSE_CONSENSUS` and zero `CELL_NOT_EVALUATED`; `CELL_DISAGREEMENT` is allowed as safe fail-closed evidence;
+- any `CELL_NOT_EVALUATED` with no prior `FALSE_CONSENSUS` makes Gate D `GATE_D_DEGRADED_SAFETY_NOT_EVALUATED`;
 - historical empty output is not required;
 - recovered words are evaluated against historical authored truth;
 - no new fixture is created;

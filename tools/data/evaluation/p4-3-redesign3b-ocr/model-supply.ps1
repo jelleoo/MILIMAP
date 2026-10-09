@@ -74,7 +74,7 @@ Import-Module (New-Module -Name MilimapP43R3bModelSupply -ScriptBlock {
         return $result
     }
     function Assert-P43R3bModelAuthority {
-        param([Parameter(Mandatory)][object]$Descriptor,[Parameter(Mandatory)][string]$Executable,[Parameter(Mandatory)][string]$ModelPath)
+        param([Parameter(Mandatory)][object]$Descriptor,[Parameter(Mandatory)][string]$Executable,[string]$ModelPath)
         $proof=$null
         if(-not $proofs.TryGetValue($Descriptor,[ref]$proof)){throw 'MODEL_AUTHORITY_REQUIRED'}
         # Read CLR metadata directly instead of trusting caller-authored members.
@@ -84,10 +84,13 @@ Import-Module (New-Module -Name MilimapP43R3bModelSupply -ScriptBlock {
             $property=$properties.get_Item($name)
             if($null -eq $property -or $property.MemberType -ne [Management.Automation.PSMemberTypes]::NoteProperty -or -not [object]::Equals($property.Value,$proof.Fields[$name])){throw 'MODEL_DESCRIPTOR_CHANGED'}
         }
-        if([IO.Path]::GetFullPath($ModelPath) -cne $proof.ModelPath -or [IO.Path]::GetFullPath($Executable) -cne $proof.Executable){throw 'MODEL_AUTHORITY_PATH_MISMATCH'}
+        if($PSBoundParameters.ContainsKey('ModelPath') -and [IO.Path]::GetFullPath($ModelPath) -cne $proof.ModelPath){throw 'MODEL_AUTHORITY_PATH_MISMATCH'}
+        if([IO.Path]::GetFullPath($Executable) -cne $proof.Executable){throw 'MODEL_AUTHORITY_PATH_MISMATCH'}
         $current=Get-P43R3bModelDescriptor $proof.ModelPath
         if($current.Status -cne 'VERIFIED' -or $current.Sha256 -cne $proof.Fields['Sha256']){throw 'MODEL_BYTES_CHANGED'}
-        Get-Runtime $proof.Executable
+        $runtime=Get-Runtime $proof.Executable
+        $runtime | Add-Member -NotePropertyName ModelPath -NotePropertyValue $proof.ModelPath
+        return $runtime
     }
     Export-ModuleMember -Function Get-P43R3bGitBlobSha1,Get-P43R3bModelDescriptor,Invoke-P43R3bGateA,Assert-P43R3bModelAuthority
 }) -Force

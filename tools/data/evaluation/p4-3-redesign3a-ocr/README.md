@@ -290,3 +290,17 @@ The supply was not reacquired; actual quality measurements and the full 62-test
 suite were not rerun during this fix. The controller owns final post-review
 verification and whole-branch review. Full-suite historical JSON parser object
 table output was pre-existing diagnostic noise; it did not invalidate 62/62 PASS.
+
+Final-review result-contract fix: unavailable prerequisites now use the exact
+`P4_3_REDESIGN3A_NOT_EVALUATED` final verdict. A later zero-invocation supply failure
+preserves an already observed B mapping failure or C batch, mandatory fidelity or
+repeat-determinism failure as FAILED / `P4_3_REDESIGN3A_REJECTED`, retaining original
+evidence and invocation counts. Without disqualifying observations, incomplete
+evaluation remains NOT_EVALUATED. Gate C PASS alone also remains an intermediate
+result: final AllReached is NOT_EVALUATED while D is `NOT_RUN_TASK4_NOT_IMPLEMENTED`.
+ClearFidelity mixed-sequence controls and the real absent-supply ReachedReporting
+CLI PASS with **zero actual OCR**. This separate code/reporting fix does not rerun
+or replace the actual eight-call C matrix, original measurement HEAD `c0d19e5`,
+62-test measurement or overall cycle total of 20 OCR calls. No supply was acquired;
+Task 4, consensus and degraded-quality evaluation remain unreached. The controller
+owns the fresh full data-suite check at the final fixed HEAD.

@@ -74,7 +74,14 @@ function Invoke-P43R3aGateB {
     foreach($psm in @(6,11)){
         $batch=Invoke-P43R3aTesseractBatch -Executable $Executable -ModelPath $ModelPath -Crops $PreparedFixture.Crops -Psm $psm
         $result.Batches+= $batch
-        if($batch.Status -cne 'COMPLETE' -and $batch.InvocationCount -eq 0){$result.Code=$batch.Code;return $result}
+        if($batch.Status -cne 'COMPLETE' -and $batch.InvocationCount -eq 0){
+            if($result.Status -cne 'GATE_B_BATCH_MAPPING_FAILED'){$result.Code=$batch.Code}
+            return $result
+        }
+        if($result.Status -cne 'GATE_B_BATCH_MAPPING_FAILED' -and ($batch.Status -cne 'COMPLETE' -or $batch.InvocationCount -ne 1 -or $batch.Pages.Count -ne 12)){
+            $result.Status='GATE_B_BATCH_MAPPING_FAILED'
+            $result.Code=if($batch.Status -cne 'COMPLETE'){$batch.Code}else{'BATCH_PAGE_MAPPING_INVALID'}
+        }
     }
     $result.Status='GATE_B_BATCH_MAPPING_FAILED'
     foreach($batch in $result.Batches){
@@ -104,13 +111,15 @@ function Invoke-P43R3aAllReached {
     $result.TotalOcrInvocationCount=$result.MappingInvocationCount
     if($result.GateB.Status -cne 'GATE_B_BATCH_MAPPING_PASS'){
         $result.GateD='NOT_RUN_GATE_B_FAILED'
-        if($result.GateB.Status -ceq 'GATE_B_BATCH_MAPPING_NOT_EVALUATED'){$result.Verdict='PRE_BUSINESS_TRUST_NOT_PROVEN'}
+        if($result.GateB.Status -ceq 'GATE_B_BATCH_MAPPING_NOT_EVALUATED'){$result.Verdict='P4_3_REDESIGN3A_NOT_EVALUATED'}
         return $result
     }
     $result.GateC=Invoke-P43R3aGateC $GrayPrepared $RgbPrepared $Executable $ModelPath
     $result.QualityInvocationCount=$result.GateC.QualityInvocationCount
     $result.TotalOcrInvocationCount+=$result.QualityInvocationCount
-    $result.Verdict=$result.GateC.Verdict
+    # Gate C alone is intermediate evidence; unimplemented D cannot establish
+    # the approved first-cycle EARLY_GATES_PASS outcome.
+    $result.Verdict=if($result.GateC.Status -ceq 'GATE_C_CLEAR_FIDELITY_PASS'){'P4_3_REDESIGN3A_NOT_EVALUATED'}else{$result.GateC.Verdict}
     $result.GateD=if($result.GateC.Status -ceq 'GATE_C_CLEAR_FIDELITY_FAILED'){'NOT_RUN_GATE_C_FAILED'}elseif($result.GateC.Status -ceq 'GATE_C_CLEAR_FIDELITY_NOT_EVALUATED'){'NOT_RUN_GATE_C_NOT_EVALUATED'}else{'NOT_RUN_TASK4_NOT_IMPLEMENTED'}
     return $result
 }
@@ -261,7 +270,7 @@ function Evaluate-P43R3aFidelity {
 
 function Invoke-P43R3aGateC {
     param([object]$GrayPrepared,[object]$RgbPrepared,[string]$Executable,[string]$ModelPath)
-    $result=[pscustomobject]@{Status='GATE_C_CLEAR_FIDELITY_NOT_EVALUATED';Code=$null;Verdict='PRE_BUSINESS_TRUST_NOT_PROVEN';Runs=@();QualityInvocationCount=0;PreparationCounts=@();Determinism=@();Task4='BLOCKED';ProductionAction='NONE'}
+    $result=[pscustomobject]@{Status='GATE_C_CLEAR_FIDELITY_NOT_EVALUATED';Code=$null;Verdict='P4_3_REDESIGN3A_NOT_EVALUATED';Runs=@();QualityInvocationCount=0;PreparationCounts=@();Determinism=@();Task4='BLOCKED';ProductionAction='NONE'}
     foreach($prepared in @($GrayPrepared,$RgbPrepared)){
         if((Invoke-P43R3aGateA $prepared) -cne 'GATE_A_CROP_PROVENANCE_PASS'){$result.Code='GATE_A_CROP_PROVENANCE_FAILED';return $result}
     }
@@ -279,6 +288,11 @@ function Invoke-P43R3aGateC {
                 $texts=@(ConvertTo-P43R3aCellTexts $batch)
                 $fidelity=Evaluate-P43R3aFidelity $pair.Name $prepared.FixtureHash $psm $texts
                 $result.Runs+=[pscustomobject]@{Fixture=$pair.Name;Psm=$psm;Repetition=$repeat;Batch=$batch;CellTexts=$texts;Fidelity=$fidelity}
+                # Keep disqualifying observations before another batch can lose
+                # its supply. The unavailable batch code remains an abort diagnostic.
+                if($batch.Status -cne 'COMPLETE' -or $fidelity.Status -ceq 'FAILED' -or $fidelity.MandatoryMatchCount -ne 8){
+                    $result.Status='GATE_C_CLEAR_FIDELITY_FAILED';$result.Verdict='P4_3_REDESIGN3A_REJECTED'
+                }
             }
             $runs=@($result.Runs | Where-Object {$_.Fixture -ceq $pair.Name -and $_.Psm -eq $psm})
             $words=($runs[0].Batch.Words | ConvertTo-Json -Depth 12 -Compress) -ceq ($runs[1].Batch.Words | ConvertTo-Json -Depth 12 -Compress)
@@ -288,6 +302,9 @@ function Invoke-P43R3aGateC {
             $secondDiagnostics=@($runs[1].Batch.Diagnostics)+@($runs[1].CellTexts | ForEach-Object {$_.Diagnostics})
             $diagnostics=($firstDiagnostics | ConvertTo-Json -Depth 12 -Compress) -ceq ($secondDiagnostics | ConvertTo-Json -Depth 12 -Compress)
             $result.Determinism+=[pscustomobject]@{Fixture=$pair.Name;Psm=$psm;WordsIdentical=$words;TextsIdentical=$texts;FidelityIdentical=$fidelity;DiagnosticsIdentical=$diagnostics}
+            if(-not $words -or -not $texts -or -not $fidelity -or -not $diagnostics){
+                $result.Status='GATE_C_CLEAR_FIDELITY_FAILED';$result.Verdict='P4_3_REDESIGN3A_REJECTED'
+            }
         }
     }
     if(@($result.Runs | Where-Object {$_.Batch.Status -cne 'COMPLETE' -or $_.Fidelity.Status -ceq 'FAILED' -or $_.Fidelity.MandatoryMatchCount -ne 8}).Count -gt 0 -or @($result.Determinism | Where-Object {-not $_.WordsIdentical -or -not $_.TextsIdentical -or -not $_.FidelityIdentical -or -not $_.DiagnosticsIdentical}).Count -gt 0){

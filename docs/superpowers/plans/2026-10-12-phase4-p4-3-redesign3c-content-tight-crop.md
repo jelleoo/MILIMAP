@@ -235,13 +235,13 @@ git commit -m "test: evaluate P4-3 redesign3c Gray fidelity"
 **Precondition:** Actual Gate B1 PASS. If not, mark `NOT_RUN_GATE_B1_FAILED` and do not implement/run this task's quality path.
 
 **Files:**
-- Modify: `run-evaluation.ps1`
-- Modify: `test-evaluation.ps1`
-- Modify: `README.md`
+- Modify: `tools/data/evaluation/p4-3-redesign3c-ocr/run-evaluation.ps1`
+- Modify: `tools/data/evaluation/p4-3-redesign3c-ocr/test-evaluation.ps1`
+- Modify: `tools/data/evaluation/p4-3-redesign3c-ocr/README.md`
 
 **Interfaces:**
-- `Invoke-P43R3cGateB2 ...` -> RGB fidelity result, max four OCR.
-- `Invoke-P43R3cGateC -GrayGate <object> -RgbGate <object>` -> zero-OCR consensus result.
+- `Invoke-P43R3cGateB2 -PreparedFixture <object> -TransformedSet <object> -Executable <string> -ModelPath <string>` -> `GATE_B2_CLEAR_RGB_FIDELITY_PASS|FAILED|NOT_EVALUATED`, max four OCR.
+- `Invoke-P43R3cGateC -GrayGate <object> -RgbGate <object>` -> `GATE_C_CLEAR_CONSENSUS_PASS|FAILED|NOT_EVALUATED`, additional OCR 0.
 
 - [ ] **Step 1: Write RED tests only if B1 PASS**
 
@@ -268,12 +268,12 @@ Failure blocks Task 4.
 **Precondition:** Actual A/B1/B2/C PASS. Otherwise `NOT_RUN_<EARLIER_GATE>_FAILED`.
 
 **Files:**
-- Modify: `run-evaluation.ps1`
-- Modify: `test-evaluation.ps1`
-- Modify: `README.md`
+- Modify: `tools/data/evaluation/p4-3-redesign3c-ocr/run-evaluation.ps1`
+- Modify: `tools/data/evaluation/p4-3-redesign3c-ocr/test-evaluation.ps1`
+- Modify: `tools/data/evaluation/p4-3-redesign3c-ocr/README.md`
 
 **Interfaces:**
-- `Invoke-P43R3cGateD ...` -> degraded safety result and max six OCR calls.
+- `Invoke-P43R3cGateD -Executable <string> -ModelPath <string> -ArtifactRoot <string>` -> `GATE_D_DEGRADED_SAFETY_PASS|GATE_D_FALSE_CONSENSUS_FAILED|GATE_D_DEGRADED_SAFETY_NOT_EVALUATED`, max six OCR calls.
 
 - [ ] **Step 1: Write RED safety tests if prior gates PASS**
 

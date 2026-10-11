@@ -186,3 +186,159 @@ Gate A, preparation or OCR. Its zero-call harness error was reproduced by a
 regression assertion and fixed by restoring the captured functions. A fresh
 Gate A-only preflight passed; the actual quality matrix then ran exactly once.
 Observed-result assertions subsequently PASS without another actual OCR call.
+
+## Reached verification and factual result (Task 6)
+
+Branch `codex/phase4-p4-3-redesign3b-best-model-evaluation`, final implementation
+HEAD `15fa95533552d415d21f9ff627c424913b370c47`. Task 3 first measurement was
+captured before its implementation commit; its unchanged evidence remains
+authoritative. The later result-recording commit is resolved from Git in the
+controller's final report, rather than self-referenced in this file.
+
+`AllReached` accepts `-TesseractExecutable` and `-BestModelPath`. Without supply
+it verifies reporting and synthetic Gray contracts with zero actual quality
+OCR. With both supply paths it requires `-ObservedResultPath` pointing to the
+original B1 rejection. The original gate/counts are checked before any Gate A,
+preparation or process call. A fresh repository-external `-ArtifactDirectory`
+is required (or a unique external temporary directory is generated). The only
+implemented/reached replay is A+B1, PSM6 x2 then PSM11 x2, one Gray preparation,
+at most four quality calls. No blocked gate is invoked. This is an evaluation
+verification interface; running it requires separately authorized quality work.
+
+```powershell
+pwsh -NoProfile -File tools/data/evaluation/p4-3-redesign3b-ocr/test-evaluation.ps1 -Group AllReached
+pwsh -NoProfile -File tools/data/evaluation/p4-3-redesign3b-ocr/test-evaluation.ps1 -Group AllReached -TesseractExecutable <absolute-exe> -BestModelPath <absolute-kor.traineddata> -ObservedResultPath <original-first-cycle.json> -ArtifactDirectory <fresh-external-directory>
+```
+
+The sole authorized final verification ran 2026-10-10 KST, UTC
+`2026-10-09T17:31:37.0054872Z` to `2026-10-09T17:31:39.7270283Z`.
+Gate A independently froze the exact same 12528128-byte pinned model and runtime
+at `2026-10-09T17:31:37.0709263Z`, before preparing or executing quality OCR.
+The model source/blob/SHA256 are as documented above. Runtime engine 5.5.3,
+build `tesseract v5.5.3.20260724`, exact SHA256 identities:
+
+| Runtime file | SHA256 |
+| --- | --- |
+| `tesseract.exe` | `c66f0f12ed76f6aa455dac97684bbc86756d6a732380bee09122454cfda3f420` |
+| `libtesseract-5.dll` | `54d54528b453ce3a5ba79487687f8df43e7b194b9ea97beba74200453fe1fb46` |
+| `libleptonica-6.dll` | `1869b44e3d46fd830620b042477e5d60a950779582f38f60291547efb27792f1` |
+
+| Gate | First measurement | Final verification |
+| --- | --- | --- |
+| A | `GATE_A_MODEL_SUPPLY_PASS` | `GATE_A_MODEL_SUPPLY_PASS` |
+| Gray provenance | `GATE_A_CROP_PROVENANCE_PASS` | `GATE_A_CROP_PROVENANCE_PASS` |
+| B1 | `GATE_B1_CLEAR_GRAY_FIDELITY_FAILED` | `GATE_B1_CLEAR_GRAY_FIDELITY_FAILED` |
+| B2 | `NOT_RUN_GATE_B1_FAILED` | `NOT_RUN_GATE_B1_FAILED` |
+| C | `NOT_RUN_GATE_B1_FAILED` | `NOT_RUN_GATE_B1_FAILED` |
+| D | `NOT_RUN_GATE_B1_FAILED` | `NOT_RUN_GATE_B1_FAILED` |
+| Verdict | `P4_3_REDESIGN3B_REJECTED` | `P4_3_REDESIGN3B_REJECTED` |
+
+Final verification was four COMPLETE batches with null codes and empty batch
+diagnostics. The first failing reached gate is B1. Verification records its
+first observation as PSM6 repeat1, `MANDATORY_FIDELITY_FAILED`. Original JSON
+predates the `FirstFailure` detail field: reporting explicitly marks that
+detail `NOT_RECORDED`, without modifying the source evidence or inventing it.
+The original recorded B1 failure and rejected verdict remain authoritative even
+if a replay unexpectedly returns another valid verdict. Accepted final vocabulary
+is `P4_3_REDESIGN3B_EARLY_GATES_PASS`, `P4_3_REDESIGN3B_REJECTED` or
+`P4_3_REDESIGN3B_NOT_EVALUATED`; none of the blocked gates gains PASS.
+
+| Fixture | PSM | Repeat | Mandatory | All cells | Words | Verification ms |
+| --- | --- | --- | --- | --- | --- | --- |
+| clear Gray | 6 | 1 | 5/8 | 7/12 | 40 | 264 |
+| clear Gray | 6 | 2 | 5/8 | 7/12 | 40 | 263 |
+| clear Gray | 11 | 1 | 6/8 | 8/12 | 39 | 283 |
+| clear Gray | 11 | 2 | 6/8 | 8/12 | 39 | 287 |
+
+The four verification runs reproduce every nonmatch, reconstruction, raw word
+confidence and geometry diagnostic in the Task 3 table above. Both PSMs have
+all four words/texts/fidelity/diagnostics equality flags true within their
+repeated pairs. Corresponding first/verification representations are also
+identical under the same historical comparison; raw TSV bytes match across
+cycles. Raw TSV and stderr match within each verification PSM pair. Cross-cycle
+stderr bytes differ because the 12 ordered page-list notices contain different
+scratch paths; verification stderr is 1469 bytes per run, only those 12 notices,
+with no warning/error text. This observation does not change comparison policy.
+Consensus/false-consensus and degraded behavior are `NOT_RUN_GATE_B1_FAILED`;
+there is no evidence to assess them. Tasks 4/5 were not implemented.
+
+| PSM | First range / median ms | Verification range / median ms | All four range / median ms |
+| --- | --- | --- | --- |
+| 6 | 261–271 / 266 | 263–264 / 263.5 | 261–271 / 263.5 |
+| 11 | 259–278 / 268.5 | 283–287 / 285 | 259–287 / 280.5 |
+
+Batch elapsed totals are 1069 ms first, 1097 ms verification, 2166 ms combined.
+The measured verification A/preparation/B1 interval is 2721.5411 ms. Timing and
+12528128-byte model size are diagnostics, not an accuracy or performance claim.
+
+| Observed counter | First | Verification | Overall |
+| --- | --- | --- | --- |
+| Physical / returned quality OCR | 4 / 4 | 4 / 4 | 8 / 8 |
+| PSM6 / PSM11 quality OCR | 2 / 2 | 2 / 2 | 4 / 4 |
+| Gray / RGB / degraded preparations | 1 / 0 / 0 | 1 / 0 / 0 | 2 / 0 / 0 |
+| Version probes for these actual cycles | 1 | 1 | 2 |
+| RGB / consensus / degraded quality OCR | 0 / 0 / 0 | 0 / 0 / 0 | 0 / 0 / 0 |
+| Per-cell fallback / per-business OCR | 0 / 0 | 0 / 0 | 0 / 0 |
+| Fast baseline rerun / Gate C extra OCR | 0 / 0 | 0 / 0 | 0 / 0 |
+
+Each cycle opens/reads/decodes/builds grid/builds crops once (`1/1/1/1/1`),
+prepares 12 crops and reuses them. Physical process-boundary counters are checked
+against returned invocation counts; overall 8 is reported only after the four
+verification quality calls actually ran. Previous ModelSupply/BestBatch test
+version probes are separate zero-quality contract checks, not part of these
+two actual quality cycles. No mapping probe, retry or further quality work ran.
+
+Task 6 reporting RED was the missing reporting function; GREEN verified original
+rejection preservation, explicit blocked statuses, independently checked counts
+and final vocabulary. The first AllReached launcher stopped on the original
+JSON's absent detail field before Gate A, preparation, scratch creation or OCR
+(quality=0). A narrow legacy-evidence regression reproduced that error; its
+minimal reporting-only fix GREENed, followed by the sole four-call replay.
+AllReached synthetic/observed assertions and actual reporting assertions PASS.
+The implementation runner and acceptance semantics were unchanged by Task 6.
+
+Controller locked historical helper restore/build and A/A2/R2 Contract plus
+3A ClearFidelity/ReachedReporting checks PASSed with zero actual quality OCR
+(historical build warnings=0/errors=0). The final full sorted
+`tools/data/test-*.ps1` suite PASSed 62/62, exit 0, controller session `58388`;
+the controller read its entire output. Final real-authority ModelSupply PASSed
+with three version probes and zero quality OCR. BestBatch PASSed six success
+and eleven failure controls, seventeen intercepted batches, one version probe
+and zero actual quality OCR. These are captured controller results, not reruns
+by the documentation worker. A subsequent no-supply `AllReached` check against
+the unchanged original JSON PASSed, exit 0: reporting controls, Gray synthetic
+controls, six determinism/parity contracts and observed-result assertions;
+replay `NOT_RUN_NO_SUPPLY`, actual quality OCR=0.
+Task 6 staged review approved the change with residual Critical/Important=0;
+the LF/CRLF advisory remains a recorded Minor observation. Historical/protected
+final diff verification, whole-branch fresh review and result-recording commit
+remain controller-owned and pending. Android local is `NOT_RUN_EVALUATION_ONLY`.
+
+External first evidence SHA256 is
+`07bcbb75effe2fa86efed4bd851cd4afc842fc83b0e4dd6c7ae65ed35813f529`;
+verification evidence SHA256 is
+`ef9d1d2c3f1168856c9901509abc011e459cfe70c6afa8c9b15f51b0e103a992`.
+The former invocation-owned verification directory was
+`C:/Users/PC/AppData/Local/Temp/milimap-p43r3b-reached-20261010-task6-verification`
+(`verification-cycle.json`, `reached-report.json`, four TSV/stderr pairs, one
+Gray inspect/source PGM and twelve crop PGMs). The former first evidence was in
+`C:/Users/PC/AppData/Local/Temp/milimap-p43r3b-gray-first-20261010-task3-measurement`.
+Controller dedicated cleanup PASSed 2026-10-12, exit 0: exact supply directory
+`C:/Users/PC/AppData/Local/Temp/milimap-p43r3b-supply-14ab2907b43141d98f576700c9a50a82`
+(three surviving installer/best/historical-fast files), first-measurement
+directory (23 files) and verification directory (24 files) were removed after
+Task 6 review. All three exact paths were checked for reparse points and verified
+absent afterward. Captured identities, hashes, fidelity and counts remain in
+this permanent record; raw outputs were intentionally removed. Extracted runtime
+and empty failed-launcher directory were already absent before cleanup. Shared
+`milimap-p42a-pdfpig-eval/sdk` was not touched; its `dotnet.exe` was already absent
+before cleanup. No shared SDK or unrelated tool was removed.
+
+The bounded Task 2 glue and exact Task 3 comparison approval remain the only
+design-constraint tradeoffs. They do not authorize broader duplication,
+preprocessing, another model/engine or production use. This result applies only
+to the locked synthetic clear Gray fixture on this Windows/runtime identity;
+population accuracy, live-source compatibility, product suitability and
+cross-OS determinism remain unestablished. Product dependency `NOT_APPROVED`,
+P4-3B `BLOCKED`, P4-3 `NOT COMPLETE`, Phase 4 `NOT COMPLETE`,
+`ProductionAction=NONE`. Human review stop; no push, PR, merge or deployment.

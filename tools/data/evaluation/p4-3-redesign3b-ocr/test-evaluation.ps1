@@ -1,5 +1,5 @@
-param([ValidateSet('ModelSupply','BestBatch','GrayFidelity')][string]$Group='ModelSupply',
-    [Alias('TesseractExecutable')][string]$Executable,[Alias('KoreanModelPath')][string]$ModelPath,
+param([ValidateSet('ModelSupply','BestBatch','GrayFidelity','AllReached')][string]$Group='ModelSupply',
+    [Alias('TesseractExecutable')][string]$Executable,[Alias('KoreanModelPath','BestModelPath')][string]$ModelPath,
     [switch]$RunRealGateB1,[string]$ArtifactDirectory,[string]$ObservedResultPath)
 Set-StrictMode -Version Latest
 $ErrorActionPreference='Stop'
@@ -8,13 +8,45 @@ function Reject([scriptblock]$Action,[string]$Code){
     try{& $Action | Out-Null}catch{Require ($_.Exception.Message -ceq $Code) "Expected $Code, got $($_.Exception.Message)";return}
     throw "Expected rejection: $Code"
 }
+function Get-P43R3bReachedReport($First,$Verification){
+    # Reporting only: keep the original measured rejection authoritative.
+    Require ($First.Verdict -ceq 'P4_3_REDESIGN3B_REJECTED' -and $First.GateB1.Status -ceq 'GATE_B1_CLEAR_GRAY_FIDELITY_FAILED' -and $First.GateB2 -ceq 'NOT_RUN_GATE_B1_FAILED' -and $First.GateC -ceq 'NOT_RUN_GATE_B1_FAILED' -and $First.GateD -ceq 'NOT_RUN_GATE_B1_FAILED') 'REACHED_FIRST_B1_REJECTION_REQUIRED'
+    Require ($Verification.Verdict -cin @('P4_3_REDESIGN3B_EARLY_GATES_PASS','P4_3_REDESIGN3B_REJECTED','P4_3_REDESIGN3B_NOT_EVALUATED')) 'REACHED_VERDICT_INVALID'
+    Require ($First.PhysicalQualityInvocationCount -eq 4 -and $First.QualityInvocationCount -eq 4 -and $Verification.PhysicalQualityInvocationCount -eq $Verification.QualityInvocationCount -and $Verification.PhysicalQualityInvocationCount -ge 0 -and $Verification.PhysicalQualityInvocationCount -le 4) 'REACHED_PHYSICAL_COUNT_MISMATCH'
+    $detail=$First.GateB1.PSObject.Properties['FirstFailure']
+    [pscustomobject]@{Verdict=$First.Verdict;FirstFailingGate=$First.GateB1.Status;FirstFailure=$(if($null -ne $detail){$detail.Value}else{$null});FirstFailureDetailStatus=$(if($null -ne $detail){'RECORDED'}else{'NOT_RECORDED'});GateB2=$First.GateB2;GateC=$First.GateC;GateD=$First.GateD;VerificationVerdict=$Verification.Verdict;FirstMeasurementQualityCount=$First.PhysicalQualityInvocationCount;FinalVerificationQualityCount=$Verification.PhysicalQualityInvocationCount;OverallQualityCount=$First.PhysicalQualityInvocationCount+$Verification.PhysicalQualityInvocationCount;ProductionAction='NONE'}
+}
 $supply=Join-Path $PSScriptRoot 'model-supply.ps1'
 Require (Test-Path -LiteralPath $supply) 'FAIL: Redesign 3B model supply functions do not exist'
 . $supply
-if($Group -ceq 'GrayFidelity'){
+if($Group -cin @('GrayFidelity','AllReached')){
     $runner=Join-Path $PSScriptRoot 'run-evaluation.ps1'
     Require (Test-Path -LiteralPath $runner) 'FAIL: Redesign 3B Gray fidelity gate does not exist'
     . $runner
+    if($Group -ceq 'AllReached'){
+        Require ($null -ne (Get-Command Get-P43R3bReachedReport -ErrorAction SilentlyContinue)) 'FAIL: Redesign 3B reached-path reporting does not exist'
+        $first=[pscustomobject]@{Verdict='P4_3_REDESIGN3B_REJECTED';GateB1=[pscustomobject]@{Status='GATE_B1_CLEAR_GRAY_FIDELITY_FAILED';FirstFailure=[pscustomobject]@{Psm=6;Repetition=1;Code='MANDATORY_FIDELITY_FAILED'}};GateB2='NOT_RUN_GATE_B1_FAILED';GateC='NOT_RUN_GATE_B1_FAILED';GateD='NOT_RUN_GATE_B1_FAILED';QualityInvocationCount=4;PhysicalQualityInvocationCount=4}
+        foreach($case in @(
+            @{Verdict='P4_3_REDESIGN3B_REJECTED';Calls=4;WantTotal=8},
+            @{Verdict='P4_3_REDESIGN3B_NOT_EVALUATED';Calls=0;WantTotal=4},
+            @{Verdict='P4_3_REDESIGN3B_EARLY_GATES_PASS';Calls=4;WantTotal=8}
+        )){
+            $replay=[pscustomobject]@{Verdict=$case.Verdict;QualityInvocationCount=$case.Calls;PhysicalQualityInvocationCount=$case.Calls}
+            $report=Get-P43R3bReachedReport $first $replay
+            Require ($report.Verdict -ceq 'P4_3_REDESIGN3B_REJECTED' -and $report.FirstFailingGate -ceq 'GATE_B1_CLEAR_GRAY_FIDELITY_FAILED' -and $report.FirstFailure.Code -ceq 'MANDATORY_FIDELITY_FAILED') 'Reached report must preserve original B1 rejection even after unexpected verification outcome'
+            Require ($report.GateB2 -ceq 'NOT_RUN_GATE_B1_FAILED' -and $report.GateC -ceq 'NOT_RUN_GATE_B1_FAILED' -and $report.GateD -ceq 'NOT_RUN_GATE_B1_FAILED') 'Reporting cannot fabricate downstream acceptance'
+            Require ($report.FirstMeasurementQualityCount -eq 4 -and $report.FinalVerificationQualityCount -eq $case.Calls -and $report.OverallQualityCount -eq $case.WantTotal -and $report.VerificationVerdict -ceq $case.Verdict) 'Report only physically observed separate cycle counts and retain verification outcome'
+        }
+        $replay=[pscustomobject]@{Verdict='P4_3_REDESIGN3B_REJECTED';QualityInvocationCount=4;PhysicalQualityInvocationCount=3}
+        Reject {Get-P43R3bReachedReport $first $replay} 'REACHED_PHYSICAL_COUNT_MISMATCH'
+        $replay.PhysicalQualityInvocationCount=4
+        $legacy=$first.PSObject.Copy();$legacy.GateB1=$first.GateB1.PSObject.Copy();$legacy.GateB1.PSObject.Properties.Remove('FirstFailure')
+        $legacyReport=Get-P43R3bReachedReport $legacy $replay
+        Require ($legacyReport.FirstFailingGate -ceq 'GATE_B1_CLEAR_GRAY_FIDELITY_FAILED' -and $null -eq $legacyReport.FirstFailure -and $legacyReport.FirstFailureDetailStatus -ceq 'NOT_RECORDED') 'Legacy original evidence preserves its recorded gate reason without inventing an unrecorded FirstFailure detail'
+        $replay.PhysicalQualityInvocationCount=4;$replay.Verdict='GATE_B1_CLEAR_GRAY_FIDELITY_PASS'
+        Reject {Get-P43R3bReachedReport $first $replay} 'REACHED_VERDICT_INVALID'
+        Write-Host 'AllReached reporting controls PASS: rejection preserved, blocked gates explicit, physical counts checked; actual quality OCR calls=0'
+    }
     function Assert-GrayEvidence($Cycle){
         Require ($Cycle.ProductionAction -ceq 'NONE' -and $Cycle.RgbInvocationCount -eq 0 -and $Cycle.ConsensusInvocationCount -eq 0 -and $Cycle.DegradedInvocationCount -eq 0) 'Task 3 cannot invoke any later gate'
         Require ($Cycle.GateB2 -like 'NOT_RUN_*' -and $Cycle.GateC -like 'NOT_RUN_*' -and $Cycle.GateD -like 'NOT_RUN_*') 'Later gates must remain blocked'
@@ -184,17 +216,34 @@ if($Group -ceq 'GrayFidelity'){
     Require ($null -ne (Get-Command Invoke-P43R3bGateA -ErrorAction SilentlyContinue) -and $null -ne (Get-Command Assert-P43R3bModelAuthority -ErrorAction SilentlyContinue)) 'Real supply functions must survive synthetic seam restoration'
     Write-Host 'GrayFidelity synthetic assertions PASS; actual quality OCR calls=0'
     if($ObservedResultPath){$observed=Get-Content -LiteralPath $ObservedResultPath -Raw | ConvertFrom-Json;Assert-GrayEvidence $observed;Write-Host "GrayFidelity observed assertions PASS: $($observed.Verdict) / $($observed.GateB1.Status)"}
-    if($RunRealGateB1){
-        Require ($Executable -and $ModelPath -and $ArtifactDirectory -and -not $ObservedResultPath) 'Actual first measurement requires supplied engine/model and fresh external artifact directory'
+    $reachedReplay=$Group -ceq 'AllReached' -and ($Executable -or $ModelPath)
+    if($Group -ceq 'AllReached'){
+        Require (-not $RunRealGateB1) 'AllReached uses only its reached replay, never another first measurement'
+        if($reachedReplay){
+            Require ($Executable -and $ModelPath -and $ObservedResultPath) 'Reached replay requires both supply paths and the unchanged original first-cycle evidence'
+            # Prove the original reached path before any supply probe/preparation/OCR.
+            Get-P43R3bReachedReport $observed $observed | Out-Null
+            $firstEvidenceHash=(Get-FileHash -LiteralPath $ObservedResultPath -Algorithm SHA256).Hash.ToLowerInvariant()
+            if(-not $ArtifactDirectory){$ArtifactDirectory=Join-Path ([IO.Path]::GetTempPath()) ('milimap-p43r3b-reached-'+[guid]::NewGuid().ToString('N'))}
+        }else{Write-Host 'AllReached synthetic/observed reporting PASS; reached replay=NOT_RUN_NO_SUPPLY; actual quality OCR calls=0'}
+    }
+    if($RunRealGateB1 -or $reachedReplay){
+        Require ($Executable -and $ModelPath -and $ArtifactDirectory -and ($reachedReplay -or -not $ObservedResultPath)) 'Actual measurement requires supplied engine/model and fresh external artifact directory'
         $repository=[IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../../../..'))+[IO.Path]::DirectorySeparatorChar
         Require ([IO.Path]::IsPathFullyQualified($ArtifactDirectory) -and -not ([IO.Path]::GetFullPath($ArtifactDirectory)+[IO.Path]::DirectorySeparatorChar).StartsWith($repository,[StringComparison]::OrdinalIgnoreCase)) 'Actual crops and raw output must stay outside the repository'
         Require (-not (Test-Path -LiteralPath $ArtifactDirectory)) 'Actual measurement artifact directory already exists; replay is not authorized'
         [void][IO.Directory]::CreateDirectory($ArtifactDirectory)
-        $originalProcess=${function:Invoke-InternalP43R3aProcess};$script:grayRawOrdinal=0;$script:grayPhysicalCalls=0;$script:grayVersionCalls=0
+        $startedAt=[DateTime]::UtcNow.ToString('o')
+        $originalProcess=${function:Invoke-InternalP43R3aProcess};$script:grayRawOrdinal=0;$script:grayPhysicalCalls=0;$script:grayVersionCalls=0;$script:grayPsmCalls=@{6=0;11=0}
         function Invoke-InternalP43R3aProcess {
             param($Executable,$Arguments,$DeadlineMilliseconds)
             if($Arguments[0] -ceq '--version'){$script:grayVersionCalls++}
-            else{$script:grayPhysicalCalls++;Require ($script:grayPhysicalCalls -le 4) 'Actual Gray quality budget exceeded'}
+            else{
+                Require ($script:grayPhysicalCalls -lt 4) 'Actual Gray quality budget exceeded'
+                $psmIndex=[Array]::IndexOf($Arguments,'--psm');$psm=[int]$Arguments[$psmIndex+1]
+                Require ($psmIndex -ge 0 -and $psm -eq $(if($script:grayPhysicalCalls -lt 2){6}else{11})) 'Actual reached replay must retain PSM6 x2 then PSM11 x2'
+                $script:grayPhysicalCalls++;$script:grayPsmCalls[$psm]++
+            }
             $output=& $originalProcess -Executable $Executable -Arguments $Arguments -DeadlineMilliseconds $DeadlineMilliseconds
             if($Arguments[0] -cne '--version'){
                 $script:grayRawOrdinal++
@@ -207,7 +256,11 @@ if($Group -ceq 'GrayFidelity'){
         finally{Set-Item Function:Invoke-InternalP43R3aProcess $originalProcess}
         $actual | Add-Member -NotePropertyName PhysicalQualityInvocationCount -NotePropertyValue $script:grayPhysicalCalls
         $actual | Add-Member -NotePropertyName VersionProbeCount -NotePropertyValue $script:grayVersionCalls
-        $resultPath=Join-Path $ArtifactDirectory 'first-cycle.json'
+        $actual | Add-Member -NotePropertyName Psm6PhysicalInvocationCount -NotePropertyValue $script:grayPsmCalls[6]
+        $actual | Add-Member -NotePropertyName Psm11PhysicalInvocationCount -NotePropertyValue $script:grayPsmCalls[11]
+        $actual | Add-Member -NotePropertyName StartedAtUtc -NotePropertyValue $startedAt
+        $actual | Add-Member -NotePropertyName FinishedAtUtc -NotePropertyValue ([DateTime]::UtcNow.ToString('o'))
+        $resultPath=Join-Path $ArtifactDirectory $(if($reachedReplay){'verification-cycle.json'}else{'first-cycle.json'})
         [IO.File]::WriteAllText($resultPath,($actual | ConvertTo-Json -Depth 20),[Text.UTF8Encoding]::new($false))
         Write-Host ('Frozen Gate A: '+($actual.GateA | ConvertTo-Json -Depth 8 -Compress))
         if($null -ne $actual.GateB1){foreach($run in @($actual.GateB1.Runs)){
@@ -220,7 +273,15 @@ if($Group -ceq 'GrayFidelity'){
         Write-Host "First cycle=$($actual.Verdict) returnedQuality=$($actual.QualityInvocationCount) physicalQuality=$script:grayPhysicalCalls versionProbes=$script:grayVersionCalls downstream=0"
         Require ($actual.QualityInvocationCount -eq $script:grayPhysicalCalls) 'Physical and reported quality counts must agree'
         Assert-GrayEvidence $actual
-        Write-Host "GrayFidelity first measurement assertions PASS; result=$resultPath"
+        if($reachedReplay){
+            Require ((Get-FileHash -LiteralPath $ObservedResultPath -Algorithm SHA256).Hash.ToLowerInvariant() -ceq $firstEvidenceHash) 'Original measurement evidence changed during verification'
+            $report=Get-P43R3bReachedReport $observed $actual
+            $report | Add-Member -NotePropertyName FirstEvidencePath -NotePropertyValue ([IO.Path]::GetFullPath($ObservedResultPath))
+            $report | Add-Member -NotePropertyName FirstEvidenceSha256 -NotePropertyValue $firstEvidenceHash
+            $report | Add-Member -NotePropertyName VerificationEvidencePath -NotePropertyValue $resultPath
+            [IO.File]::WriteAllText((Join-Path $ArtifactDirectory 'reached-report.json'),($report | ConvertTo-Json -Depth 8),[Text.UTF8Encoding]::new($false))
+            Write-Host ('AllReached verification assertions PASS: '+($report | ConvertTo-Json -Depth 8 -Compress))
+        }else{Write-Host "GrayFidelity first measurement assertions PASS; result=$resultPath"}
     }
     return
 }

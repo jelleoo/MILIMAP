@@ -95,7 +95,7 @@ function Invoke-Phase5BenefitCycle {
     $started=$false
     $launchClaim=$null;$claimPath=$null;$clearClaim=$false
     try{
-        if($RunId -cnotmatch '^[a-z0-9][a-z0-9._-]{0,127}$' -or $RunId.Contains('..')){throw 'P5_RUN_ID_INVALID'}
+        if($RunId -cnotmatch '^[a-z0-9][a-z0-9._-]{0,127}$' -or $RunId.Contains('..') -or $RunId.EndsWith('.') -or $RunId -cmatch '^(con|prn|aux|nul|com[1-9]|lpt[1-9])(\.|$)'){throw 'P5_RUN_ID_INVALID'}
         Assert-HistoryTimestamp -Value $ObservedAt
         if($RepositoryRevision -cnotmatch '^[0-9a-f]{40}$'){throw 'P5_REVISION_INVALID'}
         Assert-CanonicalBusinessId $BusinessId
@@ -147,7 +147,7 @@ function Invoke-Phase5BenefitCycle {
         $claimPath=Assert-HistoryStorePathWithinRoot -Store $Store -Path (Join-Path $Store.TempRoot ('.p5-'+$RunId+'.claim'))
         if(Test-Path -LiteralPath $claimPath){
             try{
-                if((Get-Item -LiteralPath $claimPath).Length -gt 128){throw 'P5_CLAIM_INVALID'}
+                if((Get-Item -LiteralPath $claimPath -Force).Length -gt 128){throw 'P5_CLAIM_INVALID'}
                 $prior=[IO.File]::ReadAllText($claimPath)
             }catch [IO.IOException]{$view.Code='P5_RUN_ACTIVE';$view.Reasons=@('P5_RUN_ACTIVE');return $view}
             if($prior -cin @('BASELINE_MOVED','WRITER_LOCKED','ABORTED')){$view.CommitCode=$prior;$view.RetryRequired=$prior -ceq 'BASELINE_MOVED'}

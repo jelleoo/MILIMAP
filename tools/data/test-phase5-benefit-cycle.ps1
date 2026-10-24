@@ -39,6 +39,16 @@ try{
             Equal $requests.Count $before "Invalid $fault performs no fetch"
             Check ($null -eq $r.Review -and $null -eq $r.Metrics) 'Invalid selection cannot fabricate review or metrics'
         }
+        foreach($unsafeRunId in @('run-dot.','con','aux','nul','prn','com1','lpt9','con.txt','com2.log')){
+            $before=$requests.Count
+            $filesBefore=@(Get-ChildItem -LiteralPath $store.Root -Recurse -File -Force | Sort-Object FullName | ForEach-Object {"$($_.FullName):$((Get-FileHash -LiteralPath $_.FullName).Hash)"})
+            $invalidRun=Invoke-Phase5BenefitCycle @args50 -RunId $unsafeRunId
+            Equal $invalidRun.Status BLOCKED "Windows-unsafe RunId $unsafeRunId rejected before execution"
+            Check (@($invalidRun.Reasons) -contains 'P5_RUN_ID_INVALID') 'Unsafe filename has an explicit identity rejection'
+            Equal $requests.Count $before "Windows-unsafe RunId $unsafeRunId fetch0"
+            $filesAfter=@(Get-ChildItem -LiteralPath $store.Root -Recurse -File -Force | Sort-Object FullName | ForEach-Object {"$($_.FullName):$((Get-FileHash -LiteralPath $_.FullName).Hash)"})
+            Equal ($filesAfter -join ',') ($filesBefore -join ',') 'Unsafe RunId cannot create or change History files'
+        }
         $first=Invoke-Phase5BenefitCycle @args50 -RunId 'run-first'
         Equal $first.CommitCode COMMITTED 'First cycle commits'
         Equal $first.OperationalStatus COMPLETE 'First cycle operational status from observation'
@@ -109,6 +119,15 @@ try{
         Write-Host 'P5-0 Recovery PASS: same RunId fetch0; fresh unchanged fetch1 / parse0 / reuse1; output recovery metrics=null; material route preserved'
     }
     if($Group -cin @('Safety','All')){
+        # Unix dotfiles and Windows Hidden claims must preserve failed-attempt reasons.
+        $hiddenClaim=Join-Path $store.TempRoot '.p5-run-hidden-claim.claim'
+        [IO.File]::WriteAllText($hiddenClaim,'WRITER_LOCKED')
+        [IO.File]::SetAttributes($hiddenClaim,([IO.File]::GetAttributes($hiddenClaim) -bor [IO.FileAttributes]::Hidden))
+        $before=$requests.Count
+        $hidden=Invoke-Phase5BenefitCycle @args50 -RunId 'run-hidden-claim'
+        Equal $hidden.CommitCode WRITER_LOCKED 'Hidden prior claim preserves the actual failure reason'
+        Equal $hidden.Status BLOCKED 'Hidden prior claim cannot restart work'
+        Equal $requests.Count $before 'Hidden prior claim fetch0'
         # Check the path guard directly so a regression cannot write production data.
         $primaryRoot=Split-Path -Parent (& git -C (Join-Path $PSScriptRoot '../..') rev-parse --path-format=absolute --git-common-dir)
         $rejected=$false

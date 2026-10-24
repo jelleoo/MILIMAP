@@ -619,3 +619,18 @@ OCR and CI were NOT_RUN (no product changes/no remote actions). Diff whitespace
 and protected-path checks PASS; exactly three reserved files changed. P4-3 HEAD
 3196d92cbde23ce7064a3c1e6fbcffd25592fc04 stayed clean and unchanged. Local checkpoint
 only; Issue126 remains open, no push/PR/merge.
+
+### PR review follow-up (2026-10-25)
+
+The initial PR CI `verify-data` run exposed hidden `.p5-*.claim` lookup behavior
+on Ubuntu. The prior claim is now inspected with `-Force`, preserving the actual
+failed-attempt reason without retrying. A Windows Hidden-file regression also
+reproduced the failure before the fix. Whole-PR review additionally found that
+terminal-dot and DOS device-name RunIds could reach execution on Windows. These
+identities, including reserved names with extensions, are now rejected before
+fetch or History writes. Both defects have RED -> minimal GREEN regressions;
+Core, adapters, contracts and the previous bounded live-smoke evidence are unchanged.
+
+Follow-up focused tests PASS in both invocation modes; the complete local data
+suite was rerun after the production fixes and passed 63/63. No live HTTP or OCR
+was rerun. Exact pushed-HEAD data and Android CI remain required before approval.

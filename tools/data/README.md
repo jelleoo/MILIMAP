@@ -456,3 +456,181 @@ Phase 2 Core closeout is recorded by the fixed representative validation in [`do
 P3-0~P3-6은 stable canonical `businessId`와 별도의 file History Store, fingerprint, Location/Benefit observation·comparison, 보수적 증분 재사용을 구현했다. P3-7은 `lib/history/phase3-review-audit.ps1`의 pure review projection과 `invoke-phase3-review-audit.ps1`의 read-only COMMITTED-history scanner를 제공한다. Scanner는 기존 store를 입력받아 `Items`와 `Summary`를 반환하며 index rebuild, provider fetch, domain re-evaluation, canonical/seed/apps write를 하지 않는다.
 
 `test-phase3-review-audit.ps1`은 route fail-closed, COMMITTED authority, comparison linkage, unique-artifact validation reuse를 검증한다. `test-phase3-closeout-validation.ps1`은 A/B/C 대표 matrix의 deterministic comparator 결과와 historical provenance 경계를 검증한다. 전체 Phase 3 근거와 limitations는 [closeout handover](../../docs/handover/2026-09-27-phase3-snapshot-incremental-closeout.md)를 참조한다. PR #108은 `dev`에 병합됐고 merge commit `d40e479b2f9e2b39839f338ef11259f126840460`의 post-merge CI run #209에서 `verify-data`와 `verify`가 모두 성공했다. Issue #107과 parent Issue #94도 완료되어 bounded Phase 3 closeout은 `COMPLETE`다.
+
+## Phase 5 P5-0 — Manual single-business Benefit cycle
+
+Issue [#126](https://github.com/jelleoo/MILIMAP/issues/126). Base:
+`4c21fcc878760f6ce5d581d346bdd5b9281b0c9a`. This is a bounded manual composition,
+not scheduling, multi-business execution, automatic approval, or Phase completion.
+P4-3B remains BLOCKED; the evaluated OCR dependency remains NOT_APPROVED and
+Phase 4 remains NOT_COMPLETE. The earlier adapter-limit notes above describe
+their historical checkpoints; current scoped native support also includes bounded
+HWPX tables and digital-text ruled-grid PDF. Production OCR is still unavailable.
+
+### Bounded design and implementation ledger
+
+Only `invoke-phase5-benefit-cycle.ps1`, `test-phase5-benefit-cycle.ps1` and this
+README belong to P5-0. Existing Core, adapter, fingerprint, schema and History
+writer/commit implementations stay unchanged. No new dependency or source policy.
+
+1. RED: runner missing. GREEN: canonical selection, official-source/URL eligibility,
+   existing single-source pipeline, committed-only Review, atomic derived output.
+2. RED: committed same-RunId reentry fetched again. GREEN: terminal-state check
+   before fetch; recover the requested run through the existing read-only scanner,
+   not the latest observation index. Compare persisted input/execution fingerprints.
+3. RED: preexisting staging fetched; overlapping launch was not excluded. GREEN:
+   inspect staging and use a small per-RunId exclusive launch claim in existing
+   History TempRoot. CAS/writer lock remain owned by existing History code.
+4. RED: primary checkout paths were misidentified as external from a linked worktree.
+   GREEN: check both current worktree and Git common repository roots; reject
+   repository outputs/reparse ancestors. Resolve Git roots once per cycle.
+5. Targeted regression, final read-only review, full data suite, protected diff,
+   then local checkpoint. No live/provider/OCR execution is part of these tests.
+
+Final read-only review: Critical0/Important1/Minor0. The Important finding was
+derived output inside History observation directories. Its isolated-store RED
+produced an unintended committed cycle; the minimum GREEN rejects report output
+equal to/inside History root before fetch, with no files created. No other
+Critical/Important finding was identified; the fix is covered by the safety test.
+
+The first full-suite invocation reached P5-0 but exposed a test-fixture scope
+error: GetNewClosure's dynamic module could not resolve the script-local runner
+under CI-style `&` invocation (standalone `-File` had passed). The immediate
+nested collision callback now retains the test's original script session state;
+both invocation modes pass with the same concurrency assertions. No production
+change or assertion weakening was needed. The complete suite is rerun afterward.
+
+### Calling the runner
+
+The file follows the existing dot-sourced PowerShell entrypoint style:
+
+```powershell
+. ./tools/data/invoke-phase5-benefit-cycle.ps1
+
+# Read canonical input only. Set explicit values for this manual attempt.
+$rows = @(Import-Csv -LiteralPath $canonicalCsv)
+$store = New-HistoryStoreLayout -Root $externalHistoryDirectory
+$result = Invoke-Phase5BenefitCycle -Store $store -Rows $rows `
+    -BusinessId $selectedBusinessId -RunId $runId -ObservedAt $observedAt `
+    -RepositoryRevision $revision -SourceRowNumberOffset 2 `
+    -OutputDirectory $externalReportDirectory `
+    -RepositoryStateProvider $repositoryStateProvider -RequestInvoker $httpInvoker
+
+$result
+```
+
+`Rows` must contain valid, unique existing canonical businessIds; exactly one is
+selected. No IDs or source URLs are generated. `SourceRowNumberOffset` defaults
+to1 and describes the current input array position (use2 for a CSV with a header),
+not a separately persisted historical row-number assertion. RunId is a lowercase
+filename-safe token, ObservedAt an explicit timestamp, revision an explicit
+lowercase40-character SHA. RepositoryStateProvider is the existing caller-supplied
+cleanliness evidence; unknown/dirty state cannot enable incremental reuse.
+
+History and reports must be outside both repository roots, and reports must also
+be outside the History root so scanners cannot mistake derived views for records.
+Callers must also
+create the store outside the repository: New-HistoryStoreLayout itself creates
+directories before this runner sees it. Do not place the store/report under
+canonical/seed/apps or another linked worktree. Paths traversing existing reparse
+points are rejected. The runner does not modify global configuration or credentials.
+
+Source eligibility requires one existing PUBLIC_OFFICIAL candidate and the
+existing safe HTTP URI gate. Missing, business-website, SNS/review or known
+unsupported suffix sources fail before fetch. Allowed lexical suffixes are empty,
+html/htm/do/php/aspx/asp/jsp/xlsx/hwpx/pdf. An extension is only preflight eligibility:
+actual MIME/bytes/package/layout/qualification are still validated by existing
+Phase2 code. Unknown returned formats fail closed. Approved MMA entry uses its
+existing LIST/DETAIL dispatch; arbitrary JSONP endpoints are not enabled.
+
+### Result, reentry and recovery
+
+- `Status`/`OperationalStatus` describe execution and observation; `CommitCode`
+  separately preserves COMMITTED, ABORTED, BASELINE_MOVED or WRITER_LOCKED. A
+  committed failed observation is not operational success. Do not infer success
+  from the old helper's RunManifest.ExecutionStatus alone.
+- BenefitState/ReviewClass and authoritative Comparison/Review are read from
+  committed records only. New-Phase3ReviewItem preserves the existing route and
+  ReviewKey; no payload-equality override or new review queue contract exists.
+- First execution returns actual existing metrics plus observed FetchCacheHits
+  and AdapterReuseCount. Recovery returns Metrics=null because work counters are
+  not persisted by History. Missing values are never invented as zeros.
+- Stable `<RunId>.json` output is written through an exclusive temporary file and
+  no-overwrite rename. Existing equivalent authoritative view is preserved;
+  conflicting/malformed output fails explicitly. Reports are derived views, not
+  an authority over History. No append-only review export or duplicate ReviewKey
+  is produced on sequential same-RunId reentry.
+- COMMITTED reentry never fetches, recommits or deletes History/staging. It uses
+  the existing committed-history scanner once to find the supplied run, validates
+  input/revision/time/semantic references, and rebuilds a missing output. A later
+  run moving the latest index cannot redirect recovery to that newer observation.
+- Commit success followed by output failure retains CommitCode=COMMITTED and
+  OutputStatus=FAILED. Reenter with the same pinned selection/RunId/time/revision
+  after correcting only the output problem. Do not perform the source run again.
+- New RunId means a new current fetch. RECORD_ONLY is returned only when the
+  existing comparator actually routes it there. Real material changes retain
+  HUMAN_DOMAIN_REVIEW; failures remain OPERATIONAL_DIAGNOSTIC where comparable
+  history permits that comparison. A first failed baseline is still represented
+  by the existing comparison policy, not a wrapper-invented route.
+
+The launch claim is `.p5-<RunId>.claim` inside existing Store.TempRoot, not the
+History `.writer-lock`. It is acquired before fetch and prevents overlapping
+P5-0 launches of the same RunId in the same store, even with different report
+directories. History fetch/parse/evaluate stay outside the writer lock. Only
+the successful committed owner removes its own claim. Failed/interrupted claims
+remain with a small diagnostic outcome; BASELINE_MOVED/WRITER_LOCKED cannot be
+silently retried on reentry. ABORTED/ambiguous terminal/staging states block.
+
+Stale claims, interrupted staging and cross-version/non-P5 writers require manual
+inspection; there is no automatic lease stealing, retry scheduler or cleanup.
+Tests prove sequential reentry, atomic exclusive-claim behavior and deterministic
+overlapping calls. They do not claim a distributed execution service or protection
+against callers bypassing this entrypoint. Existing History CAS remains the final
+authority for competing different-RunId writers. Recovery scans committed history
+once (an existing cost); normal execution does not introduce a history-wide scan.
+
+### Offline acceptance
+
+```powershell
+pwsh -NoProfile -File ./tools/data/test-phase5-benefit-cycle.ps1
+```
+
+The tests inject only synthetic HTTP and use isolated external temporary stores.
+They exercise real normalization/scoped parsing/extraction/evaluation/comparison/
+commit. Expected controls: first fetch1/parse1/extract1/evaluate1; same RunId
+fetch0/metrics unknown; unchanged new RunId fetch1/parse0/reuse1; changed material
+ReviewRoute preserved; failure parse0/extract0 with no false absence/ending;
+BASELINE_MOVED/WRITER_LOCKED no authoritative Review or artifact publication;
+output-failure recovery without work; invalid inputs/source/staging no network.
+ProductionAction is always NONE. No canonical/seed/apps writes are authorized.
+
+P4-3 evaluation branch/evidence stay untouched. Before periodic execution, validate
+the manual one-cycle path operationally, define authorized credentials/budgets and
+stale-attempt recovery, then separately design scheduling/backoff and any batch or
+cross-run incident grouping. This file does not authorize those later steps.
+
+Final local verification (2026-10-24): Base/Recovery/Safety PASS in both `-File`
+and CI-style `&` invocation; applicable Benefit incremental/adapter, History
+store/commit, Review and scoped HTML/XLSX regressions PASS. The final complete
+data suite passed63/63 after the test-fixture scope correction. Existing portable
+.NET SDK8.0.426 was configured process-locally for native PDF regression in the
+nonadmin Windows environment; no SDK/dependency was installed. Android, live HTTP,
+OCR and CI were NOT_RUN (no product changes/no remote actions). Diff whitespace
+and protected-path checks PASS; exactly three reserved files changed. P4-3 HEAD
+3196d92cbde23ce7064a3c1e6fbcffd25592fc04 stayed clean and unchanged. Local checkpoint
+only; Issue126 remains open, no push/PR/merge.
+
+### PR review follow-up (2026-10-25)
+
+The initial PR CI `verify-data` run exposed hidden `.p5-*.claim` lookup behavior
+on Ubuntu. The prior claim is now inspected with `-Force`, preserving the actual
+failed-attempt reason without retrying. A Windows Hidden-file regression also
+reproduced the failure before the fix. Whole-PR review additionally found that
+terminal-dot and DOS device-name RunIds could reach execution on Windows. These
+identities, including reserved names with extensions, are now rejected before
+fetch or History writes. Both defects have RED -> minimal GREEN regressions;
+Core, adapters, contracts and the previous bounded live-smoke evidence are unchanged.
+
+Follow-up focused tests PASS in both invocation modes; the complete local data
+suite was rerun after the production fixes and passed 63/63. No live HTTP or OCR
+was rerun. Exact pushed-HEAD data and Android CI remain required before approval.

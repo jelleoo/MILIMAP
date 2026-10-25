@@ -74,6 +74,8 @@ function Assert-InternalPhase5BenefitBatchIndex {
     }
     # Existing committed comparison edges prove baseline succession; do not infer commit order from timestamps.
     if($known.Count -gt 0){
+        $latestSuccessors=@($known | Where-Object {$_.PreviousObservationId -ceq $entry.LatestObservationId -and $_.CurrentObservationId -cne $entry.LatestObservationId})
+        if($latestSuccessors.Count -gt 0){throw 'P51_HISTORY_LATEST_POINTER_REGRESSED'}
         $successors=@($known | Where-Object {$_.CurrentComparable -and $_.CurrentOperationalStatus -ceq 'COMPLETE' -and $_.PreviousObservationId -ceq $entry.LatestComparableObservationId -and $_.CurrentObservationId -cne $entry.LatestComparableObservationId})
         if(-not [string]::IsNullOrEmpty($entry.LatestComparableObservationId) -and $successors.Count -gt 0){throw 'P51_HISTORY_COMPARABLE_POINTER_REGRESSED'}
         if(-not ($latest.Comparable -and $latest.OperationalStatus -ceq 'COMPLETE')){

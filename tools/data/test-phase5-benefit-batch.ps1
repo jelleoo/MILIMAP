@@ -173,6 +173,36 @@ try{
         Write-Host 'P5-1 Recovery PASS: recovered3 HTTP0 / History0 / stable ReviewKeys; residue preserved; mixed known2 missing1 total=null'
     }
     if($Group -cin @('Safety','All')){
+        # A later committed operational failure remains LatestObservation even though A stays comparable.
+        $a=$args51.Clone();$a.BusinessIds=@($ids[0]);$a.Store=New-HistoryStoreLayout -Root (Join-Path $root 'latest-regression-history');$a.BatchWorkspaceRoot=Join-Path $root 'latest-regression-batches'
+        $baseline=Invoke-Phase5BenefitCycle -Store $a.Store -Rows $rows -BusinessId $ids[0] -RunId 'run-latest-regression-a' -ObservedAt $a.ObservedAt -RepositoryRevision $a.RepositoryRevision -SourceRowNumberOffset 2 -OutputDirectory (Join-Path $root 'latest-regression-seed-output') @invokeArgs
+        Equal $baseline.CommitCode COMMITTED 'Comparable A actually commits'
+        $failureHttp={param($Uri);$requests.Urls.Add([string]$Uri);throw 'synthetic operational failure'}.GetNewClosure()
+        $failure=Invoke-Phase5BenefitCycle -Store $a.Store -Rows $rows -BusinessId $ids[0] -RunId 'run-latest-regression-b' -ObservedAt '2026-10-25T00:10:00Z' -RepositoryRevision $a.RepositoryRevision -SourceRowNumberOffset 2 -OutputDirectory (Join-Path $root 'latest-regression-seed-output') -RepositoryStateProvider $invokeArgs.RepositoryStateProvider -RequestInvoker $failureHttp
+        Equal $failure.CommitCode COMMITTED 'Operational failure B actually commits'
+        Equal $failure.OperationalStatus FAILED 'B is an operational failure'
+        Check (-not (Read-HistoryObservation -Store $a.Store -ObservationId $failure.ObservationId).Comparable) 'B is noncomparable'
+        Equal $failure.Comparison.PreviousObservationId $baseline.ObservationId 'Committed B comparison references A'
+        $entry=Get-HistoryLatestEntry -Store $a.Store -BusinessId $ids[0] -Domain BENEFIT
+        Equal $entry.LatestObservationId $failure.ObservationId 'Legitimate latest is failed B'
+        Equal $entry.LatestComparableObservationId $baseline.ObservationId 'Legitimate comparable remains A'
+        $count=$requests.Urls.Count;$before=Inventory $a.Store.Root
+        $validated=Assert-InternalPhase5BenefitBatchIndex -Store $a.Store -BusinessId $ids[0] -KnownReviews (Invoke-Phase3ReviewAudit -Store $a.Store).Items
+        Equal $validated.LatestObservationId $failure.ObservationId 'Legitimate B/A index remains accepted'
+        Equal $requests.Urls.Count $count 'Legitimate index validation fetch0'
+        Equal (Inventory $a.Store.Root) $before 'Legitimate validation does not write History'
+        # Corrupt only LatestObservationId: the comparable pointer must remain untouched.
+        $entry.LatestObservationId=$baseline.ObservationId
+        [IO.File]::WriteAllText((Get-HistoryIndexPath -Store $a.Store -BusinessId $ids[0] -Domain BENEFIT),(ConvertTo-HistoryCanonicalJson -Value $entry))
+        $a.ObservedAt='2026-10-25T00:20:00Z';$plan=New-Phase5BenefitBatchPlan @a
+        $before=Inventory $a.Store.Root
+        $regressed=Invoke-Phase5BenefitBatch @a @invokeArgs -BatchId $plan.BatchId
+        Equal $requests.Urls.Count $count 'Regressed latest A with committed failed B must reject before HTTP'
+        Equal $regressed.Status BLOCKED 'Regressed latest blocks Execute'
+        Equal $regressed.Summary.CommittedCount 0 'Regressed latest produces no new commits'
+        Equal (Inventory $a.Store.Root) $before 'Regressed latest leaves all History bytes unchanged'
+        Check ($null -eq $regressed.Items[0].Review -and -not $regressed.Items[0].AuthorityValidated) 'Regressed latest publishes no authoritative Review'
+        Check (-not (Test-Path -LiteralPath $plan.OutputDirectory)) 'Regressed latest creates no per-business Review output'
         foreach($fault in @('guard','active-guard','staging','bare-terminal','index','noncomp-unlinked','paired-rollback','cleared-comparable','rolled-comparable','noncomp-cleared','noncomp-rolled','artifact','plan','output','writer','unclassified')){
             $a=$args51.Clone();$a.Store=New-HistoryStoreLayout -Root (Join-Path $root ($fault+'-history'));$a.BatchWorkspaceRoot=Join-Path $root ($fault+'-batches')
             $plan=New-Phase5BenefitBatchPlan @a

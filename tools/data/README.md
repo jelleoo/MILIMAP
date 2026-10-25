@@ -751,3 +751,107 @@ rerun; coverage and full regression verify the correction pass. Protected/Core/
 adapter/evaluation diff0; whitespace check PASS. Android, remote CI, live HTTP and
 OCR NOT_RUN (no product changes, no push or execution authorization). Local commit
 only; branch/worktree retained for human review, no P5-2 implementation.
+
+## Phase 5 P5-2A — Read-only Benefit batch operational inspection
+
+Issue [#130](https://github.com/jelleoo/MILIMAP/issues/130), based on dev
+`db50d6c357366350fca5f235ffc3211ce7ff1634`. This inspector returns one diagnostic
+object through the PowerShell pipeline. It does not execute or recover a cycle,
+create a Store, write reports, claim a batch, repair indexes or fetch sources.
+
+```powershell
+. ./tools/data/inspect-phase5-benefit-batch.ps1
+$inspection = Inspect-Phase5BenefitBatch `
+    -Store $existingStoreLayout -CanonicalCsvPath $canonicalCsv `
+    -BusinessIds $orderedBusinessIds -BatchWorkspaceRoot $batchWorkspace `
+    -BatchId $frozenBatchId -ObservedAt $frozenObservationTime `
+    -RepositoryRevision $frozenRepositoryRevision
+```
+
+Pass an existing layout; do not call New-HistoryStoreLayout just to inspect an
+unknown/missing directory. Paths are operator inputs, not destinations taken
+from untrusted JSON. Traversal/reparse boundaries are rejected. Frozen plan
+metadata is checked against the 1MiB bound before loading. The v1 format verifier
+uses existing canonical JSON/SHA helpers and the existing BatchId/RunId formulas;
+no new normalization or History contract is introduced. The canonical input
+identity is the existing parsed-row digest, not a claim about raw CSV byte hash.
+
+PlanState describes stored self-consistency, not authenticated historical truth.
+CurrentCompatibility separately compares the current canonical/revision/selection
+and roots. Historical revision or current input mismatch does not make an
+otherwise valid plan INVALID, but blocks recovery consideration. Missing plan
+is reported MISSING, not History corruption, and is never created by inspection.
+A copied archive is not silently rebound to another History/workspace root.
+
+One existing committed-History audit is followed by selected-record validation
+and existing P5-1 index checks. There is no per-business full recovery helper.
+Manifest identity, input/execution fingerprints when currently comparable,
+evidence/semantic projections, comparison/ReviewKeys and artifacts remain strict.
+Historical work metrics are unavailable and stay null. Legitimate failed latest
+B with retained comparable A is accepted; regressed A/A remains rejected.
+
+Outputs separate PlanState, CurrentCompatibility, HistoryState, GuardState and
+per-business RunState, CommitStatus, OperationalStatus, DerivedReportState,
+FingerprintState, claims/staging, reasons and RecoveryConsideration. COMMITTED
+is not benefit approval; operational failure is not NOT_FOUND or ENDED.
+ABORTED is a legitimate terminal, while PREPARED/bare terminal directories are
+unresolved. Shared malformed/ambiguous History blocks recovery assessment.
+
+A committed missing report remains COMMITTED/MISSING; the inspector never rebuilds
+it. PRESENT_IDENTITY_ONLY checks basic IDs/time/revision/ReviewKey, not complete
+report equivalence with the existing output writer. Conflicting/unreadable derived
+identity blocks consideration without rewriting committed History.
+
+Guard presence blocks recovery regardless of age or readability. No PID/age-based
+staleness proof or deletion advice is supplied. COMMITTED with per-run residue may
+remain conditionally assessable; ResidueBlocksExecute reports the separate Execute
+blocker. No guard/staging/claim is acquired, removed or stolen.
+
+RecoveryConsideration is CONDITIONAL, BLOCKED, NOT_APPLICABLE or INCONCLUSIVE.
+ExecutionAuthorized=false and ProductionAction=NONE always. CONDITIONAL only means
+an operator may consider the existing recovery path, which must revalidate its own
+current guards/identities and output policy; this object is never an execution
+permit or resume cursor.
+
+Critical plan/input/selected-record/index/guard state is checked again. A detected
+change yields INCONCLUSIVE_CONCURRENT_CHANGE. This is a best-effort observation,
+not an atomic History snapshot or guarantee that state will remain unchanged.
+No writer lock or automatic read-retry loop is added.
+
+Costs remain proportional to the existing History: a no-follow metadata traversal
+rejects internal reparse entries before the global audit can follow them; that
+audit scans committed records and hashes unique artifact references. Selected
+strict helpers may re-read/hash artifacts. No persistent cache/index or public
+trust bypass is added; selected count<=10 is not a History-size/time bound.
+
+Offline checks: test-inspect-phase5-benefit-batch.ps1 Plan/History/Safety/All,
+existing P5-0/P5-1 tests, then the complete sorted tools/data/test-*.ps1 suite.
+Fictional fixtures are constructed outside each inspected measurement window.
+Every inspection asserts HTTP0 and unchanged History/workspace directory lists
+and SHA-256 inventories, with mutation/network entrypoints trapped. The design-stage
+independent builder check was NOT completed (capacity error); no prior independent
+validation is claimed.
+
+No P5-2B transport/budget implementation, scheduler, new dependency, Core/adapter
+change or production write is included. OCR dependency NOT_APPROVED; P4-3B BLOCKED;
+Phase4 NOT_COMPLETE. This local checkpoint does not authorize push/PR/merge.
+The whole-change review found one Important diagnostic identity bug: absent plan
+plus changed current input could substitute another batch's resolved RunIds.
+The regression was observed RED before correction. Inspection now keeps the
+requested BatchId-derived RunIds; current plan metadata is used only when its
+BatchId matches. With no matching frozen/current plan, SourceRowNumber is null
+and fingerprints remain NOT_VERIFIED; recovery stays BLOCKED. Tests also create
+the other batch's actual committed records and verify no observation/ReviewKey
+substitution. No independent re-review is claimed after this correction pass.
+Local checkpoint verification (2026-10-25 KST): inspector Plan/History/Safety and
+missing-plan/other-batch identity regression PASS; existing P5-0
+Base/Recovery/Safety/Parity and P5-1 Plan/Execution/Recovery/Safety PASS.
+Complete CI-style sorted tools/data/test-*.ps1 suite passed65/65 after the review
+correction, using the already available portable .NET8.0.426 process-locally.
+All65 per-script logs are retained outside Git. The early targeted native Git
+read warning did not recur in final full regression. Whole-change review:
+Critical0/Important1/Minor0; the Important finding was reproduced RED and fixed.
+No remaining known Critical/Important finding; no independent correction re-review.
+Exactly3reserved files; protected/Core/adapter/evaluation diff0; diff-check PASS.
+Android/remote CI/live HTTP/OCR NOT_RUN (data-only local checkpoint; no execution
+or push authorization). Ready for human Draft PR review, not periodic execution.

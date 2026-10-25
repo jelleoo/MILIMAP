@@ -211,7 +211,11 @@ function Inspect-Phase5BenefitBatch {
             # Observation time was validated above against the manifest/frozen instant.
             # The audit's display string can differ after the Core JSON reader parses dates.
             $audited=$review | Select-Object *;$audited.ObservedAt=$view.Review.ObservedAt
-            if((ConvertTo-HistoryCanonicalJson $view.Review) -cne (ConvertTo-HistoryCanonicalJson $audited)){throw 'P52_AUDITED_REVIEW_CHANGED'}
+            if((ConvertTo-HistoryCanonicalJson $view.Review) -cne (ConvertTo-HistoryCanonicalJson $audited)){
+                $changeException=[InvalidOperationException]::new('P52_AUDITED_REVIEW_CHANGED')
+                $changeException.Data['P52ConcurrentChange']=$true
+                throw $changeException
+            }
             $item.RunState='COMMITTED';$item.OperationalStatus=$obs.OperationalStatus;$item.ObservationId=$obs.ObservationId;$item.ComparisonId=$review.ComparisonId;$item.ReviewKey=$review.ReviewKey
             $item.RecoveryConsideration='CONDITIONAL'
             $reportPath=Join-Path (Join-Path $directory 'items') ($item.RunId+'.json')
@@ -231,16 +235,19 @@ function Inspect-Phase5BenefitBatch {
         }elseif(@($result.Items | Where-Object RecoveryConsideration -CEQ 'BLOCKED').Count -gt 0){$result.RecoveryConsideration='BLOCKED'}
         elseif(@($result.Items | Where-Object RecoveryConsideration -CEQ 'CONDITIONAL').Count -gt 0){$result.RecoveryConsideration='CONDITIONAL'}else{$result.RecoveryConsideration='NOT_APPLICABLE'}
     }catch{
-        $result.InspectionStatus='BLOCKED'
-        if($result.HistoryState -ceq 'NOT_INSPECTED' -and $result.PlanState -cin @('VALID','MISSING')){$result.HistoryState='INVALID'}
+        $concurrent=$_.Exception.Data.Contains('P52ConcurrentChange')
+        $result.InspectionStatus=if($concurrent){'INCONCLUSIVE_CONCURRENT_CHANGE'}else{'BLOCKED'}
+        if(-not $concurrent -and $result.HistoryState -ceq 'NOT_INSPECTED' -and $result.PlanState -cin @('VALID','MISSING')){$result.HistoryState='INVALID'}
         $result.ReasonCodes+=@($_.Exception.Message)
-        $result.RecoveryConsideration='BLOCKED'
-        foreach($item in $result.Items){$item.RecoveryConsideration='BLOCKED';$item.ReasonCodes+=@('P52_GLOBAL_INSPECTION_BLOCKED')}
+        $result.RecoveryConsideration=if($concurrent){'INCONCLUSIVE'}else{'BLOCKED'}
+        $code=if($concurrent){'P52_CONCURRENT_CHANGE'}else{'P52_GLOBAL_INSPECTION_BLOCKED'}
+        if($concurrent){$result.ReasonCodes+=@($code)}
+        foreach($item in $result.Items){$item.RecoveryConsideration=$result.RecoveryConsideration;$item.ReasonCodes+=@($code)}
     }finally{
         foreach($path in $watch.Keys){
             try{if((Get-InternalPhase5InspectionStamp $path) -cne $watch[$path]){$result.InspectionStatus='INCONCLUSIVE_CONCURRENT_CHANGE';$result.RecoveryConsideration='INCONCLUSIVE';$result.ReasonCodes+=@('P52_CONCURRENT_CHANGE')}}catch{$result.InspectionStatus='INCONCLUSIVE_CONCURRENT_CHANGE';$result.RecoveryConsideration='INCONCLUSIVE';$result.ReasonCodes+=@('P52_CONCURRENT_CHANGE')}
         }
     }
-    if($result.InspectionStatus -ceq 'INCONCLUSIVE_CONCURRENT_CHANGE'){foreach($item in $result.Items){$item.RecoveryConsideration='INCONCLUSIVE'}}
+    if($result.InspectionStatus -ceq 'INCONCLUSIVE_CONCURRENT_CHANGE'){$result.HistoryState='INCONCLUSIVE';foreach($item in $result.Items){$item.RecoveryConsideration='INCONCLUSIVE'}}
     return $result
 }

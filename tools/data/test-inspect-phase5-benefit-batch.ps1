@@ -245,6 +245,20 @@ try{
             Equal $probe.Audits 0 'Audit never follows internal reparse targets'
             Check (@($r.ReasonCodes) -ccontains 'P52_REPARSE_PATH') 'Internal reparse detection is the actual rejection reason'
         }finally{if(Test-Path -LiteralPath $link){[IO.Directory]::Delete($link)}}
+        # An audit/reread difference is detected even if the first file stamp follows the change.
+        $path=$paths.comparison;$original=[IO.File]::ReadAllBytes($path)
+        try{
+            $comparison=[IO.File]::ReadAllText($path) | ConvertFrom-Json @jsonOptions
+            $comparison.ChangeCandidates=@()
+            Assert-ObservationComparison $comparison
+            $changedComparisonText=ConvertTo-HistoryCanonicalJson $comparison
+            $mutate={ [IO.File]::WriteAllText($path,$changedComparisonText) }.GetNewClosure()
+            $r=Inspect-Checked $options -DuringAudit $mutate
+            Equal $r.InspectionStatus INCONCLUSIVE_CONCURRENT_CHANGE ('Detected audit/reread mismatch is concurrent change, not History damage: '+($r.ReasonCodes -join ';'))
+            Equal $r.HistoryState INCONCLUSIVE 'Different valid read versions do not establish History corruption'
+            Equal $r.RecoveryConsideration INCONCLUSIVE 'Audit/reread mismatch never recommends recovery'
+            foreach($item in $r.Items){Equal $item.RecoveryConsideration INCONCLUSIVE 'Every item inherits the inconclusive inspection'}
+        }finally{[IO.File]::WriteAllBytes($path,$original)}
         Write-Host 'P5-2A Safety PASS: guards/corruption/index rollback/concurrent mutation/reparse; HTTP0 / History0 / Workspace0'
     }
     if($Group -cin @('History','All')){

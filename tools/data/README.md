@@ -855,3 +855,25 @@ No remaining known Critical/Important finding; no independent correction re-revi
 Exactly3reserved files; protected/Core/adapter/evaluation diff0; diff-check PASS.
 Android/remote CI/live HTTP/OCR NOT_RUN (data-only local checkpoint; no execution
 or push authorization). Ready for human Draft PR review, not periodic execution.
+Final PR-preparation review found one Important concurrency-classification issue:
+a selected valid comparison changed after the global audit but before its first
+file stamp was detected as P52_AUDITED_REVIEW_CHANGED yet reported as invalid
+History. The existing DuringAudit regression first failed RED (BLOCKED instead
+of INCONCLUSIVE_CONCURRENT_CHANGE). An internal exception marker now routes that
+detected version difference to INCONCLUSIVE_CONCURRENT_CHANGE / HistoryState
+INCONCLUSIVE, including every item's recovery consideration. Ordinary corruption
+remains blocked. Inspector All and P5-0/P5-1 focused parity PASS after correction;
+full data regression and exact-head CI are required for the final PR HEAD.
+
+The first post-fix full-suite attempt exposed a test-fixture scope error: a
+GetNewClosure callback could not resolve script-scoped assertion/serialization
+functions under CI's ampersand invocation. Fixture validation and serialization
+now occur before the callback, which only performs the intended captured file
+write. No assertion was relaxed. Inspector All passes in both -File and CI-style
+ampersand modes; the full final suite is rerun after this test-only correction.
+
+Final local PR gate: complete CI-style data regression65/65 PASS after both the
+concurrency correction and fixture-scope correction. Inspector All passes in both
+invocation modes; P5-0/P5-1 focused parity and all existing full-suite regressions
+PASS. Failed checkpoints remain recorded; no live HTTP/OCR was executed. Exact
+pushed-head verify-data and verify must still succeed before merge approval.

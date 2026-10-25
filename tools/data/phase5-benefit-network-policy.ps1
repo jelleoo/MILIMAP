@@ -8,7 +8,9 @@ function Get-Phase5NetworkTransportIdentity {
 function Test-InternalPhase5NetworkQualification {
     param($Identity)
     # Qualification is deliberately exact. Other runtimes never inherit these results.
-    return ($Identity.Profile -ceq 'P52_HTTP11_SINGLE_CONNECTION_V1' -and $Identity.Framework -ceq '.NET 10.0.12' -and $Identity.OS -ceq 'Microsoft Windows 10.0.26300' -and $Identity.Architecture -ceq 'X64')
+    $environmentQualified=($Identity.Profile -ceq 'P52_HTTP11_SINGLE_CONNECTION_V1' -and $Identity.Framework -ceq '.NET 10.0.12' -and $Identity.OS -ceq 'Microsoft Windows 10.0.26300' -and $Identity.Architecture -ceq 'X64')
+    if(-not $environmentQualified){return $false}
+    try{[void](Assert-InternalPhase5NetworkImplementation);return $true}catch{return $false}
 }
 function New-Phase5BenefitNetworkPolicy {
     param([Parameter(Mandatory)][string[]]$AllowedHttpsHosts,[Parameter(Mandatory)][long]$MaxPhysicalAttempts,[int]$RequestTimeoutMilliseconds=30000,[long]$MaxResponseBodyBytes=33554432,[int]$MaxResponseHeaderBytes=65536)
@@ -45,9 +47,9 @@ function Assert-InternalPhase5NetworkUrl {
     $authority=($Url -split '/',4)[2]
     if($authority -cne $uri.Host -and $authority -cne ($uri.Host+':443')){throw 'P52B_AUTHORITY_REPRESENTATION_DENIED'}
 }
-function Initialize-InternalPhase5NetworkTypes {
-    if('Milimap.P52.NetworkBoundary' -as [type]){return}
-    Add-Type -TypeDefinition @"
+
+function Get-InternalPhase5NetworkTypeDefinition {
+    @'
 using System;
 using System.IO;
 using System.Net;
@@ -132,8 +134,43 @@ namespace Milimap.P52 {
   }
  }
 }
-"@
+'@
 }
+function Assert-InternalPhase5NetworkImplementation {
+    $source=Get-InternalPhase5NetworkTypeDefinition
+    $digest=Get-HistorySha256 -Text $source.Replace("`r`n","`n")
+    # This is the digest of the already-qualified transport source, not a caller/type claim.
+    # A transport change requires an explicit qualification-manifest update.
+    if($digest -cne 'ac2e86899fa9f4aca57feb42af32b5b72a0b115a650d9e5d4424194ae8831fcd'){throw 'P52B_TRANSPORT_SOURCE_UNQUALIFIED'}
+    $boundary='Milimap.P52.NetworkBoundary' -as [type]
+    $accounting='Milimap.P52.Accounting' -as [type]
+    $response='Milimap.P52.ResponseData' -as [type]
+    $registration=Get-Variable -Name MilimapP52QualifiedTypes -Scope Global -ErrorAction SilentlyContinue
+    if($null -ne $boundary -or $null -ne $accounting -or $null -ne $response -or $null -ne $registration){
+        if($null -eq $registration -or ($registration.Options -band [Management.Automation.ScopedItemOptions]::Constant) -eq 0 -or $registration.Value -isnot [Tuple[Type,Type,Type,string]]){throw 'P52B_LOADED_TRANSPORT_UNTRUSTED'}
+        $known=$registration.Value
+        if($null -eq $boundary -or $null -eq $accounting -or $null -eq $response -or
+            -not [object]::ReferenceEquals($known.Item1,$boundary) -or
+            -not [object]::ReferenceEquals($known.Item2,$accounting) -or
+            -not [object]::ReferenceEquals($known.Item3,$response) -or
+            $known.Item4 -cne $digest){throw 'P52B_LOADED_TRANSPORT_UNTRUSTED'}
+    }
+    [pscustomobject]@{Definition=$source;Digest=$digest;Boundary=$boundary}
+}
+function Initialize-InternalPhase5NetworkTypes {
+    $implementation=Assert-InternalPhase5NetworkImplementation
+    if($null -ne $implementation.Boundary){return}
+    # CLR types outlive script scopes; provenance is constant in the owning runspace.
+    # Unknown origins (including other runspaces) fail closed. No request/payload cache.
+    $compiled=@(Add-Type -TypeDefinition $implementation.Definition -PassThru)
+    $boundary=$compiled | Where-Object FullName -CEQ 'Milimap.P52.NetworkBoundary'
+    $accounting=$compiled | Where-Object FullName -CEQ 'Milimap.P52.Accounting'
+    $response=$compiled | Where-Object FullName -CEQ 'Milimap.P52.ResponseData'
+    if($null -eq $boundary -or $null -eq $accounting -or $null -eq $response){throw 'P52B_COMPILED_TRANSPORT_INVALID'}
+    $record=[Tuple[Type,Type,Type,string]]::new($boundary,$accounting,$response,$implementation.Digest)
+    Set-Variable -Name MilimapP52QualifiedTypes -Scope Global -Option Constant -Value $record
+}
+
 function New-InternalPhase5NetworkState {
     param($Policy,[string]$BatchId,[string[]]$SourceUrls)
     $copy=Copy-InternalPhase5NetworkPolicy $Policy

@@ -1,4 +1,4 @@
-param([ValidateSet('Policy','Transport','All')][string]$Group='All')
+param([ValidateSet('Policy','Transport','LoadedTypes','All')][string]$Group='All')
 Set-StrictMode -Version Latest
 $ErrorActionPreference='Stop'
 $library=Join-Path $PSScriptRoot 'phase5-benefit-network-policy.ps1'
@@ -250,4 +250,82 @@ if($Group -cin @('Transport','All')){
     $handler=$factory.Invoke($null,@([Net.IPAddress[]]@([Net.IPAddress]::Loopback),[int]1000,[int]1024,$account))
     $expired=[Threading.CancellationTokenSource]::new();$expired.Cancel()
     try{Reject {$exchange.Invoke($null,@([Uri]'https://localhost:1/expired',$handler,[int]1000,[long]16,$account,[long]$token,$expired.Token))} 'Expired shared deadline fails before dispatch';Equal $account.AttemptedCount 0 'No dispatch after deadline expiration'}finally{$account.Finish($token,$false);$expired.Dispose()}
+}
+
+if($Group -cin @('LoadedTypes','All')){
+    $scratch=Join-Path ([IO.Path]::GetTempPath()) ('milimap-p52-loaded-'+[guid]::NewGuid().ToString('N'))
+    [void][IO.Directory]::CreateDirectory($scratch)
+    $driver=Join-Path $scratch 'probe.ps1'
+    @'
+param([string]$Case,[string]$Module,[string]$Scratch)
+Set-StrictMode -Version Latest
+$ErrorActionPreference='Stop'
+if($Case -eq 'preloaded-drift'){
+    $tokens=$null;$parseErrors=$null
+    $ast=[Management.Automation.Language.Parser]::ParseFile($Module,[ref]$tokens,[ref]$parseErrors)
+    $literal=$ast.Find({param($node);$node -is [Management.Automation.Language.StringConstantExpressionAst] -and $node.Value.Contains('namespace Milimap.P52')},$true)
+    if($null -eq $literal -or $parseErrors.Count -ne 0){throw 'PRELOAD_SOURCE_FIXTURE_INVALID'}
+    $drift=$literal.Value.Replace('request.Headers.ConnectionClose=true;','request.Headers.ConnectionClose=false;')
+    if($drift -ceq $literal.Value){throw 'PRELOAD_SOURCE_MUTATION_MISSING'}
+    Add-Type -TypeDefinition $drift
+}
+if($Case -eq 'incompatible'){
+    Add-Type 'namespace Milimap.P52 { public static class NetworkBoundary { public static string ClaimedProfile = "P52_HTTP11_SINGLE_CONNECTION_V1"; } public sealed class Accounting { public Accounting(long n){} } }'
+}
+if($Case -eq 'crlf'){
+    $dependency=Join-Path (Split-Path -Parent $Module) 'lib/history/history-fingerprints.ps1'
+    $source=[IO.File]::ReadAllText($Module).Replace("`r`n","`n").Replace("`n","`r`n")
+    $source=$source.Replace('. (Join-Path $PSScriptRoot ''lib/history/history-fingerprints.ps1'')',(". '"+$dependency.Replace("'","''")+"'"))
+    $Module=Join-Path $Scratch 'crlf-policy.ps1';[IO.File]::WriteAllText($Module,$source)
+}
+if($Case -cin @('repeat','crlf')){
+    . $Module
+    Initialize-InternalPhase5NetworkTypes
+    $first='Milimap.P52.NetworkBoundary' -as [type]
+    & {param($Path);. $Path;Initialize-InternalPhase5NetworkTypes} $Module
+    . $Module
+    Initialize-InternalPhase5NetworkTypes
+    if(-not [object]::ReferenceEquals($first,('Milimap.P52.NetworkBoundary' -as [type]))){throw 'VALID_REPEAT_TYPE_CHANGED'}
+    Write-Host "LoadedTypes $Case PASS: same exact validated types survive module reload"
+    exit 0
+}
+if($Case -eq 'changed-loaded'){
+    . $Module
+    Initialize-InternalPhase5NetworkTypes
+    $originalDefinition=(Get-InternalPhase5NetworkTypeDefinition).Replace("`r`n","`n")
+    $oldPin=Get-HistorySha256 -Text $originalDefinition
+    $newPin=Get-HistorySha256 -Text $originalDefinition.Replace('request.Headers.ConnectionClose=true;','request.Headers.ConnectionClose=false;')
+}
+if($Case -cin @('changed-source','changed-loaded')){
+    $source=[IO.File]::ReadAllText($Module)
+    $changed=$source.Replace('request.Headers.ConnectionClose=true;','request.Headers.ConnectionClose=false;')
+    if($changed -ceq $source){throw 'FIXTURE_MUTATION_DID_NOT_CHANGE_SOURCE'}
+    $dependency=Join-Path (Split-Path -Parent $Module) 'lib/history/history-fingerprints.ps1'
+    $changed=$changed.Replace('. (Join-Path $PSScriptRoot ''lib/history/history-fingerprints.ps1'')',(". '"+$dependency.Replace("'","''")+"'"))
+    if($Case -eq 'changed-loaded'){$changed=$changed.Replace($oldPin,$newPin)}
+    $Module=Join-Path $Scratch 'changed-policy.ps1'
+    [IO.File]::WriteAllText($Module,$changed)
+}
+. $Module
+$identity=Get-Phase5NetworkTransportIdentity
+$qualified=Test-InternalPhase5NetworkQualification $identity
+$rejected=$false
+try{Initialize-InternalPhase5NetworkTypes}catch{$rejected=$true}
+$stateCreated=$false
+try{$state=New-InternalPhase5NetworkState -Policy (New-Phase5BenefitNetworkPolicy -AllowedHttpsHosts @('example.go.kr') -MaxPhysicalAttempts 0) -BatchId ('batch-'+('d'*64)) -SourceUrls @('https://example.go.kr/a');$stateCreated=$true}catch{}
+Write-Host "LoadedTypes $Case observed: qualified=$qualified initRejected=$rejected stateCreated=$stateCreated profile=$($identity.Profile)"
+if(-not $rejected -or $qualified -or $stateCreated){throw 'RED: incompatible or changed transport accepted solely by type/profile/environment identity'}
+'@ | Set-Content -LiteralPath $driver -Encoding utf8
+    try{
+        $failures=@()
+        foreach($case in @('incompatible','preloaded-drift','changed-source','changed-loaded','repeat','crlf')){
+            & (Get-Command pwsh).Source -NoProfile -File $driver -Case $case -Module $library -Scratch $scratch
+            if($LASTEXITCODE -ne 0){$failures+=@($case)}
+        }
+        if($failures.Count -gt 0){throw ('LoadedTypes regressions failed: '+($failures -join ','))}
+    }finally{
+        $full=[IO.Path]::GetFullPath($scratch)
+        if(-not $full.StartsWith([IO.Path]::GetFullPath([IO.Path]::GetTempPath()),[StringComparison]::OrdinalIgnoreCase) -or -not ([IO.Path]::GetFileName($full)).StartsWith('milimap-p52-loaded-')){throw 'UNSAFE_LOADED_TEST_CLEANUP'}
+        Remove-Item -LiteralPath $full -Recurse -Force
+    }
 }

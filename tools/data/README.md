@@ -634,3 +634,120 @@ Core, adapters, contracts and the previous bounded live-smoke evidence are uncha
 Follow-up focused tests PASS in both invocation modes; the complete local data
 suite was rerun after the production fixes and passed 63/63. No live HTTP or OCR
 was rerun. Exact pushed-HEAD data and Android CI remain required before approval.
+
+## Phase 5 P5-1 — Bounded sequential manual Benefit batch
+
+Issue [#128](https://github.com/jelleoo/MILIMAP/issues/128), base
+`c134f94af27665dc3ab95da4732d8a8f73afeb3a`. Manual, sequential, 1–10 explicit
+existing businessIds; no scheduling, shared RunContext or production approval.
+Only the two P5-0 internal preflight/verified-recovery helpers are extracted;
+its public parameters, result/error behavior and existing policies are unchanged.
+
+```powershell
+. ./tools/data/invoke-phase5-benefit-batch.ps1
+$options = @{
+    CanonicalCsvPath = $canonicalCsv
+    BusinessIds = $selectedBusinessIds # explicit order, unique, count1–10
+    Store = $existingExternalHistoryStore
+    BatchWorkspaceRoot = $externalBatchWorkspace
+    ObservedAt = $fixedObservationTime
+    RepositoryRevision = $actualCheckoutRevision
+}
+$plan = New-Phase5BenefitBatchPlan @options # read-only preview, no source requests
+# Freeze/review this BatchId before the manual attempt.
+$result = Invoke-Phase5BenefitBatch @options -BatchId $plan.BatchId `
+    -RepositoryStateProvider $repositoryStateProvider -RequestInvoker $httpInvoker
+$recovery = Invoke-Phase5BenefitBatch @options -BatchId $plan.BatchId `
+    -Mode RecoverOnly -RepositoryStateProvider $repositoryStateProvider
+```
+
+Read the entire operator-supplied canonical CSV once per invocation before
+selection. Preserve record ordinals + header offset2, not a new multiline-CSV
+physical-line policy. Validate all selected identities/sources/paths and actual
+checkout revision before HTTP. The input is a trusted operator snapshot, not an
+authenticated source of benefit truth. Observation time is explicitly frozen,
+not silently substituted for actual request time or canonical verification date.
+
+PlanCore v1 includes full ordered input digest/path, selected order, original
+ordinals, business/source identity/input fingerprints, revision/time, normalized
+History/workspace roots, every effective History subroot, and fixed10 bound. Existing canonical JSON/SHA helpers
+derive `batch-<full hash>` and domain-separated business RunIds. Derived IDs are
+excluded from their own digest inputs. Changed input/order/time/revision/root
+rejects the previous BatchId. Digests establish integrity, not authenticity.
+
+Exclusive immutable `plan.json`, one atomic derived `summary.json`, and stable
+`items/<RunId>.json` reports live under `<BatchWorkspaceRoot>/<BatchId>` outside
+Git and History. Workspace/History overlap in either direction and existing
+reparse ancestors are rejected. Existing plan bytes must equal the recomputed
+canonical plan, including version; no overwrite. Plan/summary metadata limit1MiB.
+Summary is neither authority nor a trusted resume cursor; no append-only Review
+copies. Existing per-business output equivalence/recovery behavior is reused.
+
+A batch-only exclusive guard coordinates the same content-bound batch. Existing
+History single-writer/CAS remain authoritative for distinct batches and standalone
+callers. No automatic retry, lease theft, stale deletion or batch index repair.
+A handled stop may release its own guard; interrupted/unclassified failures or
+summary-output failures retain it for manual examination. Fresh commits are
+independent; a later failure does not roll back earlier commits.
+
+RecoverOnly reads verified COMMITTED records, preserves ReviewKeys/evidence,
+never executes pending/failed businesses or writes History. Missing derived
+reports may be rebuilt. COMMITTED takes precedence over residual per-run claim/
+staging for read-only recovery; residue blocks Execute and is never deleted.
+A stale batch guard blocks both modes. Unknown historical work metrics stay null.
+
+Use existing read-only History audit plus selected index/artifact validation.
+Fresh persisted index must match current observation; a cleared or regressed comparable pointer inconsistent with committed comparable history blocks execution. Noncomparable failure may
+advance LatestObservationId while retaining prior LatestComparableObservationId.
+IndexRepairRequired is unavailable from P5-0; never assume false. Existing Core
+may rebuild on missing indexes/recovery stages, including first-time businesses;
+that behavior and lock cost stay unchanged. Batch does no repair.
+
+Continue on verified COMMITTED/COMPLETE, or a safely committed FAILED/PARTIAL/
+UNSUPPORTED with existing OPERATIONAL_DIAGNOSTIC routing. An initial failed
+baseline can legitimately route RECORD_ONLY: preserve it and stop rather than
+invent a diagnostic route. Stop on CAS/lock, unresolved state, invalid shared
+History, unclassified cycle error or committed output failure. Correct only the
+output problem and use RecoverOnly; no source rerun is needed.
+
+FINISHED denotes traversal, not current-benefit approval. Summary separates
+executed/recovered/not-started, commit, operational and ReviewRoute counts.
+Each metric exposes KnownSum/ObservedCount/MissingCount; Total=null when coverage
+is incomplete. Never zero-fill recovery or infer work from commit status. A cycle
+that throws without returning remains an attempted failure with unknown work.
+
+Three new businesses sharing one HTML URL still fetch3/parse3. Existing individual
+POST_FETCH reuse and durable artifact dedup remain. Remaining costs: repeated
+input/path checks, source fetch/parse, initial History audit, per-recovery full
+scans, indexed artifact integrity reads and possible existing Core rebuilds.
+Ten businesses is a count limit, not a hard wall-clock limit. Cross-business
+sharing requires separate approval and isolation tests; no parallel cache added.
+
+Offline tests: `test-phase5-benefit-batch.ps1` Plan/Execution/Recovery/Safety and
+P5-0 Base/Recovery/Safety/Parity. Synthetic fictional inputs, external temporary
+stores and injected transport exercise actual Benefit/History/Review, CAS and
+writer lock. No real benefit truth, live HTTP or OCR is implied. Before periodic
+execution, separately approve source budgets, stale-state procedures and retry/
+backoff after the manual path is operationally verified.
+
+`ProductionAction=NONE`; OCR dependency NOT_APPROVED; P4-3B BLOCKED;
+Phase4 NOT_COMPLETE. This checkpoint does not authorize push/PR/merge or P5-2.
+
+P5-1 local checkpoint verification (2026-10-25 KST): Plan/Execution/Recovery/Safety
+and P5-0 Base/Recovery/Safety/Parity PASS; related Benefit/History/Review/run-context
+regressions PASS. Final CI-style sorted `&` invocation of all tools/data/test-*.ps1
+passed64/64 using existing portable .NET8.0.426 process-locally. No SDK/dependency
+installation. Actual CSV read1, first shared-URL3 businesses fetch3/parse3/commits3;
+recovery3 adds HTTP0/History writes0 with unchanged ReviewKeys; mixed metrics
+KnownSum2/Observed2/Missing1/Total=null. Actual Core CAS movement and writer lock
+stop after one request, leaving two businesses unstarted. Latest failed observation
+retains prior comparable pointer; stale/corrupt cases reject before requests.
+
+One fresh whole-change review identified Important2: effective History subroots
+were missing from PlanCore, and cleared/regressed comparable index pointers could
+bypass comparison. Both were reproduced RED and fixed minimally, then targeted
+and the final full suite passed. No deferred Minor findings. The review was not
+rerun; coverage and full regression verify the correction pass. Protected/Core/
+adapter/evaluation diff0; whitespace check PASS. Android, remote CI, live HTTP and
+OCR NOT_RUN (no product changes, no push or execution authorization). Local commit
+only; branch/worktree retained for human review, no P5-2 implementation.

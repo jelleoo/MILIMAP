@@ -1,9 +1,10 @@
 Set-StrictMode -Version Latest
 $ErrorActionPreference='Stop'
 . (Join-Path $PSScriptRoot 'invoke-phase5-benefit-cycle.ps1')
+. (Join-Path $PSScriptRoot 'phase5-benefit-network-policy.ps1')
 
 function Resolve-InternalPhase5BenefitBatchPlan {
-    param([string]$CanonicalCsvPath,[AllowEmptyCollection()][string[]]$BusinessIds,$Store,[string]$BatchWorkspaceRoot,[string]$ObservedAt,[string]$RepositoryRevision)
+    param([string]$CanonicalCsvPath,[AllowEmptyCollection()][string[]]$BusinessIds,$Store,[string]$BatchWorkspaceRoot,[string]$ObservedAt,[string]$RepositoryRevision,[AllowNull()]$NetworkPolicy=$null)
     $repositoryRoots=Get-Phase5BenefitRepositoryRoots
     $actualRevision=& git -C $repositoryRoots[0] rev-parse HEAD
     if($LASTEXITCODE -ne 0 -or $RepositoryRevision -cne [string]$actualRevision){throw 'P51_REPOSITORY_REVISION_MISMATCH'}
@@ -27,6 +28,15 @@ function Resolve-InternalPhase5BenefitBatchPlan {
     $layout=[ordered]@{}
     foreach($property in @('Root','RunsRoot','ObservationsRoot','ComparisonsRoot','ArtifactsRoot','IndexesRoot','TempRoot')){$layout[$property]=[IO.Path]::GetFullPath([string]$Store.$property).TrimEnd([IO.Path]::DirectorySeparatorChar)}
     $core=[pscustomobject][ordered]@{PlanVersion=1;CanonicalCsvPath=$csv;CanonicalInputDigest=(Get-HistorySha256 -Text (ConvertTo-HistoryCanonicalJson -Value $rows));RepositoryRevision=$RepositoryRevision;ObservedAt=$ObservedAt;HistoryRoot=$history;HistoryLayout=[pscustomobject]$layout;BatchWorkspaceRoot=$workspace;SourceRowNumberOffset=2;MaxBusinesses=10;Items=@($entries.ToArray())}
+    if($null -ne $NetworkPolicy){
+        $policy=Copy-InternalPhase5NetworkPolicy $NetworkPolicy
+        Assert-InternalPhase5NetworkSources -Policy $policy -SourceUrls @($core.Items.SourceUrl)
+        $identity=Get-Phase5NetworkTransportIdentity;Assert-InternalPhase5NetworkIdentity $identity
+        $core.PlanVersion=2
+        $core | Add-Member NoteProperty NetworkPolicy $policy
+        $core | Add-Member NoteProperty NetworkPolicyFingerprint (Get-Phase5NetworkPolicyFingerprint $policy)
+        $core | Add-Member NoteProperty NetworkTransportIdentity $identity
+    }
     $batchId='batch-'+(Get-HistorySha256 -Text (ConvertTo-HistoryCanonicalJson -Value $core))
     $directory=Join-Path $workspace $batchId
     $output=Join-Path $directory 'items'
@@ -41,7 +51,7 @@ function Resolve-InternalPhase5BenefitBatchPlan {
 }
 
 function New-Phase5BenefitBatchPlan {
-    param([Parameter(Mandatory)][string]$CanonicalCsvPath,[Parameter(Mandatory)][AllowEmptyCollection()][string[]]$BusinessIds,[Parameter(Mandatory)]$Store,[Parameter(Mandatory)][string]$BatchWorkspaceRoot,[Parameter(Mandatory)][string]$ObservedAt,[Parameter(Mandatory)][string]$RepositoryRevision)
+    param([Parameter(Mandatory)][string]$CanonicalCsvPath,[Parameter(Mandatory)][AllowEmptyCollection()][string[]]$BusinessIds,[Parameter(Mandatory)]$Store,[Parameter(Mandatory)][string]$BatchWorkspaceRoot,[Parameter(Mandatory)][string]$ObservedAt,[Parameter(Mandatory)][string]$RepositoryRevision,[AllowNull()]$NetworkPolicy=$null)
     return (Resolve-InternalPhase5BenefitBatchPlan @PSBoundParameters).Plan
 }
 
@@ -88,7 +98,7 @@ function Assert-InternalPhase5BenefitBatchIndex {
 }
 
 function Write-InternalPhase5BenefitBatchJson {
-    param([string]$Path,$Value,[switch]$Immutable)
+    param([string]$Path,$Value,[switch]$Immutable,[switch]$Durable)
     [void](Assert-Phase5BenefitExternalPath $Path)
     $text=ConvertTo-HistoryCanonicalJson -Value $Value
     $bytes=[Text.UTF8Encoding]::new($false).GetBytes($text)
@@ -98,14 +108,14 @@ function Write-InternalPhase5BenefitBatchJson {
             if((Get-Item -LiteralPath $Path -Force).Length -gt 1048576 -or [IO.File]::ReadAllText($Path) -cne $text){throw 'P51_STORED_PLAN_MISMATCH'}
             return
         }
-        $stream=[IO.File]::Open($Path,[IO.FileMode]::CreateNew,[IO.FileAccess]::Write,[IO.FileShare]::None)
-        try{$stream.Write($bytes);$stream.Flush()}finally{$stream.Dispose()}
+        $stream=if($Durable){[IO.FileStream]::new($Path,[IO.FileMode]::CreateNew,[IO.FileAccess]::Write,[IO.FileShare]::None,4096,[IO.FileOptions]::WriteThrough)}else{[IO.File]::Open($Path,[IO.FileMode]::CreateNew,[IO.FileAccess]::Write,[IO.FileShare]::None)}
+        try{$stream.Write($bytes);if($Durable){$stream.Flush($true)}else{$stream.Flush()}}finally{$stream.Dispose()}
         return
     }
     $temporary=Join-Path (Split-Path -Parent $Path) ('.summary-'+[guid]::NewGuid().ToString('N')+'.tmp')
     try{
         $stream=[IO.File]::Open($temporary,[IO.FileMode]::CreateNew,[IO.FileAccess]::Write,[IO.FileShare]::None)
-        try{$stream.Write($bytes);$stream.Flush()}finally{$stream.Dispose()}
+        try{$stream.Write($bytes);if($Durable){$stream.Flush($true)}else{$stream.Flush()}}finally{$stream.Dispose()}
         [IO.File]::Move($temporary,$Path,$true)
     }finally{if([IO.File]::Exists($temporary)){[IO.File]::Delete($temporary)}}
 }
@@ -132,11 +142,13 @@ function Set-InternalPhase5BenefitBatchSummary {
 }
 
 function Invoke-Phase5BenefitBatch {
-    param([Parameter(Mandatory)][string]$CanonicalCsvPath,[Parameter(Mandatory)][AllowEmptyCollection()][string[]]$BusinessIds,[Parameter(Mandatory)]$Store,[Parameter(Mandatory)][string]$BatchWorkspaceRoot,[Parameter(Mandatory)][string]$ObservedAt,[Parameter(Mandatory)][string]$RepositoryRevision,[Parameter(Mandatory)][string]$BatchId,[ValidateSet('Execute','RecoverOnly')][string]$Mode='Execute',[Parameter(Mandatory)][scriptblock]$RepositoryStateProvider,[AllowNull()][scriptblock]$RequestInvoker=$null)
+    param([Parameter(Mandatory)][string]$CanonicalCsvPath,[Parameter(Mandatory)][AllowEmptyCollection()][string[]]$BusinessIds,[Parameter(Mandatory)]$Store,[Parameter(Mandatory)][string]$BatchWorkspaceRoot,[Parameter(Mandatory)][string]$ObservedAt,[Parameter(Mandatory)][string]$RepositoryRevision,[Parameter(Mandatory)][string]$BatchId,[ValidateSet('Execute','RecoverOnly')][string]$Mode='Execute',[Parameter(Mandatory)][scriptblock]$RepositoryStateProvider,[AllowNull()][scriptblock]$RequestInvoker=$null,[AllowNull()]$NetworkPolicy=$null)
     $result=[pscustomobject][ordered]@{BatchId=$BatchId;Mode=$Mode;Status='BLOCKED';Code=$null;Reasons=@();Items=@();Summary=$null;Metrics=$null;OutputStatus='NOT_WRITTEN';ProductionAction='NONE'}
-    $guard=$null;$plan=$null;$release=$false;$started=$false
+    $guard=$null;$plan=$null;$release=$false;$started=$false;$network=$null;$strict=($null -ne $NetworkPolicy)
+    if($strict){$result | Add-Member NoteProperty NetworkExecution $null}
     try{
-        $resolved=Resolve-InternalPhase5BenefitBatchPlan -CanonicalCsvPath $CanonicalCsvPath -BusinessIds $BusinessIds -Store $Store -BatchWorkspaceRoot $BatchWorkspaceRoot -ObservedAt $ObservedAt -RepositoryRevision $RepositoryRevision
+        if($strict -and $null -ne $RequestInvoker){$result.Code='P52B_CUSTOM_INVOKER_DENIED';throw 'P52B_CUSTOM_INVOKER_DENIED'}
+        $resolved=Resolve-InternalPhase5BenefitBatchPlan -CanonicalCsvPath $CanonicalCsvPath -BusinessIds $BusinessIds -Store $Store -BatchWorkspaceRoot $BatchWorkspaceRoot -ObservedAt $ObservedAt -RepositoryRevision $RepositoryRevision -NetworkPolicy $NetworkPolicy
         $plan=$resolved.Plan
         if($BatchId -cne $plan.BatchId){throw 'P51_PLAN_ID_MISMATCH'}
         $result.Items=@($resolved.Inputs | ForEach-Object {New-InternalPhase5BenefitBatchItem $_})
@@ -144,8 +156,19 @@ function Invoke-Phase5BenefitBatch {
         if(Test-Path -LiteralPath $plan.PlanPath){
             if(-not [IO.File]::Exists($plan.PlanPath) -or (Get-Item -LiteralPath $plan.PlanPath -Force).Length -gt 1048576 -or [IO.File]::ReadAllText($plan.PlanPath) -cne (ConvertTo-HistoryCanonicalJson -Value $plan)){throw 'P51_STORED_PLAN_MISMATCH'}
         }
+        if($strict -and $Mode -ceq 'RecoverOnly' -and -not (Test-Path -LiteralPath $plan.PlanPath)){$result.Code='P52B_RECOVERY_PLAN_MISSING';throw 'P52B_RECOVERY_PLAN_MISSING'}
+        # Refuse a sealed execution before creating any new guard; retain the under-guard race check too.
+        if($strict -and $Mode -ceq 'Execute' -and (Test-Path -LiteralPath $plan.PlanPath)){$result.Code='P52B_STRICT_EXECUTE_REENTRY';throw 'P52B_STRICT_EXECUTE_REENTRY'}
         [void][IO.Directory]::CreateDirectory((Split-Path -Parent $plan.GuardPath))
         try{$guard=[IO.File]::Open($plan.GuardPath,[IO.FileMode]::CreateNew,[IO.FileAccess]::ReadWrite,[IO.FileShare]::None)}catch [IO.IOException]{$result.Code='P51_BATCH_GUARD_PRESENT';throw}
+        if($strict -and $Mode -ceq 'Execute'){
+            if(Test-Path -LiteralPath $plan.PlanPath){$result.Code='P52B_STRICT_EXECUTE_REENTRY';throw 'P52B_STRICT_EXECUTE_REENTRY'}
+            if(-not (Test-InternalPhase5NetworkQualification (Get-Phase5NetworkTransportIdentity))){$result.Code='P52B_TRANSPORT_UNQUALIFIED';throw 'P52B_TRANSPORT_UNQUALIFIED'}
+            $network=New-InternalPhase5NetworkState -Policy $plan.PlanCore.NetworkPolicy -BatchId $plan.BatchId -SourceUrls @($plan.PlanCore.Items.SourceUrl)
+            $ownedState=$network
+            $ownedRequest=Get-Command Invoke-InternalPhase5NetworkRequest -CommandType Function
+            $RequestInvoker={param($Uri);& $ownedRequest -State $ownedState -Uri $Uri}.GetNewClosure()
+        }
         $audit=Invoke-Phase3ReviewAudit -Store $Store
         foreach($inputRow in $resolved.Inputs){[void](Assert-InternalPhase5BenefitBatchIndex -Store $Store -BusinessId $inputRow.BusinessId -KnownReviews $audit.Items)}
         # All selected launch states are checked before any new source request.
@@ -167,7 +190,7 @@ function Invoke-Phase5BenefitBatch {
                 $item.Status='BLOCKED';$item.Code='P51_RUN_STATE_AMBIGUOUS'
             }
         }
-        Write-InternalPhase5BenefitBatchJson -Path $plan.PlanPath -Value $plan -Immutable
+        Write-InternalPhase5BenefitBatchJson -Path $plan.PlanPath -Value $plan -Immutable -Durable:$strict
         $result.Status='FINISHED';$result.Code='P51_FINISHED'
         for($i=0;$i -lt $resolved.Inputs.Count;$i++){
             $inputRow=$resolved.Inputs[$i];$item=$result.Items[$i]
@@ -175,6 +198,7 @@ function Invoke-Phase5BenefitBatch {
                 try{$item.OutputStatus='WRITTEN';Write-Phase5BenefitCycleOutput -Result $item -Directory $plan.OutputDirectory}catch{$item.OutputStatus='FAILED';$item.Code='OUTPUT_FAILED';$item.Reasons+=@($_.Exception.Message)}
             }elseif($Mode -ceq 'RecoverOnly'){continue}
             else{
+                if($null -ne $network -and -not $network.Accounting.CanStart()){$result.Status='STOPPED';$result.Code='P52B_NETWORK_POLICY_STOP';break}
                 $started=$true;$item.Action='EXECUTE'
                 $prior=Get-HistoryLatestEntry -Store $Store -BusinessId $item.BusinessId -Domain BENEFIT
                 $priorComparable=if($null -ne $prior){[string]$prior.LatestComparableObservationId}else{''}
@@ -194,6 +218,7 @@ function Invoke-Phase5BenefitBatch {
                     $item.Review=$review;$item.Comparison=$comparison;$item.AuthorityValidated=$true
                 }
             }
+            if($null -ne $network -and $null -ne $network.Accounting.FirstStopReason){$result.Status='STOPPED';$result.Code='P52B_NETWORK_POLICY_STOP';break}
             if($item.CommitCode -cne 'COMMITTED' -or -not $item.AuthorityValidated){$result.Status='STOPPED';$result.Code='P51_ITEM_UNCOMMITTED';break}
             if($item.OutputStatus -ceq 'FAILED'){$result.Status='STOPPED';$result.Code='P51_ITEM_OUTPUT_FAILED';break}
             if($item.OperationalStatus -cne 'COMPLETE' -and ($item.OperationalStatus -cnotin @('FAILED','PARTIAL','UNSUPPORTED') -or $item.Review.ReviewRoute -cne 'OPERATIONAL_DIAGNOSTIC')){$result.Status='STOPPED';$result.Code='P51_DIAGNOSTIC_ROUTE_UNVERIFIED';break}
@@ -208,6 +233,7 @@ function Invoke-Phase5BenefitBatch {
         $result.Reasons=@($_.Exception.Message)
     }
     try{
+        if($null -ne $network){$result.NetworkExecution=Get-InternalPhase5NetworkMetrics $network}
         Set-InternalPhase5BenefitBatchSummary $result
         if($null -ne $guard){
             try{$result.OutputStatus='WRITTEN';Write-InternalPhase5BenefitBatchJson -Path $plan.SummaryPath -Value $result}catch{$result.OutputStatus='FAILED';$result.Status='STOPPED';$result.Code='P51_SUMMARY_OUTPUT_FAILED';$result.Reasons+=@($_.Exception.Message);$release=$false}

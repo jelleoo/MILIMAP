@@ -1,4 +1,4 @@
-param([ValidateSet('Plan','History','Safety','All')][string]$Group='All')
+param([ValidateSet('Plan','History','Safety','Network','All')][string]$Group='All')
 Set-StrictMode -Version Latest
 $ErrorActionPreference='Stop'
 $inspector=Join-Path $PSScriptRoot 'inspect-phase5-benefit-batch.ps1'
@@ -28,7 +28,7 @@ function Inspect-Checked {
     $before=Inventory $root;$probe.Audits=0;$probe.Traps=0;$probe.AfterMutation=$null
     $originalAudit=(Get-Command Invoke-Phase3ReviewAudit).ScriptBlock
     $saved=@{}
-    $blocked=@('New-HistoryStoreLayout','Invoke-Phase5BenefitBatch','Invoke-Phase5BenefitCycle','Restore-InternalPhase5BenefitCommittedCycle','Prepare-HistoryRun','Commit-HistoryRun','Rebuild-HistoryIndexes','Write-HistoryIndexEntry','Write-HistoryArtifact','Write-Phase5BenefitCycleOutput','Write-InternalPhase5BenefitBatchJson','Get-BenefitSourceDocument','Get-BenefitRunSourceDocument','Invoke-WebRequest','Invoke-RestMethod')
+    $blocked=@('New-InternalPhase5NetworkState','Invoke-InternalPhase5NetworkDispatch','Test-InternalPhase5NetworkQualification','New-HistoryStoreLayout','Invoke-Phase5BenefitBatch','Invoke-Phase5BenefitCycle','Restore-InternalPhase5BenefitCommittedCycle','Prepare-HistoryRun','Commit-HistoryRun','Rebuild-HistoryIndexes','Write-HistoryIndexEntry','Write-HistoryArtifact','Write-Phase5BenefitCycleOutput','Write-InternalPhase5BenefitBatchJson','Get-BenefitSourceDocument','Get-BenefitRunSourceDocument','Invoke-WebRequest','Invoke-RestMethod')
     $trap={ $probe.Traps++;throw 'INSPECTION_MUTATION_OR_NETWORK_ATTEMPT' }.GetNewClosure()
     foreach($name in $blocked){$command=Get-Command $name -ErrorAction SilentlyContinue;if($null -ne $command -and $command.CommandType -eq 'Function'){$saved[$name]=$command.ScriptBlock};Set-Item -Path ('Function:script:'+$name) -Value $trap}
     function Invoke-Phase3ReviewAudit {
@@ -59,6 +59,32 @@ function Rebind-Plan($Value){
     foreach($item in $Value.Items){$item.RunId='run-p51-'+(Get-HistorySha256 -Text (ConvertTo-HistoryCanonicalJson ([pscustomobject]@{Purpose='P5_1_RUN_ID_V1';BatchId=$Value.BatchId;BusinessId=$item.BusinessId})))}
 }
 try{
+    if($Group -cin @('Network','All')){
+        $strictArgs=$options.Clone();$strictArgs.Remove('BatchId');$strictArgs.BatchWorkspaceRoot=Join-Path $root 'strict-inspection-batches'
+        $policy=New-Phase5BenefitNetworkPolicy -AllowedHttpsHosts @('city.example.go.kr') -MaxPhysicalAttempts 2
+        $strictPlan=New-Phase5BenefitBatchPlan @strictArgs -NetworkPolicy $policy
+        $missingArgs=$options.Clone();$missingArgs.BatchId=$strictPlan.BatchId;$missingArgs.BatchWorkspaceRoot=$strictArgs.BatchWorkspaceRoot
+        $missing=Inspect-Checked $missingArgs
+        Equal $missing.CurrentCompatibility UNAVAILABLE 'Missing frozen policy must not be guessed as a v1 input mismatch'
+        Freeze-Plan $strictPlan
+        $inspectArgs=$options.Clone();$inspectArgs.BatchId=$strictPlan.BatchId;$inspectArgs.BatchWorkspaceRoot=$strictArgs.BatchWorkspaceRoot
+        $checked=Inspect-Checked $inspectArgs
+        Equal $checked.PlanState VALID 'RED: strict Plan v2 must be validated without execution'
+        Equal $checked.CurrentCompatibility MATCH 'Current policy participates in Plan re-computation'
+        $original=[IO.File]::ReadAllText($strictPlan.PlanPath)
+        $damaged=$original | ConvertFrom-Json @jsonOptions;$damaged.PlanCore.NetworkPolicy.MaxPhysicalAttempts=1
+        [IO.File]::WriteAllText($strictPlan.PlanPath,(ConvertTo-HistoryCanonicalJson $damaged))
+        $checked=Inspect-Checked $inspectArgs
+        Equal $checked.PlanState INVALID 'Policy fingerprint mutation rejected'
+        [IO.File]::WriteAllText($strictPlan.PlanPath,$original)
+        $historical=$original | ConvertFrom-Json @jsonOptions;$historical.PlanCore.NetworkTransportIdentity.Framework='historical-other-runtime'
+        Rebind-Plan $historical;Freeze-Plan $historical
+        $inspectArgs.BatchId=$historical.BatchId
+        $checked=Inspect-Checked $inspectArgs
+        Equal $checked.PlanState VALID 'Historical runtime identity remains inspectable without qualification'
+        Equal $checked.CurrentCompatibility MISMATCH 'Historical/current runtime mismatch is not guessed compatible'
+        Write-Host 'P5-2B Inspector PASS: v2 fingerprint/BatchId/RunIds/current compatibility; historical read-only / transport0 / qualification0'
+    }
     if($Group -cin @('Plan','All')){
         $r=Inspect-Checked $options
         Equal $r.PlanState MISSING 'Unstarted plan absence is not corruption'
@@ -116,7 +142,7 @@ try{
         Equal (@((Get-Command Inspect-Phase5BenefitBatch).Parameters.Keys | Where-Object {$_ -notin $common} | Sort-Object) -join ',') (@('Store','CanonicalCsvPath','BusinessIds','BatchWorkspaceRoot','BatchId','ObservedAt','RepositoryRevision' | Sort-Object) -join ',') 'Read-only public interface only'
         Write-Host 'P5-2A Plan PASS: missing/frozen/historical/input mismatch; unsafe/oversized rejected; HTTP0 / writes0'
     }
-    if($Group -cin @('History','Safety','All')){
+    if($Group -cin @('History','Safety','Network','All')){
         $html='<table><tr><th>업소명</th><th>주소</th><th>전화번호</th><th>할인</th></tr>'
         foreach($row in $rows){$html+='<tr><td>'+$row.업소명+'</td><td>'+$row.소재지도로명주소+'</td><td>'+$row.업소전화번호+'</td><td>10% 할인</td></tr>'};$html+='</table>'
         $http={param($Uri);[pscustomobject]@{StatusCode=200;ContentType='text/html';Text=$html;Bytes=$null}}.GetNewClosure()
@@ -268,7 +294,7 @@ try{
             $changed=$rows | ConvertTo-Json -Depth 10 | ConvertFrom-Json @jsonOptions;$changed[0].할인정보='변경된 합성 입력';$changed | Export-Csv -LiteralPath $csv -NoTypeInformation -Encoding utf8
             $r=Inspect-Checked $options
             Equal $r.PlanState MISSING 'Missing old plan is not corruption'
-            Equal $r.CurrentCompatibility MISMATCH 'Current input belongs to another BatchId'
+            Equal $r.CurrentCompatibility UNAVAILABLE 'Without a frozen plan, an unmatched identifier cannot prove the missing policy or current compatibility'
             Equal ($r.Items.RunId -join '|') ($plan.Items.RunId -join '|') 'Missing plan must retain requested BatchId RunIds'
             Equal ($r.Items.RunState -join ',') 'COMMITTED,COMMITTED' 'Requested old committed runs must not become unstarted'
             Equal ($r.Items.ObservationId -join '|') ($committed.Items.ObservationId -join '|') 'Requested old observations retained'

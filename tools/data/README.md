@@ -877,3 +877,137 @@ concurrency correction and fixture-scope correction. Inspector All passes in bot
 invocation modes; P5-0/P5-1 focused parity and all existing full-suite regressions
 PASS. Failed checkpoints remain recorded; no live HTTP/OCR was executed. Exact
 pushed-head verify-data and verify must still succeed before merge approval.
+
+## Phase 5 P5-2B — Optional strict network execution policy
+
+Issue #132 adds explicit `-NetworkPolicy` to `New-Phase5BenefitBatchPlan` and
+`Invoke-Phase5BenefitBatch`. Omitting it retains the exact Plan v1, caller
+RequestInvoker and legacy result shape. P5-0, adapters, History Core, evidence,
+Review and fingerprint contracts are unchanged.
+
+`New-Phase5BenefitNetworkPolicy` creates pure canonical configuration. Strict
+Plan v2 binds the complete policy, its existing canonical-JSON SHA-256 fingerprint
+and the transport/runtime identity into BatchId. Existing BatchId-derived RunIds
+are preserved. A caller RequestInvoker is rejected in strict mode; no callback,
+Verified flag or trust switch can enable a custom transport. Plan preview and
+historical v2 inspection do not instantiate transport or run qualification.
+The inspector validates policy/identity/fingerprint/BatchId/RunIds and includes
+frozen policy in current-input compatibility. Its v1 validation remains strict.
+ExecutionAuthorized=false and ProductionAction=NONE remain mandatory.
+
+Strict transport uses owned .NET HTTP/1.1 GET with Connection: close, fresh handler
+per reservation, no proxy/cookies/credentials/redirect/decompression, and an atomic
+one-connect gate. A framework reconnect cannot silently consume another physical
+request: the additional connect is rejected before connecting. Original HTTPS
+hostname and certificate validation remain intact. URLs require exact approved
+hosts, port443 and frozen destinations. MMA permits only its existing fixed LIST
+and numeric DETAIL URL shapes; business matching and code linkage stay in the MMA
+adapter. DNS results are checked for unsafe addresses before connection; connection
+uses a validated address without a second DNS resolution or address fallback.
+
+Qualification evidence is restricted to .NET10.0.12 / Microsoft Windows
+10.0.26300 / X64 / P52_HTTP11_SINGLE_CONNECTION_V1. Other environments fail closed
+at Execute. No Linux qualification or operational source compatibility is claimed.
+Tests use local counting TLS servers and the private exchange/handler core via
+reflection. Their test-only custom-root chain does not install a certificate,
+change the system trust store, or affect the strict public Send path; production
+has no caller certificate/address/handler override. Servers and certificate/key
+handles are disposed. Tests cover keep-alive closure/reconnect, redirect, auth
+challenge, timeout, reset, bounded headers/body/chunks and untrusted TLS. Qualification
+is evidence for this profile, not a universal proof for future runtimes or changed
+transport code. Profile changes require requalification, never legacy fallback.
+
+The policy's provisional test ceilings are 0..20 attempts, timeout<=30000ms,
+body<=32MiB, headers<=64KiB (whole KiB), MaxInFlight1, Redirect0 and Retry0.
+They are not approved operational limits for all official sources. No official
+source HTTP or production activation is part of this implementation checkpoint.
+Budgets are per batch, not an aggregate limit across independently created batches.
+
+Reservations are atomic/nonrefundable. FirstStopReason is sticky outside fetch
+exceptions. Pre-cycle and post-cycle checks prevent subsequent pristine cycles.
+Budget0 starts no cycle or History commit. Mid-cycle denial (including MMA DETAIL)
+may reach the existing legitimate diagnostic commit; the separate policy stop is
+reported and prior commits remain authoritative. An ordinary source timeout
+consumes its reservation but is not labeled budget exhaustion. No benefit approval,
+NOT_FOUND or ENDED is inferred from policy failure.
+
+The immutable strict plan is the one-shot execution seal. It is written with
+WriteThrough and Flush(true) before any request; a prior seal blocks Execute both
+before guard creation and after guard acquisition. Interrupted/partial seals and
+existing claims remain blocked. Even a crash after sealing and before dispatch
+requires operator review; Execute does not resume or reset its budget. RecoverOnly
+can reproduce verified committed results without requests or new History commits.
+There is no automatic retry, stale guard/claim/seal deletion, rollback or repair.
+Existing safe owner-guard lifecycle and transport handle disposal are preserved.
+
+Strict-only NetworkExecution separates ReservationsConsumed, AttemptedCount,
+DeniedCount, RespondedCount, UnknownOutcomeCount, nullable PhysicalRequestCount,
+FirstStopReason and TransportQualification. AttemptedCount means dispatch entry,
+not confirmed server receipt. Headers may be observed before a body failure.
+PhysicalRequestCount is null after a real dispatch because dispatch does not prove
+server receipt; zero is known only before dispatch. Legacy ExternalFetchCount
+still counts logical invoker calls, including a denied DETAIL. Historical recovery
+network metrics remain null; they are not reconstructed from History.
+
+Offline batch integration substitutes only the internal dispatch function in tests;
+there is no public strict-mode injection parameter. It exercises real P5-0,
+MMA LIST/DETAIL, XLSX, History commits and committed recovery. Runtime qualification
+is separately exercised by the counting-server tests. No actual source response,
+History operational data, binary or raw evidence is committed.
+
+Remaining costs: fresh TLS connection per admitted request; per-business P5-0
+fetch/parse state; existing global History/recovery scans. No shared cache,
+scheduler, new persistent budget ledger, dependency or production write is added.
+P4-3B=BLOCKED; OCR dependency=NOT_APPROVED; Phase4=NOT_COMPLETE.
+
+P5-2B final review corrections (offline):
+- An owned X509 chain policy disables certificate issuer downloads, retains normal
+  verification/system trust and server-auth purpose, and leaves online revocation
+  disabled as in the original .NET client default. The missing-intermediate client
+  chain test records issuer HTTP0 and PartialChain. The first combined fixture
+  observed one AIA request; a raw ClientHello with no client chain validation
+  reproduced that request in Windows test-server credential construction. Server
+  preparation is measured separately and is not mislabeled as a client request.
+- Framework initial-header and trailer limit failures latch
+  RESPONSE_HEADERS_EXCEEDED before fetch can catch them. Batch regression preserves
+  the current diagnostic commit and leaves two subsequent businesses unstarted.
+- DNS and exchange share one cancellation deadline. A controlled150ms resolver-phase
+  delay plus200ms response delay is canceled near the single300ms budget; an expired
+  deadline dispatches0. This is a local timing fixture, not an OS DNS latency claim.
+- Strict RecoverOnly requires an existing frozen plan and creates no seal/guard on
+  pristine input. The subsequent first Execute remains possible. Sealed committed
+  recovery stays network0/History-write0.
+- Inspector Network fixtures have an isolated workspace; legacy All assertions are
+  retained. Without a frozen policy and without a provably matching current v1 plan,
+  compatibility is UNAVAILABLE rather than a guessed input mismatch.
+The whole-change review found Critical0/Important5; each Important was reproduced
+RED and corrected. The frozen-policy diagnostic was also corrected under the
+explicit mission requirement. No independent re-review is claimed. Final focused
+and full data verification are recorded after these corrections.
+
+A denied internal reconnect also latches TRANSPORT_RECONNECT_BLOCKED, preventing
+further pristine cycles. The additional author regression was observed RED before
+the owned accounting was connected to the one-connect gate.
+The first full CI-style suite found an additional invocation-scope defect:
+-File had passed, but ampersand invocation could not resolve the named internal
+request function from GetNewClosure. Fetch swallowed that error; observed dispatch
+and reservations were both0. The owned invoker now captures its internal Function
+CommandInfo rather than resolving the function name inside the closure. The same
+ampersand Network regression changed RED to GREEN without counter correction or
+public transport injection. The failed full-suite log is retained outside Git;
+full regression is rerun after this one-line orchestration fix.
+
+Final local checkpoint verification (2026-10-26 KST): complete sorted CI-style
+ampersand tools/data/test-*.ps1 suite PASS66/66 after the invocation-scope fix.
+P5-0 Base/Recovery/Safety/Parity, P5-1 legacy and Network, inspector All including
+v2/historical/missing-policy isolation, and policy/transport tests PASS. Both
+-File and ampersand Network invocation were verified during the correction.
+Existing portable .NET SDK8.0.426 was used process-locally for the PDF regressions;
+PowerShell transport qualification used its own .NET10.0.12 runtime. Failed and
+final per-script logs remain outside Git. Protected/Core/adapter/evaluation diff0;
+exactly seven reserved files. No official-source HTTP, quality OCR, new dependency,
+Android execution, remote CI, push, PR or merge occurred in this checkpoint.
+Numeric source-operational limits and any live smoke still require human approval.
+Timeout is cooperative .NET cancellation, not an OS process/resource guarantee.
+Independent whole-change review was performed once before its RED/GREEN correction
+pass; no independent re-review of the corrections is claimed.

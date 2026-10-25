@@ -1,4 +1,4 @@
-param([ValidateSet('Base','Recovery','Safety','All')][string]$Group='All')
+param([ValidateSet('Base','Recovery','Safety','Parity','All')][string]$Group='All')
 Set-StrictMode -Version Latest
 $ErrorActionPreference='Stop'
 $runner=Join-Path $PSScriptRoot 'invoke-phase5-benefit-cycle.ps1'
@@ -234,6 +234,42 @@ try{
         Equal $movedAgain.CommitCode BASELINE_MOVED 'CAS failed attempt remains distinguishable on reentry'
         Equal $requests.Count $before 'No silent retry after CAS rejection'
         Write-Host 'P5-0 Safety PASS: overlapping RunId blocked before fetch; writer/CAS fetch1; no stale Review; failure parse0 / extraction0; ProductionAction NONE'
+    }
+    if($Group -cin @('Parity','All')){
+        $store=New-HistoryStoreLayout -Root (Join-Path $root 'parity-history');$args50=$args50.Clone();$args50.Store=$store
+        $badRow=Copy-TestRow $row;$badRow.출처URL=''
+        $badArgs=$args50.Clone();$badArgs.Rows=@($badRow)
+        $before=$requests.Count
+        $bad=Invoke-Phase5BenefitCycle @badArgs -RunId 'run-parity-invalid'
+        Equal $bad.Code P5_PREFLIGHT_REJECTED 'Original preflight error code preserved'
+        Equal $bad.SourceRowNumber 2 'Selected row identity survives later preflight rejection'
+        Equal $requests.Count $before 'Characterization invalid source fetch0'
+        $common=@([Management.Automation.PSCmdlet]::CommonParameters)+@([Management.Automation.PSCmdlet]::OptionalCommonParameters);$names=@((Get-Command Invoke-Phase5BenefitCycle).Parameters.Keys | Where-Object {$_ -notin $common} | Sort-Object)
+        $public=@('Store','Rows','BusinessId','RunId','ObservedAt','RepositoryRevision','OutputDirectory','RepositoryStateProvider','SourceRowNumberOffset','RequestInvoker' | Sort-Object)
+        Equal ($names -join '|') ($public -join '|') 'Existing P5-0 public interface unchanged'
+        $preArgs=$args50.Clone();$preArgs.Remove('RequestInvoker');$preArgs.Remove('RepositoryStateProvider')
+        $historyBefore=@(Get-ChildItem -LiteralPath $store.Root -File -Recurse -Force | Sort-Object FullName | ForEach-Object {"$($_.FullName):$((Get-FileHash -LiteralPath $_.FullName).Hash)"})
+        $input=Resolve-InternalPhase5BenefitInput @preArgs -RunId 'run-parity'
+        Equal $input.SourceRowNumber 2 'Shared preflight retains canonical ordinal'
+        Equal $input.Candidate.SourceKind PUBLIC_OFFICIAL 'Shared preflight reuses official-source policy'
+        Equal $requests.Count $before 'Shared preflight fetch0'
+        Equal (@(Get-ChildItem -LiteralPath $store.Root -File -Recurse -Force | Sort-Object FullName | ForEach-Object {"$($_.FullName):$((Get-FileHash -LiteralPath $_.FullName).Hash)"}) -join '|') ($historyBefore -join '|') 'Shared preflight has no History writes'
+        $one=Invoke-Phase5BenefitCycle @args50 -RunId 'run-parity'
+        Equal $one.CommitCode COMMITTED 'Parity baseline commits'
+        $before=$requests.Count
+        $historyBefore=@(Get-ChildItem -LiteralPath $store.Root -File -Recurse -Force | Sort-Object FullName | ForEach-Object {"$($_.FullName):$((Get-FileHash -LiteralPath $_.FullName).Hash)"})
+        $view=$one | Select-Object *
+        $recovered=Restore-InternalPhase5BenefitCommittedCycle -Store $store -ResolvedInput $input -Result $view
+        Equal $recovered.Review.ReviewKey $one.Review.ReviewKey 'Internal recovery preserves original ReviewKey'
+        Check ($recovered.Recovered -and $null -eq $recovered.Metrics) 'Internal recovery never claims historical work metrics'
+        Equal $requests.Count $before 'Internal recovery never fetches'
+        Equal (@(Get-ChildItem -LiteralPath $store.Root -File -Recurse -Force | Sort-Object FullName | ForEach-Object {"$($_.FullName):$((Get-FileHash -LiteralPath $_.FullName).Hash)"}) -join '|') ($historyBefore -join '|') 'Internal recovery never writes History'
+        $pending=Resolve-InternalPhase5BenefitInput @preArgs -RunId 'run-parity-pending'
+        $rejected=$false
+        try{Restore-InternalPhase5BenefitCommittedCycle -Store $store -ResolvedInput $pending -Result ($one | Select-Object *) | Out-Null}catch{$rejected=$true}
+        Check $rejected 'Recovery-only helper rejects a missing committed run without executing it'
+        Equal $requests.Count $before 'Missing committed run recovery fetch0'
+        Write-Host 'P5-0 Parity PASS: public interface/error/ordinal preserved; internal preflight read-only; recovery never executes'
     }
 }finally{
     $fullRoot=[IO.Path]::GetFullPath($root)

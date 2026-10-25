@@ -73,6 +73,67 @@ function Set-Phase5BenefitCommittedView {
     $Result.Status=if($Observation.OperationalStatus -ceq 'COMPLETE'){'COMPLETE'}else{[string]$Observation.OperationalStatus}
 }
 
+function Resolve-InternalPhase5BenefitInput {
+    param($Store,[object[]]$Rows,[string]$BusinessId,[string]$RunId,[string]$ObservedAt,[string]$RepositoryRevision,[string]$OutputDirectory,[int]$SourceRowNumberOffset=1)
+    $sourceRowNumber=$null
+    try{
+        if($RunId -cnotmatch '^[a-z0-9][a-z0-9._-]{0,127}$' -or $RunId.Contains('..') -or $RunId.EndsWith('.') -or $RunId -cmatch '^(con|prn|aux|nul|com[1-9]|lpt[1-9])(\.|$)'){throw 'P5_RUN_ID_INVALID'}
+        Assert-HistoryTimestamp -Value $ObservedAt
+        if($RepositoryRevision -cnotmatch '^[0-9a-f]{40}$'){throw 'P5_REVISION_INVALID'}
+        Assert-CanonicalBusinessId $BusinessId
+        Assert-CanonicalBusinessIds -Rows $Rows
+        $selected=@(for($i=0;$i -lt $Rows.Count;$i++){if([string]$Rows[$i].businessId -ceq $BusinessId){$i}})
+        if($selected.Count -ne 1 -or $SourceRowNumberOffset -lt 1){throw 'P5_BUSINESS_SELECTION_INVALID'}
+        $row=$Rows[$selected[0]]
+        $sourceRowNumber=$selected[0]+$SourceRowNumberOffset
+        $business=ConvertTo-NormalizedBusiness -Row $row -SourceRowNumber $sourceRowNumber
+        $benefit=ConvertTo-Phase2CanonicalBenefitRecord -Row $row -SourceRowNumber $sourceRowNumber
+        $candidate=Get-ExistingBenefitSourceCandidate -Benefit $benefit
+        if($null -eq $candidate -or $candidate.SourceKind -cne 'PUBLIC_OFFICIAL'){throw 'P5_OFFICIAL_SOURCE_REQUIRED'}
+        if(-not (Test-BenefitSafeHttpUri $candidate.Url)){throw 'P5_SOURCE_URL_UNSAFE'}
+        $extension=[IO.Path]::GetExtension(([Uri]$candidate.Url).AbsolutePath).ToLowerInvariant()
+        if($extension -notin @('','.html','.htm','.do','.php','.aspx','.asp','.jsp','.xlsx','.hwpx','.pdf')){throw 'P5_SOURCE_FORMAT_UNSUPPORTED'}
+        $candidate.ObservedAt=$ObservedAt
+        $phone=Get-Phase2BenefitRowValue -Row $row -Name '업소전화번호'
+        $repositoryRoots=Get-Phase5BenefitRepositoryRoots
+        foreach($property in @('Root','RunsRoot','ObservationsRoot','ComparisonsRoot','ArtifactsRoot','IndexesRoot','TempRoot')){
+            [void](Assert-Phase5BenefitExternalPath ([string]$Store.$property) $repositoryRoots)
+            if($property -cne 'Root'){[void](Assert-HistoryStorePathWithinRoot -Store $Store -Path $Store.$property)}
+        }
+        $output=Assert-Phase5BenefitExternalPath $OutputDirectory $repositoryRoots
+        $historyRoot=[IO.Path]::GetFullPath([string]$Store.Root).TrimEnd([IO.Path]::DirectorySeparatorChar)
+        if($output.Equals($historyRoot,[StringComparison]::OrdinalIgnoreCase) -or $output.StartsWith($historyRoot+[IO.Path]::DirectorySeparatorChar,[StringComparison]::OrdinalIgnoreCase)){throw 'P5_REPORT_MUST_BE_OUTSIDE_HISTORY'}
+        return [pscustomobject]@{RunId=$RunId;BusinessId=$BusinessId;ObservedAt=$ObservedAt;RepositoryRevision=$RepositoryRevision;SourceRowNumber=$sourceRowNumber;Business=$business;Benefit=$benefit;Candidate=$candidate;Phone=$phone;OutputDirectory=$output}
+    }catch{
+        if($null -ne $sourceRowNumber){$_.Exception.Data['Phase5SourceRowNumber']=$sourceRowNumber}
+        throw
+    }
+}
+
+function Restore-InternalPhase5BenefitCommittedCycle {
+    param($Store,$ResolvedInput,$Result)
+    $terminal=Read-HistoryJsonFile -Store $Store -Path (Get-HistoryRunManifestPath -Store $Store -RunId $ResolvedInput.RunId) -Kind 'run manifest'
+    if($null -eq $terminal){throw 'P5_RECOVERY_REQUIRES_COMMITTED'}
+    $Result.Metrics=$null
+    Assert-HistoryRunManifest $terminal
+    if($terminal.RunId -cne $ResolvedInput.RunId -or $terminal.RepositoryRevision -cne $ResolvedInput.RepositoryRevision -or [DateTimeOffset]$terminal.StartedAt -ne [DateTimeOffset]::Parse($ResolvedInput.ObservedAt,[Globalization.CultureInfo]::InvariantCulture) -or @($terminal.RequestedBusinessIds).Count -ne 1 -or $terminal.RequestedBusinessIds[0] -cne $ResolvedInput.BusinessId){throw 'P5_RUN_IDENTITY_MISMATCH'}
+    $Result.CommitCode=[string]$terminal.RunCommitStatus
+    if($Result.CommitCode -cne 'COMMITTED'){throw ('P5_TERMINAL_'+$Result.CommitCode)}
+    # Recovery only: use the existing read-only committed-history scanner
+    # once; latest indexes may already point to a newer run.
+    $audit=Invoke-Phase3ReviewAudit -Store $Store
+    $items=@($audit.Items | Where-Object { $_.RunId -ceq $ResolvedInput.RunId })
+    if($items.Count -ne 1 -or $items[0].BusinessId -cne $ResolvedInput.BusinessId -or $items[0].Domain -cne 'BENEFIT'){throw 'P5_COMMITTED_RECORDS_AMBIGUOUS'}
+    $observation=Read-HistoryObservation -Store $Store -ObservationId $items[0].CurrentObservationId
+    $input=ConvertTo-BenefitHistoryInputProjection -BusinessId $ResolvedInput.BusinessId -Benefit $ResolvedInput.Benefit -BusinessIdentity $ResolvedInput.Business -CanonicalPhone $ResolvedInput.Phone
+    $execution=ConvertTo-BenefitHistoryExecutionProjection -RepositoryRevision $ResolvedInput.RepositoryRevision
+    if([DateTimeOffset]$observation.ObservedAt -ne [DateTimeOffset]::Parse($ResolvedInput.ObservedAt,[Globalization.CultureInfo]::InvariantCulture) -or $observation.InputFingerprint -cne (Get-HistoryFingerprint -Projection $input -SchemaVersion $script:FingerprintSchemaVersion) -or $observation.ExecutionFingerprint -cne (Get-HistoryFingerprint -Projection $execution -SchemaVersion $script:FingerprintSchemaVersion)){throw 'P5_COMMITTED_INPUT_MISMATCH'}
+    $comparison=if($items[0].ComparisonId){Read-HistoryJsonFile -Store $Store -Path (Get-HistoryComparisonPath -Store $Store -ComparisonId $items[0].ComparisonId) -Kind 'comparison'}else{$null}
+    Set-Phase5BenefitCommittedView -Result $Result -Store $Store -Observation $observation -Comparison $comparison
+    $Result.Code='COMMITTED';$Result.Recovered=$true
+    return $Result
+}
+
 function Invoke-Phase5BenefitCycle {
     param(
         [Parameter(Mandatory)]$Store,
@@ -95,50 +156,12 @@ function Invoke-Phase5BenefitCycle {
     $started=$false
     $launchClaim=$null;$claimPath=$null;$clearClaim=$false
     try{
-        if($RunId -cnotmatch '^[a-z0-9][a-z0-9._-]{0,127}$' -or $RunId.Contains('..') -or $RunId.EndsWith('.') -or $RunId -cmatch '^(con|prn|aux|nul|com[1-9]|lpt[1-9])(\.|$)'){throw 'P5_RUN_ID_INVALID'}
-        Assert-HistoryTimestamp -Value $ObservedAt
-        if($RepositoryRevision -cnotmatch '^[0-9a-f]{40}$'){throw 'P5_REVISION_INVALID'}
-        Assert-CanonicalBusinessId $BusinessId
-        Assert-CanonicalBusinessIds -Rows $Rows
-        $selected=@(for($i=0;$i -lt $Rows.Count;$i++){if([string]$Rows[$i].businessId -ceq $BusinessId){$i}})
-        if($selected.Count -ne 1 -or $SourceRowNumberOffset -lt 1){throw 'P5_BUSINESS_SELECTION_INVALID'}
-        $row=$Rows[$selected[0]]
-        $view.SourceRowNumber=$selected[0]+$SourceRowNumberOffset
-        $business=ConvertTo-NormalizedBusiness -Row $row -SourceRowNumber $view.SourceRowNumber
-        $benefit=ConvertTo-Phase2CanonicalBenefitRecord -Row $row -SourceRowNumber $view.SourceRowNumber
-        $candidate=Get-ExistingBenefitSourceCandidate -Benefit $benefit
-        if($null -eq $candidate -or $candidate.SourceKind -cne 'PUBLIC_OFFICIAL'){throw 'P5_OFFICIAL_SOURCE_REQUIRED'}
-        if(-not (Test-BenefitSafeHttpUri $candidate.Url)){throw 'P5_SOURCE_URL_UNSAFE'}
-        $extension=[IO.Path]::GetExtension(([Uri]$candidate.Url).AbsolutePath).ToLowerInvariant()
-        if($extension -notin @('','.html','.htm','.do','.php','.aspx','.asp','.jsp','.xlsx','.hwpx','.pdf')){throw 'P5_SOURCE_FORMAT_UNSUPPORTED'}
-        $candidate.ObservedAt=$ObservedAt
-        $phone=Get-Phase2BenefitRowValue -Row $row -Name '업소전화번호'
-        $repositoryRoots=Get-Phase5BenefitRepositoryRoots
-        foreach($property in @('Root','RunsRoot','ObservationsRoot','ComparisonsRoot','ArtifactsRoot','IndexesRoot','TempRoot')){
-            [void](Assert-Phase5BenefitExternalPath ([string]$Store.$property) $repositoryRoots)
-            if($property -cne 'Root'){[void](Assert-HistoryStorePathWithinRoot -Store $Store -Path $Store.$property)}
-        }
-        $output=Assert-Phase5BenefitExternalPath $OutputDirectory $repositoryRoots
-        $historyRoot=[IO.Path]::GetFullPath([string]$Store.Root).TrimEnd([IO.Path]::DirectorySeparatorChar)
-        if($output.Equals($historyRoot,[StringComparison]::OrdinalIgnoreCase) -or $output.StartsWith($historyRoot+[IO.Path]::DirectorySeparatorChar,[StringComparison]::OrdinalIgnoreCase)){throw 'P5_REPORT_MUST_BE_OUTSIDE_HISTORY'}
+        $resolved=Resolve-InternalPhase5BenefitInput -Store $Store -Rows $Rows -BusinessId $BusinessId -RunId $RunId -ObservedAt $ObservedAt -RepositoryRevision $RepositoryRevision -OutputDirectory $OutputDirectory -SourceRowNumberOffset $SourceRowNumberOffset
+        $view.SourceRowNumber=$resolved.SourceRowNumber
+        $business=$resolved.Business;$benefit=$resolved.Benefit;$candidate=$resolved.Candidate;$phone=$resolved.Phone;$output=$resolved.OutputDirectory
         $terminal=Read-HistoryJsonFile -Store $Store -Path (Get-HistoryRunManifestPath -Store $Store -RunId $RunId) -Kind 'run manifest'
         if($null -ne $terminal){
-            Assert-HistoryRunManifest $terminal
-            if($terminal.RunId -cne $RunId -or $terminal.RepositoryRevision -cne $RepositoryRevision -or [DateTimeOffset]$terminal.StartedAt -ne [DateTimeOffset]::Parse($ObservedAt,[Globalization.CultureInfo]::InvariantCulture) -or @($terminal.RequestedBusinessIds).Count -ne 1 -or $terminal.RequestedBusinessIds[0] -cne $BusinessId){throw 'P5_RUN_IDENTITY_MISMATCH'}
-            $view.CommitCode=[string]$terminal.RunCommitStatus
-            if($view.CommitCode -cne 'COMMITTED'){throw ('P5_TERMINAL_'+$view.CommitCode)}
-            # Recovery only: use the existing read-only committed-history scanner
-            # once; latest indexes may already point to a newer run.
-            $audit=Invoke-Phase3ReviewAudit -Store $Store
-            $items=@($audit.Items | Where-Object { $_.RunId -ceq $RunId })
-            if($items.Count -ne 1 -or $items[0].BusinessId -cne $BusinessId -or $items[0].Domain -cne 'BENEFIT'){throw 'P5_COMMITTED_RECORDS_AMBIGUOUS'}
-            $observation=Read-HistoryObservation -Store $Store -ObservationId $items[0].CurrentObservationId
-            $input=ConvertTo-BenefitHistoryInputProjection -BusinessId $BusinessId -Benefit $benefit -BusinessIdentity $business -CanonicalPhone $phone
-            $execution=ConvertTo-BenefitHistoryExecutionProjection -RepositoryRevision $RepositoryRevision
-            if([DateTimeOffset]$observation.ObservedAt -ne [DateTimeOffset]::Parse($ObservedAt,[Globalization.CultureInfo]::InvariantCulture) -or $observation.InputFingerprint -cne (Get-HistoryFingerprint -Projection $input -SchemaVersion $script:FingerprintSchemaVersion) -or $observation.ExecutionFingerprint -cne (Get-HistoryFingerprint -Projection $execution -SchemaVersion $script:FingerprintSchemaVersion)){throw 'P5_COMMITTED_INPUT_MISMATCH'}
-            $comparison=if($items[0].ComparisonId){Read-HistoryJsonFile -Store $Store -Path (Get-HistoryComparisonPath -Store $Store -ComparisonId $items[0].ComparisonId) -Kind 'comparison'}else{$null}
-            Set-Phase5BenefitCommittedView -Result $view -Store $Store -Observation $observation -Comparison $comparison
-            $view.Code='COMMITTED';$view.Recovered=$true
+            $view=Restore-InternalPhase5BenefitCommittedCycle -Store $Store -ResolvedInput $resolved -Result $view
             try{$view.OutputStatus='WRITTEN';Write-Phase5BenefitCycleOutput $view $output}catch{$view.OutputStatus='FAILED';$view.Code='OUTPUT_FAILED';$view.Reasons+=@($_.Exception.Message)}
             return $view
         }
@@ -176,6 +199,7 @@ function Invoke-Phase5BenefitCycle {
         }
         try{$view.OutputStatus='WRITTEN';Write-Phase5BenefitCycleOutput $view $output}catch{$view.OutputStatus='FAILED';$view.Code='OUTPUT_FAILED';$view.Reasons+=@($_.Exception.Message)}
     }catch{
+        if($_.Exception.Data.Contains('Phase5SourceRowNumber')){$view.SourceRowNumber=$_.Exception.Data['Phase5SourceRowNumber']}
         $view.Status=if($started){'FAILED'}else{'BLOCKED'}
         $view.Code=if($started){'P5_CYCLE_FAILED'}else{'P5_PREFLIGHT_REJECTED'}
         $view.Reasons=@($_.Exception.Message)

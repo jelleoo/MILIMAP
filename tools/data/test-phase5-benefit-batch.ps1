@@ -173,7 +173,7 @@ try{
         Write-Host 'P5-1 Recovery PASS: recovered3 HTTP0 / History0 / stable ReviewKeys; residue preserved; mixed known2 missing1 total=null'
     }
     if($Group -cin @('Safety','All')){
-        foreach($fault in @('guard','active-guard','staging','bare-terminal','index','cleared-comparable','rolled-comparable','noncomp-cleared','artifact','plan','output','writer','unclassified')){
+        foreach($fault in @('guard','active-guard','staging','bare-terminal','index','noncomp-unlinked','paired-rollback','cleared-comparable','rolled-comparable','noncomp-cleared','noncomp-rolled','artifact','plan','output','writer','unclassified')){
             $a=$args51.Clone();$a.Store=New-HistoryStoreLayout -Root (Join-Path $root ($fault+'-history'));$a.BatchWorkspaceRoot=Join-Path $root ($fault+'-batches')
             $plan=New-Phase5BenefitBatchPlan @a
             $count=$requests.Urls.Count;$held=$null;$savedCycle=$null
@@ -183,17 +183,30 @@ try{
                 staging {[void][IO.Directory]::CreateDirectory((Join-Path $a.Store.TempRoot $plan.Items[2].RunId))}
                 bare-terminal {[void][IO.Directory]::CreateDirectory((Split-Path -Parent (Get-HistoryRunManifestPath -Store $a.Store -RunId $plan.Items[2].RunId)))}
                 index {[IO.File]::WriteAllText((Get-HistoryIndexPath -Store $a.Store -BusinessId $a.BusinessIds[2] -Domain BENEFIT),'{broken')}
-                {$_ -cin @('cleared-comparable','rolled-comparable','noncomp-cleared')} {
+                {$_ -cin @('noncomp-unlinked','paired-rollback','cleared-comparable','rolled-comparable','noncomp-cleared','noncomp-rolled')} {
                     $seed=Invoke-Phase5BenefitCycle -Store $a.Store -Rows $rows -BusinessId $a.BusinessIds[0] -RunId 'run-comparable-seed' -ObservedAt $a.ObservedAt -RepositoryRevision $a.RepositoryRevision -SourceRowNumberOffset 2 -OutputDirectory (Join-Path $root 'comparable-seed-output') @invokeArgs
                     Equal $seed.CommitCode COMMITTED 'Comparable corruption fixture starts with a real committed baseline'
-                    if($fault -cin @('rolled-comparable','noncomp-cleared')){
+                    if($fault -ceq 'noncomp-rolled'){
+                        $newer=Invoke-Phase5BenefitCycle -Store $a.Store -Rows $rows -BusinessId $a.BusinessIds[0] -RunId 'run-newer-comparable' -ObservedAt '2026-10-25T00:10:00Z' -RepositoryRevision $a.RepositoryRevision -SourceRowNumberOffset 2 -OutputDirectory (Join-Path $root 'newer-seed-output') @invokeArgs
+                        Equal $newer.CommitCode COMMITTED 'Second comparable baseline really commits'
+                    }
+                    if($fault -cin @('noncomp-unlinked','paired-rollback','rolled-comparable','noncomp-cleared','noncomp-rolled')){
                         $argsSeed=@{Store=$a.Store;Rows=$rows;BusinessId=$a.BusinessIds[0];RunId='run-current-comparable';ObservedAt='2026-10-25T00:15:00Z';RepositoryRevision=$a.RepositoryRevision;SourceRowNumberOffset=2;OutputDirectory=(Join-Path $root 'current-seed-output');RepositoryStateProvider=$invokeArgs.RepositoryStateProvider;RequestInvoker=$http}
-                        if($fault -ceq 'noncomp-cleared'){$argsSeed.RequestInvoker={param($Uri);throw 'synthetic timeout'}}
+                        if($fault -cin @('noncomp-unlinked','noncomp-cleared','noncomp-rolled')){$argsSeed.RequestInvoker={param($Uri);throw 'synthetic timeout'}}
                         $current=Invoke-Phase5BenefitCycle @argsSeed
                         Equal $current.CommitCode COMMITTED 'A newer committed observation exists'
                     }
                     $entry=Get-HistoryLatestEntry -Store $a.Store -BusinessId $a.BusinessIds[0] -Domain BENEFIT
-                    $entry.LatestComparableObservationId=if($fault -ceq 'rolled-comparable'){$seed.ObservationId}else{''}
+                    if($fault -ceq 'noncomp-rolled'){
+                        Equal $entry.LatestComparableObservationId $newer.ObservationId 'Legitimate failed latest retains the second comparable baseline'
+                        [void](Assert-InternalPhase5BenefitBatchIndex -Store $a.Store -BusinessId $a.BusinessIds[0] -KnownReviews (Invoke-Phase3ReviewAudit -Store $a.Store).Items)
+                    }
+                    if($fault -ceq 'noncomp-unlinked'){
+                        Remove-Item -LiteralPath (Get-HistoryComparisonPath -Store $a.Store -ComparisonId $current.Comparison.ComparisonId)
+                    }else{
+                        if($fault -ceq 'paired-rollback'){$entry.LatestObservationId=$seed.ObservationId}
+                        $entry.LatestComparableObservationId=if($fault -cin @('paired-rollback','rolled-comparable','noncomp-rolled')){$seed.ObservationId}else{''}
+                    }
                     [IO.File]::WriteAllText((Get-HistoryIndexPath -Store $a.Store -BusinessId $a.BusinessIds[0] -Domain BENEFIT),(ConvertTo-HistoryCanonicalJson -Value $entry))
                     $count=$requests.Urls.Count
                 }

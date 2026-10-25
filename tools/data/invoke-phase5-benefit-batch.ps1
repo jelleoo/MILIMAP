@@ -72,6 +72,15 @@ function Assert-InternalPhase5BenefitBatchIndex {
         if($property -ceq 'LatestComparableObservationId' -and (-not $obs.Comparable -or $obs.OperationalStatus -cne 'COMPLETE')){throw 'P51_HISTORY_COMPARABLE_INVALID'}
         foreach($reference in $obs.ArtifactReferences){Assert-HistoryArtifactReferenceExists -Store $Store -Reference $reference}
     }
+    # Existing committed comparison edges prove baseline succession; do not infer commit order from timestamps.
+    if($known.Count -gt 0){
+        $successors=@($known | Where-Object {$_.CurrentComparable -and $_.CurrentOperationalStatus -ceq 'COMPLETE' -and $_.PreviousObservationId -ceq $entry.LatestComparableObservationId -and $_.CurrentObservationId -cne $entry.LatestComparableObservationId})
+        if(-not [string]::IsNullOrEmpty($entry.LatestComparableObservationId) -and $successors.Count -gt 0){throw 'P51_HISTORY_COMPARABLE_POINTER_REGRESSED'}
+        if(-not ($latest.Comparable -and $latest.OperationalStatus -ceq 'COMPLETE')){
+            $latestReview=@($known | Where-Object CurrentObservationId -CEQ $entry.LatestObservationId)
+            if($latestReview.Count -ne 1 -or [string]::IsNullOrEmpty($latestReview[0].ComparisonId) -or $latestReview[0].PreviousObservationId -cne $entry.LatestComparableObservationId){throw 'P51_HISTORY_COMPARABLE_LINK_UNVERIFIED'}
+        }
+    }
     if(-not [string]::IsNullOrEmpty($entry.LatestComparableObservationId)){[void](Get-BenefitIncrementalBaseline -Store $Store -BusinessId $BusinessId -Entry $entry)}
     return $entry
 }

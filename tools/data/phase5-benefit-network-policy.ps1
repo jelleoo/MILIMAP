@@ -8,7 +8,7 @@ function Get-Phase5NetworkTransportIdentity {
 function Test-InternalPhase5NetworkQualification {
     param($Identity)
     # Qualification is deliberately exact. Other runtimes never inherit these results.
-    $environmentQualified=($Identity.Profile -ceq 'P52_HTTP11_SINGLE_CONNECTION_V1' -and $Identity.Framework -ceq '.NET 10.0.12' -and $Identity.OS -ceq 'Microsoft Windows 10.0.26300' -and $Identity.Architecture -ceq 'X64')
+    $environmentQualified=($Identity.Profile -ceq 'P52_HTTP11_SINGLE_CONNECTION_V1' -and $Identity.Framework -cin @('.NET 10.0.12','.NET 10.0.14') -and $Identity.OS -ceq 'Microsoft Windows 10.0.26300' -and $Identity.Architecture -ceq 'X64')
     if(-not $environmentQualified){return $false}
     try{[void](Assert-InternalPhase5NetworkImplementation);return $true}catch{return $false}
 }

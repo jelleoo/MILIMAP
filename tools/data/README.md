@@ -1027,3 +1027,157 @@ Numeric source-operational limits and any live smoke still require human approva
 Timeout is cooperative .NET cancellation, not an OS process/resource guarantee.
 Independent whole-change review was performed once before its RED/GREEN correction
 pass; no independent re-review of the corrections is claimed.
+
+## C-Lite PR 1 — inactive HTML scoped-evidence contracts (Issue #137)
+
+`lib/history/benefit-scoped-evidence.ps1` defines validation functions only. No
+production runner imports it. It does not open a store, write artifacts, fetch a
+source, activate reuse, suppress RAW capture, or change any existing fingerprint.
+Existing `RAW_SOURCE_PAYLOAD` behavior and historical artifacts remain unchanged.
+
+Run the offline synthetic contract tests:
+
+```powershell
+pwsh -NoProfile -File tools/data/test-benefit-scoped-evidence.ps1
+```
+
+### Exact v1 shape and types
+
+All listed properties are required, case-sensitive, and closed to additional
+properties. Objects are PSCustomObjects; arrays must be real one-dimensional
+arrays (including `[]`), never null or implicitly wrapped scalars. Integers are
+Int32/Int64 only, not boolean, floating point or numeric strings. Booleans must
+be Boolean. All timestamps remain the original ISO string, explicit offset and
+fractional digits included. `ConvertFrom-BenefitScopedEvidenceJson` checks every
+JSON object for duplicate/escaped/case-colliding names before deserialization,
+then uses `DateKind String`. Callers must not feed untrusted JSON through a lossy
+reader first. No truncation or repair occurs.
+
+`BENEFIT_SCOPED_EVIDENCE` / `BenefitScopedEvidence` / version 1 contains:
+
+- `RetentionProfile='C_LITE_V1'`, `Mode=LOCATED_FIELDS|OUTCOME_ONLY`, `BusinessId`.
+- `Capture={ObservationId,RunId,ObservedAt,SourceRowNumber}`; row >=2 is capture
+  provenance, not business identity.
+- `Links={InputFingerprint,EvidenceFingerprint,SemanticFingerprint,
+  ExecutionFingerprint,EvidenceArtifactReference,SemanticArtifactReference}`.
+- `Source={Url,Format,ContentHash,HashKind,SnapshotId,ObservedAt,TextLengthUtf16}`;
+  Format HTML, HashKind HTML_TEXT_UTF8_SHA256. Hash covers the original decoded
+  markup-bearing response string encoded as UTF8, not HTTP wire bytes. SnapshotId
+  uses the existing URL/format/original timestamp/hash identity. Spans are UTF16.
+- `Adapter={Id,Version}`: HTML_GENERIC / string `1`, or both null if unobserved.
+- `Outcome={ObservationOperationalStatus,Comparable,FetchStatus,
+  OfficialityStatus,AdapterStatus,LocationOperationalStatus,LocationStatus,
+  BindingStatus,ExtractionStatus,ValidationStatus,CoverageKind,ContentUnitCount,
+  CandidateReferences,CandidateReferenceCount,IdentityEvidenceCodes,ReasonCodes,
+  ClaimValidationCounts}`. CoverageKind is ADAPTER_SUPPORTED_TABLE_ROWS, not
+  website-wide coverage.
+- `Scope={Type,Reference,TableStart,TableLength,RowStart,RowLength}`, TABLE_ROW;
+  null in OUTCOME_ONLY.
+- `Fields[]={Key,HeaderText,DecodedValue,HeaderStart,HeaderLength,CellStart,
+  CellLength,FieldReference}`. Existing header map and physical references apply.
+- `Claims[]={ClaimType,FieldKey,EvidenceReference,ExtractionMethod,
+  ValidationStatus,SemanticClaimOrdinal}`; method SCOPED_HTML_CELL, status VALIDATED.
+
+History operational status is COMPLETE/PARTIAL/FAILED; Comparable is boolean.
+Captured FetchStatus is COMPLETE. Officiality is VERIFIED_OFFICIAL/UNVERIFIED/
+REJECTED or null when unobserved. Adapter/location operational codes are
+COMPLETE/PARTIAL/FAILED/UNSUPPORTED or null. Location semantic codes are LOCATED/
+AMBIGUOUS/NOT_FOUND or null; noncomplete location cannot have a semantic result.
+Binding codes are STRONG/PLAUSIBLE/AMBIGUOUS/CONFLICT or unobserved null.
+Extraction/validation codes are COMPLETE/PARTIAL/FAILED or unobserved null.
+A placeholder FAILED result does not claim that a stage actually executed.
+ReasonCodes use the existing Benefit registry; IdentityEvidenceCodes are the
+existing NAME_MATCH/FULL_NAME_MATCH/FULL_ADDRESS_MATCH/BRANCH_MATCH/PHONE_MATCH.
+No arbitrary diagnostic text or exception messages belong in this artifact.
+
+`ClaimValidationCounts` is null when unavailable; otherwise exactly
+`{Total,Validated,Invalid,Conflict,Unknown}`, nonnegative measured result counts,
+Total = sum of the other four. These are not execution counters. A measured zero
+is 0, never null. CandidateReferenceCount is null only with an empty reference
+array, otherwise equals its measured array length. ContentUnitCount is nullable.
+Never invent metadata for an unobserved stage.
+
+### Capture, claim linkage, outcomes and reuse
+
+`Assert-BenefitScopedEvidenceCapture` validates the original source document and
+slice using the existing strict provenance path; source fields and exact cell
+references must match. Each retained claim has exactly one extracted claim,
+validated claim and Result claim, then one ordinal in the **canonical stored**
+BenefitHistorySemantic Claims array. It reuses existing scoped whitespace
+comparison and domain semantic conversion, without new normalization. Duplicate,
+ambiguous, wrong-source, wrong-cell or incomplete linkage is rejected.
+
+LOCATED_FIELDS requires complete fetch/adapter/location/extraction/validation,
+VERIFIED_OFFICIAL, LOCATED, STRONG, complete comparable History, no nonvalidated
+claim counts, and full semantic-claim coverage. Unlinked UNKNOWN/unbound semantic
+claims cannot be hidden behind a valid subset. A VALIDATED claim's domain
+ClaimResult may still be UNKNOWN; validation never upgrades benefit truth.
+Zero-claim identity-only evidence is representable but not initially reuse eligible.
+
+PARTIAL/FAILED/mixed validation uses OUTCOME_ONLY with `Scope=null`, `Fields=[]`,
+`Claims=[]`, even when the existing History assessment is COMPLETE/comparable.
+AMBIGUOUS, NOT_FOUND and unsupported/partial adapter outcomes also use receipts;
+they are not reuse eligible. NOT_FOUND remains identity absence, never ENDED.
+A failed fetch has no captured HTML artifact: the narrow metadata-only exception
+requires noncomplete/noncomparable History, SOURCE_FETCH_NOT_COMPLETE, no trusted
+payload hash or supported format, unknown presence and no absence eligibility.
+Deleting a mandatory scoped reference never activates that exception.
+
+`BENEFIT_REUSE_DECISION` / BenefitReuseDecision version 2 preserves v1's fields
+(ProcessingMode, ReusedFromObservationId, Capability, PreviousPayloadCheckpoint,
+CurrentPayloadCheckpoint, InputMatch, ExecutionMatch, PayloadMatch,
+RepositoryClean, PreviousComparable, ReuseApplied, ReasonCodes) and adds exactly
+`OwnerObservationId,OwnerRunId,BusinessId,ScopedEvidenceReference`.
+All match/clean/comparable/applied flags are true Boolean for an applied record;
+capability POST_FETCH, processing mode REUSED_IDENTICAL_EVIDENCE, reason REUSE_ELIGIBLE.
+
+Read-only relationship validators check supplied capture/previous/current records,
+COMMITTED manifest membership/revision, four fingerprints, canonical E/S hashes,
+scoped artifact hash, source and checkpoint identity, fresh observation identity
+using the existing formula, and empty successful baseline-to-current comparison.
+The immutable artifact remains owned by its capture run and source timestamp.
+Later reuse requires the prior owned v2 proof; there is no recursive History walk.
+The caller must obtain authentic manifests/observations/artifact bytes from the
+existing audited History readers. These pure validators do not attest to caller-
+constructed records or filesystem authenticity. After HTML removal, a persisted
+receipt cannot independently re-prove membership in the original source; it
+checks an immutable capture attestation, not a reconstructed/padded HTML document.
+
+### Frozen descriptor candidates and compatibility
+
+The classifier hashes two exact BenefitHistoryExecution v1 descriptors using the
+existing serializer and matched manifest revision. All six version fields are
+frozen at 1. Legacy Configuration is null; C-Lite Configuration is exactly
+`{HtmlEvidenceRetentionProfile:'C_LITE_V1'}`. It never reverses a fingerprint.
+Missing/unsupported configurations or revision mismatch return PROFILE_UNKNOWN,
+not Legacy. Removing a scoped reference does not change the execution fingerprint,
+so a C-Lite observation stays C-Lite and fails its artifact requirement.
+
+A recognized descriptor is only a **profile candidate**, not execution/runtime
+qualification or authorization to recover/reuse. Unknown historical configurations
+remain readable through existing Core readers but cannot silently obtain trusted
+C-Lite recovery. Legacy RAW references remain readable and immutable. The first
+Legacy-to-C-Lite transition must recompute; no migration or RAW deletion is added.
+
+### Limits and activation boundary
+
+All size limits are UTF8 bytes unless explicitly UTF16: URL 2048; identifiers and
+references 128 ASCII with existing patterns; timestamp 64 ASCII; hashes 64 lowercase
+hex; header 256; decoded field 4096; combined header/value text 16384. At most 10
+fields, 6 scoped claims, 16 candidate references, 8 identity codes, 32 reasons;
+codes <=64 ASCII. These ceilings do not introduce new header aliases (current
+HTML supports eight semantic fields and four benefit claim header families).
+Canonical scoped/E/S artifacts are each <=65536 bytes, reuse audit <=16384, newly
+prepared JSON payload total <=196608. BundleSize checks size only, not validity;
+shape, source, linkage and byte/hash checks remain independently mandatory.
+
+Oversized, forbidden or inconsistent evidence must fail before future Prepare;
+never truncate semantic projections or persist only their valid subset. A consumed
+one-shot GET/seal is not permission to retry after a retention failure. This PR
+adds no persistence or execution integration and changes no Plan v1/v2, Inspector,
+Review semantics, transport policy or History contract. An activation PR must
+handle byte-verified store reads, exception/output leakage, pre-Prepare failure,
+strict one-shot outcomes and current-path performance explicitly.
+
+LiveHTTP=NOT_AUTHORIZED; ProductionAction=NONE; P4-3B=BLOCKED;
+OCR dependency=NOT_APPROVED; Phase4=NOT_COMPLETE.

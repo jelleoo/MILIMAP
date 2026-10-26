@@ -1,4 +1,4 @@
-param([ValidateSet('Plan','Execution','Recovery','Safety','All')][string]$Group='All')
+param([ValidateSet('Plan','Execution','Recovery','Safety','Network','All')][string]$Group='All')
 Set-StrictMode -Version Latest
 $ErrorActionPreference='Stop'
 $runner=Join-Path $PSScriptRoot 'invoke-phase5-benefit-batch.ps1'
@@ -22,6 +22,142 @@ $store=New-HistoryStoreLayout -Root (Join-Path $root 'history')
 $args51=@{CanonicalCsvPath=$csv;BusinessIds=@($ids[0],$ids[2],$ids[4]);Store=$store;BatchWorkspaceRoot=(Join-Path $root 'batches');ObservedAt='2026-10-25T00:00:00Z';RepositoryRevision=([string](& git -C (Join-Path $PSScriptRoot '../..') rev-parse HEAD))}
 $invokeArgs=@{RepositoryStateProvider={ [pscustomobject]@{IsClean=$true} };RequestInvoker=$http}
 try{
+    if($Group -cin @('Network','All')){
+        Check ((Get-Command New-Phase5BenefitBatchPlan).Parameters.ContainsKey('NetworkPolicy')) 'RED: missing explicit optional NetworkPolicy on plan creation'
+        $policy=New-Phase5BenefitNetworkPolicy -AllowedHttpsHosts @('city.example.go.kr','open.mma.go.kr') -MaxPhysicalAttempts 0
+        $a=$args51.Clone();$a.Store=New-HistoryStoreLayout -Root (Join-Path $root 'strict-zero-history');$a.BatchWorkspaceRoot=Join-Path $root 'strict-zero-batches';$a.NetworkPolicy=$policy
+        $originalIdentity=(Get-Command Get-Phase5NetworkTransportIdentity).ScriptBlock
+        # All integration I/O below is synthetic. Qualification itself is independently tested by the transport tests.
+        function Get-Phase5NetworkTransportIdentity {[pscustomobject]@{Profile='P52_HTTP11_SINGLE_CONNECTION_V1';Framework='.NET 10.0.12';OS='Microsoft Windows 10.0.26300';Architecture='X64'}}
+        $dispatch=Get-Command Invoke-InternalPhase5NetworkDispatch
+        $networkProbe=[pscustomobject]@{Calls=0;Urls=[Collections.Generic.List[string]]::new();Timeout=$false;HeaderLimit=$false;Family='HTML'}
+        function Invoke-InternalPhase5NetworkDispatch {
+            param($State,$Uri,$Token)
+            $networkProbe.Calls++;$networkProbe.Urls.Add([string]$Uri);$State.Accounting.Dispatch($Token)
+            if($networkProbe.Timeout){throw 'ordinary synthetic timeout'}
+            if($networkProbe.HeaderLimit){$State.Accounting.Stop('RESPONSE_HEADERS_EXCEEDED');throw 'counted transport header limit'}
+            $State.Accounting.Response($Token)
+            if($networkProbe.Family -ceq 'MMA'){
+                $text=if([string]$Uri -like '*mmanrsrListAjaxJsonCallNew*'){$mmaList}else{$mmaDetail}
+                return [pscustomobject]@{StatusCode=200;ContentType='application/json';Text=$text;Bytes=$null}
+            }
+            if($networkProbe.Family -ceq 'XLSX'){return [pscustomobject]@{StatusCode=200;ContentType='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';Text='';Bytes=$xlsxBytes}}
+            [pscustomobject]@{StatusCode=200;ContentType='text/html';Text=$html;Bytes=$null}
+        }
+        try{
+            $plan=New-Phase5BenefitBatchPlan @a
+            Equal $plan.PlanCore.PlanVersion 2 'Strict Plan v2'
+            Equal $plan.PlanCore.NetworkPolicyFingerprint (Get-Phase5NetworkPolicyFingerprint $policy) 'Policy fingerprint bound'
+            $pristine=Invoke-Phase5BenefitBatch @a -BatchId $plan.BatchId -Mode RecoverOnly -RepositoryStateProvider $invokeArgs.RepositoryStateProvider
+            Equal $pristine.Code P52B_RECOVERY_PLAN_MISSING 'Pristine strict RecoverOnly must not manufacture a one-shot seal'
+            Check (-not (Test-Path -LiteralPath $plan.PlanPath) -and -not (Test-Path -LiteralPath $plan.GuardPath)) 'Pristine recovery creates neither seal nor guard'
+            $before=Inventory $a.Store.Root
+            $zero=Invoke-Phase5BenefitBatch @a -BatchId $plan.BatchId -RepositoryStateProvider $invokeArgs.RepositoryStateProvider
+            Equal $zero.Code P52B_NETWORK_POLICY_STOP "Budget0 is explicit policy stop: $($zero.Reasons -join '; ')"
+            Equal $zero.Summary.ExecutedCount 0 'Budget0 cycle0'
+            Equal $zero.Summary.CommittedCount 0 'Budget0 commit0'
+            Equal $networkProbe.Calls 0 'Budget0 actual dispatch0'
+            Equal $zero.NetworkExecution.AttemptedCount 0 'Budget0 measured attempts0'
+            Equal (Inventory $a.Store.Root) $before 'Budget0 History unchanged'
+            $again=Invoke-Phase5BenefitBatch @a -BatchId $plan.BatchId -RepositoryStateProvider $invokeArgs.RepositoryStateProvider
+            Equal $again.Code P52B_STRICT_EXECUTE_REENTRY 'Plan seal blocks budget reset even with no prior dispatch'
+            $custom=Invoke-Phase5BenefitBatch @a @invokeArgs -BatchId $plan.BatchId
+            Equal $custom.Code P52B_CUSTOM_INVOKER_DENIED 'Raw custom invoker rejected'
+            $a=$args51.Clone();$a.Store=New-HistoryStoreLayout -Root (Join-Path $root 'strict-history');$a.BatchWorkspaceRoot=Join-Path $root 'strict-batches';$a.NetworkPolicy=New-Phase5BenefitNetworkPolicy -AllowedHttpsHosts @('city.example.go.kr') -MaxPhysicalAttempts 1
+            $plan=New-Phase5BenefitBatchPlan @a;$start=$networkProbe.Calls
+            $one=Invoke-Phase5BenefitBatch @a -BatchId $plan.BatchId -RepositoryStateProvider $invokeArgs.RepositoryStateProvider
+            Equal $one.Code P52B_NETWORK_POLICY_STOP 'No next business after pre-cycle budget stop'
+            Equal $one.Summary.CommittedCount 1 'First independent commit preserved'
+            Equal ($networkProbe.Calls-$start) 1 'Actual single-source request1'
+            Equal $one.Summary.NotStartedCount 2 'Subsequent businesses pristine'
+            $reenter=Invoke-Phase5BenefitBatch @a -BatchId $plan.BatchId -RepositoryStateProvider $invokeArgs.RepositoryStateProvider
+            Equal $reenter.Code P52B_STRICT_EXECUTE_REENTRY 'Committed strict Execute cannot reset the budget'
+            Check (-not (Test-Path -LiteralPath $plan.GuardPath)) 'Rejected strict reentry must not manufacture a new stale guard blocking RecoverOnly'
+            $history=Inventory $a.Store.Root;$reviewKey=$one.Items[0].Review.ReviewKey
+            $recovered=Invoke-Phase5BenefitBatch @a -BatchId $plan.BatchId -Mode RecoverOnly -RepositoryStateProvider $invokeArgs.RepositoryStateProvider
+            Equal ($networkProbe.Calls-$start) 1 'Recovery adds no network'
+            Equal (Inventory $a.Store.Root) $history 'Recovery adds no History mutation'
+            Equal $recovered.Items[0].Review.ReviewKey $reviewKey 'Review key stable'
+            Equal $recovered.NetworkExecution $null 'Historical network metrics unavailable, not zero'
+            $a.NetworkPolicy.MaxPhysicalAttempts=2
+            $mismatch=Invoke-Phase5BenefitBatch @a -BatchId $plan.BatchId -RepositoryStateProvider $invokeArgs.RepositoryStateProvider
+            Equal $mismatch.Status BLOCKED 'Changed policy cannot reuse BatchId'
+            Equal ($networkProbe.Calls-$start) 1 'Policy mismatch network0'
+            foreach($barrier in @('guard','claim','partial-seal','runtime')){
+                $a=$args51.Clone();$a.Store=New-HistoryStoreLayout -Root (Join-Path $root ($barrier+'-history'));$a.BatchWorkspaceRoot=Join-Path $root ($barrier+'-batches');$a.NetworkPolicy=New-Phase5BenefitNetworkPolicy -AllowedHttpsHosts @('city.example.go.kr') -MaxPhysicalAttempts 1
+                $plan=New-Phase5BenefitBatchPlan @a;$start=$networkProbe.Calls;$before=Inventory $a.Store.Root
+                $hold=$null
+                if($barrier -ceq 'guard'){[void][IO.Directory]::CreateDirectory((Split-Path -Parent $plan.GuardPath));$hold=[IO.File]::Open($plan.GuardPath,[IO.FileMode]::CreateNew,[IO.FileAccess]::Write,[IO.FileShare]::None)}
+                if($barrier -ceq 'claim'){[IO.File]::WriteAllText((Join-Path $a.Store.TempRoot ('.p5-'+$plan.Items[0].RunId+'.claim')),'retained fixture');$before=Inventory $a.Store.Root}
+                if($barrier -ceq 'partial-seal'){[void][IO.Directory]::CreateDirectory((Split-Path -Parent $plan.PlanPath));[IO.File]::WriteAllText($plan.PlanPath,'partial interrupted seal')}
+                $qualifier=(Get-Command Test-InternalPhase5NetworkQualification).ScriptBlock
+                if($barrier -ceq 'runtime'){function Test-InternalPhase5NetworkQualification {param($Identity);return $false}}
+                try{$blocked=Invoke-Phase5BenefitBatch @a -BatchId $plan.BatchId -RepositoryStateProvider $invokeArgs.RepositoryStateProvider}finally{if($null -ne $hold){$hold.Dispose()};Set-Item Function:Test-InternalPhase5NetworkQualification $qualifier}
+                Equal $blocked.Status BLOCKED "$barrier blocks before execution"
+                Equal ($networkProbe.Calls-$start) 0 "$barrier request0"
+                Equal $blocked.Summary.ExecutedCount 0 "$barrier cycle0"
+                Equal (Inventory $a.Store.Root) $before "$barrier preserves History and residue"
+            }
+            # Same exact existing MMA adapter and JSONP linkage; no new source implementation.
+            $mmaList=([IO.File]::ReadAllText((Join-Path $PSScriptRoot 'testdata/benefit-evidence-mma/mma-list.fixture.jsonp'))) -replace '^MmaTestList','MmaBenefitList'
+            $mmaDetail=([IO.File]::ReadAllText((Join-Path $PSScriptRoot 'testdata/benefit-evidence-mma/mma-detail-2789.fixture.jsonp'))) -replace '^MmaTestDetail','MmaBenefitDetail'
+            $mmaRows=$rows | ConvertTo-Json -Depth 10 | ConvertFrom-Json
+            $mmaRows[0].업소명='(유)투투여행사';$mmaRows[0].소재지도로명주소='서울특별시 테스트구 여행로 2789';$mmaRows[0].업소전화번호='02-2789-0000';$mmaRows[0].출처유형='병무청 공식 자료';$mmaRows[0].출처URL='https://www.mma.go.kr/about/udgg/list.do?mc=mma0003357'
+            $mmaCsv=Join-Path $root 'mma.csv';$mmaRows | Export-Csv -LiteralPath $mmaCsv -NoTypeInformation -Encoding utf8
+            $networkProbe.Family='MMA'
+            foreach($scenario in @('detail-denied','detail-complete','list-only')){
+                $a=$args51.Clone();$a.CanonicalCsvPath=$mmaCsv;$a.BusinessIds=@($ids[0],$ids[2]);$a.Store=New-HistoryStoreLayout -Root (Join-Path $root ($scenario+'-history'));$a.BatchWorkspaceRoot=Join-Path $root ($scenario+'-batches')
+                $a.NetworkPolicy=New-Phase5BenefitNetworkPolicy -AllowedHttpsHosts @('city.example.go.kr','open.mma.go.kr') -MaxPhysicalAttempts $(if($scenario -ceq 'detail-complete'){2}else{1})
+                if($scenario -ceq 'list-only'){$mmaRows[0].업소명='없는 합성 업체';$mmaRows | Export-Csv -LiteralPath $mmaCsv -NoTypeInformation -Encoding utf8}
+                $plan=New-Phase5BenefitBatchPlan @a;$start=$networkProbe.Calls
+                $value=Invoke-Phase5BenefitBatch @a -BatchId $plan.BatchId -RepositoryStateProvider $invokeArgs.RepositoryStateProvider
+                Equal $value.Code P52B_NETWORK_POLICY_STOP "$scenario hard stop"
+                Equal ($networkProbe.Calls-$start) $(if($scenario -ceq 'detail-complete'){2}else{1}) "$scenario underlying requests"
+                Equal $value.Summary.ExecutedCount 1 'No later pristine business cycle'
+                Equal $value.Summary.CommittedCount 1 'Existing current-cycle legitimate commit preserved'
+                if($scenario -ceq 'detail-denied'){
+                    Equal $value.NetworkExecution.DeniedCount 1 'DETAIL rejected before transport'
+                    Equal $value.Items[0].OperationalStatus FAILED 'Denied DETAIL becomes operational failure, not semantic absence'
+                    Equal $value.Items[0].Metrics.ExternalFetchCount 2 'Legacy logical counter includes swallowed denied request'
+                    Equal $value.NetworkExecution.AttemptedCount 1 'Strict actual dispatch distinct from legacy logical count'
+                    Check ($value.Items[0].BenefitState -cnotin @('ENDED','ACTIVE')) 'Policy failure never approves/ends benefit'
+                    Check ($networkProbe.Urls[$start] -like '*mmanrsrListAjaxJsonCallNew*') 'Only LIST transmitted on DETAIL denial'
+                }
+                Write-Host "P5-2B MMA $scenario PASS: dispatch=$($value.NetworkExecution.AttemptedCount) denied=$($value.NetworkExecution.DeniedCount) committed=$($value.Summary.CommittedCount)"
+            }
+            . (Join-Path $PSScriptRoot 'testdata/benefit-evidence-xlsx/test-support.ps1')
+            $xlsxRows=$rows | ConvertTo-Json -Depth 10 | ConvertFrom-Json;$xlsxRows[0].출처URL='https://city.example.go.kr/list.xlsx'
+            $xlsxCsv=Join-Path $root 'xlsx.csv';$xlsxRows | Export-Csv -LiteralPath $xlsxCsv -NoTypeInformation -Encoding utf8
+            $xlsxBytes=New-XlsxTestBytes -Name $rows[0].업소명 -Address $rows[0].소재지도로명주소 -Phone $rows[0].업소전화번호 -Benefit '합성 혜택'
+            $networkProbe.Family='XLSX'
+            $a=$args51.Clone();$a.CanonicalCsvPath=$xlsxCsv;$a.BusinessIds=@($ids[0]);$a.Store=New-HistoryStoreLayout -Root (Join-Path $root 'xlsx-history');$a.BatchWorkspaceRoot=Join-Path $root 'xlsx-batches';$a.NetworkPolicy=New-Phase5BenefitNetworkPolicy -AllowedHttpsHosts @('city.example.go.kr') -MaxPhysicalAttempts 1
+            $plan=New-Phase5BenefitBatchPlan @a;$start=$networkProbe.Calls
+            $xlsx=Invoke-Phase5BenefitBatch @a -BatchId $plan.BatchId -RepositoryStateProvider $invokeArgs.RepositoryStateProvider
+            Equal $xlsx.Items[0].OperationalStatus COMPLETE 'XLSX normal pipeline remains COMPLETE'
+            Equal ($networkProbe.Calls-$start) 1 'XLSX underlying request1'
+            Equal $xlsx.Items[0].Metrics.ParseCount 1 'XLSX parsed once'
+            $networkProbe.Family='HTML';$networkProbe.Timeout=$true
+            $a=$args51.Clone();$a.BusinessIds=@($ids[0]);$a.Store=New-HistoryStoreLayout -Root (Join-Path $root 'timeout-history');$a.BatchWorkspaceRoot=Join-Path $root 'timeout-batches';$a.NetworkPolicy=New-Phase5BenefitNetworkPolicy -AllowedHttpsHosts @('city.example.go.kr') -MaxPhysicalAttempts 1
+            $plan=New-Phase5BenefitBatchPlan @a;$start=$networkProbe.Calls
+            $timeout=Invoke-Phase5BenefitBatch @a -BatchId $plan.BatchId -RepositoryStateProvider $invokeArgs.RepositoryStateProvider
+            Equal ($networkProbe.Calls-$start) 1 'Ordinary timeout actual attempt1'
+            Equal $timeout.NetworkExecution.FirstStopReason $null 'Ordinary timeout never becomes budget exhaustion'
+            Equal $timeout.NetworkExecution.UnknownOutcomeCount 1 'Ordinary timeout preserves unknown response outcome'
+            Equal $timeout.Items[0].OperationalStatus FAILED 'Ordinary source failure remains source failure'
+            $networkProbe.Timeout=$false
+            $networkProbe.HeaderLimit=$true
+            $a=$args51.Clone();$a.Store=New-HistoryStoreLayout -Root (Join-Path $root 'header-limit-history');$a.BatchWorkspaceRoot=Join-Path $root 'header-limit-batches';$a.NetworkPolicy=New-Phase5BenefitNetworkPolicy -AllowedHttpsHosts @('city.example.go.kr') -MaxPhysicalAttempts 3
+            $plan=New-Phase5BenefitBatchPlan @a;$start=$networkProbe.Calls
+            $headers=Invoke-Phase5BenefitBatch @a -BatchId $plan.BatchId -RepositoryStateProvider $invokeArgs.RepositoryStateProvider
+            Equal $headers.Code P52B_NETWORK_POLICY_STOP 'Caught header-limit exception remains sticky at coordinator'
+            Equal ($networkProbe.Calls-$start) 1 'Header limit stops before next business despite remaining budget'
+            Equal $headers.Summary.CommittedCount 1 'Existing first-cycle diagnostic commit retained'
+            Equal $headers.Summary.NotStartedCount 2 'No fabricated later failures'
+            Equal $headers.NetworkExecution.FirstStopReason RESPONSE_HEADERS_EXCEEDED 'Exact stop reason retained outside SOURCE_FETCH_FAILED'
+            $networkProbe.HeaderLimit=$false
+        }finally{Set-Item Function:Get-Phase5NetworkTransportIdentity $originalIdentity;Set-Item Function:Invoke-InternalPhase5NetworkDispatch $dispatch.ScriptBlock}
+        Write-Host 'P5-2B Network batch PASS: policy-v2, budget0 cycle0/commit0, one-shot seal, stop-next-business, committed recovery0/0, custom-invoker rejection'
+    }
     if($Group -cin @('Plan','All')){
         $before=Inventory $store.Root
         $wrongRevision=$args51.Clone();$wrongRevision.RepositoryRevision=('0'*40)

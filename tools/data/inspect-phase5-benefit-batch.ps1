@@ -55,8 +55,17 @@ function Assert-InternalPhase5StoredPlan {
     param($Plan,[string]$Text)
     Assert-InternalPhase5InspectionFields $Plan @('PlanCore','BatchId','Items','PlanPath','GuardPath','OutputDirectory','SummaryPath')
     $core=$Plan.PlanCore
-    Assert-InternalPhase5InspectionFields $core @('PlanVersion','CanonicalCsvPath','CanonicalInputDigest','RepositoryRevision','ObservedAt','HistoryRoot','HistoryLayout','BatchWorkspaceRoot','SourceRowNumberOffset','MaxBusinesses','Items')
-    if(($core.PlanVersion -isnot [int] -and $core.PlanVersion -isnot [long]) -or $core.PlanVersion -ne 1){throw 'P52_PLAN_VERSION_UNSUPPORTED'}
+    if(($core.PlanVersion -isnot [int] -and $core.PlanVersion -isnot [long]) -or $core.PlanVersion -notin @(1,2)){throw 'P52_PLAN_VERSION_UNSUPPORTED'}
+    $coreFields=@('PlanVersion','CanonicalCsvPath','CanonicalInputDigest','RepositoryRevision','ObservedAt','HistoryRoot','HistoryLayout','BatchWorkspaceRoot','SourceRowNumberOffset','MaxBusinesses','Items')
+    if($core.PlanVersion -eq 2){$coreFields+=@('NetworkPolicy','NetworkPolicyFingerprint','NetworkTransportIdentity')}
+    Assert-InternalPhase5InspectionFields $core $coreFields
+    if($core.PlanVersion -eq 2){
+        Assert-Phase5BenefitNetworkPolicy $core.NetworkPolicy
+        Assert-HistoryHash $core.NetworkPolicyFingerprint
+        if($core.NetworkPolicyFingerprint -cne (Get-Phase5NetworkPolicyFingerprint $core.NetworkPolicy)){throw 'P52B_POLICY_FINGERPRINT_MISMATCH'}
+        Assert-InternalPhase5NetworkIdentity $core.NetworkTransportIdentity
+        Assert-InternalPhase5NetworkSources -Policy $core.NetworkPolicy -SourceUrls @($core.Items.SourceUrl)
+    }
     if(($core.SourceRowNumberOffset -isnot [int] -and $core.SourceRowNumberOffset -isnot [long]) -or $core.SourceRowNumberOffset -ne 2 -or ($core.MaxBusinesses -isnot [int] -and $core.MaxBusinesses -isnot [long]) -or $core.MaxBusinesses -ne 10){throw 'P52_PLAN_BOUNDS_INVALID'}
     Assert-HistoryHash $core.CanonicalInputDigest
     Assert-HistoryTimestamp $core.ObservedAt
@@ -142,9 +151,12 @@ function Inspect-Phase5BenefitBatch {
         if($RepositoryRevision -cne $actual){$result.CurrentCompatibility='MISMATCH';$result.ReasonCodes+=@('P52_CURRENT_REVISION_MISMATCH')}
         else{
             try{
-                $resolved=Resolve-InternalPhase5BenefitBatchPlan -Store $Store -CanonicalCsvPath $csv -BusinessIds $BusinessIds -BatchWorkspaceRoot $workspace -ObservedAt $ObservedAt -RepositoryRevision $RepositoryRevision
-                $result.CurrentCompatibility=if($resolved.Plan.BatchId -ceq $BatchId){'MATCH'}else{'MISMATCH'}
+                $policyArguments=@{}
+                if($null -ne $frozen -and $frozen.PlanCore.PlanVersion -eq 2){$policyArguments.NetworkPolicy=$frozen.PlanCore.NetworkPolicy}
+                $resolved=Resolve-InternalPhase5BenefitBatchPlan -Store $Store -CanonicalCsvPath $csv -BusinessIds $BusinessIds -BatchWorkspaceRoot $workspace -ObservedAt $ObservedAt -RepositoryRevision $RepositoryRevision @policyArguments
+                $result.CurrentCompatibility=if($resolved.Plan.BatchId -ceq $BatchId){'MATCH'}elseif($null -eq $frozen){'UNAVAILABLE'}else{'MISMATCH'}
                 if($result.CurrentCompatibility -ceq 'MISMATCH'){$result.ReasonCodes+=@('P52_CURRENT_INPUT_MISMATCH')}
+                if($result.CurrentCompatibility -ceq 'UNAVAILABLE'){$result.ReasonCodes+=@('P52_FROZEN_POLICY_UNAVAILABLE')}
             }catch{$result.CurrentCompatibility='UNAVAILABLE';$result.ReasonCodes+=@('P52_CURRENT_INPUT_UNAVAILABLE')}
         }
         if($null -ne $frozen){

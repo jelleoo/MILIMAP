@@ -1,4 +1,4 @@
-param([ValidateSet('Policy','Transport','LoadedTypes','All')][string]$Group='All')
+param([ValidateSet('Policy','Qualification','Transport','LoadedTypes','All')][string]$Group='All')
 Set-StrictMode -Version Latest
 $ErrorActionPreference='Stop'
 $library=Join-Path $PSScriptRoot 'phase5-benefit-network-policy.ps1'
@@ -7,6 +7,35 @@ if(-not (Test-Path -LiteralPath $library)){throw 'RED: missing strict network po
 function Check($Value,[string]$Message){if(-not $Value){throw $Message}}
 function Equal($Actual,$Expected,[string]$Message){if($Actual -cne $Expected){throw "$Message expected=$Expected actual=$Actual"}}
 function Reject([scriptblock]$Action,[string]$Message){$hit=$false;try{& $Action | Out-Null}catch{$hit=$true};Check $hit $Message}
+if($Group -cin @('Qualification','All')){
+    Initialize-InternalPhase5NetworkTypes
+    $actual=Get-Phase5NetworkTransportIdentity
+    $actualQualified=Test-InternalPhase5NetworkQualification $actual
+    Write-Host ('P5-2C actual runtime: '+($actual | ConvertTo-Json -Compress)+' qualified='+$actualQualified)
+    if($actual.OS -ceq 'Microsoft Windows 10.0.26300' -and $actual.Architecture -ceq 'X64' -and $actual.Framework -cin @('.NET 10.0.12','.NET 10.0.14')){
+        Check $actualQualified 'Actual exact qualified Windows runtime must be accepted with trusted implementation'
+    }else{Check (-not $actualQualified) 'Actual unqualified runtime remains blocked'}
+    # Literal identity controls are not evidence that the test ran on each framework.
+    foreach($case in @(
+        @{Framework='.NET 10.0.12';Expected=$true},@{Framework='.NET 10.0.14';Expected=$true},
+        @{Framework='.NET 10.0.11';Expected=$false},@{Framework='.NET 10.0.13';Expected=$false},
+        @{Framework='.NET 10.0.15';Expected=$false},@{Framework='.NET 10.0.140';Expected=$false},
+        @{Framework='.NET 10.0.14-preview';Expected=$false},@{Framework='.net 10.0.14';Expected=$false}
+    )){
+        $synthetic=[pscustomobject]@{Profile='P52_HTTP11_SINGLE_CONNECTION_V1';Framework=$case.Framework;OS='Microsoft Windows 10.0.26300';Architecture='X64'}
+        Equal (Test-InternalPhase5NetworkQualification $synthetic) $case.Expected ('Synthetic exact framework gate '+$case.Framework)
+    }
+    foreach($case in @(
+        @{Field='OS';Value='Microsoft Windows 10.0.26301'},@{Field='OS';Value='Ubuntu 26.04.1 LTS'},
+        @{Field='Architecture';Value='X86'},@{Field='Architecture';Value='Arm64'},
+        @{Field='Profile';Value='P52_HTTP11_SINGLE_CONNECTION_V2'}
+    )){
+        $synthetic=[pscustomobject]@{Profile='P52_HTTP11_SINGLE_CONNECTION_V1';Framework='.NET 10.0.14';OS='Microsoft Windows 10.0.26300';Architecture='X64'}
+        $synthetic.($case.Field)=$case.Value
+        Check (-not (Test-InternalPhase5NetworkQualification $synthetic)) ('Synthetic changed '+$case.Field+' remains unqualified')
+    }
+    Write-Host 'P5-2C Qualification PASS: actual runtime result above; synthetic exact 10.0.12/10.0.14 and negative identities'
+}
 if($Group -cin @('Policy','All')){
     $policy=New-Phase5BenefitNetworkPolicy -AllowedHttpsHosts @('example.go.kr','open.mma.go.kr') -MaxPhysicalAttempts 2
     Assert-Phase5BenefitNetworkPolicy $policy
@@ -260,14 +289,14 @@ if($Group -cin @('LoadedTypes','All')){
 param([string]$Case,[string]$Module,[string]$Scratch)
 Set-StrictMode -Version Latest
 $ErrorActionPreference='Stop'
-if($Case -eq 'preloaded-drift'){
+if($Case -cin @('preloaded-drift','untrusted-provenance')){
     $tokens=$null;$parseErrors=$null
     $ast=[Management.Automation.Language.Parser]::ParseFile($Module,[ref]$tokens,[ref]$parseErrors)
     $literal=$ast.Find({param($node);$node -is [Management.Automation.Language.StringConstantExpressionAst] -and $node.Value.Contains('namespace Milimap.P52')},$true)
     if($null -eq $literal -or $parseErrors.Count -ne 0){throw 'PRELOAD_SOURCE_FIXTURE_INVALID'}
     $drift=$literal.Value.Replace('request.Headers.ConnectionClose=true;','request.Headers.ConnectionClose=false;')
     if($drift -ceq $literal.Value){throw 'PRELOAD_SOURCE_MUTATION_MISSING'}
-    Add-Type -TypeDefinition $drift
+    if($Case -eq 'untrusted-provenance'){Add-Type -TypeDefinition $literal.Value}else{Add-Type -TypeDefinition $drift}
 }
 if($Case -eq 'incompatible'){
     Add-Type 'namespace Milimap.P52 { public static class NetworkBoundary { public static string ClaimedProfile = "P52_HTTP11_SINGLE_CONNECTION_V1"; } public sealed class Accounting { public Accounting(long n){} } }'
@@ -318,7 +347,7 @@ if(-not $rejected -or $qualified -or $stateCreated){throw 'RED: incompatible or 
 '@ | Set-Content -LiteralPath $driver -Encoding utf8
     try{
         $failures=@()
-        foreach($case in @('incompatible','preloaded-drift','changed-source','changed-loaded','repeat','crlf')){
+        foreach($case in @('incompatible','preloaded-drift','untrusted-provenance','changed-source','changed-loaded','repeat','crlf')){
             & (Get-Command pwsh).Source -NoProfile -File $driver -Case $case -Module $library -Scratch $scratch
             if($LASTEXITCODE -ne 0){$failures+=@($case)}
         }

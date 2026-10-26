@@ -905,9 +905,25 @@ and numeric DETAIL URL shapes; business matching and code linkage stay in the MM
 adapter. DNS results are checked for unsafe addresses before connection; connection
 uses a validated address without a second DNS resolution or address fallback.
 
-Qualification evidence is restricted to .NET10.0.12 / Microsoft Windows
-10.0.26300 / X64 / P52_HTTP11_SINGLE_CONNECTION_V1. Other environments fail closed
-at Execute. No Linux qualification or operational source compatibility is claimed.
+Qualification evidence is restricted to the exact frameworks .NET10.0.12 and
+.NET10.0.14 / Microsoft Windows 10.0.26300 / X64 /
+P52_HTTP11_SINGLE_CONNECTION_V1. Other environments fail closed at Execute.
+No Linux qualification or operational source compatibility is claimed.
+
+Issue #135 adds only the exact .NET10.0.14 framework identity. On 2026-10-26,
+actual Windows10.0.26300 / .NET10.0.14 / X64 / PowerShell7.6.9 first failed the
+new qualification assertion, then passed after the exact-version extension.
+The existing local transport All matrix also passed on that actual runtime:
+counting HTTPS, redirect/retry suppression, TLS/chain and separate client/server
+AIA attribution, address safety, size/deadline/reset/reconnect limits, atomic
+admission/sticky stop, and loaded-type provenance/reload rejection controls.
+The .NET10.0.12 positive identity check is synthetic in this run; its prior
+physical qualification evidence remains historical. The embedded C# source
+and its pinned digest are unchanged. Version ranges and caller trust switches
+are not supported. Offline PASS, production predicate approval and official
+source compatibility are separate: this extension grants neither DDC access
+nor private raw-HTML retention permission. Issue #134 remains an independent
+human live-access gate; LiveHTTP=NOT_AUTHORIZED and ProductionAction=NONE.
 Tests use local counting TLS servers and the private exchange/handler core via
 reflection. Their test-only custom-root chain does not install a certificate,
 change the system trust store, or affect the strict public Send path; production

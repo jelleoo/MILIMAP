@@ -412,7 +412,12 @@ function Assert-BenefitScopedEvidenceCapture {
             if($null -eq $Evidence.Outcome.CandidateReferenceCount -or $Evidence.Outcome.CandidateReferenceCount -ne @($located.CandidateReferences).Count -or (ConvertTo-HistoryCanonicalJson @($located.CandidateReferences|Sort-Object -CaseSensitive)) -cne (ConvertTo-HistoryCanonicalJson @($Evidence.Outcome.CandidateReferences|Sort-Object -CaseSensitive))){throw 'C_LITE_CANDIDATE_LINK'}
         }else{
             # Validate available observation integrity, without requiring successful parsing/location.
-            Assert-ScopeObservation -Observation $SourceObservation
+            $htmlValidationIndex=$null
+            if($SourceObservation.PSObject.Properties.Name -ccontains 'HtmlValidationIndex' -and
+                (Test-InternalBenefitHtmlRunContextTrust -Snapshot $SourceObservation.Snapshot -HtmlValidationIndex $SourceObservation.HtmlValidationIndex)){
+                $htmlValidationIndex=$SourceObservation.HtmlValidationIndex
+            }
+            Assert-ScopeObservation -Observation $SourceObservation -HtmlValidationIndex $htmlValidationIndex
         }
     }
     if($Evidence.Mode -ceq 'OUTCOME_ONLY'){return}

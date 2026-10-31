@@ -534,3 +534,77 @@ $m=New-Case;$m.Artifact.Mode='OUTCOME_ONLY';$m.Artifact.Scope=$null;$m.Artifact.
 $completeGateParameters=Capture-Args $m;$completeGateParameters.Validation.Status='PARTIAL'
 Reject {Assert-BenefitScopedEvidenceCapture @completeGateParameters} 'measured count alone cannot substitute different candidate references'
 Write-Host "PASS: final complete-adapter trust assertions=$script:checks"
+
+# PR 2A: instrument only capture validation, after the real run-context parse.
+. (Join-Path $PSScriptRoot 'lib/benefit-evidence/benefit-source-run-context.ps1')
+function New-TrustedPartialCaptureParameters {
+    $case=New-ReceiptCase
+    $html=(Get-ScopeTestHtml)+'<table><tr><th>업소명</th><th>할인</th></tr><tr><td colspan="2">합성 unsupported row</td></tr></table>'
+    $context=New-BenefitSourceRunContext
+    $candidate=(New-TestQualified).Candidate
+    $request={param($Uri)[pscustomobject]@{StatusCode=200;ContentType='text/html';Text=$html;Bytes=$null}}.GetNewClosure()
+    $document=Get-BenefitRunSourceDocument -Context $context -Candidate $candidate -RequestInvoker $request
+    $observation=Get-BenefitRunHtmlObservation -Context $context -Document $document
+    Check ($observation.AdapterStatus -ceq 'PARTIAL' -and $observation.ContentUnits.Count -gt 0) 'trusted fixture is genuine PARTIAL with valid units'
+    Check (Test-InternalBenefitHtmlRunContextTrust -Snapshot $observation.Snapshot -HtmlValidationIndex $observation.HtmlValidationIndex) 'fixture index bound by existing run-context trust'
+    $a=$case.Artifact;$a.Source.ContentHash=$observation.Snapshot.ContentHash;$a.Source.SnapshotId=$observation.SnapshotId;$a.Source.ObservedAt=$document.ObservedAt;$a.Source.TextLengthUtf16=$html.Length
+    $o=$a.Outcome;$o.AdapterStatus='PARTIAL';$o.LocationOperationalStatus='PARTIAL';$o.LocationStatus=$null;$o.ObservationOperationalStatus='FAILED';$o.Comparable=$false;$o.ContentUnitCount=$observation.ContentUnits.Count;$o.CandidateReferences=@();$o.CandidateReferenceCount=$null
+    $parameters=Receipt-Args $case;$parameters.Document=$document;$parameters.SourceObservation=$observation;$parameters.QualifiedSource=New-QualifiedBenefitSource -Candidate $candidate -Document $document -OfficialityStatus VERIFIED_OFFICIAL
+    return $parameters
+}
+function Measure-CaptureTokenizer([hashtable]$Parameters){
+    $script:CaptureTokenizerCalls=0
+    $original=(Get-Item Function:Get-ScopeHtmlTagTokens).ScriptBlock
+    $script:CaptureOriginalTokenizer=$original
+    $failure=$null
+    try{
+        Set-Item Function:Get-ScopeHtmlTagTokens -Value {param([string]$Text)$script:CaptureTokenizerCalls++;& $script:CaptureOriginalTokenizer -Text $Text}
+        try{Assert-BenefitScopedEvidenceCapture @Parameters}catch{$failure=$_.Exception.Message}
+    }finally{Set-Item Function:Get-ScopeHtmlTagTokens -Value $original;Remove-Variable CaptureOriginalTokenizer -Scope Script}
+    [pscustomobject]@{Calls=$script:CaptureTokenizerCalls;Failure=$failure}
+}
+$trustedPartial=New-TrustedPartialCaptureParameters
+$measured=Measure-CaptureTokenizer $trustedPartial
+Check ($null -eq $measured.Failure) 'trusted PARTIAL capture succeeds'
+Write-Host "PR2A trusted PARTIAL additional tokenizer calls=$($measured.Calls)"
+Check ($measured.Calls -eq 0) 'trusted PARTIAL capture adds zero tokenizer invocations'
+
+foreach($kind in @('copied','other-snapshot','forged','missing')){
+    $parameters=New-TrustedPartialCaptureParameters
+    $snapshot=$parameters.SourceObservation.Snapshot
+    switch($kind){
+        copied {$index=Copy-Case $parameters.SourceObservation.HtmlValidationIndex}
+        other-snapshot {$donor=New-TrustedPartialCaptureParameters;$index=$donor.SourceObservation.HtmlValidationIndex}
+        forged {$index=Copy-Case $parameters.SourceObservation.HtmlValidationIndex;$index|Add-Member Trusted $true;$index|Add-Member SnapshotAlreadyValidated $true}
+        missing {$index=$null}
+    }
+    if($kind -ceq 'missing'){$parameters.SourceObservation.PSObject.Properties.Remove('HtmlValidationIndex')}
+    else{$parameters.SourceObservation.HtmlValidationIndex=$index;Check (-not (Test-InternalBenefitHtmlRunContextTrust -Snapshot $snapshot -HtmlValidationIndex $index)) "$kind index never trusted"}
+    $result=Measure-CaptureTokenizer $parameters
+    Check ($null -eq $result.Failure -and $result.Calls -gt 0) "$kind uses strict validation, not trusted reuse"
+    Write-Host "PR2A $kind strict fallback additional tokenizer calls=$($result.Calls)"
+}
+foreach($property in @('Text','SnapshotId','ContentHash')){
+    $parameters=New-TrustedPartialCaptureParameters
+    if($property -ceq 'Text'){$parameters.SourceObservation.Snapshot.Text+='changed'}else{$parameters.SourceObservation.Snapshot.$property='f'*64}
+    Check (-not (Test-InternalBenefitHtmlRunContextTrust -Snapshot $parameters.SourceObservation.Snapshot -HtmlValidationIndex $parameters.SourceObservation.HtmlValidationIndex)) "$property mutation invalidates trust"
+    $result=Measure-CaptureTokenizer $parameters
+    Check ($null -ne $result.Failure) "$property mutation fails closed"
+}
+foreach($property in @('CellStart','FieldReference')){
+    $parameters=New-TrustedPartialCaptureParameters
+    $reference=$parameters.SourceObservation.ContentUnits[0].FieldReferences.BenefitDescription
+    if($property -ceq 'CellStart'){$reference.CellStart++}else{$reference.FieldReference='HTML_TABLE_1_ROW_99/BenefitDescription'}
+    $result=Measure-CaptureTokenizer $parameters
+    Check ($null -ne $result.Failure) "trusted index never bypasses wrong $property provenance"
+}
+Write-Host "PASS: PR2A final assertions=$script:checks"
+
+$publicCase=New-ReceiptCase;$o=$publicCase.Artifact.Outcome;$o.AdapterStatus='PARTIAL';$o.LocationOperationalStatus='PARTIAL';$o.LocationStatus=$null;$o.ObservationOperationalStatus='FAILED';$o.Comparable=$false;$o.CandidateReferences=@();$o.CandidateReferenceCount=$null
+$publicCase.Fixture.Observation.AdapterStatus='PARTIAL'
+$publicParameters=Receipt-Args $publicCase
+Check (-not (Test-InternalBenefitHtmlRunContextSnapshotTrust $publicParameters.SourceObservation.Snapshot)) 'standalone public snapshot has no run-context trust'
+$measured=Measure-CaptureTokenizer $publicParameters
+Check ($null -eq $measured.Failure -and $measured.Calls -gt 0) 'standalone public PARTIAL retains strict validation'
+Write-Host "PR2A standalone public strict additional tokenizer calls=$($measured.Calls)"
+Write-Host "PASS: complete PR2A assertions=$script:checks"

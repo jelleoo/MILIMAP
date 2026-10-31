@@ -437,3 +437,79 @@ $m=New-Case;$callParameters=Capture-Args $m;$callParameters.Result.BusinessIdent
 Reject {Assert-BenefitScopedEvidenceCapture @callParameters} 'Result identity must equal the actual locator business'
 
 Write-Host "PASS: complete corrected contract suite assertions=$script:checks"
+
+# OUTCOME_ONLY must not bypass trusted identity or full-source semantic location.
+function New-ReceiptCase([string]$Location='NOT_FOUND'){
+    $case=New-Case;$case.Artifact.Mode='OUTCOME_ONLY';$case.Artifact.Scope=$null;$case.Artifact.Fields=@();$case.Artifact.Claims=@()
+    $o=$case.Artifact.Outcome;$o.LocationStatus=$Location;$o.BindingStatus='AMBIGUOUS';$o.ExtractionStatus='FAILED';$o.ValidationStatus='FAILED';$o.IdentityEvidenceCodes=@();$o.ClaimValidationCounts=[pscustomobject]@{Total=0;Validated=0;Invalid=0;Conflict=0;Unknown=0}
+    $case.Extracted=@();$case.Validated=@();$case.Result.ClaimResults=@()
+    return $case
+}
+function Receipt-Args($case){$parameters=Capture-Args $case;$parameters.Extraction.Status=$case.Artifact.Outcome.ExtractionStatus;$parameters.Validation.Status=$case.Artifact.Outcome.ValidationStatus;return $parameters}
+$m=New-ReceiptCase;$receiptParameters=Receipt-Args $m
+Reject {Assert-BenefitScopedEvidenceCapture @receiptParameters} 'false NOT_FOUND cannot bypass actual LOCATED source'
+$m=New-ReceiptCase 'AMBIGUOUS';$receiptParameters=Receipt-Args $m
+Reject {Assert-BenefitScopedEvidenceCapture @receiptParameters} 'false AMBIGUOUS cannot bypass actual LOCATED source'
+$m=New-Case;$m.Artifact.Mode='OUTCOME_ONLY';$m.Artifact.Scope=$null;$m.Artifact.Fields=@();$m.Artifact.Claims=@();$m.Artifact.Outcome.ValidationStatus='PARTIAL'
+$receiptParameters=Capture-Args $m;$receiptParameters.Validation.Status='PARTIAL'
+Assert-BenefitScopedEvidenceCapture @receiptParameters
+$receiptParameters.Result.BusinessIdentity=New-ScopeTestBusiness -Name '다른 합성 업소' -Building 99
+Reject {Assert-BenefitScopedEvidenceCapture @receiptParameters} 'partial receipt cannot substitute Result business'
+
+# Genuine complete absence: trusted business is missing from the unchanged complete source.
+$m=New-ReceiptCase;$m.Artifact.Outcome.CandidateReferences=@();$m.Artifact.Outcome.CandidateReferenceCount=0
+$receiptParameters=Receipt-Args $m
+$missing=New-ScopeTestBusiness -Name '없는 합성 업소' -Building 500
+$receiptParameters.Business=$missing;$receiptParameters.Result.BusinessIdentity=Copy-Case $missing
+Assert-BenefitScopedEvidenceCapture @receiptParameters
+Check $true 'actual NOT_FOUND receipt accepted without positive slice'
+# Verify every receipt still binds trusted row and source, even though it carries no fields.
+foreach($mutation in @(
+ {param($p)$p.Business.SourceRowNumber=3},
+ {param($p)$p.SourceObservation.SourceRowNumber=3},
+ {param($p)$p.QualifiedSource.Document.ObservedAt='2026-10-31T00:00:00Z'},
+ {param($p)$p.QualifiedSource.Candidate.Url='https://other.example.invalid/'},
+ {param($p)$p.SourceObservation.SourceUrl='https://other.example.invalid/'}
+)){
+ $case=New-ReceiptCase;$case.Artifact.Outcome.ValidationStatus='PARTIAL';$case.Artifact.Outcome.LocationStatus='LOCATED';$case.Artifact.Outcome.BindingStatus='STRONG'
+ $parameters=Receipt-Args $case;& $mutation $parameters
+ Reject {Assert-BenefitScopedEvidenceCapture @parameters} 'receipt trusted ownership mutation'
+}
+# A real duplicate-identity source yields AMBIGUOUS via the existing locator.
+$m=New-ReceiptCase 'AMBIGUOUS'
+$html=(Get-ScopeTestHtml).Replace('테스트가게 B','테스트가게 A').Replace('테스트로 99','테스트로 12').Replace('02-0000-0099','02-0000-0012')
+$doc=New-ScopeTestDocument -Html $html;$obs=ConvertTo-BenefitHtmlObservation -Document $doc
+$actual=Find-BenefitBusinessEvidence -Observation $obs -Business (New-ScopeTestBusiness)
+$m.Fixture.Document=$doc;$m.Fixture.Observation=$obs
+$m.Artifact.Source.ContentHash=$obs.Snapshot.ContentHash;$m.Artifact.Source.SnapshotId=$obs.SnapshotId;$m.Artifact.Source.TextLengthUtf16=$html.Length
+$m.Artifact.Outcome.CandidateReferences=@($actual.CandidateReferences);$m.Artifact.Outcome.CandidateReferenceCount=$actual.CandidateReferences.Count
+$receiptParameters=Receipt-Args $m
+$candidate=New-BenefitSourceCandidate -SourceRowNumber 2 -Url $doc.Url -SourceKind PUBLIC_OFFICIAL
+$receiptParameters.QualifiedSource=New-QualifiedBenefitSource -Candidate $candidate -Document $doc -OfficialityStatus VERIFIED_OFFICIAL
+Assert-BenefitScopedEvidenceCapture @receiptParameters
+Check ($actual.Status -ceq 'AMBIGUOUS') 'actual AMBIGUOUS receipt accepted'
+foreach($status in @('PARTIAL','FAILED','UNSUPPORTED')){
+ $m=New-ReceiptCase;$o=$m.Artifact.Outcome;$o.AdapterStatus=$status;$o.LocationOperationalStatus=$status;$o.LocationStatus=$null;$o.CandidateReferences=@();$o.CandidateReferenceCount=$null;$o.ObservationOperationalStatus=$(if($status -ceq 'FAILED'){'FAILED'}else{'PARTIAL'});$o.Comparable=$false
+ $m.Fixture.Observation.AdapterStatus=$status
+ if($status -cin @('FAILED','UNSUPPORTED')){$m.Fixture.Observation.ContentUnits=@();$o.ContentUnitCount=0}
+ $receiptParameters=Receipt-Args $m
+ Assert-BenefitScopedEvidenceCapture @receiptParameters
+ Check $true "actual $status observation does not require complete locator evidence"
+}
+$m=New-ReceiptCase;$o=$m.Artifact.Outcome;$o.AdapterStatus=$null;$o.LocationOperationalStatus=$null;$o.LocationStatus=$null;$o.ContentUnitCount=$null;$o.CandidateReferences=@();$o.CandidateReferenceCount=$null;$o.ObservationOperationalStatus='FAILED';$o.Comparable=$false
+$m.Artifact.Adapter.Id=$null;$m.Artifact.Adapter.Version=$null
+$receiptParameters=Receipt-Args $m;$receiptParameters.SourceObservation=$null
+Assert-BenefitScopedEvidenceCapture @receiptParameters
+Check $true 'parse failure with no source observation remains valid outcome receipt'
+Write-Host "PASS: OUTCOME_ONLY capture trust assertions=$script:checks"
+
+$m=New-ReceiptCase;$m.Artifact.Outcome.AdapterStatus='PARTIAL';$m.Fixture.Observation.AdapterStatus='PARTIAL'
+$receiptParameters=Receipt-Args $m
+Reject {Assert-BenefitScopedEvidenceCapture @receiptParameters} 'incomplete adapter cannot claim semantic NOT_FOUND'
+
+$m.Artifact.Outcome.LocationStatus=$null
+Reject {Assert-BenefitScopedEvidence $m.Artifact} 'incomplete adapter cannot claim complete locator with null semantic status'
+Write-Host "PASS: final OUTCOME_ONLY trust assertions=$script:checks"
+$m=New-Case;$m.Artifact.Mode='OUTCOME_ONLY';$m.Artifact.Scope=$null;$m.Artifact.Fields=@();$m.Artifact.Claims=@();$m.Artifact.Outcome.LocationStatus=$null
+Reject {Assert-BenefitScopedEvidence $m.Artifact} 'complete locator cannot hide positive outcome with null semantic status'
+Write-Host "PASS: complete receipt trust suite assertions=$script:checks"

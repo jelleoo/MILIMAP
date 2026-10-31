@@ -143,7 +143,7 @@ function Assert-BenefitScopedEvidence {
     Assert-InternalScopedCode $o.BindingStatus @('STRONG','PLAUSIBLE','AMBIGUOUS','CONFLICT') -Nullable
     foreach($key in @('ExtractionStatus','ValidationStatus')){Assert-InternalScopedCode $o.$key @('COMPLETE','PARTIAL','FAILED') -Nullable}
     Assert-InternalScopedCode $o.CoverageKind @('ADAPTER_SUPPORTED_TABLE_ROWS')
-    if($null -ne $o.LocationStatus -and $o.LocationOperationalStatus -cne 'COMPLETE'){throw 'C_LITE_LOCATION_STATUS'}
+    if(($null -ne $o.LocationStatus -and $o.LocationOperationalStatus -cne 'COMPLETE') -or ($o.LocationOperationalStatus -ceq 'COMPLETE' -and ($o.AdapterStatus -cne 'COMPLETE' -or $null -eq $o.LocationStatus))){throw 'C_LITE_LOCATION_STATUS'}
     if($null -eq $o.AdapterStatus){
         if($null -ne $a.Adapter.Id -or $null -ne $o.ContentUnitCount -or $null -ne $o.LocationOperationalStatus){throw 'C_LITE_UNOBSERVED_ADAPTER'}
     } elseif($null -eq $a.Adapter.Id){throw 'C_LITE_ADAPTER_IDENTITY'}
@@ -374,7 +374,7 @@ function Assert-BenefitScopedEvidenceRelationship {
     }
 }
 function Assert-BenefitScopedEvidenceCapture {
-    param([Parameter(Mandatory)]$Evidence,[Parameter(Mandatory)]$Document,[AllowNull()]$EvidenceSlice,[Parameter(Mandatory)]$Extraction,[Parameter(Mandatory)]$Validation,[Parameter(Mandatory)]$Result,[Parameter(Mandatory)]$SourceObservation,[Parameter(Mandatory)]$Business,[Parameter(Mandatory)]$QualifiedSource,[string]$CanonicalPhone=$null)
+    param([Parameter(Mandatory)]$Evidence,[Parameter(Mandatory)]$Document,[AllowNull()]$EvidenceSlice,[Parameter(Mandatory)]$Extraction,[Parameter(Mandatory)]$Validation,[Parameter(Mandatory)]$Result,[Parameter(Mandatory)][AllowNull()]$SourceObservation,[Parameter(Mandatory)]$Business,[Parameter(Mandatory)]$QualifiedSource,[string]$CanonicalPhone=$null)
     Assert-BenefitScopedEvidence $Evidence
     Assert-BenefitSourceDocument $Document
     if($Document.FetchStatus -cne 'COMPLETE' -or $Document.SourceFormat -cne 'HTML' -or $Document.Url -cne $Evidence.Source.Url -or $Document.ObservedAt -cne $Evidence.Source.ObservedAt -or $Document.Text.Length -ne $Evidence.Source.TextLengthUtf16 -or (Get-BenefitEvidenceTextHash $Document.Text) -cne $Evidence.Source.ContentHash){throw 'C_LITE_CAPTURE_DOCUMENT'}
@@ -388,19 +388,36 @@ function Assert-BenefitScopedEvidenceCapture {
         switch -CaseSensitive ($v.ValidationStatus){'VALIDATED'{$counts.Validated++};'INVALID'{$counts.Invalid++};'CONFLICT'{$counts.Conflict++};'UNKNOWN'{$counts.Unknown++};default{throw 'C_LITE_VALIDATION_CODE'}}
     }
     if((ConvertTo-HistoryCanonicalJson ([pscustomobject]$counts)) -cne (ConvertTo-HistoryCanonicalJson $Evidence.Outcome.ClaimValidationCounts)){throw 'C_LITE_CAPTURE_COUNTS'}
+    # Ownership applies to receipts as well as positive field captures.
+    Assert-NormalizedBusiness $Business
+    Assert-BenefitVerificationResult $Result
+    Assert-QualifiedBenefitSource $QualifiedSource
+    foreach($trustedInput in @($Business,$QualifiedSource,$QualifiedSource.Candidate,$QualifiedSource.Document)){
+        Assert-InternalScopedInteger $trustedInput.SourceRowNumber 2
+        if($trustedInput.SourceRowNumber -ne $Evidence.Capture.SourceRowNumber){throw 'C_LITE_TRUSTED_ROW'}
+    }
+    if((ConvertTo-HistoryCanonicalJson $Business) -cne (ConvertTo-HistoryCanonicalJson $Result.BusinessIdentity)){throw 'C_LITE_TRUSTED_BUSINESS'}
+    if($QualifiedSource.Document.Text -cne $Document.Text -or $QualifiedSource.Document.Url -cne $Document.Url -or $QualifiedSource.Candidate.Url -cne $Document.Url -or $QualifiedSource.Document.ObservedAt -cne $Document.ObservedAt -or $QualifiedSource.Document.SourceFormat -cne $Document.SourceFormat -or $QualifiedSource.Document.FetchStatus -cne $Document.FetchStatus -or ($null -ne $Evidence.Outcome.OfficialityStatus -and $QualifiedSource.OfficialityStatus -cne $Evidence.Outcome.OfficialityStatus)){throw 'C_LITE_TRUSTED_QUALIFICATION'}
+    $located=$null
+    if($null -eq $SourceObservation){
+        if($null -ne $Evidence.Adapter.Id -or $null -ne $Evidence.Outcome.AdapterStatus -or $null -ne $Evidence.Outcome.ContentUnitCount -or $null -ne $Evidence.Outcome.LocationOperationalStatus -or $null -ne $Evidence.Outcome.LocationStatus){throw 'C_LITE_UNOBSERVED_ADAPTER'}
+    }else{
+        Assert-InternalScopedInteger $SourceObservation.SourceRowNumber 2
+        if($SourceObservation.SourceRowNumber -ne $Evidence.Capture.SourceRowNumber){throw 'C_LITE_TRUSTED_ROW'}
+        if($SourceObservation.Snapshot.Text -cne $Document.Text -or $SourceObservation.SourceUrl -cne $Document.Url -or $SourceObservation.ObservedAt -cne $Document.ObservedAt -or $SourceObservation.SourceFormat -cne 'HTML'){throw 'C_LITE_TRUSTED_SOURCE'}
+        if($Evidence.Adapter.Id -cne $SourceObservation.AdapterId -or $Evidence.Adapter.Version -cne $SourceObservation.AdapterVersion -or $Evidence.Outcome.AdapterStatus -cne $SourceObservation.AdapterStatus -or ($null -ne $Evidence.Outcome.ContentUnitCount -and $Evidence.Outcome.ContentUnitCount -ne $SourceObservation.ContentUnits.Count)){throw 'C_LITE_TRUSTED_ADAPTER'}
+        if($SourceObservation.AdapterStatus -ceq 'COMPLETE' -and $null -ne $Evidence.Outcome.LocationStatus){
+            $located=Find-BenefitBusinessEvidence -Observation $SourceObservation -Business $Business -CanonicalPhone $CanonicalPhone
+            if($located.OperationalStatus -cne $Evidence.Outcome.LocationOperationalStatus -or $located.Status -cne $Evidence.Outcome.LocationStatus){throw 'C_LITE_TRUSTED_LOCATION'}
+            if($null -ne $Evidence.Outcome.CandidateReferenceCount -and (ConvertTo-HistoryCanonicalJson @($located.CandidateReferences|Sort-Object -CaseSensitive)) -cne (ConvertTo-HistoryCanonicalJson @($Evidence.Outcome.CandidateReferences|Sort-Object -CaseSensitive))){throw 'C_LITE_CANDIDATE_LINK'}
+        }else{
+            # Validate available observation integrity, without requiring successful parsing/location.
+            Assert-ScopeObservation -Observation $SourceObservation
+        }
+    }
     if($Evidence.Mode -ceq 'OUTCOME_ONLY'){return}
     Assert-RelevantBenefitEvidenceSlice -Slice $EvidenceSlice -Document $Document -SourceRowNumber $Document.SourceRowNumber
     foreach($p in @(@('Type','ScopeType'),@('Reference','EvidenceReference'),@('TableStart','TableStart'),@('TableLength','TableLength'),@('RowStart','RawStart'),@('RowLength','RawLength'))){if($Evidence.Scope.($p[0]) -cne $EvidenceSlice.($p[1])){throw 'C_LITE_CAPTURE_SCOPE'}}
-    foreach($input in @($SourceObservation,$Business,$QualifiedSource,$QualifiedSource.Candidate,$QualifiedSource.Document)){
-        Assert-InternalScopedInteger $input.SourceRowNumber 2
-        if($input.SourceRowNumber -ne $Evidence.Capture.SourceRowNumber){throw 'C_LITE_TRUSTED_ROW'}
-    }
-    if((ConvertTo-HistoryCanonicalJson $Business) -cne (ConvertTo-HistoryCanonicalJson $Result.BusinessIdentity)){throw 'C_LITE_TRUSTED_BUSINESS'}
-    # Existing full-source gates run before minimizing retained fields.
-    if($SourceObservation.Snapshot.Text -cne $Document.Text -or $SourceObservation.SourceUrl -cne $Document.Url -or $SourceObservation.ObservedAt -cne $Document.ObservedAt -or $SourceObservation.SourceFormat -cne 'HTML'){throw 'C_LITE_TRUSTED_SOURCE'}
-    Assert-QualifiedBenefitSource $QualifiedSource
-    if($QualifiedSource.OfficialityStatus -cne 'VERIFIED_OFFICIAL' -or $QualifiedSource.Document.Text -cne $Document.Text -or $QualifiedSource.Document.Url -cne $Document.Url -or $QualifiedSource.Document.ObservedAt -cne $Document.ObservedAt){throw 'C_LITE_TRUSTED_QUALIFICATION'}
-    $located=Find-BenefitBusinessEvidence -Observation $SourceObservation -Business $Business -CanonicalPhone $CanonicalPhone
     if($located.OperationalStatus -cne 'COMPLETE' -or $located.Status -cne 'LOCATED' -or $located.Slices.Count -ne 1 -or $located.Slices[0].EvidenceReference -cne $EvidenceSlice.EvidenceReference){throw 'C_LITE_TRUSTED_LOCATION'}
     $trustedSlice=$located.Slices[0]
     $binding=Get-BenefitBusinessBinding -Source $QualifiedSource -Business $Business -CanonicalPhone $CanonicalPhone -EvidenceSlice $trustedSlice

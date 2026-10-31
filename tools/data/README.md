@@ -1198,3 +1198,14 @@ strict one-shot outcomes and current-path performance explicitly.
 
 LiveHTTP=NOT_AUTHORIZED; ProductionAction=NONE; P4-3B=BLOCKED;
 OCR dependency=NOT_APPROVED; Phase4=NOT_COMPLETE.
+
+OUTCOME_ONLY capture trust (PR #138 follow-up): receipt capture performs the same
+Business/Result identity, canonical row, qualification/document and available
+SourceObservation ownership checks before returning. For a complete supported
+adapter with a recorded semantic location, the existing full-source locator must
+agree on operational/semantic status and any measured candidate references. A
+PARTIAL/FAILED/UNSUPPORTED adapter cannot claim a COMPLETE locator or NOT_FOUND. A COMPLETE locator must carry a non-null semantic status; null cannot conceal a positive outcome.
+Genuine failure observations retain their incomplete statuses without requiring a
+successful locator; failed parsing may supply SourceObservation=null only when
+adapter/count/location metadata is unobserved. No source matching or absence
+semantics, writer, RAW policy, History or production orchestration is introduced.

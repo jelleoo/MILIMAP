@@ -406,10 +406,10 @@ function Assert-BenefitScopedEvidenceCapture {
         if($SourceObservation.SourceRowNumber -ne $Evidence.Capture.SourceRowNumber){throw 'C_LITE_TRUSTED_ROW'}
         if($SourceObservation.Snapshot.Text -cne $Document.Text -or $SourceObservation.SourceUrl -cne $Document.Url -or $SourceObservation.ObservedAt -cne $Document.ObservedAt -or $SourceObservation.SourceFormat -cne 'HTML'){throw 'C_LITE_TRUSTED_SOURCE'}
         if($Evidence.Adapter.Id -cne $SourceObservation.AdapterId -or $Evidence.Adapter.Version -cne $SourceObservation.AdapterVersion -or $Evidence.Outcome.AdapterStatus -cne $SourceObservation.AdapterStatus -or ($null -ne $Evidence.Outcome.ContentUnitCount -and $Evidence.Outcome.ContentUnitCount -ne $SourceObservation.ContentUnits.Count)){throw 'C_LITE_TRUSTED_ADAPTER'}
-        if($SourceObservation.AdapterStatus -ceq 'COMPLETE' -and $null -ne $Evidence.Outcome.LocationStatus){
+        if($SourceObservation.AdapterStatus -ceq 'COMPLETE'){
             $located=Find-BenefitBusinessEvidence -Observation $SourceObservation -Business $Business -CanonicalPhone $CanonicalPhone
             if($located.OperationalStatus -cne $Evidence.Outcome.LocationOperationalStatus -or $located.Status -cne $Evidence.Outcome.LocationStatus){throw 'C_LITE_TRUSTED_LOCATION'}
-            if($null -ne $Evidence.Outcome.CandidateReferenceCount -and (ConvertTo-HistoryCanonicalJson @($located.CandidateReferences|Sort-Object -CaseSensitive)) -cne (ConvertTo-HistoryCanonicalJson @($Evidence.Outcome.CandidateReferences|Sort-Object -CaseSensitive))){throw 'C_LITE_CANDIDATE_LINK'}
+            if($null -eq $Evidence.Outcome.CandidateReferenceCount -or $Evidence.Outcome.CandidateReferenceCount -ne @($located.CandidateReferences).Count -or (ConvertTo-HistoryCanonicalJson @($located.CandidateReferences|Sort-Object -CaseSensitive)) -cne (ConvertTo-HistoryCanonicalJson @($Evidence.Outcome.CandidateReferences|Sort-Object -CaseSensitive))){throw 'C_LITE_CANDIDATE_LINK'}
         }else{
             # Validate available observation integrity, without requiring successful parsing/location.
             Assert-ScopeObservation -Observation $SourceObservation

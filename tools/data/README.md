@@ -1201,9 +1201,10 @@ OCR dependency=NOT_APPROVED; Phase4=NOT_COMPLETE.
 
 OUTCOME_ONLY capture trust (PR #138 follow-up): receipt capture performs the same
 Business/Result identity, canonical row, qualification/document and available
-SourceObservation ownership checks before returning. For a complete supported
-adapter with a recorded semantic location, the existing full-source locator must
-agree on operational/semantic status and any measured candidate references. A
+SourceObservation ownership checks before returning. For every complete supported adapter, the existing full-source locator must run
+regardless of proposed location status, and agree on operational/semantic status.
+A completed locator requires a measured candidate count (zero for an empty result)
+and exact candidate references; null cannot bypass comparison. A
 PARTIAL/FAILED/UNSUPPORTED adapter cannot claim a COMPLETE locator or NOT_FOUND. A COMPLETE locator must carry a non-null semantic status; null cannot conceal a positive outcome.
 Genuine failure observations retain their incomplete statuses without requiring a
 successful locator; failed parsing may supply SourceObservation=null only when

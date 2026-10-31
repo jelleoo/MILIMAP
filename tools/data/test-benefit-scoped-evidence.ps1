@@ -513,3 +513,24 @@ Write-Host "PASS: final OUTCOME_ONLY trust assertions=$script:checks"
 $m=New-Case;$m.Artifact.Mode='OUTCOME_ONLY';$m.Artifact.Scope=$null;$m.Artifact.Fields=@();$m.Artifact.Claims=@();$m.Artifact.Outcome.LocationStatus=$null
 Reject {Assert-BenefitScopedEvidence $m.Artifact} 'complete locator cannot hide positive outcome with null semantic status'
 Write-Host "PASS: complete receipt trust suite assertions=$script:checks"
+
+# Complete adapters cannot suppress their authoritative locator result.
+$m=New-ReceiptCase;$o=$m.Artifact.Outcome;$o.LocationOperationalStatus='PARTIAL';$o.LocationStatus=$null;$o.CandidateReferenceCount=$null;$o.CandidateReferences=@();$o.ObservationOperationalStatus='PARTIAL';$o.Comparable=$false
+$completeGateParameters=Receipt-Args $m
+Reject {Assert-BenefitScopedEvidenceCapture @completeGateParameters} 'complete adapter cannot bypass locator with partial/null stored location'
+$m=New-Case;$m.Artifact.Mode='OUTCOME_ONLY';$m.Artifact.Scope=$null;$m.Artifact.Fields=@();$m.Artifact.Claims=@();$m.Artifact.Outcome.ValidationStatus='PARTIAL';$m.Artifact.Outcome.CandidateReferenceCount=$null;$m.Artifact.Outcome.CandidateReferences=@()
+$completeGateParameters=Capture-Args $m;$completeGateParameters.Validation.Status='PARTIAL'
+Reject {Assert-BenefitScopedEvidenceCapture @completeGateParameters} 'completed locator requires measured candidate count and exact references'
+
+# A measured empty result is zero, never unknown, when the complete locator ran.
+$m=New-ReceiptCase;$m.Artifact.Outcome.CandidateReferences=@();$m.Artifact.Outcome.CandidateReferenceCount=$null
+$completeGateParameters=Receipt-Args $m;$missing=New-ScopeTestBusiness -Name '없는 합성 업소' -Building 500
+$completeGateParameters.Business=$missing;$completeGateParameters.Result.BusinessIdentity=Copy-Case $missing
+Reject {Assert-BenefitScopedEvidenceCapture @completeGateParameters} 'actual empty locator count cannot be unknown'
+$m.Artifact.Outcome.CandidateReferenceCount=0
+Assert-BenefitScopedEvidenceCapture @completeGateParameters
+Check $true 'measured zero candidate count remains valid'
+$m=New-Case;$m.Artifact.Mode='OUTCOME_ONLY';$m.Artifact.Scope=$null;$m.Artifact.Fields=@();$m.Artifact.Claims=@();$m.Artifact.Outcome.ValidationStatus='PARTIAL';$m.Artifact.Outcome.CandidateReferences=@('HTML_TABLE_1_ROW_3')
+$completeGateParameters=Capture-Args $m;$completeGateParameters.Validation.Status='PARTIAL'
+Reject {Assert-BenefitScopedEvidenceCapture @completeGateParameters} 'measured count alone cannot substitute different candidate references'
+Write-Host "PASS: final complete-adapter trust assertions=$script:checks"

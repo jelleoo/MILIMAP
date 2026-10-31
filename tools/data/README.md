@@ -1112,7 +1112,24 @@ VERIFIED_OFFICIAL, LOCATED, STRONG, complete comparable History, no nonvalidated
 claim counts, and full semantic-claim coverage. Unlinked UNKNOWN/unbound semantic
 claims cannot be hidden behind a valid subset. A VALIDATED claim's domain
 ClaimResult may still be UNKNOWN; validation never upgrades benefit truth.
-Zero-claim identity-only evidence is representable but not initially reuse eligible.
+Zero-claim identity-only evidence must also use LOCATED_FIELDS when all positive
+stage conditions hold, but is not initially reuse eligible. A complete comparable
+VERIFIED_OFFICIAL / LOCATED / STRONG result with COMPLETE extraction and validation
+cannot downgrade to OUTCOME_ONLY, including after recomputing the artifact hash.
+
+Retained Fields are exactly the deduplicated union of BusinessName, fields for all
+trusted identity-match codes, and fields referenced by validated scoped claims.
+NAME_MATCH/FULL_NAME_MATCH map to BusinessName; FULL_ADDRESS_MATCH to Address;
+BRANCH_MATCH to Branch; PHONE_MATCH to Phone. Other nonempty row fields are not
+retained. Missing required fields and arbitrary extra fields are rejected.
+Capture requires SourceObservation, Business, QualifiedSource and optional
+CanonicalPhone from the existing trusted caller context. It re-runs existing
+full-source locator and binding checks before minimizing fields, compares actual
+locator evidence with both the slice and artifact identity codes, and verifies
+source/adapter identity. Thus an omitted Phone/Branch cannot hide a source conflict.
+These new parameters belong only to the inactive validator; no existing production
+contract or caller is changed. Persisted readers validate the immutable capture
+attestation and exact retained union; they do not recreate source-only checks.
 
 PARTIAL/FAILED/mixed validation uses OUTCOME_ONLY with `Scope=null`, `Fields=[]`,
 `Claims=[]`, even when the existing History assessment is COMPLETE/comparable.

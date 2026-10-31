@@ -2,6 +2,7 @@
 Set-StrictMode -Version Latest
 . (Join-Path $PSScriptRoot 'benefit-history-adapter.ps1')
 . (Join-Path (Split-Path -Parent $PSScriptRoot) 'benefit-evidence/validate-benefit-evidence.ps1')
+. (Join-Path (Split-Path -Parent $PSScriptRoot) 'benefit-evidence/find-business-evidence-slice.ps1')
 
 function Assert-InternalScopedObject($Value,[string[]]$Properties){
     if($Value -isnot [pscustomobject]){throw 'C_LITE_OBJECT_TYPE'}
@@ -83,6 +84,19 @@ function Assert-InternalScopedSpan($Start,$Length,$ParentStart,$ParentLength){
 function Get-InternalScopedClaimFields {
     return @{BENEFIT_DESCRIPTION='BenefitDescription';ELIGIBLE_TARGET='EligibleTarget';USAGE_CONDITION='UsageCondition';VERIFICATION_METHOD='VerificationMethod';VALID_FROM='ValidFrom';VALID_UNTIL='ValidUntilObserved'}
 }
+function Get-InternalScopedRetainedKeys($IdentityCodes,$Claims){
+    $keys=[Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
+    [void]$keys.Add('BusinessName')
+    $identityMap=@{NAME_MATCH='BusinessName';FULL_NAME_MATCH='BusinessName';FULL_ADDRESS_MATCH='Address';BRANCH_MATCH='Branch';PHONE_MATCH='Phone'}
+    foreach($code in $IdentityCodes){if(-not $identityMap.ContainsKey($code)){throw 'C_LITE_IDENTITY_CODE'};[void]$keys.Add($identityMap[$code])}
+    $claimMap=Get-InternalScopedClaimFields
+    foreach($claim in $Claims){if(-not $claimMap.ContainsKey($claim.ClaimType)){throw 'C_LITE_CLAIM_LINK'};[void]$keys.Add($claimMap[$claim.ClaimType])}
+    return @($keys)
+}
+function Test-InternalScopedCompletePositive($Outcome){
+    foreach($key in @('ObservationOperationalStatus','FetchStatus','AdapterStatus','LocationOperationalStatus','ExtractionStatus','ValidationStatus')){if($Outcome.$key -cne 'COMPLETE'){return $false}}
+    return ($Outcome.Comparable -and $Outcome.OfficialityStatus -ceq 'VERIFIED_OFFICIAL' -and $Outcome.LocationStatus -ceq 'LOCATED' -and $Outcome.BindingStatus -ceq 'STRONG')
+}
 function Assert-BenefitScopedEvidence {
     param([Parameter(Mandatory)]$Evidence)
     $a=$Evidence
@@ -155,6 +169,7 @@ function Assert-BenefitScopedEvidence {
     Assert-InternalScopedArray $a.Fields 10
     Assert-InternalScopedArray $a.Claims 6
     if($a.Mode -ceq 'OUTCOME_ONLY'){
+        if(Test-InternalScopedCompletePositive $o){throw 'C_LITE_POSITIVE_DOWNGRADE'}
         if($null -ne $a.Scope -or $a.Fields.Count -ne 0 -or $a.Claims.Count -ne 0){throw 'C_LITE_OUTCOME_HAS_FIELDS'}
     }else{
         foreach($key in @('ObservationOperationalStatus','FetchStatus','AdapterStatus','LocationOperationalStatus','ExtractionStatus','ValidationStatus')){if($o.$key -cne 'COMPLETE'){throw 'C_LITE_INCOMPLETE_SCOPED'}}
@@ -185,6 +200,8 @@ function Assert-BenefitScopedEvidence {
             Assert-InternalScopedSpan $field.CellStart $field.CellLength $a.Scope.RowStart $a.Scope.RowLength
             if($field.HeaderStart+$field.HeaderLength -gt $a.Scope.RowStart){throw 'C_LITE_HEADER_ORDER'}
         }
+        $requiredKeys=@(Get-InternalScopedRetainedKeys $o.IdentityEvidenceCodes $a.Claims)
+        if($keys.Count -ne $requiredKeys.Count -or @($requiredKeys|Where-Object {-not $keys.Contains($_)}).Count -ne 0){throw 'C_LITE_RETAINED_FIELD_SET'}
         if(-not $keys.Contains('BusinessName') -or $totalBytes -gt 16384){throw 'C_LITE_FIELD_COVERAGE_OR_SIZE'}
         for($i=0;$i -lt $a.Fields.Count;$i++){
             for($j=$i+1;$j -lt $a.Fields.Count;$j++){
@@ -357,7 +374,7 @@ function Assert-BenefitScopedEvidenceRelationship {
     }
 }
 function Assert-BenefitScopedEvidenceCapture {
-    param([Parameter(Mandatory)]$Evidence,[Parameter(Mandatory)]$Document,[AllowNull()]$EvidenceSlice,[Parameter(Mandatory)]$Extraction,[Parameter(Mandatory)]$Validation,[Parameter(Mandatory)]$Result)
+    param([Parameter(Mandatory)]$Evidence,[Parameter(Mandatory)]$Document,[AllowNull()]$EvidenceSlice,[Parameter(Mandatory)]$Extraction,[Parameter(Mandatory)]$Validation,[Parameter(Mandatory)]$Result,[Parameter(Mandatory)]$SourceObservation,[Parameter(Mandatory)]$Business,[Parameter(Mandatory)]$QualifiedSource,[string]$CanonicalPhone=$null)
     Assert-BenefitScopedEvidence $Evidence
     Assert-BenefitSourceDocument $Document
     if($Document.FetchStatus -cne 'COMPLETE' -or $Document.SourceFormat -cne 'HTML' -or $Document.Url -cne $Evidence.Source.Url -or $Document.ObservedAt -cne $Evidence.Source.ObservedAt -or $Document.Text.Length -ne $Evidence.Source.TextLengthUtf16 -or (Get-BenefitEvidenceTextHash $Document.Text) -cne $Evidence.Source.ContentHash){throw 'C_LITE_CAPTURE_DOCUMENT'}
@@ -374,7 +391,26 @@ function Assert-BenefitScopedEvidenceCapture {
     if($Evidence.Mode -ceq 'OUTCOME_ONLY'){return}
     Assert-RelevantBenefitEvidenceSlice -Slice $EvidenceSlice -Document $Document -SourceRowNumber $Document.SourceRowNumber
     foreach($p in @(@('Type','ScopeType'),@('Reference','EvidenceReference'),@('TableStart','TableStart'),@('TableLength','TableLength'),@('RowStart','RawStart'),@('RowLength','RawLength'))){if($Evidence.Scope.($p[0]) -cne $EvidenceSlice.($p[1])){throw 'C_LITE_CAPTURE_SCOPE'}}
-    $nonemptyKeys=@($EvidenceSlice.StructuredFields.Keys|Where-Object {-not [string]::IsNullOrWhiteSpace($EvidenceSlice.StructuredFields[$_])})
+    foreach($input in @($SourceObservation,$Business,$QualifiedSource,$QualifiedSource.Candidate,$QualifiedSource.Document)){
+        Assert-InternalScopedInteger $input.SourceRowNumber 2
+        if($input.SourceRowNumber -ne $Evidence.Capture.SourceRowNumber){throw 'C_LITE_TRUSTED_ROW'}
+    }
+    if((ConvertTo-HistoryCanonicalJson $Business) -cne (ConvertTo-HistoryCanonicalJson $Result.BusinessIdentity)){throw 'C_LITE_TRUSTED_BUSINESS'}
+    # Existing full-source gates run before minimizing retained fields.
+    if($SourceObservation.Snapshot.Text -cne $Document.Text -or $SourceObservation.SourceUrl -cne $Document.Url -or $SourceObservation.ObservedAt -cne $Document.ObservedAt -or $SourceObservation.SourceFormat -cne 'HTML'){throw 'C_LITE_TRUSTED_SOURCE'}
+    Assert-QualifiedBenefitSource $QualifiedSource
+    if($QualifiedSource.OfficialityStatus -cne 'VERIFIED_OFFICIAL' -or $QualifiedSource.Document.Text -cne $Document.Text -or $QualifiedSource.Document.Url -cne $Document.Url -or $QualifiedSource.Document.ObservedAt -cne $Document.ObservedAt){throw 'C_LITE_TRUSTED_QUALIFICATION'}
+    $located=Find-BenefitBusinessEvidence -Observation $SourceObservation -Business $Business -CanonicalPhone $CanonicalPhone
+    if($located.OperationalStatus -cne 'COMPLETE' -or $located.Status -cne 'LOCATED' -or $located.Slices.Count -ne 1 -or $located.Slices[0].EvidenceReference -cne $EvidenceSlice.EvidenceReference){throw 'C_LITE_TRUSTED_LOCATION'}
+    $trustedSlice=$located.Slices[0]
+    $binding=Get-BenefitBusinessBinding -Source $QualifiedSource -Business $Business -CanonicalPhone $CanonicalPhone -EvidenceSlice $trustedSlice
+    if($binding.BusinessBindingStatus -cne 'STRONG'){throw 'C_LITE_TRUSTED_BINDING'}
+    $trustedCodes=@($trustedSlice.IdentityEvidence|Sort-Object -CaseSensitive)
+    foreach($codes in @(@{Values=$Evidence.Outcome.IdentityEvidenceCodes},@{Values=$EvidenceSlice.IdentityEvidence})){
+        if((ConvertTo-HistoryCanonicalJson @($codes.Values|Sort-Object -CaseSensitive)) -cne (ConvertTo-HistoryCanonicalJson $trustedCodes)){throw 'C_LITE_TRUSTED_IDENTITY'}
+    }
+    if($Evidence.Outcome.ContentUnitCount -ne $SourceObservation.ContentUnits.Count -or $Evidence.Adapter.Id -cne $SourceObservation.AdapterId -or $Evidence.Adapter.Version -cne $SourceObservation.AdapterVersion){throw 'C_LITE_TRUSTED_ADAPTER'}
+    $nonemptyKeys=@(Get-InternalScopedRetainedKeys $trustedSlice.IdentityEvidence $Evidence.Claims)
     if($Evidence.Fields.Count -ne $nonemptyKeys.Count -or $Evidence.Claims.Count -ne $Extraction.Claims.Count -or $Extraction.Claims.Count -ne $Validation.Claims.Count){throw 'C_LITE_CAPTURE_CARDINALITY'}
     foreach($field in $Evidence.Fields){
         if($field.Key -cnotin $nonemptyKeys -or $field.DecodedValue -cne $EvidenceSlice.StructuredFields[$field.Key]){throw 'C_LITE_CAPTURE_FIELD'}

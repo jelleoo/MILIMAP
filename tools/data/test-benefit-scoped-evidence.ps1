@@ -30,8 +30,14 @@ function Ref($Kind,$Projection,[string[]]$Paths=@()){
     $hash=Get-HistorySha256 (ConvertTo-HistoryCanonicalJson -Value $Projection -OrderInsensitivePaths $Paths)
     New-HistoryArtifactReference -Kind $Kind -ContentHash $hash -RelativePath "artifacts/sha256/$hash.json"
 }
+. (Join-Path $PSScriptRoot 'lib/benefit-evidence/find-business-evidence-slice.ps1')
+function New-TestQualified {
+    $doc=New-ScopeTestDocument
+    $candidate=New-BenefitSourceCandidate -SourceRowNumber 2 -Url $doc.Url -SourceKind PUBLIC_OFFICIAL
+    New-QualifiedBenefitSource -Candidate $candidate -Document $doc -OfficialityStatus VERIFIED_OFFICIAL
+}
 function New-Case {
-    $f=New-ScopeContractFixture
+    $f=New-ScopeContractFixture;$f.Slice=(Find-BenefitBusinessEvidence -Observation $f.Observation -Business (New-ScopeTestBusiness)).Slices[0]
     $x=New-ExtractedBenefitClaim -ClaimType BENEFIT_DESCRIPTION -Value $f.Slice.StructuredFields.BenefitDescription -EvidenceText $f.Slice.StructuredFields.BenefitDescription -EvidenceReference $f.Slice.FieldReferences.BenefitDescription.FieldReference -SourceUrl $f.Document.Url -ExtractionMethod SCOPED_HTML_CELL
     $v=Test-ScopedBenefitExtractedClaim -Claim $x -Document $f.Document -EvidenceSlice $f.Slice
     $verification=New-BenefitClaimVerification -ClaimType BENEFIT_DESCRIPTION -EvidenceValue $v.Value -Result CONFIRMED -ValidatedClaim $v
@@ -49,7 +55,7 @@ function New-Case {
     $oid='obs-'+(Get-HistorySha256 ($run+'|'+$biz+'|BENEFIT|'+$ifp+'|'+$efp+'|'+$sfp+'|'+$xfp)).Substring(0,32)
     $o=New-HistoryObservation -ObservationId $oid -RunId $run -BusinessId $biz -Domain BENEFIT -ObservedAt '2026-10-27T08:00:00.000+09:00' -OperationalStatus COMPLETE -Comparable $true -InputFingerprint $ifp -EvidenceFingerprint $efp -SemanticFingerprint $sfp -ExecutionFingerprint $xfp -ArtifactReferences @($er,$sr) -SemanticResultReference $sr.RelativePath
     $manifest=New-HistoryRunManifest -RunId $run -StartedAt $o.ObservedAt -CompletedAt $o.ObservedAt -RepositoryRevision $revision -RequestedBusinessIds @($biz) -CompletedBusinessIds @($biz) -ExecutionStatus COMPLETE -RunCommitStatus COMMITTED
-    $fields=@(foreach($key in $f.Slice.StructuredFields.Keys){
+    $fields=@(foreach($key in @('BusinessName','Address','BenefitDescription')){
         $r=$f.Slice.FieldReferences[$key]
         [pscustomobject]@{Key=$key;HeaderText=$r.OriginalHeader;DecodedValue=$f.Slice.StructuredFields[$key];HeaderStart=$r.HeaderStart;HeaderLength=$r.HeaderLength;CellStart=$r.CellStart;CellLength=$r.CellLength;FieldReference=$r.FieldReference}
     })
@@ -111,7 +117,7 @@ Write-Host "PASS: C-Lite evidence shapes ($script:checks checks)"
 
 Assert-BenefitScopedEvidenceRelationship -Evidence $c.Artifact -Observation $c.Observation -RunManifest $c.Manifest -EvidenceProjection $c.EvidenceProjection -SemanticProjection $c.SemanticProjection
 $cap=@{Evidence=$c.Artifact;Document=$c.Fixture.Document;EvidenceSlice=$c.Fixture.Slice;Extraction=[pscustomobject]@{Status='COMPLETE';SourceRowNumber=2;Claims=$c.Extracted};Validation=[pscustomobject]@{Status='COMPLETE';SourceRowNumber=2;Claims=$c.Validated};Result=$c.Result}
-Assert-BenefitScopedEvidenceCapture @cap
+Assert-BenefitScopedEvidenceCapture -SourceObservation $c.Fixture.Observation -Business (New-ScopeTestBusiness) -QualifiedSource (New-TestQualified) @cap
 foreach($mutation in @(
     {param($k)$k.Evidence.Fields[0].DecodedValue='another business'},
     {param($k)$k.Extraction.Claims+=@($k.Extraction.Claims[0])},
@@ -125,9 +131,9 @@ foreach($mutation in @(
     {param($k)$k.Evidence.Source.ContentHash='b'*64},
     {param($k)$k.Document.SourceRowNumber=3}
 )){
-    $k=Copy-Case ([pscustomobject]$cap);$k.EvidenceSlice=$c.Fixture.Slice;$baselineArgs=@{};foreach($p in $k.PSObject.Properties){$baselineArgs[$p.Name]=$p.Value};Assert-BenefitScopedEvidenceCapture @baselineArgs;& $mutation $k
-    $args=@{};foreach($p in $k.PSObject.Properties){$args[$p.Name]=$p.Value}
-    Reject {Assert-BenefitScopedEvidenceCapture @args} 'claim/source tamper rejected'
+    $k=Copy-Case ([pscustomobject]$cap);$k.EvidenceSlice=$c.Fixture.Slice;$baselineArgs=@{};foreach($p in $k.PSObject.Properties){$baselineArgs[$p.Name]=$p.Value};Assert-BenefitScopedEvidenceCapture -SourceObservation $c.Fixture.Observation -Business (New-ScopeTestBusiness) -QualifiedSource (New-TestQualified) @baselineArgs;& $mutation $k
+    $callParameters=@{};foreach($p in $k.PSObject.Properties){$callParameters[$p.Name]=$p.Value}
+    Reject {Assert-BenefitScopedEvidenceCapture -SourceObservation $c.Fixture.Observation -Business (New-ScopeTestBusiness) -QualifiedSource (New-TestQualified) @callParameters} 'claim/source tamper rejected'
 }
 # A persisted artifact alone cannot prove that an excerpt was in a deleted original HTML.
 # Relationships are checked against supplied immutable E/S records, never by fabricating an HTML document.
@@ -177,8 +183,8 @@ function New-ReuseCase($Capture){
 }
 $r=New-ReuseCase $c
 function Reuse-Args($Object){$splat=@{};foreach($p in $Object.PSObject.Properties){$splat[$p.Name]=$p.Value};return $splat}
-$args=Reuse-Args $r
-Assert-BenefitScopedReuseRelationship @args
+$callParameters=Reuse-Args $r
+Assert-BenefitScopedReuseRelationship @callParameters
 foreach($mutation in @(
     {param($r)$r.Decision.ContractVersion=1}, {param($r)$r.Decision.ReuseApplied='true'},
     {param($r)$r.Decision.PayloadMatch=$false}, {param($r)$r.Decision.OwnerObservationId='other'},
@@ -196,8 +202,8 @@ foreach($mutation in @(
     {param($r)$r.Decision|Add-Member RawSource 'forbidden'},
     {param($r)$r.CaptureManifest.RepositoryRevision='f'*40}
 )){
-    $m=Copy-Case $r;& $mutation $m;$args=Reuse-Args $m
-    Reject {Assert-BenefitScopedReuseRelationship @args} 'reuse ownership/tamper rejected'
+    $m=Copy-Case $r;& $mutation $m;$callParameters=Reuse-Args $m
+    Reject {Assert-BenefitScopedReuseRelationship @callParameters} 'reuse ownership/tamper rejected'
 }
 # Type-specific limits are checked on the canonical artifacts as well as raw JSON input.
 Assert-InternalScopedString ('x'*256) 256
@@ -238,7 +244,7 @@ Reject {ConvertFrom-BenefitScopedEvidenceJson '{"Mode":1,"\u004dode":2}'} 'escap
 Reject {ConvertFrom-BenefitScopedEvidenceJson '{"a":NaN}'} 'non-JSON number rejected'
 $a=Copy-Case $c.Artifact;$a.PSObject.Properties.Remove('Mode');$a|Add-Member mode LOCATED_FIELDS
 Reject {Assert-BenefitScopedEvidence $a} 'exact property casing'
-$a=Copy-Case $c.Artifact;$a.Outcome.ClaimValidationCounts=[pscustomobject]@{Total=0;Validated=0;Invalid=0;Conflict=0;Unknown=0};$a.Claims=@()
+$a=Copy-Case $c.Artifact;$a.Outcome.ClaimValidationCounts=[pscustomobject]@{Total=0;Validated=0;Invalid=0;Conflict=0;Unknown=0};$a.Claims=@();$a.Fields=@($a.Fields|Where-Object Key -cne BenefitDescription)
 Assert-BenefitScopedEvidence $a
 Check (-not (Test-BenefitScopedEvidenceReuseEligible $a)) 'identity-only scoped evidence not initially reuse eligible'
 foreach($state in @('AMBIGUOUS','PARTIAL','UNSUPPORTED','FAILED')){
@@ -295,7 +301,7 @@ $canonical=ConvertFrom-BenefitScopedEvidenceJson (ConvertTo-HistoryCanonicalJson
 $unlinked.Artifact.Claims[0].SemanticClaimOrdinal=@(for($i=0;$i -lt $canonical.Claims.Count;$i++){if($canonical.Claims[$i].ClaimType -ceq 'BENEFIT_DESCRIPTION'){$i}})[0]
 $unlinked.Reference=Ref BENEFIT_SCOPED_EVIDENCE $unlinked.Artifact;$o.ArtifactReferences[2]=$unlinked.Reference
 $badCap=@{Evidence=$unlinked.Artifact;Document=$unlinked.Fixture.Document;EvidenceSlice=$unlinked.Fixture.Slice;Extraction=[pscustomobject]@{Status='COMPLETE';SourceRowNumber=2;Claims=$unlinked.Extracted};Validation=[pscustomobject]@{Status='COMPLETE';SourceRowNumber=2;Claims=$unlinked.Validated};Result=$unlinked.Result}
-Reject {Assert-BenefitScopedEvidenceCapture @badCap} 'unlinked semantic claim cannot be hidden behind valid subset at capture'
+Reject {Assert-BenefitScopedEvidenceCapture -SourceObservation $c.Fixture.Observation -Business (New-ScopeTestBusiness) -QualifiedSource (New-TestQualified) @badCap} 'unlinked semantic claim cannot be hidden behind valid subset at capture'
 Reject {Assert-BenefitScopedEvidenceRelationship -Evidence $unlinked.Artifact -Observation $unlinked.Observation -RunManifest $unlinked.Manifest -EvidenceProjection $unlinked.EvidenceProjection -SemanticProjection $unlinked.SemanticProjection} 'unlinked semantic claim cannot qualify persisted receipt'
 $badReuse=Reuse-Args (New-ReuseCase $unlinked)
 Reject {Assert-BenefitScopedReuseRelationship @badReuse} 'mixed semantic projection cannot reuse'
@@ -307,8 +313,8 @@ foreach($mutation in @(
     $m=Copy-Case $c.Manifest;& $mutation $m
     Reject {Assert-BenefitScopedEvidenceRelationship -Evidence $c.Artifact -Observation $c.Observation -RunManifest $m -EvidenceProjection $c.EvidenceProjection -SemanticProjection $c.SemanticProjection} 'manifest scalar types never coerced'
 }
-$m=New-ReuseCase $c;$m.Comparison.ComparisonId=@('comparison-reuse');$args=Reuse-Args $m
-Reject {Assert-BenefitScopedReuseRelationship @args} 'comparison scalar ID never coerced'
+$m=New-ReuseCase $c;$m.Comparison.ComparisonId=@('comparison-reuse');$callParameters=Reuse-Args $m
+Reject {Assert-BenefitScopedReuseRelationship @callParameters} 'comparison scalar ID never coerced'
 
 
 $m=Copy-Case (New-Case)
@@ -317,7 +323,7 @@ $sp=ConvertTo-BenefitHistorySemanticProjection -Result $m.Result -EvidenceDiagno
 $m.Artifact.Links.SemanticFingerprint=Get-HistoryFingerprint $sp -OrderInsensitivePaths @('Claims','Claims[].MaterialReasonCodes','MaterialReasonCodes')
 $m.Artifact.Links.SemanticArtifactReference=Ref BENEFIT_SEMANTIC_PROJECTION $sp @('Claims','Claims[].MaterialReasonCodes','MaterialReasonCodes')
 $badCap=@{Evidence=$m.Artifact;Document=$m.Fixture.Document;EvidenceSlice=$c.Fixture.Slice;Extraction=[pscustomobject]@{Status='COMPLETE';SourceRowNumber=2;Claims=$m.Extracted};Validation=[pscustomobject]@{Status='COMPLETE';SourceRowNumber=2;Claims=$m.Validated};Result=$m.Result}
-Reject {Assert-BenefitScopedEvidenceCapture @badCap} 'Result embedded UNKNOWN validation cannot inherit validated stage status'
+Reject {Assert-BenefitScopedEvidenceCapture -SourceObservation $c.Fixture.Observation -Business (New-ScopeTestBusiness) -QualifiedSource (New-TestQualified) @badCap} 'Result embedded UNKNOWN validation cannot inherit validated stage status'
 
 
 
@@ -343,9 +349,91 @@ $third.Decision.OwnerObservationId=$third.Current.ObservationId;$third.Decision.
 $third.Current.ArtifactReferences=@($third.Current.ArtifactReferences|Where-Object Kind -cne BENEFIT_REUSE_DECISION)+@(Ref BENEFIT_REUSE_DECISION $third.Decision)
 $third.CurrentManifest.RunId=$third.Current.RunId;$third.CurrentManifest.StartedAt=$third.Current.ObservedAt;$third.CurrentManifest.CompletedAt=$third.Current.ObservedAt
 $third.Comparison.RunId=$third.Current.RunId;$third.Comparison.PreviousObservationId=$third.Previous.ObservationId;$third.Comparison.CurrentObservationId=$third.Current.ObservationId
-$args=Reuse-Args $third
-Reject {Assert-BenefitScopedReuseRelationship @args} 'later reuse requires owned previous v2 proof'
-$args.PreviousReuseDecision=$r.Decision
-Assert-BenefitScopedReuseRelationship @args
+$callParameters=Reuse-Args $third
+Reject {Assert-BenefitScopedReuseRelationship @callParameters} 'later reuse requires owned previous v2 proof'
+$callParameters.PreviousReuseDecision=$r.Decision
+Assert-BenefitScopedReuseRelationship @callParameters
 Check ($third.Evidence.Capture.RunId -ceq $c.Observation.RunId) 'later reuse preserves original capture ownership'
 Write-Host "PASS: final C-Lite contract assertions=$script:checks"
+
+# Approved correction: complete positives cannot discard physical evidence.
+$d=New-Case;$d.Artifact.Mode='OUTCOME_ONLY';$d.Artifact.Scope=$null;$d.Artifact.Fields=@();$d.Artifact.Claims=@()
+$d.Observation.ArtifactReferences[2]=Ref BENEFIT_SCOPED_EVIDENCE $d.Artifact
+Reject {Assert-BenefitScopedEvidence $d.Artifact} 'complete-positive downgrade rejected at shape'
+Reject {Assert-BenefitScopedEvidenceCapture -SourceObservation $c.Fixture.Observation -Business (New-ScopeTestBusiness) -QualifiedSource (New-TestQualified) -Evidence $d.Artifact -Document $d.Fixture.Document -EvidenceSlice $d.Fixture.Slice -Extraction ([pscustomobject]@{Status='COMPLETE';SourceRowNumber=2;Claims=$d.Extracted}) -Validation ([pscustomobject]@{Status='COMPLETE';SourceRowNumber=2;Claims=$d.Validated}) -Result $d.Result} 'complete-positive downgrade rejected at capture'
+Reject {Assert-BenefitScopedEvidenceRelationship -Evidence $d.Artifact -Observation $d.Observation -RunManifest $d.Manifest -EvidenceProjection $d.EvidenceProjection -SemanticProjection $d.SemanticProjection} 'rehashed downgrade rejected at relationship'
+
+# Minimal retained fields are verified against a re-derived full-source locator result.
+function Capture-Args($case,$phone='',$business=(New-ScopeTestBusiness)){
+    @{Evidence=$case.Artifact;Document=$case.Fixture.Document;EvidenceSlice=$case.Fixture.Slice;Extraction=[pscustomobject]@{Status='COMPLETE';SourceRowNumber=2;Claims=$case.Extracted};Validation=[pscustomobject]@{Status='COMPLETE';SourceRowNumber=2;Claims=$case.Validated};Result=$case.Result;SourceObservation=$case.Fixture.Observation;Business=$business;QualifiedSource=(New-TestQualified);CanonicalPhone=$phone}
+}
+$m=New-Case;$callParameters=Capture-Args $m
+Assert-BenefitScopedEvidenceCapture @callParameters
+Check ($m.Artifact.Fields.Key -cnotcontains 'Phone') 'unused source Phone omitted from valid capture'
+foreach($key in @('BusinessName','Address','BenefitDescription')){
+ $a=Copy-Case $m.Artifact;$a.Fields=@($a.Fields|Where-Object Key -cne $key)
+ Reject {Assert-BenefitScopedEvidence $a} "required retained field $key"
+}
+$extra=New-ScopeContractFixture
+$phoneRef=$extra.Slice.FieldReferences.Phone
+$phoneField=[pscustomobject]@{Key='Phone';HeaderText=$phoneRef.OriginalHeader;DecodedValue=$extra.Slice.StructuredFields.Phone;HeaderStart=$phoneRef.HeaderStart;HeaderLength=$phoneRef.HeaderLength;CellStart=$phoneRef.CellStart;CellLength=$phoneRef.CellLength;FieldReference=$phoneRef.FieldReference}
+$m.Artifact.Fields+=@($phoneField)
+Reject {Assert-BenefitScopedEvidence $m.Artifact} 'arbitrary extra Phone without identity or claim forbidden'
+$m.Artifact.Outcome.IdentityEvidenceCodes+=@('PHONE_MATCH')
+$m.Fixture.Slice=(Find-BenefitBusinessEvidence -Observation $m.Fixture.Observation -Business (New-ScopeTestBusiness) -CanonicalPhone '02-0000-0012').Slices[0]
+$callParameters=Capture-Args $m '02-0000-0012'
+Assert-BenefitScopedEvidenceCapture @callParameters
+Check $true 'actual PHONE_MATCH retains Phone and captures'
+$a=Copy-Case $m.Artifact;$a.Fields=@($a.Fields|Where-Object Key -cne Phone)
+Reject {Assert-BenefitScopedEvidence $a} 'PHONE_MATCH requires Phone'
+$callParameters.CanonicalPhone='02-0000-9999'
+Reject {Assert-BenefitScopedEvidenceCapture @callParameters} 'omitted fields cannot hide full-source phone conflict'
+$callParameters=Capture-Args $m ''
+Reject {Assert-BenefitScopedEvidenceCapture @callParameters} 'forged PHONE_MATCH not established by trusted canonical input'
+$m=New-Case;$m.Artifact.Outcome.IdentityEvidenceCodes=@('FULL_NAME_MATCH');$m.Artifact.Fields=@($m.Artifact.Fields|Where-Object Key -cne Address)
+$callParameters=Capture-Args $m
+Reject {Assert-BenefitScopedEvidenceCapture @callParameters} 'omitted identity code rejected against trusted locator'
+$m=New-Case;$m.Artifact.Outcome.IdentityEvidenceCodes+=@('BRANCH_MATCH')
+Reject {Assert-BenefitScopedEvidence $m.Artifact} 'BRANCH_MATCH requires Branch'
+Write-Host "PASS: approved correction assertions=$script:checks"
+
+# Zero-claim complete identity evidence still needs its physical identity fields, never reuse.
+$z=New-Case;$z.Artifact.Claims=@();$z.Artifact.Fields=@($z.Artifact.Fields|Where-Object Key -cne BenefitDescription)
+$z.Artifact.Outcome.ClaimValidationCounts=[pscustomobject]@{Total=0;Validated=0;Invalid=0;Conflict=0;Unknown=0};$z.Result.ClaimResults=@()
+$diag=Get-InternalScopedPresenceDiagnostic $z.Artifact
+$sp=ConvertTo-BenefitHistorySemanticProjection -Result $z.Result -EvidenceDiagnostics @($diag)
+$z.Artifact.Links.SemanticFingerprint=Get-HistoryFingerprint $sp -OrderInsensitivePaths @('Claims','Claims[].MaterialReasonCodes','MaterialReasonCodes')
+$z.Artifact.Links.SemanticArtifactReference=Ref BENEFIT_SEMANTIC_PROJECTION $sp @('Claims','Claims[].MaterialReasonCodes','MaterialReasonCodes')
+$callParameters=Capture-Args $z;$callParameters.Extraction.Claims=@();$callParameters.Validation.Claims=@()
+Assert-BenefitScopedEvidenceCapture @callParameters
+Check (-not (Test-BenefitScopedEvidenceReuseEligible $z.Artifact)) 'complete zero-claim identity capture not reuse eligible'
+$z.Artifact.Mode='OUTCOME_ONLY';$z.Artifact.Scope=$null;$z.Artifact.Fields=@()
+Reject {Assert-BenefitScopedEvidence $z.Artifact} 'zero-claim complete positive cannot downgrade'
+# Actual branch identity uses the existing parser/locator/binding, with no new fixture file.
+. (Join-Path $PSScriptRoot 'lib/benefit-evidence/convert-html-source-observation.ps1')
+$b=New-Case;$business=New-ScopeTestBusiness;$business.BranchName='테스트점';$b.Result.BusinessIdentity=Copy-Case $business
+$html=(Get-ScopeTestHtml).Replace('<th>할인</th>','<th>할인</th><th>지점</th>').Replace('<td>10% 할인</td>','<td>10% 할인</td><td>테스트점</td>').Replace('<td>30% 할인</td>','<td>30% 할인</td><td>다른점</td>')
+$doc=New-ScopeTestDocument -Html $html;$obs=ConvertTo-BenefitHtmlObservation -Document $doc
+$slice=(Find-BenefitBusinessEvidence -Observation $obs -Business $business).Slices[0]
+$b.Fixture.Document=$doc;$b.Fixture.Observation=$obs;$b.Fixture.Slice=$slice
+$b.Artifact.Source.ContentHash=$obs.Snapshot.ContentHash;$b.Artifact.Source.SnapshotId=$obs.SnapshotId;$b.Artifact.Source.TextLengthUtf16=$html.Length
+$b.Artifact.Outcome.IdentityEvidenceCodes=@($slice.IdentityEvidence)
+$b.Artifact.Scope=[pscustomobject]@{Type='TABLE_ROW';Reference=$slice.EvidenceReference;TableStart=$slice.TableStart;TableLength=$slice.TableLength;RowStart=$slice.RawStart;RowLength=$slice.RawLength}
+$b.Artifact.Fields=@(foreach($key in @('BusinessName','Address','Branch','BenefitDescription')){$ref=$slice.FieldReferences[$key];[pscustomobject]@{Key=$key;HeaderText=$ref.OriginalHeader;DecodedValue=$slice.StructuredFields[$key];HeaderStart=$ref.HeaderStart;HeaderLength=$ref.HeaderLength;CellStart=$ref.CellStart;CellLength=$ref.CellLength;FieldReference=$ref.FieldReference}})
+$callParameters=Capture-Args $b '' $business
+$candidate=New-BenefitSourceCandidate -SourceRowNumber 2 -Url $doc.Url -SourceKind PUBLIC_OFFICIAL
+$callParameters.QualifiedSource=New-QualifiedBenefitSource -Candidate $candidate -Document $doc -OfficialityStatus VERIFIED_OFFICIAL
+Assert-BenefitScopedEvidenceCapture @callParameters
+Check ($slice.IdentityEvidence -ccontains 'BRANCH_MATCH') 'actual BRANCH_MATCH capture includes required Branch'
+$business.BranchName='잘못된점';$b.Result.BusinessIdentity=Copy-Case $business
+try{Assert-BenefitScopedEvidenceCapture @callParameters;throw 'EXPECTED_BRANCH_CONFLICT'}catch{Check ($_.Exception.Message -ceq 'C_LITE_TRUSTED_LOCATION') 'full source branch conflict reaches existing locator gate'}
+Write-Host "PASS: final corrected C-Lite assertions=$script:checks"
+
+$m=New-Case;$callParameters=Capture-Args $m
+$callParameters.SourceObservation.SourceRowNumber=3;$callParameters.Business=New-ScopeTestBusiness -RowNumber 3
+$callParameters.QualifiedSource.SourceRowNumber=3;$callParameters.QualifiedSource.Candidate.SourceRowNumber=3;$callParameters.QualifiedSource.Document.SourceRowNumber=3
+Reject {Assert-BenefitScopedEvidenceCapture @callParameters} 'trusted locator inputs cannot switch physical canonical row'
+$m=New-Case;$callParameters=Capture-Args $m;$callParameters.Result.BusinessIdentity=New-ScopeTestBusiness -Name '다른 합성 업소' -Building 99
+Reject {Assert-BenefitScopedEvidenceCapture @callParameters} 'Result identity must equal the actual locator business'
+
+Write-Host "PASS: complete corrected contract suite assertions=$script:checks"

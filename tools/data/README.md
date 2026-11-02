@@ -1199,6 +1199,113 @@ strict one-shot outcomes and current-path performance explicitly.
 LiveHTTP=NOT_AUTHORIZED; ProductionAction=NONE; P4-3B=BLOCKED;
 OCR dependency=NOT_APPROVED; Phase4=NOT_COMPLETE.
 
+## C-Lite PR 2B — inactive HTML capture candidate builder (Issue #141)
+
+`lib/history/benefit-scoped-html-capture-builder.ps1` defines
+`New-BenefitScopedHtmlCaptureCandidate`. No production runner imports it. It
+consumes existing pipeline results; it does not open a Store, fetch, parse,
+extract, evaluate, publish History, activate reuse or suppress RAW capture.
+
+Parameters: `RunContext`, `SourceRecord`, `Benefit`, `BusinessId`,
+`BusinessIdentity`, `CanonicalPhone` (default empty string), `Result`,
+`OperationalStatus`, `RunId`, `ObservedAt`, `RepositoryRevision`. No Store,
+manifest, callback, network invoker, output directory or trust-bypass parameter
+is accepted. Contracts are checked inside the output-safe boundary.
+
+The transient wrapper has exactly `Status`, `ReasonCode`, `Candidate`:
+
+| Status | ReasonCode | Candidate |
+| --- | --- | --- |
+| READY | C_LITE_CANDIDATE_READY | Observation and Artifacts |
+| NOT_APPLICABLE | C_LITE_NO_CAPTURED_HTML | null |
+| REJECTED | C_LITE_CANDIDATE_REJECTED | null |
+
+The generic rejection code deliberately excludes exception text/private stage
+details. Each of exactly three Artifacts has `Reference` (the existing
+content-addressed reference) and `Text` (canonical JSON). Kinds are
+BENEFIT_EVIDENCE_PROJECTION, BENEFIT_SEMANTIC_PROJECTION and
+BENEFIT_SCOPED_EVIDENCE. Document, Snapshot, full Result, index, raw row and
+unrelated businesses are not returned. Publication happens once, after all
+validation; redirectable helper streams are captured and unexpected output
+rejects the entire candidate.
+
+Existing snapshot/index trust predicates, cached template status/rows, full-source
+locator and binding establish ownership before minimization. COMPLETE and
+nonempty PARTIAL require the existing exact trusted index.
+For COMPLETE input, both the original and qualified Document must also retain
+the exact trusted Snapshot/index/text relationship before any binder/slice
+validation. Missing/copied Document trust is rejected before strict fallback.
+FAILED/UNSUPPORTED may use the existing constructor's strict snapshot copy. Index-less zero-unit
+PARTIAL is allowed only on the tested strict path with no extra tokenization;
+it never becomes semantic absence. Parser exceptions use only an already present,
+trusted cached Snapshot's real hash in the new C-Lite projection. The lazy
+Snapshot getter is never called; original SourceRecord/Legacy diagnostics and
+caches are unchanged.
+
+Missing-observation receipts support failures before a template is cached. A
+post-template construction failure is conservatively rejected: existing cache
+state cannot distinguish it from a caller removing a successful observation.
+No new failure-trust flag is invented to accept that ambiguous state.
+
+Complete positive inputs, including zero-claim identity-only results, produce
+LOCATED_FIELDS. Mixed/incomplete validation, actual NOT_FOUND/AMBIGUOUS and safe
+adapter/parser failures produce OUTCOME_ONLY. Every semantic claim in a receipt
+must still link to the original located source field, extraction and validation;
+an outcome receipt cannot smuggle unrelated claim text. Failed fetches/non-HTML
+are NOT_APPLICABLE. Contradictory, untrusted, oversized or tampered inputs reject.
+NOT_FOUND never means ENDED. Required fields are the exact existing minimum union.
+
+The builder reuses I/E/S/X projections, canonical JSON, fingerprints, operational
+assessment and the observation constructor. Pre-Prepare checks use existing
+capture/projection helpers plus staged ownership/hash/presence/ID checks. No fake
+COMMITTED manifest is made; authentic persisted relationships remain the future
+integration's responsibility. Existing strict hashing and bounded locator/claim
+validation work remain; zero additional hashing is not claimed. Existing locator
+copies of bounded row/field data remain; full source object graphs are not copied.
+
+### Offline acceptance traceability
+
+Run `pwsh -NoProfile -File tools/data/test-benefit-scoped-html-capture-builder.ps1`
+or invoke the script using `&` as in CI. Fixtures are synthetic, not current
+official benefit truth. The following IDs preserve the owner's original 27
+acceptance conditions; AC27 is verified by the separately executed existing suites.
+
+| ID | Original acceptance condition | Coverage |
+| --- | --- | --- |
+| 01 | Valid complete HTML / LOCATED / STRONG / validated claims | real scoped pipeline positive, exact fields |
+| 02 | Zero-claim identity-only positive | LOCATED_FIELDS, reuse false |
+| 03 | Partial validation | receipt controls |
+| 04 | Mixed invalid/conflicting claims | invalid/conflict receipts and receipt-link attacks |
+| 05 | FAILED and UNSUPPORTED adapter | setup-time adapter fault injection, cached-status downgrade rejection |
+| 06 | Complete NOT_FOUND with measured zero candidates | real missing business, exact zero |
+| 07 | Complete AMBIGUOUS with exact candidate references | real duplicate source identities |
+| 08 | Successful fetch followed by parser exception | setup-time parser exception, real cached hash, missing Snapshot rejection |
+| 09 | Wrong business, source URL, source row or timestamp | input mutation matrix |
+| 10 | Identity conflict and hard-conflict bypass attempts | phone conflict, cross-business receipt slice |
+| 11 | Forged index, copied index and unrelated Snapshot | missing/copied/forged/foreign index matrix |
+| 12 | Wrong field, cell offset, physical reference or header | source slice mutation matrix |
+| 13 | Missing and extra retained fields | exact positive union and staged missing/extra faults |
+| 14 | Duplicate claims and incorrect canonical semantic ordinals | duplicate extraction, staged ordinal fault |
+| 15 | Null candidate count versus measured zero | actual zero plus removed measured references |
+| 16 | Misleading or tampered candidate references | source-location reference mutations |
+| 17 | ContentHash, SnapshotId, fingerprint and artifact-reference tampering | snapshot and staged mutations |
+| 18 | Oversized artifacts | staged artifact byte limit |
+| 19 | Forbidden output properties | closed wrapper/candidate/observation and injected raw property |
+| 20 | Serializer and validator failure injection | throwing serializer/validator, emitting validator |
+| 21 | No partial candidate when any internal step fails | rejected wrapper checks in fault matrix |
+| 22 | No full HTML or unrelated-business leakage in every output channel | merged-stream checks, minimized public JSON, unrelated receipt claim rejection |
+| 23 | Additional HTTP calls = 0 | source-document getter forbidden after fixture setup |
+| 24 | Additional tokenizer/parser/index-building calls = 0 for supported trusted paths | COMPLETE/PARTIAL/zero-unit PARTIAL instrumentation |
+| 25 | No unnecessary copying of large source object graphs | source graph copy guards, reference identity and input/cache before/after checks |
+| 26 | History package oracle parity | temporary test-only Store: four fingerprints, ID, E/S canonical bytes/hash/path, assessment, repeatability |
+| 27 | Legacy and existing incremental reuse regression | test-benefit-scoped-evidence, test-benefit-history-adapter, test-benefit-incremental-reuse plus full suite |
+
+There is no activation authorization in this implementation. LiveHTTP remains
+NOT_AUTHORIZED; ProductionAction NONE; P4-3B BLOCKED; OCR dependency NOT_APPROVED;
+Phase4 NOT_COMPLETE; RAW suppression NOT_AUTHORIZED. Local and CI execution
+results belong to the PR's exact-head verification report, not an assumed fixed
+test count or historical checkpoint.
+
 OUTCOME_ONLY capture trust (PR #138 follow-up): receipt capture performs the same
 Business/Result identity, canonical row, qualification/document and available
 SourceObservation ownership checks before returning. For every complete supported adapter, the existing full-source locator must run

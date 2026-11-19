@@ -9,14 +9,19 @@ import javax.xml.parsers.SAXParserFactory
 import org.xml.sax.Attributes
 import org.xml.sax.InputSource
 import org.xml.sax.SAXException
-import org.xml.sax.helpers.DefaultHandler
+import org.xml.sax.ext.DefaultHandler2
 
 class BenefitXmlParser {
     fun parse(inputStream: InputStream): BenefitPage {
         val handler = BenefitXmlHandler()
 
         try {
-            createParserFactory().newSAXParser().parse(inputStream, handler)
+            val reader = createParserFactory().newSAXParser().xmlReader
+            reader.setProperty(LEXICAL_HANDLER, handler)
+            reader.contentHandler = handler
+            reader.errorHandler = handler
+            reader.entityResolver = handler
+            reader.parse(InputSource(inputStream))
         } catch (exception: ParserConfigurationException) {
             throw BenefitParsingException("XML parser 보안 설정을 적용하지 못했습니다.", exception)
         } catch (exception: SAXException) {
@@ -53,12 +58,11 @@ class BenefitXmlParser {
         SAXParserFactory.newInstance().apply {
             isNamespaceAware = false
 
-            setFeature(DISALLOW_DOCTYPE, true)
             setFeature(EXTERNAL_GENERAL_ENTITIES, false)
             setFeature(EXTERNAL_PARAMETER_ENTITIES, false)
         }
 
-    private class BenefitXmlHandler : DefaultHandler() {
+    private class BenefitXmlHandler : DefaultHandler2() {
         val benefits = mutableListOf<MmaBenefit>()
         var resultCode: String? = null
         var resultMessage: String? = null
@@ -87,9 +91,20 @@ class BenefitXmlParser {
             text.append(characters, start, length)
         }
 
+        override fun startDTD(name: String?, publicId: String?, systemId: String?) {
+            throw SAXException("DOCTYPE 선언은 허용되지 않습니다.")
+        }
+
         override fun resolveEntity(publicId: String?, systemId: String?): InputSource {
             throw SAXException("외부 XML 엔터티는 허용되지 않습니다.")
         }
+
+        override fun resolveEntity(
+            name: String?,
+            publicId: String?,
+            baseURI: String?,
+            systemId: String?,
+        ): InputSource = resolveEntity(publicId, systemId)
 
         override fun endElement(uri: String?, localName: String?, qName: String?) {
             val tag = tagName(localName, qName)
@@ -142,7 +157,7 @@ class BenefitXmlParser {
 
     private companion object {
         const val SUCCESS_RESULT_CODE = "00"
-        const val DISALLOW_DOCTYPE = "http://apache.org/xml/features/disallow-doctype-decl"
+        const val LEXICAL_HANDLER = "http://xml.org/sax/properties/lexical-handler"
         const val EXTERNAL_GENERAL_ENTITIES =
             "http://xml.org/sax/features/external-general-entities"
         const val EXTERNAL_PARAMETER_ENTITIES =

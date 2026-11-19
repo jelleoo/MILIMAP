@@ -1589,3 +1589,31 @@ pwsh -NoProfile -File .\tools\data\export-phase5-review-queue.ps1 `
   -CanonicalCsvPath '.\data\canonical\capital-area-military-benefits.csv' `
   -OutputDirectory 'C:\milimap-ops\review-queue'
 ```
+
+## Approval Ledger Validator & Release Seed Manifest Builder (PR 2, Issue #157)
+
+Following #151 Design v0.2 Stages 2–3, PR 2 adds fail-closed approval ledger
+verification and cross-platform release seed manifest generation while keeping
+`capital-area-military-benefits.csv`, `benefits.seed.json` (`249` rows),
+`manual_benefits_seed.json`, and Room schema `v4` unchanged:
+
+- **`lib/release/approval-release-contracts.ps1`:** Defines
+  `SHA-256-LF-UTF8` (strip optional UTF-8 BOM, normalize `\r\n`/`\r` to `\n`,
+  hash UTF-8 bytes without BOM), strict calendar date / offset ISO-8601 /
+  HTTP(S) URL list / human approver validators, `BenefitReleaseApprovalLedger`
+  v1 assertions, and `BenefitReleaseSeedManifest` v1 assertions.
+- **`validate-benefit-release-approvals.ps1` (`Test-BenefitReleaseApprovalLedger`):**
+  Verifies each `BenefitReleaseApprovalRecord` read-only against committed
+  `Invoke-Phase3ReviewAudit` history, canonical CSV rows, and strict
+  `CoordinateReviewCsv` (`ProductionAction=NONE`). Enforces unique `businessId`,
+  `COMPLETE` + `Comparable` on `APPROVE_ACTIVE`, mandatory rationale on
+  non-`GREEN` overrides and `APPROVE_ENDED` (with `SUPPRESS_PIN`), and dual
+  canonical + `'확인 후보'` gates on `KEEP_PIN`.
+- **`build-release-benefit-seed-manifest.ps1` (`New-ReleaseBenefitSeedManifest`):**
+  Generates `apps/android/app/src/main/assets/benefits.seed.manifest.json`
+  (`seedVersion: 7`, `totalCount: 249`, `exactPinCount: 111`,
+  `unconfirmedCoordinateCount: 138`, `manualSeedCount: 0`, plus
+  `canonicalCsvSha256`, `seedSha256`, `manualSeedSha256`).
+- **`test-release-artifact-pipeline.ps1`:** Preserves all 2026-09 parity
+  checks and validates the committed `benefits.seed.manifest.json` counts and
+  normalized `SHA-256-LF-UTF8` digests.

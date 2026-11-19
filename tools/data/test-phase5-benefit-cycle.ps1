@@ -1,4 +1,4 @@
-param([ValidateSet('Base','Recovery','Safety','Parity','All')][string]$Group='All')
+﻿param([ValidateSet('Base','Recovery','Safety','Parity','All')][string]$Group='All')
 Set-StrictMode -Version Latest
 $ErrorActionPreference='Stop'
 $runner=Join-Path $PSScriptRoot 'invoke-phase5-benefit-cycle.ps1'
@@ -116,6 +116,72 @@ try{
         Equal $requests.Count $before 'Output recovery does not rerun work'
         Check ($null -eq $recovered.Metrics -and $null -ne $recovered.Review) 'Recovered Review known but transient metrics unknown'
         Equal @((Get-ChildItem -LiteralPath $args50.OutputDirectory -Filter 'run-output-failure.json' -File)).Count 1 'One stable recovered output'
+
+        # PR 3A: C-Lite capture and reuse committed recovery compatibility.
+        . (Join-Path $PSScriptRoot 'lib/history/benefit-scoped-html-capture-builder.ps1')
+        $cliteStore=New-HistoryStoreLayout -Root (Join-Path $root 'clite-p50-history')
+        $cliteOut=Join-Path $root 'clite-p50-output'
+        $cliteRow=New-ScopeTestRow
+        $cliteRow | Add-Member NoteProperty businessId $id
+        $cliteObsAt='2026-11-19T12:34:56.000+09:00'
+        $cliteRev=$args50.RepositoryRevision
+        $cliteBiz=ConvertTo-NormalizedBusiness -Row $cliteRow -SourceRowNumber 2
+        $cliteBen=ConvertTo-Phase2CanonicalBenefitRecord -Row $cliteRow -SourceRowNumber 2
+        $cliteCand=Get-ExistingBenefitSourceCandidate -Benefit $cliteBen
+        $cliteCand.ObservedAt=$cliteObsAt
+        $cliteCtx=New-BenefitSourceRunContext
+        $cliteRec=Invoke-ScopedPhase2BenefitSourceCandidate -Candidate $cliteCand -Business $cliteBiz -CanonicalPhone $cliteRow.업소전화번호 -RunContext $cliteCtx -RequestInvoker {param($Uri)[pscustomobject]@{StatusCode=200;ContentType='text/html';Text=$html;Bytes=$null}}.GetNewClosure()
+        $cliteEval=Get-Phase2BenefitEvaluation -Benefit $cliteBen -SourceRecords @($cliteRec) -DiscoveryStatus COMPLETE
+        $cliteReasons=[Collections.Generic.List[string]]::new()
+        Add-Phase2UniqueReasonCodes -Target $cliteReasons -ReasonCodes $cliteEval.Evaluation.ReasonCodes
+        Add-Phase2UniqueReasonCodes -Target $cliteReasons -ReasonCodes $cliteRec.ReasonCodes
+        $cliteRes=New-BenefitVerificationResult -SourceRowNumber 2 -BusinessIdentity $cliteBiz -BenefitState $cliteEval.Evaluation.BenefitState -ReviewClass $cliteEval.Evaluation.ReviewClass -ReasonCodes @($cliteReasons) -ClaimResults $cliteEval.ClaimResults -Evidence $cliteEval.Evaluation.Evidence -Warnings $cliteEval.Evaluation.Warnings -ProductionAction NONE
+        $cliteCapPkg=New-BenefitScopedHtmlCaptureCandidate -RunContext $cliteCtx -SourceRecord $cliteRec -Benefit $cliteBen -BusinessId $id -BusinessIdentity $cliteBiz -CanonicalPhone $cliteRow.업소전화번호 -Result $cliteRes -OperationalStatus $cliteEval.OperationalStatus -RunId 'run-clite-cap' -ObservedAt $cliteObsAt -RepositoryRevision $cliteRev
+        Check ($cliteCapPkg.Status -ceq 'READY') 'P5-0 C-Lite capture fixture READY'
+        $cliteCapArtifacts=@(foreach($a in $cliteCapPkg.Candidate.Artifacts){[pscustomobject]@{ContentHash=$a.Reference.ContentHash;Extension='json';Kind=$a.Reference.Kind;Text=$a.Text}})
+        $cliteCapManifest=New-HistoryRunManifest -RunId 'run-clite-cap' -StartedAt $cliteObsAt -CompletedAt '' -RepositoryRevision $cliteRev -RequestedBusinessIds @($id) -CompletedBusinessIds @($id) -FailedBusinessIds @() -ExecutionStatus COMPLETE -RunCommitStatus PREPARED
+        $cliteCapPrep=Prepare-HistoryRun -Store $cliteStore -RunManifest $cliteCapManifest -Artifacts $cliteCapArtifacts -Observations @($cliteCapPkg.Candidate.Observation) -Comparisons @()
+        Equal (Commit-HistoryRun -Store $cliteStore -PreparedRun $cliteCapPrep -ExpectedBaselines @{($id+'|BENEFIT')=''}).Code COMMITTED 'P5-0 C-Lite capture fixture commits'
+
+        $cliteReuseObsAt='2026-11-19T13:34:56.000+09:00'
+        $cliteReuseCtx=New-BenefitSourceRunContext
+        $cliteReuseCand=Get-ExistingBenefitSourceCandidate -Benefit $cliteBen
+        $cliteReuseCand.ObservedAt=$cliteReuseObsAt
+        $cliteReuseDoc=Get-BenefitRunSourceDocument -Context $cliteReuseCtx -Candidate $cliteReuseCand -RequestInvoker {param($Uri)[pscustomobject]@{StatusCode=200;ContentType='text/html';Text=$html;Bytes=$null}}.GetNewClosure()
+        [void](Get-BenefitRunSourceSnapshot -Context $cliteReuseCtx -Document $cliteReuseDoc)
+        $cliteReuseRes=New-BenefitScopedHtmlReusePackage -Store $cliteStore -PreviousObservationId $cliteCapPkg.Candidate.Observation.ObservationId -RunContext $cliteReuseCtx -Candidate $cliteReuseCand -Document $cliteReuseDoc -Benefit $cliteBen -BusinessId $id -BusinessIdentity $cliteBiz -CanonicalPhone $cliteRow.업소전화번호 -RunId 'run-clite-reuse' -ObservedAt $cliteReuseObsAt -RepositoryRevision $cliteRev -RepositoryClean $true
+        Check ($cliteReuseRes.Status -ceq 'READY') 'P5-0 C-Lite reuse fixture READY'
+        $cliteReuseManifest=New-HistoryRunManifest -RunId 'run-clite-reuse' -StartedAt $cliteReuseObsAt -CompletedAt '' -RepositoryRevision $cliteRev -RequestedBusinessIds @($id) -CompletedBusinessIds @($id) -FailedBusinessIds @() -ExecutionStatus COMPLETE -RunCommitStatus PREPARED
+        $cliteReusePrep=Prepare-HistoryRun -Store $cliteStore -RunManifest $cliteReuseManifest -Artifacts $cliteReuseRes.Package.PreparedArtifacts -Observations @($cliteReuseRes.Package.Observation) -Comparisons @($cliteReuseRes.Package.Comparison)
+        Equal (Commit-HistoryRun -Store $cliteStore -PreparedRun $cliteReusePrep -ExpectedBaselines @{($id+'|BENEFIT')=$cliteCapPkg.Candidate.Observation.ObservationId}).Code COMMITTED 'P5-0 C-Lite reuse fixture commits'
+
+        $cliteBefore=$requests.Count
+        $cliteArgs=@{Store=$cliteStore;Rows=@($cliteRow);BusinessId=$id;SourceRowNumberOffset=2;RepositoryRevision=$cliteRev;OutputDirectory=$cliteOut;RequestInvoker=$http;RepositoryStateProvider={ [pscustomobject]@{IsClean=$true} }}
+        $recCap=Invoke-Phase5BenefitCycle @cliteArgs -RunId 'run-clite-cap' -ObservedAt $cliteObsAt
+        Check ($recCap.Recovered -and $recCap.CommitCode -ceq 'COMMITTED' -and $recCap.ObservationId -ceq $cliteCapPkg.Candidate.Observation.ObservationId -and $null -eq $recCap.Metrics) 'P5-0 recovers committed C-Lite capture read-only'
+        Equal $requests.Count $cliteBefore 'P5-0 C-Lite capture recovery fetch0'
+        $recReuse=Invoke-Phase5BenefitCycle @cliteArgs -RunId 'run-clite-reuse' -ObservedAt $cliteReuseObsAt
+        Check ($recReuse.Recovered -and $recReuse.CommitCode -ceq 'COMMITTED' -and $recReuse.ObservationId -ceq $cliteReuseRes.Package.Observation.ObservationId -and $recReuse.Comparison.ComparisonId -ceq $cliteReuseRes.Package.Comparison.ComparisonId -and $null -eq $recReuse.Metrics) 'P5-0 recovers committed C-Lite reuse read-only'
+        Equal $requests.Count $cliteBefore 'P5-0 C-Lite reuse recovery fetch0'
+
+        $capObsPath=Get-HistoryObservationPath -Store $cliteStore -ObservationId $cliteCapPkg.Candidate.Observation.ObservationId
+        $origCapObs=[IO.File]::ReadAllBytes($capObsPath)
+        try{
+            $tampered=[Text.Encoding]::UTF8.GetString($origCapObs) | ConvertFrom-Json
+            $tampered.ObservedAt='2026-11-19T03:34:56Z'
+            [IO.File]::WriteAllText($capObsPath,(ConvertTo-HistoryCanonicalJson $tampered),[Text.UTF8Encoding]::new($false))
+            $badLex=Invoke-Phase5BenefitCycle @cliteArgs -RunId 'run-clite-cap' -ObservedAt $cliteObsAt
+            Check ($badLex.Status -ceq 'BLOCKED' -and $null -eq $badLex.Review) 'P5-0 rejects C-Lite lexical timestamp mismatch'
+        }finally{[IO.File]::WriteAllBytes($capObsPath,$origCapObs)}
+        $scopedRef=@($cliteCapPkg.Candidate.Observation.ArtifactReferences | Where-Object Kind -CEQ 'BENEFIT_SCOPED_EVIDENCE')[0]
+        $scopedPath=Join-Path $cliteStore.Root $scopedRef.RelativePath
+        $origScoped=[IO.File]::ReadAllBytes($scopedPath)
+        try{
+            [IO.File]::WriteAllText($scopedPath,'{"corrupt":true}',[Text.UTF8Encoding]::new($false))
+            $badScoped=Invoke-Phase5BenefitCycle @cliteArgs -RunId 'run-clite-reuse' -ObservedAt $cliteReuseObsAt
+            Check ($badScoped.Status -ceq 'BLOCKED' -and $null -eq $badScoped.Review) 'P5-0 rejects corrupted C-Lite scoped artifact on reuse recovery'
+        }finally{[IO.File]::WriteAllBytes($scopedPath,$origScoped)}
+
         Write-Host 'P5-0 Recovery PASS: same RunId fetch0; fresh unchanged fetch1 / parse0 / reuse1; output recovery metrics=null; material route preserved'
     }
     if($Group -cin @('Safety','All')){

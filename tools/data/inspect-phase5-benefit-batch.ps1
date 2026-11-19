@@ -203,14 +203,11 @@ function Inspect-Phase5BenefitBatch {
             $watch[$observationPath]=Get-InternalPhase5InspectionStamp $observationPath
             $obs=Read-HistoryObservation -Store $Store -ObservationId $review.CurrentObservationId
             if($null -eq $obs -or $obs.RunId -cne $item.RunId -or $obs.BusinessId -cne $item.BusinessId -or $obs.Domain -cne 'BENEFIT' -or [DateTimeOffset]$obs.ObservedAt -ne [DateTimeOffset]::Parse($identityTime,[Globalization.CultureInfo]::InvariantCulture) -or ($null -ne $identityPlan -and $obs.InputFingerprint -cne $identityPlan.PlanCore.Items[$i].InputFingerprint)){throw 'P52_OBSERVATION_IDENTITY_MISMATCH'}
-            [void](Read-BenefitIncrementalEvidenceProjection -Store $Store -Observation $obs)
-            if($result.CurrentCompatibility -ceq 'MATCH' -and $null -ne $resolved){
-                $input=$resolved.Inputs[$i]
-                $projection=ConvertTo-BenefitHistoryInputProjection -BusinessId $item.BusinessId -Benefit $input.Benefit -BusinessIdentity $input.Business -CanonicalPhone $input.Phone
-                $execution=ConvertTo-BenefitHistoryExecutionProjection -RepositoryRevision $RepositoryRevision
-                if($obs.InputFingerprint -cne (Get-HistoryFingerprint $projection -SchemaVersion $script:FingerprintSchemaVersion) -or $obs.ExecutionFingerprint -cne (Get-HistoryFingerprint $execution -SchemaVersion $script:FingerprintSchemaVersion)){throw 'P52_COMMITTED_FINGERPRINT_MISMATCH'}
-                $item.FingerprintState='MATCH'
+            foreach($reference in @($obs.ArtifactReferences)){
+                $refPath=Assert-HistoryStorePathWithinRoot -Store $Store -Path (Join-Path $Store.Root ([string]$reference.RelativePath))
+                $watch[$refPath]=Get-InternalPhase5InspectionStamp $refPath
             }
+            [void](Read-BenefitIncrementalEvidenceProjection -Store $Store -Observation $obs)
             $comparison=$null
             if($review.ComparisonId){
                 $comparisonPath=Get-HistoryComparisonPath -Store $Store -ComparisonId $review.ComparisonId
@@ -227,6 +224,15 @@ function Inspect-Phase5BenefitBatch {
                 $changeException=[InvalidOperationException]::new('P52_AUDITED_REVIEW_CHANGED')
                 $changeException.Data['P52ConcurrentChange']=$true
                 throw $changeException
+            }
+            $profile=Assert-InternalPhase5CommittedObservationProfile -Store $Store -Observation $obs -Manifest $manifests[$item.RunId] -ExpectedObservedAt $identityTime -Comparison $comparison
+            if($result.CurrentCompatibility -ceq 'MATCH' -and $null -ne $resolved){
+                $input=$resolved.Inputs[$i]
+                $projection=ConvertTo-BenefitHistoryInputProjection -BusinessId $item.BusinessId -Benefit $input.Benefit -BusinessIdentity $input.Business -CanonicalPhone $input.Phone
+                $executionConfig=if($profile -ceq 'C_LITE_V1'){[pscustomobject]@{HtmlEvidenceRetentionProfile='C_LITE_V1'}}else{$null}
+                $execution=ConvertTo-BenefitHistoryExecutionProjection -RepositoryRevision $RepositoryRevision -ExecutionConfiguration $executionConfig
+                if($obs.InputFingerprint -cne (Get-HistoryFingerprint $projection -SchemaVersion $script:FingerprintSchemaVersion) -or $obs.ExecutionFingerprint -cne (Get-HistoryFingerprint $execution -SchemaVersion $script:FingerprintSchemaVersion)){throw 'P52_COMMITTED_FINGERPRINT_MISMATCH'}
+                $item.FingerprintState='MATCH'
             }
             $item.RunState='COMMITTED';$item.OperationalStatus=$obs.OperationalStatus;$item.ObservationId=$obs.ObservationId;$item.ComparisonId=$review.ComparisonId;$item.ReviewKey=$review.ReviewKey
             $item.RecoveryConsideration='CONDITIONAL'

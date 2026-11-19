@@ -1,4 +1,4 @@
-param([ValidateSet('Plan','Execution','Recovery','Safety','Network','All')][string]$Group='All')
+﻿param([ValidateSet('Plan','Execution','Recovery','Safety','Network','All')][string]$Group='All')
 Set-StrictMode -Version Latest
 $ErrorActionPreference='Stop'
 $runner=Join-Path $PSScriptRoot 'invoke-phase5-benefit-batch.ps1'
@@ -306,6 +306,77 @@ try{
         Equal $mixed.Metrics.ExternalFetchCount.ObservedCount 2 'Observed metric coverage retained'
         Equal $mixed.Metrics.ExternalFetchCount.MissingCount 1 'Recovered metric remains missing'
         Check ($null -eq $mixed.Metrics.ExternalFetchCount.Total) 'Partial metrics cannot become complete total'
+
+        # PR 3A: Phase 5 RecoverOnly batch compatibility with C-Lite capture and v2 reuse records.
+        . (Join-Path $PSScriptRoot 'lib/history/benefit-scoped-html-capture-builder.ps1')
+        $cStore=New-HistoryStoreLayout -Root (Join-Path $root 'clite-batch-history')
+        $cBatchRoot=Join-Path $root 'clite-batch-ws'
+        $cObsAt='2026-11-19T12:34:56.000+09:00'
+        $cBatchArgs=@{CanonicalCsvPath=$csv;BusinessIds=@($ids[0],$ids[2]);Store=$cStore;BatchWorkspaceRoot=$cBatchRoot;ObservedAt=$cObsAt;RepositoryRevision=$args51.RepositoryRevision}
+        $cPlan=New-Phase5BenefitBatchPlan @cBatchArgs
+        $cUrl=$rows[0].출처URL
+
+        # Business 0: C-Lite capture committed under batch RunId 0.
+        $b0Biz=ConvertTo-NormalizedBusiness -Row $rows[0] -SourceRowNumber 2
+        $b0Ben=ConvertTo-Phase2CanonicalBenefitRecord -Row $rows[0] -SourceRowNumber 2
+        $b0Cand=Get-ExistingBenefitSourceCandidate -Benefit $b0Ben; $b0Cand.ObservedAt=$cObsAt
+        $b0Ctx=New-BenefitSourceRunContext
+        $b0Rec=Invoke-ScopedPhase2BenefitSourceCandidate -Candidate $b0Cand -Business $b0Biz -CanonicalPhone $rows[0].업소전화번호 -RunContext $b0Ctx -RequestInvoker {param($Uri)[pscustomobject]@{StatusCode=200;ContentType='text/html';Text=$html;Bytes=$null}}.GetNewClosure()
+        $b0Eval=Get-Phase2BenefitEvaluation -Benefit $b0Ben -SourceRecords @($b0Rec) -DiscoveryStatus COMPLETE
+        $b0Reasons=[Collections.Generic.List[string]]::new();Add-Phase2UniqueReasonCodes -Target $b0Reasons -ReasonCodes $b0Eval.Evaluation.ReasonCodes;Add-Phase2UniqueReasonCodes -Target $b0Reasons -ReasonCodes $b0Rec.ReasonCodes
+        $b0Res=New-BenefitVerificationResult -SourceRowNumber 2 -BusinessIdentity $b0Biz -BenefitState $b0Eval.Evaluation.BenefitState -ReviewClass $b0Eval.Evaluation.ReviewClass -ReasonCodes @($b0Reasons) -ClaimResults $b0Eval.ClaimResults -Evidence $b0Eval.Evaluation.Evidence -Warnings $b0Eval.Evaluation.Warnings -ProductionAction NONE
+        $b0Pkg=New-BenefitScopedHtmlCaptureCandidate -RunContext $b0Ctx -SourceRecord $b0Rec -Benefit $b0Ben -BusinessId $ids[0] -BusinessIdentity $b0Biz -CanonicalPhone $rows[0].업소전화번호 -Result $b0Res -OperationalStatus $b0Eval.OperationalStatus -RunId $cPlan.Items[0].RunId -ObservedAt $cObsAt -RepositoryRevision $cBatchArgs.RepositoryRevision
+        $b0Arts=@(foreach($a in $b0Pkg.Candidate.Artifacts){[pscustomobject]@{ContentHash=$a.Reference.ContentHash;Extension='json';Kind=$a.Reference.Kind;Text=$a.Text}})
+        $b0Man=New-HistoryRunManifest -RunId $cPlan.Items[0].RunId -StartedAt $cObsAt -CompletedAt '' -RepositoryRevision $cBatchArgs.RepositoryRevision -RequestedBusinessIds @($ids[0]) -CompletedBusinessIds @($ids[0]) -FailedBusinessIds @() -ExecutionStatus COMPLETE -RunCommitStatus PREPARED
+        $b0Prep=Prepare-HistoryRun -Store $cStore -RunManifest $b0Man -Artifacts $b0Arts -Observations @($b0Pkg.Candidate.Observation) -Comparisons @()
+        Equal (Commit-HistoryRun -Store $cStore -PreparedRun $b0Prep -ExpectedBaselines @{($ids[0]+'|BENEFIT')=''}).Code COMMITTED 'P5-1 C-Lite capture item commits'
+
+        # Business 1 (ids[2]): prior C-Lite capture then v2 reuse committed under batch RunId 1.
+        $b1SeedObsAt='2026-11-19T11:34:56.000+09:00'
+        $b1Biz=ConvertTo-NormalizedBusiness -Row $rows[2] -SourceRowNumber 4
+        $b1Ben=ConvertTo-Phase2CanonicalBenefitRecord -Row $rows[2] -SourceRowNumber 4
+        $b1SeedCand=Get-ExistingBenefitSourceCandidate -Benefit $b1Ben; $b1SeedCand.ObservedAt=$b1SeedObsAt
+        $b1SeedCtx=New-BenefitSourceRunContext
+        $b1SeedRec=Invoke-ScopedPhase2BenefitSourceCandidate -Candidate $b1SeedCand -Business $b1Biz -CanonicalPhone $rows[2].업소전화번호 -RunContext $b1SeedCtx -RequestInvoker {param($Uri)[pscustomobject]@{StatusCode=200;ContentType='text/html';Text=$html;Bytes=$null}}.GetNewClosure()
+        $b1SeedEval=Get-Phase2BenefitEvaluation -Benefit $b1Ben -SourceRecords @($b1SeedRec) -DiscoveryStatus COMPLETE
+        $b1SeedReasons=[Collections.Generic.List[string]]::new();Add-Phase2UniqueReasonCodes -Target $b1SeedReasons -ReasonCodes $b1SeedEval.Evaluation.ReasonCodes;Add-Phase2UniqueReasonCodes -Target $b1SeedReasons -ReasonCodes $b1SeedRec.ReasonCodes
+        $b1SeedRes=New-BenefitVerificationResult -SourceRowNumber 4 -BusinessIdentity $b1Biz -BenefitState $b1SeedEval.Evaluation.BenefitState -ReviewClass $b1SeedEval.Evaluation.ReviewClass -ReasonCodes @($b1SeedReasons) -ClaimResults $b1SeedEval.ClaimResults -Evidence $b1SeedEval.Evaluation.Evidence -Warnings $b1SeedEval.Evaluation.Warnings -ProductionAction NONE
+        $b1SeedPkg=New-BenefitScopedHtmlCaptureCandidate -RunContext $b1SeedCtx -SourceRecord $b1SeedRec -Benefit $b1Ben -BusinessId $ids[2] -BusinessIdentity $b1Biz -CanonicalPhone $rows[2].업소전화번호 -Result $b1SeedRes -OperationalStatus $b1SeedEval.OperationalStatus -RunId 'run-clite-b1-seed' -ObservedAt $b1SeedObsAt -RepositoryRevision $cBatchArgs.RepositoryRevision
+        $b1SeedArts=@(foreach($a in $b1SeedPkg.Candidate.Artifacts){[pscustomobject]@{ContentHash=$a.Reference.ContentHash;Extension='json';Kind=$a.Reference.Kind;Text=$a.Text}})
+        $b1SeedMan=New-HistoryRunManifest -RunId 'run-clite-b1-seed' -StartedAt $b1SeedObsAt -CompletedAt '' -RepositoryRevision $cBatchArgs.RepositoryRevision -RequestedBusinessIds @($ids[2]) -CompletedBusinessIds @($ids[2]) -FailedBusinessIds @() -ExecutionStatus COMPLETE -RunCommitStatus PREPARED
+        $b1SeedPrep=Prepare-HistoryRun -Store $cStore -RunManifest $b1SeedMan -Artifacts $b1SeedArts -Observations @($b1SeedPkg.Candidate.Observation) -Comparisons @()
+        Equal (Commit-HistoryRun -Store $cStore -PreparedRun $b1SeedPrep -ExpectedBaselines @{($ids[2]+'|BENEFIT')=''}).Code COMMITTED 'P5-1 C-Lite prior capture commits'
+
+        $b1ReuseCtx=New-BenefitSourceRunContext
+        $b1ReuseCand=Get-ExistingBenefitSourceCandidate -Benefit $b1Ben; $b1ReuseCand.ObservedAt=$cObsAt
+        $b1ReuseDoc=Get-BenefitRunSourceDocument -Context $b1ReuseCtx -Candidate $b1ReuseCand -RequestInvoker {param($Uri)[pscustomobject]@{StatusCode=200;ContentType='text/html';Text=$html;Bytes=$null}}.GetNewClosure()
+        [void](Get-BenefitRunSourceSnapshot -Context $b1ReuseCtx -Document $b1ReuseDoc)
+        $b1ReusePkg=New-BenefitScopedHtmlReusePackage -Store $cStore -PreviousObservationId $b1SeedPkg.Candidate.Observation.ObservationId -RunContext $b1ReuseCtx -Candidate $b1ReuseCand -Document $b1ReuseDoc -Benefit $b1Ben -BusinessId $ids[2] -BusinessIdentity $b1Biz -CanonicalPhone $rows[2].업소전화번호 -RunId $cPlan.Items[1].RunId -ObservedAt $cObsAt -RepositoryRevision $cBatchArgs.RepositoryRevision -RepositoryClean $true
+        $b1ReuseMan=New-HistoryRunManifest -RunId $cPlan.Items[1].RunId -StartedAt $cObsAt -CompletedAt '' -RepositoryRevision $cBatchArgs.RepositoryRevision -RequestedBusinessIds @($ids[2]) -CompletedBusinessIds @($ids[2]) -FailedBusinessIds @() -ExecutionStatus COMPLETE -RunCommitStatus PREPARED
+        $b1ReusePrep=Prepare-HistoryRun -Store $cStore -RunManifest $b1ReuseMan -Artifacts $b1ReusePkg.Package.PreparedArtifacts -Observations @($b1ReusePkg.Package.Observation) -Comparisons @($b1ReusePkg.Package.Comparison)
+        Equal (Commit-HistoryRun -Store $cStore -PreparedRun $b1ReusePrep -ExpectedBaselines @{($ids[2]+'|BENEFIT')=$b1SeedPkg.Candidate.Observation.ObservationId}).Code COMMITTED 'P5-1 C-Lite reuse item commits'
+
+        $cBeforeInv=Inventory $cStore.Root; $cBeforeHttp=$requests.Urls.Count
+        $cRec=Invoke-Phase5BenefitBatch @cBatchArgs @invokeArgs -BatchId $cPlan.BatchId -Mode RecoverOnly
+        Equal $cRec.Status FINISHED 'P5-1 C-Lite RecoverOnly succeeds'
+        Equal $cRec.Summary.RecoveredCount 2 'P5-1 C-Lite recovers both capture and reuse items'
+        Equal $cRec.Items[0].ObservationId $b0Pkg.Candidate.Observation.ObservationId 'P5-1 C-Lite capture ObservationId preserved'
+        Equal $cRec.Items[1].ObservationId $b1ReusePkg.Package.Observation.ObservationId 'P5-1 C-Lite reuse ObservationId preserved'
+        Equal $cRec.Items[1].Comparison.ComparisonId $b1ReusePkg.Package.Comparison.ComparisonId 'P5-1 C-Lite reuse ComparisonId preserved'
+        Equal $requests.Urls.Count $cBeforeHttp 'P5-1 C-Lite RecoverOnly fetch0'
+        Equal (Inventory $cStore.Root) $cBeforeInv 'P5-1 C-Lite RecoverOnly History unchanged'
+
+        # Negative control: corrupted scoped artifact blocks batch recovery.
+        $b0ScopedRef=@($b0Pkg.Candidate.Observation.ArtifactReferences | Where-Object Kind -CEQ 'BENEFIT_SCOPED_EVIDENCE')[0]
+        $b0ScopedPath=Join-Path $cStore.Root $b0ScopedRef.RelativePath
+        $origB0Scoped=[IO.File]::ReadAllBytes($b0ScopedPath)
+        try{
+            [IO.File]::WriteAllText($b0ScopedPath,'{"tampered":true}')
+            $cBad=Invoke-Phase5BenefitBatch @cBatchArgs @invokeArgs -BatchId $cPlan.BatchId -Mode RecoverOnly
+            Equal $cBad.Status BLOCKED 'P5-1 corrupted C-Lite scoped artifact blocks recovery'
+            Equal $requests.Urls.Count $cBeforeHttp 'P5-1 corrupted C-Lite recovery fetch0'
+        }finally{[IO.File]::WriteAllBytes($b0ScopedPath,$origB0Scoped)}
+
         Write-Host 'P5-1 Recovery PASS: recovered3 HTTP0 / History0 / stable ReviewKeys; residue preserved; mixed known2 missing1 total=null'
     }
     if($Group -cin @('Safety','All')){

@@ -12,6 +12,7 @@ $dataLibRoot = Split-Path -Parent $historyRoot
 . (Join-Path $historyRoot 'commit-history-run.ps1')
 . (Join-Path $historyRoot 'benefit-history-adapter.ps1')
 . (Join-Path $dataLibRoot 'benefit-evidence/benefit-source-run-context.ps1')
+. (Join-Path $historyRoot 'benefit-scoped-html-history.ps1')
 
 function Get-BenefitIncrementalCapability {
     param(
@@ -145,7 +146,8 @@ function Get-BenefitIncrementalBaseline {
     param(
         [Parameter(Mandatory)]$Store,
         [Parameter(Mandatory)][string]$BusinessId,
-        [AllowNull()]$Entry=$null
+        [AllowNull()]$Entry=$null,
+        [ValidateSet('LEGACY','C_LITE_V1')][string]$HtmlEvidenceRetentionProfile='LEGACY'
     )
 
     Assert-HistoryBusinessId -Value $BusinessId
@@ -159,10 +161,56 @@ function Get-BenefitIncrementalBaseline {
         throw 'Indexed baseline is not a complete comparable observation'
     }
 
+    $evidenceProjection = Read-BenefitIncrementalEvidenceProjection -Store $Store -Observation $observation
+    $semanticProjection = Read-BenefitHistorySemanticProjection -Store $Store -Observation $observation
+    if ($HtmlEvidenceRetentionProfile -ceq 'LEGACY') {
+        return [pscustomobject][ordered]@{
+            Observation = $observation
+            EvidenceProjection = $evidenceProjection
+            SemanticProjection = $semanticProjection
+        }
+    }
+
+    $manifest = Read-HistoryJsonFile -Store $Store -Path (Get-HistoryRunManifestPath -Store $Store -RunId ([string]$observation.RunId)) -Kind 'run manifest'
+    if ($null -eq $manifest) { throw 'Indexed baseline run manifest is missing' }
+    Assert-HistoryRunManifest $manifest
+    $baselineProfile = Get-BenefitRetentionProfileCandidate -ExecutionFingerprint ([string]$observation.ExecutionFingerprint) -RepositoryRevision ([string]$manifest.RepositoryRevision)
+    if ($baselineProfile -ceq 'PROFILE_UNKNOWN') { throw 'Indexed baseline has unknown execution profile' }
+    $scopedEvidence = $null
+    if ($baselineProfile -ceq 'LEGACY') {
+        if (@($observation.ArtifactReferences | Where-Object { [string]$_.Kind -ceq 'BENEFIT_SCOPED_EVIDENCE' }).Count -gt 0) {
+            throw 'Indexed legacy baseline cannot contain scoped evidence'
+        }
+        foreach ($reuseRef in @($observation.ArtifactReferences | Where-Object { [string]$_.Kind -ceq 'BENEFIT_REUSE_DECISION' })) {
+            $reuseItem = Read-InternalScopedArtifactItem -Store $Store -Ref $reuseRef -MaxBytes 65536
+            if ($null -eq $reuseItem.Value -or $reuseItem.Value.PSObject.Properties.Name -cnotcontains 'ContractVersion' -or [int]$reuseItem.Value.ContractVersion -ne 1) {
+                throw 'Indexed legacy baseline has invalid reuse decision version'
+            }
+        }
+    } else {
+        $refCount = @($observation.ArtifactReferences).Count
+        $scopedArtifacts = $null
+        if ($refCount -eq 3) {
+            $verified = Read-BenefitScopedHtmlCommittedCapture -Store $Store -ObservationId ([string]$observation.ObservationId)
+            if ($verified.Status -cne 'VERIFIED' -or $null -eq $verified.Capture) { throw 'Indexed C-Lite capture baseline failed verification' }
+            $scopedArtifacts = $verified.Capture.Artifacts
+        } elseif ($refCount -eq 4) {
+            $verified = Read-BenefitScopedHtmlCommittedReuse -Store $Store -ObservationId ([string]$observation.ObservationId)
+            if ($verified.Status -cne 'VERIFIED' -or $null -eq $verified.Reuse) { throw 'Indexed C-Lite reuse baseline failed verification' }
+            $scopedArtifacts = $verified.Reuse.Artifacts
+        } else {
+            throw 'Indexed comparable C-Lite baseline has invalid artifact count'
+        }
+        $scopedText = @($scopedArtifacts | Where-Object { [string]$_.Reference.Kind -ceq 'BENEFIT_SCOPED_EVIDENCE' })[0].Text
+        $scopedEvidence = ConvertFrom-BenefitScopedEvidenceJson -Json $scopedText -MaxBytes 65536
+    }
+
     return [pscustomobject][ordered]@{
         Observation = $observation
-        EvidenceProjection = Read-BenefitIncrementalEvidenceProjection -Store $Store -Observation $observation
-        SemanticProjection = Read-BenefitHistorySemanticProjection -Store $Store -Observation $observation
+        EvidenceProjection = $evidenceProjection
+        SemanticProjection = $semanticProjection
+        RetentionProfile = $baselineProfile
+        ScopedEvidence = $scopedEvidence
     }
 }
 
@@ -234,13 +282,14 @@ function Get-BenefitIncrementalNonReusableDecision {
         [Parameter(Mandatory)]$Store,
         [Parameter(Mandatory)][string]$BusinessId,
         [Parameter(Mandatory)][string]$Capability,
-        [Parameter(Mandatory)][string]$ReasonCode
+        [Parameter(Mandatory)][string]$ReasonCode,
+        [ValidateSet('LEGACY','C_LITE_V1')][string]$HtmlEvidenceRetentionProfile='LEGACY'
     )
 
     Assert-HistoryBusinessId -Value $BusinessId
     $entry=Get-HistoryLatestEntry -Store $Store -BusinessId $BusinessId -Domain BENEFIT -ComparableOnly
     $expectedBaselineObservationId=if($null -eq $entry){''}else{[string]$entry.LatestComparableObservationId}
-    try { $baseline=Get-BenefitIncrementalBaseline -Store $Store -BusinessId $BusinessId -Entry $entry }
+    try { $baseline=Get-BenefitIncrementalBaseline -Store $Store -BusinessId $BusinessId -Entry $entry -HtmlEvidenceRetentionProfile $HtmlEvidenceRetentionProfile }
     catch { return New-BenefitIncrementalReuseDecision -ReuseApplied $false -Capability $Capability -ExpectedBaselineObservationId $expectedBaselineObservationId -ReasonCodes @('PRIOR_ARTIFACT_INVALID') }
     return New-BenefitIncrementalReuseDecision -ReuseApplied $false -Capability $Capability -Baseline $baseline -ExpectedBaselineObservationId $expectedBaselineObservationId -ReasonCodes @($ReasonCode)
 }
@@ -254,7 +303,8 @@ function Get-BenefitIncrementalReuseDecision {
         [AllowNull()]$CurrentSnapshot=$null,
         [Parameter(Mandatory)][string]$CurrentInputFingerprint,
         [Parameter(Mandatory)][string]$CurrentExecutionFingerprint,
-        [Parameter(Mandatory)][scriptblock]$RepositoryStateProvider
+        [Parameter(Mandatory)][scriptblock]$RepositoryStateProvider,
+        [ValidateSet('LEGACY','C_LITE_V1')][string]$HtmlEvidenceRetentionProfile='LEGACY'
     )
 
     Assert-HistoryBusinessId -Value $BusinessId
@@ -266,7 +316,7 @@ function Get-BenefitIncrementalReuseDecision {
     # This is the one indexed lookup for this decision; no history scan occurs.
     $baselineEntry = Get-HistoryLatestEntry -Store $Store -BusinessId $BusinessId -Domain BENEFIT -ComparableOnly
     $expectedBaselineObservationId = if ($null -eq $baselineEntry) { '' } else { [string]$baselineEntry.LatestComparableObservationId }
-    try { $baseline = Get-BenefitIncrementalBaseline -Store $Store -BusinessId $BusinessId -Entry $baselineEntry }
+    try { $baseline = Get-BenefitIncrementalBaseline -Store $Store -BusinessId $BusinessId -Entry $baselineEntry -HtmlEvidenceRetentionProfile $HtmlEvidenceRetentionProfile }
     catch { return New-BenefitIncrementalReuseDecision -ReuseApplied $false -Capability $capability -ExpectedBaselineObservationId $expectedBaselineObservationId -ReasonCodes @('PRIOR_ARTIFACT_INVALID') }
     if ($capability -cne 'POST_FETCH') {
         return New-BenefitIncrementalReuseDecision -ReuseApplied $false -Capability $capability -Baseline $baseline -ExpectedBaselineObservationId $expectedBaselineObservationId -ReasonCodes @('CAPABILITY_NONE')
@@ -301,6 +351,11 @@ function Get-BenefitIncrementalReuseDecision {
     $payloadMatch = Test-BenefitIncrementalPayloadCheckpointMatch -Previous $previousCheckpoint -Current $currentCheckpoint
     if (-not $payloadMatch) {
         return New-BenefitIncrementalReuseDecision -ReuseApplied $false -Capability $capability -Baseline $baseline -PreviousPayloadCheckpoint $previousCheckpoint -CurrentPayloadCheckpoint $currentCheckpoint -InputMatch $true -ExecutionMatch $true -PayloadMatch $false -RepositoryClean $true -ReasonCodes @('PAYLOAD_CHANGED')
+    }
+    if ($HtmlEvidenceRetentionProfile -ceq 'C_LITE_V1') {
+        if ($Document.SourceFormat -cne 'HTML' -or $null -eq $baseline.ScopedEvidence -or -not (Test-BenefitScopedEvidenceReuseEligible -Evidence $baseline.ScopedEvidence)) {
+            return New-BenefitIncrementalReuseDecision -ReuseApplied $false -Capability $capability -Baseline $baseline -PreviousPayloadCheckpoint $previousCheckpoint -CurrentPayloadCheckpoint $currentCheckpoint -InputMatch $true -ExecutionMatch $true -PayloadMatch $true -RepositoryClean $true -ReasonCodes @('SCOPED_EVIDENCE_NOT_REUSABLE')
+        }
     }
     return New-BenefitIncrementalReuseDecision -ReuseApplied $true -Capability $capability -Baseline $baseline -PreviousPayloadCheckpoint $previousCheckpoint -CurrentPayloadCheckpoint $currentCheckpoint -InputMatch $true -ExecutionMatch $true -PayloadMatch $true -RepositoryClean $true -ReasonCodes @('REUSE_ELIGIBLE')
 }
@@ -411,7 +466,8 @@ function Invoke-BenefitIncrementalPostFetch {
     param(
         [Parameter(Mandatory)]$Store,[Parameter(Mandatory)][string]$RunId,[Parameter(Mandatory)][string]$ObservedAt,[Parameter(Mandatory)][string]$RepositoryRevision,
         [Parameter(Mandatory)][string]$BusinessId,[Parameter(Mandatory)]$Benefit,[Parameter(Mandatory)]$BusinessIdentity,[string]$CanonicalPhone='',
-        [Parameter(Mandatory)]$Candidate,[Parameter(Mandatory)]$RunContext,[AllowNull()][scriptblock]$RequestInvoker=$null,[Parameter(Mandatory)][scriptblock]$RepositoryStateProvider
+        [Parameter(Mandatory)]$Candidate,[Parameter(Mandatory)]$RunContext,[AllowNull()][scriptblock]$RequestInvoker=$null,[Parameter(Mandatory)][scriptblock]$RepositoryStateProvider,
+        [ValidateSet('LEGACY','C_LITE_V1')][string]$HtmlEvidenceRetentionProfile='LEGACY'
     )
     $result=$null
     $sourceRecord=$null
@@ -427,28 +483,42 @@ function Invoke-BenefitIncrementalPostFetch {
         $isMmaEntry=Test-MmaBenefitEntryUrl -Url $Candidate.Url
     }
     if($isMmaEntry){
+        if($HtmlEvidenceRetentionProfile -ceq 'C_LITE_V1'){throw 'C_LITE_HTML_SOURCE_REQUIRED'}
         # MMA owns its LIST/DETAIL retrieval and JSONP parsing.  It is always
         # recomputed and never enters the HTML/XLSX post-fetch shortcut.
         $sourceRecord=Invoke-MmaJsonpBenefitSourceCandidate -Candidate $Candidate -Business $BusinessIdentity -CanonicalPhone $CanonicalPhone -RunContext $RunContext -RequestInvoker $RequestInvoker
-        $decision=Get-BenefitIncrementalNonReusableDecision -Store $Store -BusinessId $BusinessId -Capability NONE -ReasonCode CAPABILITY_NONE
+        $decision=Get-BenefitIncrementalNonReusableDecision -Store $Store -BusinessId $BusinessId -Capability NONE -ReasonCode CAPABILITY_NONE -HtmlEvidenceRetentionProfile $HtmlEvidenceRetentionProfile
     } else {
         $document=Get-BenefitRunSourceDocument -Context $RunContext -Candidate $Candidate -RequestInvoker $RequestInvoker
         $snapshot=$null
         if($document.FetchStatus -ceq 'COMPLETE' -and $document.SourceFormat -in @('HTML','XLSX')){
+            if($HtmlEvidenceRetentionProfile -ceq 'C_LITE_V1' -and $document.SourceFormat -cne 'HTML'){throw 'C_LITE_HTML_SOURCE_REQUIRED'}
             $snapshot=Get-BenefitRunSourceSnapshot -Context $RunContext -Document $document
-            # The run-context snapshot is the byte-validated XLSX payload.  Bind
-            # this local wrapper to its exact bytes before the generic checkpoint
-            # verifies snapshot/document identity; no bytes are copied or rehashed.
-            if($document.SourceFormat -ceq 'XLSX'){$document.Bytes=$snapshot.Bytes}
-            $rawSourcePayloadArtifact=New-BenefitIncrementalRawSourcePayloadArtifact -Store $Store -Document $document -Snapshot $snapshot
+            if($HtmlEvidenceRetentionProfile -ceq 'LEGACY'){
+                # The run-context snapshot is the byte-validated XLSX payload.  Bind
+                # this local wrapper to its exact bytes before the generic checkpoint
+                # verifies snapshot/document identity; no bytes are copied or rehashed.
+                if($document.SourceFormat -ceq 'XLSX'){$document.Bytes=$snapshot.Bytes}
+                $rawSourcePayloadArtifact=New-BenefitIncrementalRawSourcePayloadArtifact -Store $Store -Document $document -Snapshot $snapshot
+            }
+        }elseif($HtmlEvidenceRetentionProfile -ceq 'C_LITE_V1' -and $document.FetchStatus -ceq 'COMPLETE'){
+            throw 'C_LITE_HTML_SOURCE_REQUIRED'
         }
         $input=ConvertTo-BenefitHistoryInputProjection -BusinessId $BusinessId -Benefit $Benefit -BusinessIdentity $BusinessIdentity -CanonicalPhone $CanonicalPhone
-        $execution=ConvertTo-BenefitHistoryExecutionProjection -RepositoryRevision $RepositoryRevision
-        $decision=Get-BenefitIncrementalReuseDecision -Store $Store -BusinessId $BusinessId -Candidate $Candidate -Document $document -CurrentSnapshot $snapshot -CurrentInputFingerprint (Get-HistoryFingerprint -Projection $input -SchemaVersion $script:FingerprintSchemaVersion) -CurrentExecutionFingerprint (Get-HistoryFingerprint -Projection $execution -SchemaVersion $script:FingerprintSchemaVersion) -RepositoryStateProvider $RepositoryStateProvider
+        $executionConfig=if($HtmlEvidenceRetentionProfile -ceq 'C_LITE_V1'){[pscustomobject]@{HtmlEvidenceRetentionProfile='C_LITE_V1'}}else{$null}
+        $execution=ConvertTo-BenefitHistoryExecutionProjection -RepositoryRevision $RepositoryRevision -ExecutionConfiguration $executionConfig
+        $decision=Get-BenefitIncrementalReuseDecision -Store $Store -BusinessId $BusinessId -Candidate $Candidate -Document $document -CurrentSnapshot $snapshot -CurrentInputFingerprint (Get-HistoryFingerprint -Projection $input -SchemaVersion $script:FingerprintSchemaVersion) -CurrentExecutionFingerprint (Get-HistoryFingerprint -Projection $execution -SchemaVersion $script:FingerprintSchemaVersion) -RepositoryStateProvider $RepositoryStateProvider -HtmlEvidenceRetentionProfile $HtmlEvidenceRetentionProfile
     }
     if($decision.ReuseApplied){
-        $package=New-BenefitIncrementalReusePackage -Store $Store -RunId $RunId -ObservedAt $ObservedAt -Decision $decision -RawSourcePayloadArtifact $rawSourcePayloadArtifact
-        $comparison=Compare-BenefitHistoryObservations -Store $Store -Previous $decision.Baseline.Observation -Current $package.Observation
+        if($HtmlEvidenceRetentionProfile -ceq 'C_LITE_V1'){
+            $cliteReuse=New-BenefitScopedHtmlReusePackage -Store $Store -PreviousObservationId ([string]$decision.Baseline.Observation.ObservationId) -RunContext $RunContext -Candidate $Candidate -Document $document -Benefit $Benefit -BusinessId $BusinessId -BusinessIdentity $BusinessIdentity -CanonicalPhone $CanonicalPhone -RunId $RunId -ObservedAt $ObservedAt -RepositoryRevision $RepositoryRevision -RepositoryClean ([bool]$decision.RepositoryClean)
+            if($cliteReuse.Status -cne 'READY' -or $null -eq $cliteReuse.Package){throw 'C_LITE_REUSE_PACKAGE_REJECTED'}
+            $package=$cliteReuse.Package
+            $comparison=$cliteReuse.Package.Comparison
+        }else{
+            $package=New-BenefitIncrementalReusePackage -Store $Store -RunId $RunId -ObservedAt $ObservedAt -Decision $decision -RawSourcePayloadArtifact $rawSourcePayloadArtifact
+            $comparison=Compare-BenefitHistoryObservations -Store $Store -Previous $decision.Baseline.Observation -Current $package.Observation
+        }
     } else {
         # Recompute uses the same run context and therefore the document that
         # has already been fetched above.  It composes existing Phase 2 and
@@ -466,8 +536,27 @@ function Invoke-BenefitIncrementalPostFetch {
         Add-Phase2UniqueReasonCodes -Target $reasonCodes -ReasonCodes $final.Evaluation.ReasonCodes
         Add-Phase2UniqueReasonCodes -Target $reasonCodes -ReasonCodes $sourceRecord.ReasonCodes
         $result=New-BenefitVerificationResult -SourceRowNumber $Benefit.SourceRowNumber -BusinessIdentity $BusinessIdentity -BenefitState $final.Evaluation.BenefitState -ReviewClass $final.Evaluation.ReviewClass -ReasonCodes @($reasonCodes) -ClaimResults $final.ClaimResults -Evidence $final.Evaluation.Evidence -Warnings $final.Evaluation.Warnings -ProductionAction NONE
-        $package=New-BenefitHistoryObservationPackage -Store $Store -RunId $RunId -BusinessId $BusinessId -ObservedAt $ObservedAt -RepositoryRevision $RepositoryRevision -Benefit $Benefit -BusinessIdentity $BusinessIdentity -CanonicalPhone $CanonicalPhone -Result $result -EvidenceDiagnostics @((ConvertTo-Phase2ScopedBenefitEvidenceDiagnostic -SourceRecord $sourceRecord)) -OperationalStatus $final.OperationalStatus
-        $package=Add-BenefitIncrementalRawSourcePayloadArtifact -Package $package -RawSourcePayloadArtifact $rawSourcePayloadArtifact
+        if($HtmlEvidenceRetentionProfile -ceq 'C_LITE_V1'){
+            if($sourceRecord.Document.FetchStatus -ceq 'COMPLETE'){
+                $cliteBuilt=New-BenefitScopedHtmlHistoryPackage -RunContext $RunContext -SourceRecord $sourceRecord -Benefit $Benefit -BusinessId $BusinessId -BusinessIdentity $BusinessIdentity -CanonicalPhone $CanonicalPhone -Result $result -OperationalStatus $final.OperationalStatus -RunId $RunId -ObservedAt $ObservedAt -RepositoryRevision $RepositoryRevision
+                if($cliteBuilt.Status -cne 'READY' -or $null -eq $cliteBuilt.Package){throw 'C_LITE_HISTORY_PACKAGE_REJECTED'}
+                $semanticText=@($cliteBuilt.Package.PreparedArtifacts | Where-Object { [string]$_.Kind -ceq 'BENEFIT_SEMANTIC_PROJECTION' })[0].Text
+                $stagedSemantic=ConvertFrom-BenefitScopedEvidenceJson -Json $semanticText -MaxBytes 65536
+                $package=[pscustomobject][ordered]@{
+                    Observation=$cliteBuilt.Package.Observation
+                    PreparedArtifacts=@($cliteBuilt.Package.PreparedArtifacts)
+                    SemanticProjection=$stagedSemantic
+                }
+            }else{
+                $package=New-BenefitHistoryObservationPackage -Store $Store -RunId $RunId -BusinessId $BusinessId -ObservedAt $ObservedAt -RepositoryRevision $RepositoryRevision -Benefit $Benefit -BusinessIdentity $BusinessIdentity -CanonicalPhone $CanonicalPhone -Result $result -EvidenceDiagnostics @((ConvertTo-Phase2ScopedBenefitEvidenceDiagnostic -SourceRecord $sourceRecord)) -OperationalStatus $final.OperationalStatus -ExecutionConfiguration ([pscustomobject]@{HtmlEvidenceRetentionProfile='C_LITE_V1'})
+                if($package.Observation.Comparable -or $package.Observation.OperationalStatus -ceq 'COMPLETE' -or 'SOURCE_FETCH_NOT_COMPLETE' -cnotin $package.Observation.NonComparableReasons -or @($package.Observation.ArtifactReferences).Count -ne 2){
+                    throw 'C_LITE_FAILED_FETCH_PACKAGE_INVALID'
+                }
+            }
+        }else{
+            $package=New-BenefitHistoryObservationPackage -Store $Store -RunId $RunId -BusinessId $BusinessId -ObservedAt $ObservedAt -RepositoryRevision $RepositoryRevision -Benefit $Benefit -BusinessIdentity $BusinessIdentity -CanonicalPhone $CanonicalPhone -Result $result -EvidenceDiagnostics @((ConvertTo-Phase2ScopedBenefitEvidenceDiagnostic -SourceRecord $sourceRecord)) -OperationalStatus $final.OperationalStatus
+            $package=Add-BenefitIncrementalRawSourcePayloadArtifact -Package $package -RawSourcePayloadArtifact $rawSourcePayloadArtifact
+        }
         $comparison=$null
         if($null -ne $decision.Baseline){
             $comparison=Compare-BenefitHistoryObservations -Store $Store -Previous $decision.Baseline.Observation -Current $package.Observation -StagedCurrentSemanticProjection $package.SemanticProjection

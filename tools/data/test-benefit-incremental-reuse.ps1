@@ -1,4 +1,4 @@
-$ErrorActionPreference='Stop'
+﻿$ErrorActionPreference='Stop'
 
 . (Join-Path $PSScriptRoot 'invoke-phase2-benefit-shadow-mode.ps1')
 . (Join-Path $PSScriptRoot 'lib/history/benefit-history-adapter.ps1')
@@ -525,5 +525,197 @@ try {
     Assert-Task10MetricContract -Run $task9Eligible.Run -Expected @{RowsRequested=1;RowsCompleted=0;ReuseEligible=1;ReuseApplied=1;ReuseRejected=0;ParseCount=0;ExtractionCount=0;EvaluationCount=0;ArtifactWrites=0;ArtifactDedupHits=0} -Message 'BASELINE_MOVED metrics'
     Assert-Task10MetricContract -Run $task9LockRun -Expected @{RowsRequested=1;RowsCompleted=0;BaselineHits=1;BaselineMisses=0;ReuseEligible=0;ReuseApplied=0;ReuseRejected=1;ExternalFetchCount=1;ParseCount=1;ExtractionCount=1;EvaluationCount=1;ArtifactWrites=0;ArtifactDedupHits=0} -Message 'WRITER_LOCKED metrics'
 } finally { if(Test-Path -LiteralPath $incrementalRoot){ Remove-Item -LiteralPath $incrementalRoot -Recurse -Force } }
+
+# PR 3B: Opt-in C_LITE_V1 post-fetch runner wiring (capture + v2 reuse + fail-closed gates).
+$clitePr3bRoot = Join-Path ([IO.Path]::GetTempPath()) ('milimap-clite-pr3b-' + [Guid]::NewGuid().ToString('N'))
+try {
+    $cliteStore = New-HistoryStoreLayout -Root $clitePr3bRoot
+    . (Join-Path $PSScriptRoot 'testdata/benefit-evidence-location/test-support.ps1')
+    $cliteBusinessId = 'biz-0123456789abcdef0123456789abcdef'
+    $cliteRow = New-ScopeTestRow
+    $cliteBusiness = ConvertTo-NormalizedBusiness -Row $cliteRow -SourceRowNumber 2
+    $cliteBenefit = ConvertTo-Phase2CanonicalBenefitRecord -Row $cliteRow -SourceRowNumber 2
+    $cliteCandidate = Get-ExistingBenefitSourceCandidate -Benefit $cliteBenefit
+    $cliteHtml = (Get-ScopeTestHtml) + '<!--RAW_CLITE_SENTINEL-->'
+    $cliteFetch = [pscustomobject]@{ Count=0 }
+    $cliteHttp = { param($Uri) $cliteFetch.Count++; [pscustomobject]@{ StatusCode=200; ContentType='text/html'; Text=$cliteHtml; Bytes=$null } }.GetNewClosure()
+    $cliteRepoClean = { [pscustomobject]@{ IsClean=$true } }
+    $cliteRev = 'a' * 40
+
+    # 1. First HTML run under C_LITE_V1 -> 3-artifact capture, 0 RAW.
+    $capRun = Invoke-BenefitIncrementalPostFetch -Store $cliteStore -RunId 'run-clite-pr3b-cap1' -ObservedAt '2026-11-19T12:00:00.000+09:00' -RepositoryRevision $cliteRev -BusinessId $cliteBusinessId -Benefit $cliteBenefit -BusinessIdentity $cliteBusiness -CanonicalPhone $cliteRow.업소전화번호 -Candidate $cliteCandidate -RunContext (New-BenefitSourceRunContext) -RequestInvoker $cliteHttp -RepositoryStateProvider $cliteRepoClean -HtmlEvidenceRetentionProfile 'C_LITE_V1'
+    Assert-Equal $capRun.Commit.Code COMMITTED 'C_LITE_V1 first HTML capture commits'
+    Assert-Equal $capRun.Metrics.ExternalFetchCount 1 'C_LITE_V1 first capture fetches once'
+    Assert-Equal $capRun.Metrics.ParseCount 1 'C_LITE_V1 first capture parses once'
+    Assert-Equal $capRun.Metrics.ExtractionCount 1 'C_LITE_V1 first capture extracts once'
+    Assert-Equal $capRun.Metrics.EvaluationCount 1 'C_LITE_V1 first capture evaluates once'
+    Assert-Equal $capRun.Metrics.ReuseApplied 0 'C_LITE_V1 first capture does not reuse'
+    Assert-Equal $capRun.Metrics.ArtifactWrites 3 'C_LITE_V1 first capture writes 3 artifacts (E, S, ScopedEvidence)'
+    Assert-Equal $capRun.Metrics.ArtifactDedupHits 0 'C_LITE_V1 first capture has 0 dedup hits'
+    Assert-Equal @($capRun.Observation.ArtifactReferences).Count 3 'C_LITE_V1 capture has exactly 3 artifact references'
+    Assert-Equal @($capRun.Observation.ArtifactReferences | Where-Object Kind -eq 'RAW_SOURCE_PAYLOAD').Count 0 'C_LITE_V1 capture has 0 RAW references'
+    Assert-Equal @(Get-ChildItem -LiteralPath $cliteStore.ArtifactsRoot -Filter '*.html' -File).Count 0 'C_LITE_V1 capture writes 0 .html files'
+    $capRead = Read-BenefitScopedHtmlCommittedCapture -Store $cliteStore -ObservationId $capRun.Observation.ObservationId
+    Assert-Equal $capRead.Status VERIFIED 'Committed C_LITE_V1 capture verifies strictly'
+    Assert-True ((ConvertTo-HistoryCanonicalJson $capRead) -cnotmatch 'RAW_CLITE_SENTINEL|테스트가게 B') 'C_LITE_V1 capture leaks neither raw HTML sentinel nor sibling business'
+
+    # 2. 1st-hop and 2nd-hop identical HTML reuse under C_LITE_V1 -> 4 artifacts (v2 reuse), 0 RAW, 0 parse/extract/evaluate.
+    $hop1Run = Invoke-BenefitIncrementalPostFetch -Store $cliteStore -RunId 'run-clite-pr3b-hop1' -ObservedAt '2026-11-19T12:10:00.000+09:00' -RepositoryRevision $cliteRev -BusinessId $cliteBusinessId -Benefit $cliteBenefit -BusinessIdentity $cliteBusiness -CanonicalPhone $cliteRow.업소전화번호 -Candidate $cliteCandidate -RunContext (New-BenefitSourceRunContext) -RequestInvoker $cliteHttp -RepositoryStateProvider $cliteRepoClean -HtmlEvidenceRetentionProfile 'C_LITE_V1'
+    Assert-Equal $hop1Run.Commit.Code COMMITTED 'C_LITE_V1 1st-hop reuse commits'
+    Assert-True $hop1Run.ReuseDecision.ReuseApplied 'C_LITE_V1 1st-hop reuse applies'
+    Assert-Equal $hop1Run.Metrics.ExternalFetchCount 1 'C_LITE_V1 1st-hop fetches current HTML once'
+    Assert-Equal $hop1Run.Metrics.ParseCount 0 'C_LITE_V1 1st-hop avoids parse'
+    Assert-Equal $hop1Run.Metrics.ExtractionCount 0 'C_LITE_V1 1st-hop avoids extraction'
+    Assert-Equal $hop1Run.Metrics.EvaluationCount 0 'C_LITE_V1 1st-hop avoids evaluation'
+    Assert-Equal $hop1Run.Metrics.AvoidedParseCount 1 'C_LITE_V1 1st-hop records avoided parse'
+    Assert-Equal $hop1Run.Metrics.AvoidedExtractionCount 1 'C_LITE_V1 1st-hop records avoided extraction'
+    Assert-Equal $hop1Run.Metrics.AvoidedEvaluationCount 1 'C_LITE_V1 1st-hop records avoided evaluation'
+    Assert-Equal $hop1Run.Metrics.ArtifactWrites 1 'C_LITE_V1 1st-hop writes only BenefitReuseDecision v2'
+    Assert-Equal $hop1Run.Metrics.ArtifactDedupHits 0 'C_LITE_V1 1st-hop has 0 dedup hits (no RAW written)'
+    Assert-Equal @($hop1Run.Observation.ArtifactReferences).Count 4 'C_LITE_V1 reuse has 4 artifact references'
+    Assert-Equal @($hop1Run.Observation.ArtifactReferences | Where-Object Kind -eq 'RAW_SOURCE_PAYLOAD').Count 0 'C_LITE_V1 1st-hop has 0 RAW references'
+    Assert-Equal @($hop1Run.Comparison.ChangeCandidates).Count 0 'C_LITE_V1 1st-hop comparison has empty change candidates'
+    $hop1Read = Read-BenefitScopedHtmlCommittedReuse -Store $cliteStore -ObservationId $hop1Run.Observation.ObservationId
+    Assert-Equal $hop1Read.Status VERIFIED 'Committed C_LITE_V1 1st-hop reuse verifies strictly'
+    Assert-Equal $hop1Read.Reuse.OwnerObservationId $capRun.Observation.ObservationId 'C_LITE_V1 1st-hop links original capture owner'
+    Assert-Equal $hop1Read.Reuse.ReuseDecision.ReusedFromObservationId $capRun.Observation.ObservationId 'C_LITE_V1 1st-hop links direct predecessor'
+
+    $hop2Run = Invoke-BenefitIncrementalPostFetch -Store $cliteStore -RunId 'run-clite-pr3b-hop2' -ObservedAt '2026-11-19T12:20:00.000+09:00' -RepositoryRevision $cliteRev -BusinessId $cliteBusinessId -Benefit $cliteBenefit -BusinessIdentity $cliteBusiness -CanonicalPhone $cliteRow.업소전화번호 -Candidate $cliteCandidate -RunContext (New-BenefitSourceRunContext) -RequestInvoker $cliteHttp -RepositoryStateProvider $cliteRepoClean -HtmlEvidenceRetentionProfile 'C_LITE_V1'
+    Assert-Equal $hop2Run.Commit.Code COMMITTED 'C_LITE_V1 2nd-hop reuse commits'
+    Assert-True $hop2Run.ReuseDecision.ReuseApplied 'C_LITE_V1 2nd-hop reuse applies'
+    $hop2Read = Read-BenefitScopedHtmlCommittedReuse -Store $cliteStore -ObservationId $hop2Run.Observation.ObservationId
+    Assert-Equal $hop2Read.Status VERIFIED 'Committed C_LITE_V1 2nd-hop reuse verifies strictly'
+    Assert-Equal $hop2Read.Reuse.OwnerObservationId $capRun.Observation.ObservationId 'C_LITE_V1 2nd-hop preserves original capture owner'
+    Assert-Equal $hop2Read.Reuse.ReuseDecision.ReusedFromObservationId $hop1Run.Observation.ObservationId 'C_LITE_V1 2nd-hop links hop1 predecessor'
+    Assert-Equal @(Get-ChildItem -LiteralPath $cliteStore.ArtifactsRoot -Filter '*.html' -File).Count 0 'All C_LITE_V1 runs write 0 .html artifacts'
+
+    # 3. Failed fetch (HTTP 500) under C_LITE_V1 -> 2-artifact non-comparable C_LITE_V1 observation, preserves hop2 comparable baseline.
+    $cliteFailHttp = { param($Uri) [pscustomobject]@{ StatusCode=500; ContentType='text/html'; Text='err'; Bytes=$null } }
+    $failedClite = Invoke-BenefitIncrementalPostFetch -Store $cliteStore -RunId 'run-clite-pr3b-fail1' -ObservedAt '2026-11-19T12:25:00.000+09:00' -RepositoryRevision $cliteRev -BusinessId $cliteBusinessId -Benefit $cliteBenefit -BusinessIdentity $cliteBusiness -CanonicalPhone $cliteRow.업소전화번호 -Candidate $cliteCandidate -RunContext (New-BenefitSourceRunContext) -RequestInvoker $cliteFailHttp -RepositoryStateProvider $cliteRepoClean -HtmlEvidenceRetentionProfile 'C_LITE_V1'
+    Assert-Equal $failedClite.Commit.Code COMMITTED 'C_LITE_V1 failed fetch still commits diagnostic observation'
+    Assert-True (-not $failedClite.Observation.Comparable) 'C_LITE_V1 failed fetch is non-comparable'
+    Assert-True ($failedClite.Observation.NonComparableReasons -contains 'SOURCE_FETCH_NOT_COMPLETE') 'C_LITE_V1 failed fetch keeps SOURCE_FETCH_NOT_COMPLETE reason'
+    Assert-Equal @($failedClite.Observation.ArtifactReferences).Count 2 'C_LITE_V1 failed fetch writes 2 artifacts (E, S)'
+    Assert-Equal (Get-HistoryLatestEntry -Store $cliteStore -BusinessId $cliteBusinessId -Domain BENEFIT -ComparableOnly).LatestComparableObservationId $hop2Run.Observation.ObservationId 'Failed fetch preserves C_LITE_V1 comparable baseline'
+
+    # 4. Corrupted prior C_LITE_V1 scoped artifact -> PRIOR_ARTIFACT_INVALID and fresh 3-artifact recompute with Comparison=$null.
+    $hop2ScopedRef = @($hop2Run.Observation.ArtifactReferences | Where-Object Kind -eq 'BENEFIT_SCOPED_EVIDENCE')[0]
+    $hop2ScopedPath = Join-Path $cliteStore.Root $hop2ScopedRef.RelativePath
+    $origHop2Scoped = [IO.File]::ReadAllBytes($hop2ScopedPath)
+    try {
+        [IO.File]::WriteAllText($hop2ScopedPath, '{"tampered":true}', [Text.UTF8Encoding]::new($false))
+        $afterCorrupt = Invoke-BenefitIncrementalPostFetch -Store $cliteStore -RunId 'run-clite-pr3b-corrupt-recover' -ObservedAt '2026-11-19T12:30:00.000+09:00' -RepositoryRevision $cliteRev -BusinessId $cliteBusinessId -Benefit $cliteBenefit -BusinessIdentity $cliteBusiness -CanonicalPhone $cliteRow.업소전화번호 -Candidate $cliteCandidate -RunContext (New-BenefitSourceRunContext) -RequestInvoker $cliteHttp -RepositoryStateProvider $cliteRepoClean -HtmlEvidenceRetentionProfile 'C_LITE_V1'
+        Assert-Equal $afterCorrupt.Commit.Code COMMITTED 'Corrupted C_LITE_V1 baseline triggers fresh C_LITE_V1 recompute commit'
+        Assert-True (-not $afterCorrupt.ReuseDecision.ReuseApplied) 'Corrupted C_LITE_V1 baseline rejects reuse'
+        Assert-True ($afterCorrupt.ReuseDecision.ReasonCodes -contains 'PRIOR_ARTIFACT_INVALID') 'Corrupted C_LITE_V1 baseline records PRIOR_ARTIFACT_INVALID'
+        Assert-True ($null -eq $afterCorrupt.Comparison) 'Corrupted C_LITE_V1 baseline produces no comparison against corrupt prior'
+        Assert-Equal @($afterCorrupt.Observation.ArtifactReferences).Count 3 'Fresh recompute produces valid 3-artifact C_LITE_V1 capture'
+        Assert-Equal (Read-BenefitScopedHtmlCommittedCapture -Store $cliteStore -ObservationId $afterCorrupt.Observation.ObservationId).Status VERIFIED 'Recomputed C_LITE_V1 capture verifies'
+    } finally {
+        [IO.File]::WriteAllBytes($hop2ScopedPath, $origHop2Scoped)
+    }
+
+    # 5. LEGACY baseline -> C_LITE_V1 transition: recomputes due to EXECUTION_CHANGED, never falls back to RAW.
+    $legacyBizId = 'biz-55555555555555555555555555555555'
+    $legacySeed = Invoke-BenefitIncrementalPostFetch -Store $cliteStore -RunId 'run-clite-pr3b-leg1' -ObservedAt '2026-11-19T12:00:00.000+09:00' -RepositoryRevision $cliteRev -BusinessId $legacyBizId -Benefit $cliteBenefit -BusinessIdentity $cliteBusiness -CanonicalPhone $cliteRow.업소전화번호 -Candidate $cliteCandidate -RunContext (New-BenefitSourceRunContext) -RequestInvoker $cliteHttp -RepositoryStateProvider $cliteRepoClean
+    Assert-Equal $legacySeed.Commit.Code COMMITTED 'LEGACY baseline commits'
+    Assert-Equal @($legacySeed.Observation.ArtifactReferences | Where-Object Kind -eq 'RAW_SOURCE_PAYLOAD').Count 1 'LEGACY baseline includes RAW_SOURCE_PAYLOAD'
+    $transitionRun = Invoke-BenefitIncrementalPostFetch -Store $cliteStore -RunId 'run-clite-pr3b-leg-to-clite' -ObservedAt '2026-11-19T12:10:00.000+09:00' -RepositoryRevision $cliteRev -BusinessId $legacyBizId -Benefit $cliteBenefit -BusinessIdentity $cliteBusiness -CanonicalPhone $cliteRow.업소전화번호 -Candidate $cliteCandidate -RunContext (New-BenefitSourceRunContext) -RequestInvoker $cliteHttp -RepositoryStateProvider $cliteRepoClean -HtmlEvidenceRetentionProfile 'C_LITE_V1'
+    Assert-Equal $transitionRun.Commit.Code COMMITTED 'LEGACY-to-C_LITE_V1 transition commits'
+    Assert-True (-not $transitionRun.ReuseDecision.ReuseApplied) 'LEGACY-to-C_LITE_V1 transition must not reuse LEGACY baseline'
+    Assert-True ($transitionRun.ReuseDecision.ReasonCodes -contains 'EXECUTION_CHANGED') 'LEGACY-to-C_LITE_V1 records EXECUTION_CHANGED'
+    Assert-True ($transitionRun.Comparison.ChangeCandidates -contains 'PROCESSOR_OUTPUT_CHANGED') 'LEGACY-to-C_LITE_V1 comparison routes execution delta safely'
+    Assert-Equal @($transitionRun.Observation.ArtifactReferences | Where-Object Kind -eq 'RAW_SOURCE_PAYLOAD').Count 0 'C_LITE_V1 transition attaches 0 RAW references'
+    Assert-Equal (Read-BenefitScopedHtmlCommittedCapture -Store $cliteStore -ObservationId $transitionRun.Observation.ObservationId).Status VERIFIED 'C_LITE_V1 transition capture verifies'
+
+    # 6. Zero-claim LOCATED_FIELDS C_LITE_V1 baseline -> next identical run recomputes with SCOPED_EVIDENCE_NOT_REUSABLE.
+    $zeroBizId = 'biz-66666666666666666666666666666666'
+    $zeroHtml = $cliteHtml.Replace('10% 할인', '').Replace('30% 할인', '')
+    $zeroHttp = { param($Uri) [pscustomobject]@{ StatusCode=200; ContentType='text/html'; Text=$zeroHtml; Bytes=$null } }.GetNewClosure()
+    $zeroCap = Invoke-BenefitIncrementalPostFetch -Store $cliteStore -RunId 'run-clite-pr3b-zero1' -ObservedAt '2026-11-19T12:00:00.000+09:00' -RepositoryRevision $cliteRev -BusinessId $zeroBizId -Benefit $cliteBenefit -BusinessIdentity $cliteBusiness -CanonicalPhone $cliteRow.업소전화번호 -Candidate $cliteCandidate -RunContext (New-BenefitSourceRunContext) -RequestInvoker $zeroHttp -RepositoryStateProvider $cliteRepoClean -HtmlEvidenceRetentionProfile 'C_LITE_V1'
+    Assert-Equal $zeroCap.Commit.Code COMMITTED 'Zero-claim C_LITE_V1 capture commits'
+    Assert-Equal (Read-BenefitScopedHtmlCommittedCapture -Store $cliteStore -ObservationId $zeroCap.Observation.ObservationId).Status VERIFIED 'Zero-claim C_LITE_V1 capture verifies'
+    $zeroNext = Invoke-BenefitIncrementalPostFetch -Store $cliteStore -RunId 'run-clite-pr3b-zero2' -ObservedAt '2026-11-19T12:10:00.000+09:00' -RepositoryRevision $cliteRev -BusinessId $zeroBizId -Benefit $cliteBenefit -BusinessIdentity $cliteBusiness -CanonicalPhone $cliteRow.업소전화번호 -Candidate $cliteCandidate -RunContext (New-BenefitSourceRunContext) -RequestInvoker $zeroHttp -RepositoryStateProvider $cliteRepoClean -HtmlEvidenceRetentionProfile 'C_LITE_V1'
+    Assert-Equal $zeroNext.Commit.Code COMMITTED 'Zero-claim C_LITE_V1 follow-up commits'
+    Assert-True (-not $zeroNext.ReuseDecision.ReuseApplied) 'Zero-claim C_LITE_V1 baseline is not reuse-eligible'
+    Assert-True ($zeroNext.ReuseDecision.ReasonCodes -contains 'SCOPED_EVIDENCE_NOT_REUSABLE') 'Zero-claim C_LITE_V1 records SCOPED_EVIDENCE_NOT_REUSABLE'
+    Assert-Equal $zeroNext.Metrics.ParseCount 1 'Zero-claim C_LITE_V1 follow-up recomputes cleanly'
+    Assert-Equal @($zeroNext.Observation.ArtifactReferences | Where-Object Kind -eq 'BENEFIT_REUSE_DECISION').Count 0 'Zero-claim recompute attaches no reuse decision'
+    Assert-Equal (Read-BenefitScopedHtmlCommittedCapture -Store $cliteStore -ObservationId $zeroNext.Observation.ObservationId).Status VERIFIED 'Zero-claim C_LITE_V1 follow-up capture verifies'
+
+    # 7. OUTCOME_ONLY HTML capture (NOT_FOUND / PARTIAL) under C_LITE_V1 -> 3-artifact verified receipt, 0 RAW.
+    $outcomeBizId = 'biz-77777777777777777777777777777777'
+    $partialHtml = $cliteHtml + '<table><tr><th>업소명</th><th>할인</th></tr><tr><td colspan="2">합성 unsupported</td></tr></table>'
+    $partialHttp = { param($Uri) [pscustomobject]@{ StatusCode=200; ContentType='text/html'; Text=$partialHtml; Bytes=$null } }.GetNewClosure()
+    $outcomeRun = Invoke-BenefitIncrementalPostFetch -Store $cliteStore -RunId 'run-clite-pr3b-outcome1' -ObservedAt '2026-11-19T12:00:00.000+09:00' -RepositoryRevision $cliteRev -BusinessId $outcomeBizId -Benefit $cliteBenefit -BusinessIdentity $cliteBusiness -CanonicalPhone $cliteRow.업소전화번호 -Candidate $cliteCandidate -RunContext (New-BenefitSourceRunContext) -RequestInvoker $partialHttp -RepositoryStateProvider $cliteRepoClean -HtmlEvidenceRetentionProfile 'C_LITE_V1'
+    Assert-Equal $outcomeRun.Commit.Code COMMITTED 'OUTCOME_ONLY PARTIAL HTML commits under C_LITE_V1'
+    Assert-Equal @($outcomeRun.Observation.ArtifactReferences | Where-Object Kind -eq 'RAW_SOURCE_PAYLOAD').Count 0 'OUTCOME_ONLY C_LITE_V1 has 0 RAW references'
+    Assert-Equal (Read-BenefitScopedHtmlCommittedCapture -Store $cliteStore -ObservationId $outcomeRun.Observation.ObservationId).Status VERIFIED 'OUTCOME_ONLY C_LITE_V1 capture verifies'
+
+    # 8. Non-HTML complete sources rejected fail-closed under C_LITE_V1.
+    $nonHtmlCases = @(
+        @{ Name='XLSX'; Candidate=$xlsxCandidate; Benefit=$xlsxBenefit; Business=$xlsxBusiness; Phone='031-861-4800'; Http=$xlsxFirstHttp },
+        @{ Name='MMA'; Candidate=$mmaCandidate; Benefit=$mmaBenefit; Business=$mmaBusiness; Phone='02-2789-0000'; Http=$mmaHttp },
+        @{ Name='CSV'; Candidate=$cliteCandidate; Benefit=$cliteBenefit; Business=$cliteBusiness; Phone=''; Http={ param($Uri) [pscustomobject]@{ StatusCode=200; ContentType='text/csv'; Text="a,b`n1,2"; Bytes=$null } } }
+    )
+    foreach ($nh in $nonHtmlCases) {
+        $threwNonHtml = $false
+        $errMsg = ''
+        try {
+            Invoke-BenefitIncrementalPostFetch -Store $cliteStore -RunId ('run-clite-pr3b-nonhtml-' + $nh.Name.ToLowerInvariant()) -ObservedAt '2026-11-19T12:40:00.000+09:00' -RepositoryRevision $cliteRev -BusinessId $cliteBusinessId -Benefit $nh.Benefit -BusinessIdentity $nh.Business -CanonicalPhone $nh.Phone -Candidate $nh.Candidate -RunContext (New-BenefitSourceRunContext) -RequestInvoker $nh.Http -RepositoryStateProvider $cliteRepoClean -HtmlEvidenceRetentionProfile 'C_LITE_V1' | Out-Null
+        } catch {
+            $threwNonHtml = $true
+            $errMsg = $_.Exception.Message
+        }
+        Assert-True ($threwNonHtml -and $errMsg -ceq 'C_LITE_HTML_SOURCE_REQUIRED') ("Non-HTML complete source $($nh.Name) rejects under C_LITE_V1 (actual=$errMsg)")
+    }
+
+    # 9. CAS movement and writer lock on C_LITE_V1 reuse publish nothing.
+    $casStore = New-HistoryStoreLayout -Root (Join-Path $clitePr3bRoot 'cas-store')
+    $casSeed = Invoke-BenefitIncrementalPostFetch -Store $casStore -RunId 'run-clite-pr3b-cas-seed' -ObservedAt '2026-11-19T12:00:00.000+09:00' -RepositoryRevision $cliteRev -BusinessId $cliteBusinessId -Benefit $cliteBenefit -BusinessIdentity $cliteBusiness -CanonicalPhone $cliteRow.업소전화번호 -Candidate $cliteCandidate -RunContext (New-BenefitSourceRunContext) -RequestInvoker $cliteHttp -RepositoryStateProvider $cliteRepoClean -HtmlEvidenceRetentionProfile 'C_LITE_V1'
+    Assert-Equal $casSeed.Commit.Code COMMITTED 'C_LITE_V1 CAS seed commits'
+    $competingCtx = New-BenefitSourceRunContext
+    $competingCand = Get-ExistingBenefitSourceCandidate -Benefit $cliteBenefit
+    $competingDoc = Get-BenefitRunSourceDocument -Context $competingCtx -Candidate $competingCand -RequestInvoker $cliteHttp
+    [void](Get-BenefitRunSourceSnapshot -Context $competingCtx -Document $competingDoc)
+    $competingPkg = New-BenefitScopedHtmlReusePackage -Store $casStore -PreviousObservationId $casSeed.Observation.ObservationId -RunContext $competingCtx -Candidate $competingCand -Document $competingDoc -Benefit $cliteBenefit -BusinessId $cliteBusinessId -BusinessIdentity $cliteBusiness -CanonicalPhone $cliteRow.업소전화번호 -RunId 'run-clite-pr3b-cas-winner' -ObservedAt '2026-11-19T12:05:00.000+09:00' -RepositoryRevision $cliteRev -RepositoryClean $true
+    Assert-Equal $competingPkg.Status READY 'C_LITE_V1 competing reuse package READY'
+    $script:pr3bOrigCommit = (Get-Item Function:Commit-HistoryRun).ScriptBlock
+    $script:pr3bCasState = [pscustomobject]@{ Moved=$false; CompetingPkg=$competingPkg; SeedObsId=$casSeed.Observation.ObservationId; Rev=$cliteRev; BizId=$cliteBusinessId }
+    $casInterceptor = {
+        param($Store,$PreparedRun,$ExpectedBaselines,$FaultInjector=$null)
+        if (-not $script:pr3bCasState.Moved) {
+            $script:pr3bCasState.Moved = $true
+            $winMan = New-HistoryRunManifest -RunId 'run-clite-pr3b-cas-winner' -StartedAt '2026-11-19T12:05:00.000+09:00' -RepositoryRevision $script:pr3bCasState.Rev -RequestedBusinessIds @($script:pr3bCasState.BizId) -CompletedBusinessIds @($script:pr3bCasState.BizId) -FailedBusinessIds @() -ExecutionStatus COMPLETE -RunCommitStatus PREPARED
+            $winPrep = Prepare-HistoryRun -Store $Store -RunManifest $winMan -Artifacts $script:pr3bCasState.CompetingPkg.Package.PreparedArtifacts -Observations @($script:pr3bCasState.CompetingPkg.Package.Observation) -Comparisons @($script:pr3bCasState.CompetingPkg.Package.Comparison)
+            $winRes = & $script:pr3bOrigCommit -Store $Store -PreparedRun $winPrep -ExpectedBaselines @{ ($script:pr3bCasState.BizId + '|BENEFIT')=$script:pr3bCasState.SeedObsId }
+            if ($winRes.Code -cne 'COMMITTED') { throw 'Competing C_LITE_V1 commit failed' }
+        }
+        return & $script:pr3bOrigCommit @PSBoundParameters
+    }
+    Set-Item Function:Commit-HistoryRun -Value $casInterceptor
+    try {
+        $casMoved = Invoke-BenefitIncrementalPostFetch -Store $casStore -RunId 'run-clite-pr3b-cas-loser' -ObservedAt '2026-11-19T12:10:00.000+09:00' -RepositoryRevision $cliteRev -BusinessId $cliteBusinessId -Benefit $cliteBenefit -BusinessIdentity $cliteBusiness -CanonicalPhone $cliteRow.업소전화번호 -Candidate $cliteCandidate -RunContext (New-BenefitSourceRunContext) -RequestInvoker $cliteHttp -RepositoryStateProvider $cliteRepoClean -HtmlEvidenceRetentionProfile 'C_LITE_V1'
+    } finally {
+        Set-Item Function:Commit-HistoryRun -Value $script:pr3bOrigCommit
+        Remove-Variable -Scope Script -Name pr3bOrigCommit,pr3bCasState -ErrorAction SilentlyContinue
+    }
+    Assert-Equal $casMoved.Commit.Code BASELINE_MOVED 'C_LITE_V1 CAS conflict preserves BASELINE_MOVED'
+    Assert-True $casMoved.Commit.RetryRequired 'C_LITE_V1 CAS conflict exposes RetryRequired'
+    Assert-True (-not (Test-Path -LiteralPath (Get-HistoryObservationPath -Store $casStore -ObservationId $casMoved.Observation.ObservationId))) 'C_LITE_V1 CAS loser observation is not written'
+    $casDecRef = @($casMoved.Observation.ArtifactReferences | Where-Object Kind -eq 'BENEFIT_REUSE_DECISION')[0]
+    Assert-True (-not (Test-Path -LiteralPath (Join-Path $casStore.Root $casDecRef.RelativePath))) 'C_LITE_V1 CAS loser reuse artifact is not written'
+
+    $casLock = [IO.File]::Open((Join-Path $casStore.Root '.writer-lock'), [IO.FileMode]::OpenOrCreate, [IO.FileAccess]::ReadWrite, [IO.FileShare]::None)
+    try {
+        $cliteLocked = Invoke-BenefitIncrementalPostFetch -Store $casStore -RunId 'run-clite-pr3b-locked' -ObservedAt '2026-11-19T12:15:00.000+09:00' -RepositoryRevision $cliteRev -BusinessId $cliteBusinessId -Benefit $cliteBenefit -BusinessIdentity $cliteBusiness -CanonicalPhone $cliteRow.업소전화번호 -Candidate $cliteCandidate -RunContext (New-BenefitSourceRunContext) -RequestInvoker $cliteHttp -RepositoryStateProvider $cliteRepoClean -HtmlEvidenceRetentionProfile 'C_LITE_V1'
+    } finally {
+        $casLock.Dispose()
+    }
+    Assert-Equal $cliteLocked.Commit.Code WRITER_LOCKED 'C_LITE_V1 writer lock preserves WRITER_LOCKED'
+    Assert-True (-not (Test-Path -LiteralPath (Get-HistoryObservationPath -Store $casStore -ObservationId $cliteLocked.Observation.ObservationId))) 'C_LITE_V1 writer-locked observation is not written'
+} finally {
+    if (Test-Path -LiteralPath $clitePr3bRoot) { Remove-Item -LiteralPath $clitePr3bRoot -Recurse -Force }
+}
 
 Write-Host 'Benefit incremental checkpoint tests passed.'

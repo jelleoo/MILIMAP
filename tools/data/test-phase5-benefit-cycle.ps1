@@ -182,6 +182,44 @@ try{
             Check ($badScoped.Status -ceq 'BLOCKED' -and $null -eq $badScoped.Review) 'P5-0 rejects corrupted C-Lite scoped artifact on reuse recovery'
         }finally{[IO.File]::WriteAllBytes($scopedPath,$origScoped)}
 
+        # PR 3B: Opt-in P5-0 Execute wiring for C_LITE_V1 capture, reuse, and recovery.
+        $profileCmd=Get-Command Get-InternalPhase5HtmlEvidenceRetentionProfile -ErrorAction SilentlyContinue
+        Check ($null -ne $profileCmd) 'PR3B retention profile helper must exist'
+        $origProfileGetter=$profileCmd.ScriptBlock
+        Equal (& $origProfileGetter) LEGACY 'Default P5-0 HTML retention profile remains LEGACY'
+        $cliteExecStore=New-HistoryStoreLayout -Root (Join-Path $root 'clite-exec-p50-history')
+        $cliteExecOut=Join-Path $root 'clite-exec-p50-output'
+        $cliteExecArgs=@{Store=$cliteExecStore;Rows=@($cliteRow);BusinessId=$id;SourceRowNumberOffset=2;RepositoryRevision=$cliteRev;OutputDirectory=$cliteExecOut;RequestInvoker=$http;RepositoryStateProvider={ [pscustomobject]@{IsClean=$true} }}
+        Set-Item Function:Get-InternalPhase5HtmlEvidenceRetentionProfile -Value { return 'C_LITE_V1' }
+        try{
+            $execCap=Invoke-Phase5BenefitCycle @cliteExecArgs -RunId 'run-clite-exec-cap' -ObservedAt '2026-11-19T14:00:00.000+09:00'
+            Equal $execCap.CommitCode COMMITTED 'P5-0 C_LITE_V1 Execute capture commits'
+            Equal $execCap.Metrics.ParseCount 1 'P5-0 C_LITE_V1 capture parses once'
+            Equal $execCap.Metrics.ArtifactWrites 3 'P5-0 C_LITE_V1 capture writes 3 artifacts'
+            Equal @(Get-ChildItem -LiteralPath $cliteExecStore.ArtifactsRoot -Filter '*.html' -File).Count 0 'P5-0 C_LITE_V1 capture writes 0 .html files'
+            $execCapObs=Read-HistoryObservation -Store $cliteExecStore -ObservationId $execCap.ObservationId
+            Equal @($execCapObs.ArtifactReferences | Where-Object Kind -CEQ 'RAW_SOURCE_PAYLOAD').Count 0 'P5-0 C_LITE_V1 capture has 0 RAW references'
+
+            $execReuse=Invoke-Phase5BenefitCycle @cliteExecArgs -RunId 'run-clite-exec-reuse' -ObservedAt '2026-11-19T14:10:00.000+09:00'
+            Equal $execReuse.CommitCode COMMITTED 'P5-0 C_LITE_V1 Execute reuse commits'
+            Equal $execReuse.Metrics.ReuseApplied 1 'P5-0 C_LITE_V1 Execute reuse applies'
+            Equal $execReuse.Metrics.ParseCount 0 'P5-0 C_LITE_V1 Execute reuse avoids parse'
+            Equal $execReuse.Metrics.ArtifactWrites 1 'P5-0 C_LITE_V1 Execute reuse writes only v2 decision artifact'
+            Equal @(Get-ChildItem -LiteralPath $cliteExecStore.ArtifactsRoot -Filter '*.html' -File).Count 0 'P5-0 C_LITE_V1 reuse writes 0 .html files'
+            $execReuseObs=Read-HistoryObservation -Store $cliteExecStore -ObservationId $execReuse.ObservationId
+            Equal @($execReuseObs.ArtifactReferences).Count 4 'P5-0 C_LITE_V1 reuse has 4 artifact references'
+            Equal @($execReuseObs.ArtifactReferences | Where-Object Kind -CEQ 'RAW_SOURCE_PAYLOAD').Count 0 'P5-0 C_LITE_V1 reuse has 0 RAW references'
+
+            $reenterBefore=$requests.Count
+            $recExecCap=Invoke-Phase5BenefitCycle @cliteExecArgs -RunId 'run-clite-exec-cap' -ObservedAt '2026-11-19T14:00:00.000+09:00'
+            $recExecReuse=Invoke-Phase5BenefitCycle @cliteExecArgs -RunId 'run-clite-exec-reuse' -ObservedAt '2026-11-19T14:10:00.000+09:00'
+            Check ($recExecCap.Recovered -and $recExecCap.CommitCode -ceq 'COMMITTED' -and $null -eq $recExecCap.Metrics) 'P5-0 recovers Execute C_LITE_V1 capture'
+            Check ($recExecReuse.Recovered -and $recExecReuse.CommitCode -ceq 'COMMITTED' -and $null -eq $recExecReuse.Metrics) 'P5-0 recovers Execute C_LITE_V1 reuse'
+            Equal $requests.Count $reenterBefore 'P5-0 C_LITE_V1 Execute recovery fetch0'
+        }finally{
+            Set-Item Function:Get-InternalPhase5HtmlEvidenceRetentionProfile -Value $origProfileGetter
+        }
+
         Write-Host 'P5-0 Recovery PASS: same RunId fetch0; fresh unchanged fetch1 / parse0 / reuse1; output recovery metrics=null; material route preserved'
     }
     if($Group -cin @('Safety','All')){

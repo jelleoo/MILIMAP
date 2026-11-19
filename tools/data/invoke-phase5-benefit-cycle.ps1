@@ -111,6 +111,10 @@ function Resolve-InternalPhase5BenefitInput {
     }
 }
 
+function Get-InternalPhase5HtmlEvidenceRetentionProfile {
+    return 'LEGACY'
+}
+
 function Assert-InternalPhase5CommittedObservationProfile {
     param(
         [Parameter(Mandatory)]$Store,
@@ -238,7 +242,9 @@ function Invoke-Phase5BenefitCycle {
         if((Test-Path -LiteralPath $stagePath) -or (Test-Path -LiteralPath $terminalDirectory)){throw 'P5_STATE_CHANGED_BEFORE_FETCH'}
         $started=$true
         $context=New-BenefitSourceRunContext
-        $run=Invoke-BenefitIncrementalPostFetch -Store $Store -RunId $RunId -ObservedAt $ObservedAt -RepositoryRevision $RepositoryRevision -BusinessId $BusinessId -Benefit $benefit -BusinessIdentity $business -CanonicalPhone $phone -Candidate $candidate -RunContext $context -RequestInvoker $RequestInvoker -RepositoryStateProvider $RepositoryStateProvider
+        $retentionProfile=Get-InternalPhase5HtmlEvidenceRetentionProfile
+        if($retentionProfile -cnotin @('LEGACY','C_LITE_V1')){throw 'P5_EXECUTION_PROFILE_UNKNOWN'}
+        $run=Invoke-BenefitIncrementalPostFetch -Store $Store -RunId $RunId -ObservedAt $ObservedAt -RepositoryRevision $RepositoryRevision -BusinessId $BusinessId -Benefit $benefit -BusinessIdentity $business -CanonicalPhone $phone -Candidate $candidate -RunContext $context -RequestInvoker $RequestInvoker -RepositoryStateProvider $RepositoryStateProvider -HtmlEvidenceRetentionProfile $retentionProfile
         $view.CommitCode=[string]$run.Commit.Code;$view.Code=$view.CommitCode;$view.RetryRequired=[bool]$run.Commit.RetryRequired
         $clearClaim=$view.CommitCode -ceq 'COMMITTED'
         $view.OperationalStatus=[string]$run.Observation.OperationalStatus
@@ -246,6 +252,10 @@ function Invoke-Phase5BenefitCycle {
         $view.Metrics | Add-Member NoteProperty FetchCacheHits $context.Metrics.FetchCacheHits
         $view.Metrics | Add-Member NoteProperty AdapterReuseCount $context.Metrics.AdapterReuseCount
         if($view.CommitCode -ceq 'COMMITTED'){
+            $committedManifest=Read-HistoryJsonFile -Store $Store -Path (Get-HistoryRunManifestPath -Store $Store -RunId $RunId) -Kind 'run manifest'
+            if($null -eq $committedManifest){throw 'P5_COMMITTED_MANIFEST_MISSING'}
+            $verifiedProfile=Assert-InternalPhase5CommittedObservationProfile -Store $Store -Observation $run.Observation -Manifest $committedManifest -ExpectedObservedAt $ObservedAt -Comparison $run.Comparison
+            if($verifiedProfile -cne $retentionProfile){throw 'P5_COMMITTED_PROFILE_MISMATCH'}
             Set-Phase5BenefitCommittedView -Result $view -Store $Store -Observation $run.Observation -Comparison $run.Comparison
         }else{
             $view.Status='FAILED';$view.Reasons=@([string]$run.Commit.Reason)

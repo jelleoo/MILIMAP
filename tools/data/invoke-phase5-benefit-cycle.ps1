@@ -1,9 +1,10 @@
-Set-StrictMode -Version Latest
+﻿Set-StrictMode -Version Latest
 $ErrorActionPreference='Stop'
 . (Join-Path $PSScriptRoot 'invoke-phase2-benefit-shadow-mode.ps1')
 . (Join-Path $PSScriptRoot 'lib/identity/canonical-business-id.ps1')
 . (Join-Path $PSScriptRoot 'lib/history/benefit-incremental-reuse.ps1')
 . (Join-Path $PSScriptRoot 'invoke-phase3-review-audit.ps1')
+. (Join-Path $PSScriptRoot 'lib/history/benefit-scoped-html-history.ps1')
 
 function Get-Phase5BenefitRepositoryRoots {
     $worktree=[IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../..'))
@@ -110,6 +111,56 @@ function Resolve-InternalPhase5BenefitInput {
     }
 }
 
+function Assert-InternalPhase5CommittedObservationProfile {
+    param(
+        [Parameter(Mandatory)]$Store,
+        [Parameter(Mandatory)]$Observation,
+        [Parameter(Mandatory)]$Manifest,
+        [AllowNull()][string]$ExpectedObservedAt=$null,
+        [AllowNull()]$Comparison=$null
+    )
+
+    Assert-HistoryObservation $Observation
+    Assert-HistoryRunManifest $Manifest
+    $profile=Get-BenefitRetentionProfileCandidate -ExecutionFingerprint ([string]$Observation.ExecutionFingerprint) -RepositoryRevision ([string]$Manifest.RepositoryRevision)
+    if($profile -ceq 'PROFILE_UNKNOWN'){throw 'P5_EXECUTION_PROFILE_UNKNOWN'}
+    if($profile -ceq 'LEGACY'){
+        $scopedRefs=@($Observation.ArtifactReferences | Where-Object { [string]$_.Kind -ceq 'BENEFIT_SCOPED_EVIDENCE' })
+        if($scopedRefs.Count -gt 0){throw 'P5_LEGACY_SCOPED_FORBIDDEN'}
+        foreach($reuseRef in @($Observation.ArtifactReferences | Where-Object { [string]$_.Kind -ceq 'BENEFIT_REUSE_DECISION' })){
+            $reuseItem=Read-InternalScopedArtifactItem -Store $Store -Ref $reuseRef -MaxBytes 65536
+            if($null -eq $reuseItem.Value -or $reuseItem.Value.PSObject.Properties.Name -cnotcontains 'ContractVersion' -or [int]$reuseItem.Value.ContractVersion -ne 1){throw 'P5_LEGACY_REUSE_VERSION_INVALID'}
+        }
+        return 'LEGACY'
+    }
+
+    $strict=Read-InternalScopedCommittedRecord -Store $Store -ObservationId ([string]$Observation.ObservationId)
+    if(-not [string]::IsNullOrWhiteSpace($ExpectedObservedAt)){
+        if($strict.Observation.ObservedAt -cne $ExpectedObservedAt){throw 'P5_CLITE_TIMESTAMP_MISMATCH'}
+        if($strict.Manifest.StartedAt -cne $ExpectedObservedAt){throw 'P5_CLITE_MANIFEST_TIMESTAMP_MISMATCH'}
+    }
+    $refCount=$strict.Observation.ArtifactReferences.Count
+    if($refCount -eq 3){
+        $cap=Read-BenefitScopedHtmlCommittedCapture -Store $Store -ObservationId $strict.Observation.ObservationId
+        if($cap.Status -cne 'VERIFIED' -or $null -eq $cap.Capture){throw 'P5_CLITE_CAPTURE_VERIFICATION_FAILED'}
+    }elseif($refCount -eq 4){
+        $reuse=Read-BenefitScopedHtmlCommittedReuse -Store $Store -ObservationId $strict.Observation.ObservationId
+        if($reuse.Status -cne 'VERIFIED' -or $null -eq $reuse.Reuse){throw 'P5_CLITE_REUSE_VERIFICATION_FAILED'}
+        if($null -ne $Comparison -and ([string]$Comparison.ComparisonId -cne [string]$reuse.Reuse.Comparison.ComparisonId)){throw 'P5_CLITE_REUSE_COMPARISON_MISMATCH'}
+    }elseif($refCount -eq 2){
+        $eRefs=@($strict.Observation.ArtifactReferences | Where-Object Kind -CEQ 'BENEFIT_EVIDENCE_PROJECTION')
+        $sRefs=@($strict.Observation.ArtifactReferences | Where-Object Kind -CEQ 'BENEFIT_SEMANTIC_PROJECTION')
+        if($eRefs.Count -ne 1 -or $sRefs.Count -ne 1){throw 'P5_CLITE_ARTIFACT_SHAPE_INVALID'}
+        $eItem=Read-InternalScopedArtifactItem -Store $Store -Ref $eRefs[0] -MaxBytes 65536
+        $sItem=Read-InternalScopedArtifactItem -Store $Store -Ref $sRefs[0] -MaxBytes 65536
+        $verifiedProfile=Assert-BenefitRetentionArtifactRequirements -Observation $strict.Observation -RunManifest $strict.Manifest -EvidenceProjection $eItem.Value -SemanticProjection $sItem.Value
+        if($verifiedProfile -cne 'C_LITE_V1'){throw 'P5_CLITE_PROFILE_MISMATCH'}
+    }else{
+        throw 'P5_CLITE_ARTIFACT_COUNT_INVALID'
+    }
+    return 'C_LITE_V1'
+}
+
 function Restore-InternalPhase5BenefitCommittedCycle {
     param($Store,$ResolvedInput,$Result)
     $terminal=Read-HistoryJsonFile -Store $Store -Path (Get-HistoryRunManifestPath -Store $Store -RunId $ResolvedInput.RunId) -Kind 'run manifest'
@@ -125,10 +176,12 @@ function Restore-InternalPhase5BenefitCommittedCycle {
     $items=@($audit.Items | Where-Object { $_.RunId -ceq $ResolvedInput.RunId })
     if($items.Count -ne 1 -or $items[0].BusinessId -cne $ResolvedInput.BusinessId -or $items[0].Domain -cne 'BENEFIT'){throw 'P5_COMMITTED_RECORDS_AMBIGUOUS'}
     $observation=Read-HistoryObservation -Store $Store -ObservationId $items[0].CurrentObservationId
-    $input=ConvertTo-BenefitHistoryInputProjection -BusinessId $ResolvedInput.BusinessId -Benefit $ResolvedInput.Benefit -BusinessIdentity $ResolvedInput.Business -CanonicalPhone $ResolvedInput.Phone
-    $execution=ConvertTo-BenefitHistoryExecutionProjection -RepositoryRevision $ResolvedInput.RepositoryRevision
-    if([DateTimeOffset]$observation.ObservedAt -ne [DateTimeOffset]::Parse($ResolvedInput.ObservedAt,[Globalization.CultureInfo]::InvariantCulture) -or $observation.InputFingerprint -cne (Get-HistoryFingerprint -Projection $input -SchemaVersion $script:FingerprintSchemaVersion) -or $observation.ExecutionFingerprint -cne (Get-HistoryFingerprint -Projection $execution -SchemaVersion $script:FingerprintSchemaVersion)){throw 'P5_COMMITTED_INPUT_MISMATCH'}
     $comparison=if($items[0].ComparisonId){Read-HistoryJsonFile -Store $Store -Path (Get-HistoryComparisonPath -Store $Store -ComparisonId $items[0].ComparisonId) -Kind 'comparison'}else{$null}
+    $profile=Assert-InternalPhase5CommittedObservationProfile -Store $Store -Observation $observation -Manifest $terminal -ExpectedObservedAt $ResolvedInput.ObservedAt -Comparison $comparison
+    $input=ConvertTo-BenefitHistoryInputProjection -BusinessId $ResolvedInput.BusinessId -Benefit $ResolvedInput.Benefit -BusinessIdentity $ResolvedInput.Business -CanonicalPhone $ResolvedInput.Phone
+    $executionConfig=if($profile -ceq 'C_LITE_V1'){[pscustomobject]@{HtmlEvidenceRetentionProfile='C_LITE_V1'}}else{$null}
+    $execution=ConvertTo-BenefitHistoryExecutionProjection -RepositoryRevision $ResolvedInput.RepositoryRevision -ExecutionConfiguration $executionConfig
+    if([DateTimeOffset]$observation.ObservedAt -ne [DateTimeOffset]::Parse($ResolvedInput.ObservedAt,[Globalization.CultureInfo]::InvariantCulture) -or $observation.InputFingerprint -cne (Get-HistoryFingerprint -Projection $input -SchemaVersion $script:FingerprintSchemaVersion) -or $observation.ExecutionFingerprint -cne (Get-HistoryFingerprint -Projection $execution -SchemaVersion $script:FingerprintSchemaVersion)){throw 'P5_COMMITTED_INPUT_MISMATCH'}
     Set-Phase5BenefitCommittedView -Result $Result -Store $Store -Observation $observation -Comparison $comparison
     $Result.Code='COMMITTED';$Result.Recovered=$true
     return $Result

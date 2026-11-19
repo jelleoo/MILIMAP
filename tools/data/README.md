@@ -1486,3 +1486,31 @@ changes remain separate approved work.
 `ProductionAction=NONE`; `LiveHTTP=NOT_AUTHORIZED`; `C-Lite activation=NOT_AUTHORIZED`;
 `RAW suppression=NOT_AUTHORIZED`; `P4-3B=BLOCKED`; `OCR dependency=NOT_APPROVED`;
 `Phase4=NOT_COMPLETE`.
+
+## C-Lite PR 3A — Phase 5 RecoverOnly and Inspector compatibility (Issue #147)
+
+`invoke-phase5-benefit-cycle.ps1` imports `lib/history/benefit-scoped-html-history.ps1`
+for read-only committed verification (`Assert-InternalPhase5CommittedObservationProfile`)
+without activating C-Lite in `Execute` mode (`C-Lite activation=NOT_AUTHORIZED`,
+`RAW suppression=NOT_AUTHORIZED`).
+
+- `Get-BenefitRetentionProfileCandidate` classifies each committed observation as
+  `LEGACY`, `C_LITE_V1`, or `PROFILE_UNKNOWN` (rejected fail-closed).
+- `LEGACY` observations forbid `BENEFIT_SCOPED_EVIDENCE` references and require
+  `ContractVersion = 1` on any `BENEFIT_REUSE_DECISION` artifact.
+- `C_LITE_V1` observations require exact lexical `ObservedAt` / `StartedAt` match
+  when an expected timestamp is supplied, and invoke strict committed verification:
+  `Read-BenefitScopedHtmlCommittedCapture` for 3-artifact captures,
+  `Read-BenefitScopedHtmlCommittedReuse` (plus `ComparisonId` check) for
+  4-artifact reuse records, and `Assert-BenefitRetentionArtifactRequirements` for
+  2-artifact failed-fetch non-comparable records.
+- `Restore-InternalPhase5BenefitCommittedCycle`, `Assert-InternalPhase5BenefitBatchIndex`,
+  and `Inspect-Phase5BenefitBatch` validate `ExecutionFingerprint` against the
+  verified profile (`LEGACY` vs `C_LITE_V1`), watch inspected artifact paths, and
+  preserve `P52_AUDITED_REVIEW_CHANGED` (`INCONCLUSIVE_CONCURRENT_CHANGE`) when an
+  audited record mutates during inspection.
+- Offline checks in `test-phase5-benefit-cycle.ps1`, `test-phase5-benefit-batch.ps1`,
+  and `test-inspect-phase5-benefit-batch.ps1` cover read-only recovery/inspection of
+  committed `C_LITE_V1` captures and v2 reuses, lexical timestamp tampering,
+  corrupted C-Lite artifacts, and concurrent comparison mutation during audit.
+  Runner `Execute` activation and RAW suppression remain separate approved work.

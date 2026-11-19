@@ -1,4 +1,4 @@
-param([ValidateSet('Plan','History','Safety','Network','All')][string]$Group='All')
+﻿param([ValidateSet('Plan','History','Safety','Network','All')][string]$Group='All')
 Set-StrictMode -Version Latest
 $ErrorActionPreference='Stop'
 $inspector=Join-Path $PSScriptRoot 'inspect-phase5-benefit-batch.ps1'
@@ -308,6 +308,95 @@ try{
             Equal ($r.Items.ObservationId -join '|') ($committed.Items.ObservationId -join '|') 'Other batch committed observations cannot leak into requested batch'
             Equal ($r.Items.ReviewKey -join '|') ($committed.Items.Review.ReviewKey -join '|') 'Requested old ReviewKeys retained'
         }finally{[IO.File]::WriteAllBytes($plan.PlanPath,$frozenBytes);[IO.File]::WriteAllBytes($csv,$csvBytes)}
+
+        # PR 3A: Inspector compatibility with committed C-Lite capture and v2 reuse records.
+        . (Join-Path $PSScriptRoot 'lib/history/benefit-scoped-html-capture-builder.ps1')
+        $cStore=New-HistoryStoreLayout -Root (Join-Path $root 'clite-inspect-history')
+        $cBatchRoot=Join-Path $root 'clite-inspect-batches'
+        $cObsAt='2026-11-19T12:34:56.000+09:00'
+        $cOpts=@{Store=$cStore;CanonicalCsvPath=$csv;BusinessIds=$ids;BatchWorkspaceRoot=$cBatchRoot;ObservedAt=$cObsAt;RepositoryRevision=$options.RepositoryRevision}
+        $cPlan=New-Phase5BenefitBatchPlan @cOpts; $cOpts.BatchId=$cPlan.BatchId; Freeze-Plan $cPlan
+        $cHtml='<table><tr><th>업소명</th><th>주소</th><th>전화번호</th><th>할인</th></tr>'
+        foreach($rw in $rows){$cHtml+='<tr><td>'+$rw.업소명+'</td><td>'+$rw.소재지도로명주소+'</td><td>'+$rw.업소전화번호+'</td><td>10% 할인</td></tr>'};$cHtml+='</table>'
+
+        $b0Biz=ConvertTo-NormalizedBusiness -Row $rows[0] -SourceRowNumber 2
+        $b0Ben=ConvertTo-Phase2CanonicalBenefitRecord -Row $rows[0] -SourceRowNumber 2
+        $b0Cand=Get-ExistingBenefitSourceCandidate -Benefit $b0Ben; $b0Cand.ObservedAt=$cObsAt
+        $b0Ctx=New-BenefitSourceRunContext
+        $b0Rec=Invoke-ScopedPhase2BenefitSourceCandidate -Candidate $b0Cand -Business $b0Biz -CanonicalPhone $rows[0].업소전화번호 -RunContext $b0Ctx -RequestInvoker {param($Uri)[pscustomobject]@{StatusCode=200;ContentType='text/html';Text=$cHtml;Bytes=$null}}.GetNewClosure()
+        $b0Eval=Get-Phase2BenefitEvaluation -Benefit $b0Ben -SourceRecords @($b0Rec) -DiscoveryStatus COMPLETE
+        $b0Reasons=[Collections.Generic.List[string]]::new();Add-Phase2UniqueReasonCodes -Target $b0Reasons -ReasonCodes $b0Eval.Evaluation.ReasonCodes;Add-Phase2UniqueReasonCodes -Target $b0Reasons -ReasonCodes $b0Rec.ReasonCodes
+        $b0Res=New-BenefitVerificationResult -SourceRowNumber 2 -BusinessIdentity $b0Biz -BenefitState $b0Eval.Evaluation.BenefitState -ReviewClass $b0Eval.Evaluation.ReviewClass -ReasonCodes @($b0Reasons) -ClaimResults $b0Eval.ClaimResults -Evidence $b0Eval.Evaluation.Evidence -Warnings $b0Eval.Evaluation.Warnings -ProductionAction NONE
+        $b0Pkg=New-BenefitScopedHtmlCaptureCandidate -RunContext $b0Ctx -SourceRecord $b0Rec -Benefit $b0Ben -BusinessId $ids[0] -BusinessIdentity $b0Biz -CanonicalPhone $rows[0].업소전화번호 -Result $b0Res -OperationalStatus $b0Eval.OperationalStatus -RunId $cPlan.Items[0].RunId -ObservedAt $cObsAt -RepositoryRevision $cOpts.RepositoryRevision
+        $b0Arts=@(foreach($a in $b0Pkg.Candidate.Artifacts){[pscustomobject]@{ContentHash=$a.Reference.ContentHash;Extension='json';Kind=$a.Reference.Kind;Text=$a.Text}})
+        $b0Man=New-HistoryRunManifest -RunId $cPlan.Items[0].RunId -StartedAt $cObsAt -CompletedAt '' -RepositoryRevision $cOpts.RepositoryRevision -RequestedBusinessIds @($ids[0]) -CompletedBusinessIds @($ids[0]) -FailedBusinessIds @() -ExecutionStatus COMPLETE -RunCommitStatus PREPARED
+        $b0Prep=Prepare-HistoryRun -Store $cStore -RunManifest $b0Man -Artifacts $b0Arts -Observations @($b0Pkg.Candidate.Observation) -Comparisons @()
+        Equal (Commit-HistoryRun -Store $cStore -PreparedRun $b0Prep -ExpectedBaselines @{($ids[0]+'|BENEFIT')=''}).Code COMMITTED 'Inspector C-Lite capture commits'
+
+        $b1SeedObsAt='2026-11-19T11:34:56.000+09:00'
+        $b1Biz=ConvertTo-NormalizedBusiness -Row $rows[1] -SourceRowNumber 3
+        $b1Ben=ConvertTo-Phase2CanonicalBenefitRecord -Row $rows[1] -SourceRowNumber 3
+        $b1Cand=Get-ExistingBenefitSourceCandidate -Benefit $b1Ben; $b1Cand.ObservedAt=$b1SeedObsAt
+        $b1Ctx=New-BenefitSourceRunContext
+        $b1Rec=Invoke-ScopedPhase2BenefitSourceCandidate -Candidate $b1Cand -Business $b1Biz -CanonicalPhone $rows[1].업소전화번호 -RunContext $b1Ctx -RequestInvoker {param($Uri)[pscustomobject]@{StatusCode=200;ContentType='text/html';Text=$cHtml;Bytes=$null}}.GetNewClosure()
+        $b1Eval=Get-Phase2BenefitEvaluation -Benefit $b1Ben -SourceRecords @($b1Rec) -DiscoveryStatus COMPLETE
+        $b1Reasons=[Collections.Generic.List[string]]::new();Add-Phase2UniqueReasonCodes -Target $b1Reasons -ReasonCodes $b1Eval.Evaluation.ReasonCodes;Add-Phase2UniqueReasonCodes -Target $b1Reasons -ReasonCodes $b1Rec.ReasonCodes
+        $b1Res=New-BenefitVerificationResult -SourceRowNumber 3 -BusinessIdentity $b1Biz -BenefitState $b1Eval.Evaluation.BenefitState -ReviewClass $b1Eval.Evaluation.ReviewClass -ReasonCodes @($b1Reasons) -ClaimResults $b1Eval.ClaimResults -Evidence $b1Eval.Evaluation.Evidence -Warnings $b1Eval.Evaluation.Warnings -ProductionAction NONE
+        $b1SeedPkg=New-BenefitScopedHtmlCaptureCandidate -RunContext $b1Ctx -SourceRecord $b1Rec -Benefit $b1Ben -BusinessId $ids[1] -BusinessIdentity $b1Biz -CanonicalPhone $rows[1].업소전화번호 -Result $b1Res -OperationalStatus $b1Eval.OperationalStatus -RunId 'run-p52a-clite-seed' -ObservedAt $b1SeedObsAt -RepositoryRevision $cOpts.RepositoryRevision
+        $b1SeedArts=@(foreach($a in $b1SeedPkg.Candidate.Artifacts){[pscustomobject]@{ContentHash=$a.Reference.ContentHash;Extension='json';Kind=$a.Reference.Kind;Text=$a.Text}})
+        $b1SeedMan=New-HistoryRunManifest -RunId 'run-p52a-clite-seed' -StartedAt $b1SeedObsAt -CompletedAt '' -RepositoryRevision $cOpts.RepositoryRevision -RequestedBusinessIds @($ids[1]) -CompletedBusinessIds @($ids[1]) -FailedBusinessIds @() -ExecutionStatus COMPLETE -RunCommitStatus PREPARED
+        $b1SeedPrep=Prepare-HistoryRun -Store $cStore -RunManifest $b1SeedMan -Artifacts $b1SeedArts -Observations @($b1SeedPkg.Candidate.Observation) -Comparisons @()
+        Equal (Commit-HistoryRun -Store $cStore -PreparedRun $b1SeedPrep -ExpectedBaselines @{($ids[1]+'|BENEFIT')=''}).Code COMMITTED 'Inspector C-Lite seed commits'
+
+        $b1ReuseCtx=New-BenefitSourceRunContext
+        $b1ReuseCand=Get-ExistingBenefitSourceCandidate -Benefit $b1Ben; $b1ReuseCand.ObservedAt=$cObsAt
+        $b1ReuseDoc=Get-BenefitRunSourceDocument -Context $b1ReuseCtx -Candidate $b1ReuseCand -RequestInvoker {param($Uri)[pscustomobject]@{StatusCode=200;ContentType='text/html';Text=$cHtml;Bytes=$null}}.GetNewClosure()
+        [void](Get-BenefitRunSourceSnapshot -Context $b1ReuseCtx -Document $b1ReuseDoc)
+        $b1ReusePkg=New-BenefitScopedHtmlReusePackage -Store $cStore -PreviousObservationId $b1SeedPkg.Candidate.Observation.ObservationId -RunContext $b1ReuseCtx -Candidate $b1ReuseCand -Document $b1ReuseDoc -Benefit $b1Ben -BusinessId $ids[1] -BusinessIdentity $b1Biz -CanonicalPhone $rows[1].업소전화번호 -RunId $cPlan.Items[1].RunId -ObservedAt $cObsAt -RepositoryRevision $cOpts.RepositoryRevision -RepositoryClean $true
+        $b1ReuseMan=New-HistoryRunManifest -RunId $cPlan.Items[1].RunId -StartedAt $cObsAt -CompletedAt '' -RepositoryRevision $cOpts.RepositoryRevision -RequestedBusinessIds @($ids[1]) -CompletedBusinessIds @($ids[1]) -FailedBusinessIds @() -ExecutionStatus COMPLETE -RunCommitStatus PREPARED
+        $b1ReusePrep=Prepare-HistoryRun -Store $cStore -RunManifest $b1ReuseMan -Artifacts $b1ReusePkg.Package.PreparedArtifacts -Observations @($b1ReusePkg.Package.Observation) -Comparisons @($b1ReusePkg.Package.Comparison)
+        Equal (Commit-HistoryRun -Store $cStore -PreparedRun $b1ReusePrep -ExpectedBaselines @{($ids[1]+'|BENEFIT')=$b1SeedPkg.Candidate.Observation.ObservationId}).Code COMMITTED 'Inspector C-Lite reuse commits'
+
+        $cRes=Inspect-Checked $cOpts
+        Equal $cRes.InspectionStatus FINISHED 'Inspector C-Lite batch finishes'
+        Equal $cRes.HistoryState VERIFIED 'Inspector C-Lite capture and reuse History verified'
+        Equal $cRes.RecoveryConsideration CONDITIONAL 'Inspector C-Lite recovery conditional'
+        Equal ($cRes.Items.RunState -join ',') 'COMMITTED,COMMITTED' 'Inspector C-Lite both committed'
+        Equal ($cRes.Items.FingerprintState -join ',') 'MATCH,MATCH' 'Inspector C-Lite fingerprints match'
+
+        # Negative controls on Inspector C-Lite: lexical timestamp tampering, scoped artifact damage, concurrent comparison mutation.
+        $capObsPath=Get-HistoryObservationPath -Store $cStore -ObservationId $b0Pkg.Candidate.Observation.ObservationId
+        $origCapObs=[IO.File]::ReadAllBytes($capObsPath)
+        try{
+            $tObj=[Text.Encoding]::UTF8.GetString($origCapObs) | ConvertFrom-Json @jsonOptions; $tObj.ObservedAt='2026-11-19T03:34:56Z'
+            [IO.File]::WriteAllText($capObsPath,(ConvertTo-HistoryCanonicalJson $tObj))
+            $cBadLex=Inspect-Checked $cOpts
+            Equal $cBadLex.HistoryState INVALID 'Inspector rejects C-Lite lexical timestamp mismatch'
+            Equal $cBadLex.RecoveryConsideration BLOCKED 'Inspector blocks C-Lite lexical timestamp mismatch'
+        }finally{[IO.File]::WriteAllBytes($capObsPath,$origCapObs)}
+
+        $reuseDecRef=@($b1ReusePkg.Package.Observation.ArtifactReferences | Where-Object Kind -CEQ 'BENEFIT_REUSE_DECISION')[0]
+        $reuseDecPath=Join-Path $cStore.Root $reuseDecRef.RelativePath
+        $origReuseDec=[IO.File]::ReadAllBytes($reuseDecPath)
+        try{
+            [IO.File]::WriteAllText($reuseDecPath,'{"tampered":true}')
+            $cBadDec=Inspect-Checked $cOpts
+            Equal $cBadDec.HistoryState INVALID 'Inspector rejects damaged C-Lite reuse decision'
+            Equal $cBadDec.RecoveryConsideration BLOCKED 'Inspector blocks damaged C-Lite reuse decision'
+        }finally{[IO.File]::WriteAllBytes($reuseDecPath,$origReuseDec)}
+
+        $cmpPath=Get-HistoryComparisonPath -Store $cStore -ComparisonId $b1ReusePkg.Package.Comparison.ComparisonId
+        $origCmp=[IO.File]::ReadAllBytes($cmpPath)
+        try{
+            $cMod=[Text.Encoding]::UTF8.GetString($origCmp) | ConvertFrom-Json @jsonOptions
+            $cMod.ChangeCandidates=@('BENEFIT_CHANGE_SUSPECTED')
+            $cModText=ConvertTo-HistoryCanonicalJson $cMod
+            $cMutate={ [IO.File]::WriteAllText($cmpPath,$cModText) }.GetNewClosure()
+            $cConc=Inspect-Checked $cOpts -DuringAudit $cMutate
+            Equal $cConc.InspectionStatus INCONCLUSIVE_CONCURRENT_CHANGE 'Inspector C-Lite concurrent comparison change stays INCONCLUSIVE_CONCURRENT_CHANGE'
+            Equal $cConc.RecoveryConsideration INCONCLUSIVE 'Inspector C-Lite concurrent comparison change blocks recovery consideration'
+        }finally{[IO.File]::WriteAllBytes($cmpPath,$origCmp)}
+
         Write-Host 'P5-2A MissingPlanIdentity PASS: requested RunIds/observations retained; other batch excluded; unknown frozen fields remain unavailable'
     }
 }finally{

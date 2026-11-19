@@ -67,6 +67,23 @@ function New-InternalPhase5BenefitBatchItem {
 function Assert-InternalPhase5BenefitBatchIndex {
     param($Store,[string]$BusinessId,[object[]]$KnownReviews=@())
     $known=@($KnownReviews | Where-Object {$_.BusinessId -ceq $BusinessId -and $_.Domain -ceq 'BENEFIT'})
+    if($known.Count -gt 0){
+        foreach($kr in $known){
+            $kObs=Read-HistoryObservation -Store $Store -ObservationId ([string]$kr.CurrentObservationId)
+            $kCmp=if([string]::IsNullOrWhiteSpace([string]$kr.ComparisonId)){$null}else{Read-HistoryJsonFile -Store $Store -Path (Get-HistoryComparisonPath -Store $Store -ComparisonId ([string]$kr.ComparisonId)) -Kind 'comparison'}
+            if($null -eq $kObs -or (-not [string]::IsNullOrWhiteSpace([string]$kr.ComparisonId) -and $null -eq $kCmp)){
+                $changeException=[InvalidOperationException]::new('P52_AUDITED_REVIEW_CHANGED')
+                $changeException.Data['P52ConcurrentChange']=$true
+                throw $changeException
+            }
+            $rebuilt=New-Phase3ReviewItem -Observation $kObs -Comparison $kCmp
+            if((ConvertTo-HistoryCanonicalJson $rebuilt) -cne (ConvertTo-HistoryCanonicalJson $kr)){
+                $changeException=[InvalidOperationException]::new('P52_AUDITED_REVIEW_CHANGED')
+                $changeException.Data['P52ConcurrentChange']=$true
+                throw $changeException
+            }
+        }
+    }
     $entry=Get-HistoryLatestEntry -Store $Store -BusinessId $BusinessId -Domain BENEFIT
     if($null -eq $entry){if($known.Count -gt 0){throw 'P51_HISTORY_INDEX_MISSING'};return $null}
     if([string]::IsNullOrWhiteSpace($entry.LatestObservationId)){throw 'P51_HISTORY_LATEST_MISSING'}
@@ -81,6 +98,9 @@ function Assert-InternalPhase5BenefitBatchIndex {
         Assert-HistoryObservationIsCommitted -Store $Store -Observation $obs
         if($property -ceq 'LatestComparableObservationId' -and (-not $obs.Comparable -or $obs.OperationalStatus -cne 'COMPLETE')){throw 'P51_HISTORY_COMPARABLE_INVALID'}
         foreach($reference in $obs.ArtifactReferences){Assert-HistoryArtifactReferenceExists -Store $Store -Reference $reference}
+        $obsManifest=Read-HistoryJsonFile -Store $Store -Path (Get-HistoryRunManifestPath -Store $Store -RunId ([string]$obs.RunId)) -Kind 'run manifest'
+        if($null -eq $obsManifest){throw 'P51_HISTORY_INDEX_MANIFEST_MISSING'}
+        [void](Assert-InternalPhase5CommittedObservationProfile -Store $Store -Observation $obs -Manifest $obsManifest)
     }
     # Existing committed comparison edges prove baseline succession; do not infer commit order from timestamps.
     if($known.Count -gt 0){

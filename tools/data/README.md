@@ -1413,8 +1413,76 @@ comparison, BASELINE_MOVED, WRITER_LOCKED and COMMITTED+IndexRepairRequired.
 Fixtures are synthetic, never evidence of current official benefits.
 
 Legacy/C-Lite/History/incremental regressions and the sorted complete data suite
-remain delivery gates. Runtime activation, reuse audit v2, RecoverOnly/Inspector,
+remain delivery gates. Runtime activation, RecoverOnly/Inspector,
 new HTML RAW suppression and operator/scheduler integration require separate
 approved work. ProductionAction=NONE; LiveHTTP=NOT_AUTHORIZED;
 C-Lite activation=NOT_AUTHORIZED; RAW suppression=NOT_AUTHORIZED;
 P4-3B=BLOCKED; OCR dependency=NOT_APPROVED; Phase4=NOT_COMPLETE.
+
+## C-Lite PR 2D — inactive ReuseDecision v2 persistence bridge (Issue #145)
+
+`lib/history/benefit-scoped-html-history.ps1` additionally defines two inactive
+reuse-bridge entry points. Neither function is imported by production runners,
+writes to the Store, repairs indexes, suppresses RAW artifacts, or activates
+C-Lite runtime execution.
+
+### Reuse package boundary before Prepare
+
+`New-BenefitScopedHtmlReusePackage` accepts `Store`, `PreviousObservationId`,
+`RunContext`, `Candidate`, `Document`, `Benefit`, `BusinessId`,
+`BusinessIdentity`, `CanonicalPhone` (default empty string), `RunId`,
+`ObservedAt`, `RepositoryRevision`, and `RepositoryClean` (default `$true`).
+It verifies a committed C-Lite baseline (`3`-artifact capture via
+`Read-BenefitScopedHtmlCommittedCapture` or `4`-artifact prior reuse via
+`Read-BenefitScopedHtmlCommittedReuse`) without recursive History walks or
+mutable index lookups, requires `Test-BenefitScopedEvidenceReuseEligible`
+(`LOCATED_FIELDS` with `Claims.Count > 0`), and rejects `LEGACY`,
+`PROFILE_UNKNOWN`, `OUTCOME_ONLY`, zero-claim captures, dirty repositories,
+changed inputs/revisions/URLs/payloads, untrusted snapshots/documents, and
+non-fresh run/timestamp identities.
+
+Success returns `READY / C_LITE_REUSE_PACKAGE_READY` with `Package` containing:
+the new `REUSED` `HistoryObservation` carrying exact 4 `ArtifactReferences`
+(`BENEFIT_EVIDENCE_PROJECTION`, `BENEFIT_SEMANTIC_PROJECTION`,
+`BENEFIT_SCOPED_EVIDENCE`, and its own `BENEFIT_REUSE_DECISION` v2 — 0 RAW
+references), the single new `BENEFIT_REUSE_DECISION` v2 `PreparedArtifact`
+(`<= 16384` canonical UTF-8 bytes), the empty-delta `COMPLETE`
+`ObservationComparison` from `Compare-BenefitHistoryObservations`, and the
+`BenefitReuseDecision` v2 projection. Any failure returns
+`REJECTED / C_LITE_REUSE_PACKAGE_REJECTED / Package=$null` with zero stream
+leakage or Store writes.
+
+### O(1) read-only committed reuse verifier
+
+`Read-BenefitScopedHtmlCommittedReuse -Store <existing Core layout> -ObservationId <id>`
+returns `VERIFIED / C_LITE_COMMITTED_REUSE_VERIFIED` with `Reuse`
+(`Observation`, `Artifacts`, `Comparison`, `ReuseDecision`,
+`OwnerObservationId`), or `REJECTED / C_LITE_COMMITTED_REUSE_REJECTED / Reuse=$null`.
+Using strict UTF-8 byte reads, reparse-point rejection, and
+`ConvertFrom-BenefitScopedEvidenceJson`, it verifies:
+
+1. The current reuse observation (`4` artifacts), its `COMMITTED` manifest, and
+   `Assert-BenefitScopedEvidenceBundleSize` (`<= 65536` each base artifact,
+   `<= 16384` reuse decision, `<= 196608` aggregate).
+2. The original capture owner (`3`-artifact `COMMITTED` observation/manifest
+   matching base artifact references).
+3. The immediate predecessor (`COMMITTED` observation/manifest, and its
+   `BENEFIT_REUSE_DECISION` v2 artifact when multi-hop) in **O(1)** without
+   walking earlier hops.
+4. The committed `ObservationComparison` (`cmp-<sha256>`),
+   `Assert-BenefitScopedReuseRelationship`, and end-of-scan immutability re-reads
+   without index repair or automatic retry.
+
+### Offline verification (PR 2D)
+
+`test-benefit-scoped-html-history.ps1` additionally exercises 1st-hop and
+multi-hop (hop2/hop3) round-trips, O(1) hop3 read-path verification (hop1
+unopened), forbidden parse/extract/evaluate/index/writer guards, rejection of
+`LEGACY`/`OUTCOME_ONLY`/zero-claim/dirty/changed/untrusted baselines, tampered
+comparison/predecessor/JSON-key/lexical-timestamp read attacks, stream
+non-leakage, and `BASELINE_MOVED` / `COMMITTED + IndexRepairRequired` reuse
+commits. RecoverOnly/Inspector integration, runner wiring, and RAW policy
+changes remain separate approved work.
+`ProductionAction=NONE`; `LiveHTTP=NOT_AUTHORIZED`; `C-Lite activation=NOT_AUTHORIZED`;
+`RAW suppression=NOT_AUTHORIZED`; `P4-3B=BLOCKED`; `OCR dependency=NOT_APPROVED`;
+`Phase4=NOT_COMPLETE`.

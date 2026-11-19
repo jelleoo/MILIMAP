@@ -24,8 +24,6 @@ import com.example.milipercent.data.local.BenefitDatabase
 import com.example.milipercent.data.local.RoomBenefitLocalDataSource
 import com.example.milipercent.data.seed.AssetJsonSource
 import com.example.milipercent.data.seed.BundledSeedSynchronizer
-import com.example.milipercent.data.seed.LegacyBenefitSeedLoader
-import com.example.milipercent.data.seed.ManualBenefitSeedLoader
 import com.example.milipercent.data.session.SessionStore
 import com.example.milipercent.location.AndroidLocationDataSource
 import com.example.milipercent.navigation.MiliSpotNavHost
@@ -53,11 +51,10 @@ class MainActivity : ComponentActivity() {
             favoriteRepository = RoomFavoriteRepository(database),
             adminRepository = RoomAdminBenefitRepository(database),
             seedSynchronizer = BundledSeedSynchronizer(
-                database,
-                listOf(
-                    LegacyBenefitSeedLoader(AssetJsonSource(applicationContext, "benefits.seed.json")),
-                    ManualBenefitSeedLoader(AssetJsonSource(applicationContext, "manual_benefits_seed.json")),
-                ),
+                database = database,
+                manifestSource = AssetJsonSource(applicationContext, "benefits.seed.manifest.json"),
+                legacySeedSource = AssetJsonSource(applicationContext, "benefits.seed.json"),
+                manualSeedSource = AssetJsonSource(applicationContext, "manual_benefits_seed.json"),
             ),
             sessionStore = SessionStore(applicationContext),
             mmaConfigured = BuildConfig.MMA_API_URL.isNotBlank() && BuildConfig.MMA_SERVICE_KEY.isNotBlank(),

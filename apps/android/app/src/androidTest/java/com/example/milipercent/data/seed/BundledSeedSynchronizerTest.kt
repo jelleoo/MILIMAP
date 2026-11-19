@@ -42,10 +42,9 @@ class BundledSeedSynchronizerTest {
     fun verifiedBundledAssetsInstallOnceAs249Rows() = runBlocking {
         val synchronizer = BundledSeedSynchronizer(
             database = database,
-            sources = listOf(
-                LegacyBenefitSeedLoader(AssetJsonSource(context, "benefits.seed.json")),
-                ManualBenefitSeedLoader(AssetJsonSource(context, "manual_benefits_seed.json")),
-            ),
+            manifestSource = AssetJsonSource(context, "benefits.seed.manifest.json"),
+            legacySeedSource = AssetJsonSource(context, "benefits.seed.json"),
+            manualSeedSource = AssetJsonSource(context, "manual_benefits_seed.json"),
             currentTimeMillis = { 123L },
         )
 
@@ -56,7 +55,7 @@ class BundledSeedSynchronizerTest {
         assertEquals(249, database.benefitDao().countAll())
         assertEquals(BUNDLED_SEED_VERSION, database.seedStateDao().version(BUNDLED_SEED_NAME))
         assertEquals(0, normalizedDuplicateCount(database.benefitDao().getAllOnce()))
-        assertEquals(7, database.benefitDao().getAllOnce().count {
+        assertEquals(111, database.benefitDao().getAllOnce().count {
             it.latitude != null && it.longitude != null
         })
 
@@ -86,10 +85,9 @@ class BundledSeedSynchronizerTest {
         )
         val synchronizer = BundledSeedSynchronizer(
             database = database,
-            sources = listOf(
-                LegacyBenefitSeedLoader(AssetJsonSource(context, "benefits.seed.json")),
-                ManualBenefitSeedLoader(AssetJsonSource(context, "manual_benefits_seed.json")),
-            ),
+            manifestSource = AssetJsonSource(context, "benefits.seed.manifest.json"),
+            legacySeedSource = AssetJsonSource(context, "benefits.seed.json"),
+            manualSeedSource = AssetJsonSource(context, "manual_benefits_seed.json"),
             currentTimeMillis = { 123L },
         )
 

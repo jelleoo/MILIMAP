@@ -9,7 +9,6 @@ import java.util.Locale
 
 const val BUNDLED_SEED_NAME = "benefits"
 const val BUNDLED_SEED_VERSION = 7
-private const val BUNDLED_SEED_EXPECTED_COUNT = 249
 private val BUNDLED_SEED_SOURCE_TYPES = listOf(
     BenefitSourceType.LOCAL_GOV.name,
     BenefitSourceType.MANUAL_SEED.name,
@@ -25,47 +24,159 @@ interface BundledSeedInstaller {
     suspend fun synchronizeIfNeeded(): BundledSeedSyncResult
 }
 
-class BundledSeedSynchronizer(
-    private val database: BenefitDatabase,
-    private val sources: List<BenefitSeedSource>,
-    private val currentTimeMillis: () -> Long = System::currentTimeMillis,
-) : BundledSeedInstaller {
-    override suspend fun synchronizeIfNeeded(): BundledSeedSyncResult {
-        // 모든 입력은 transaction 진입 전에 parsing과 validation을 끝낸다.
-        val entities = sources.flatMap { source -> source.loadAndValidate() }
-        require(entities.size == BUNDLED_SEED_EXPECTED_COUNT) {
-            "내장 seed 건수가 올바르지 않습니다. (예상: $BUNDLED_SEED_EXPECTED_COUNT, 실제: ${entities.size})"
-        }
+internal interface BundledSeedTransactionScope {
+    suspend fun seedVersion(name: String): Int?
 
-        return database.withTransaction {
+    suspend fun countAllBenefits(): Int
+
+    suspend fun countBundledSeedRows(bundledSourceTypes: List<String>): Int
+
+    suspend fun deleteRetiredBundledSeedRows(
+        bundledSourceTypes: List<String>,
+        retainedIds: List<String>,
+    )
+
+    suspend fun upsertAllBenefits(benefits: List<BenefitEntity>)
+
+    suspend fun upsertSeedState(state: SeedStateEntity)
+}
+
+internal interface BundledSeedStore {
+    suspend fun <T> inTransaction(block: suspend BundledSeedTransactionScope.() -> T): T
+}
+
+private class RoomBundledSeedStore(
+    private val database: BenefitDatabase,
+) : BundledSeedStore {
+    override suspend fun <T> inTransaction(block: suspend BundledSeedTransactionScope.() -> T): T =
+        database.withTransaction {
             val benefitDao = database.benefitDao()
             val seedStateDao = database.seedStateDao()
-            if (seedStateDao.version(BUNDLED_SEED_NAME) == BUNDLED_SEED_VERSION) {
-                return@withTransaction BundledSeedSyncResult(
+            val scope = object : BundledSeedTransactionScope {
+                override suspend fun seedVersion(name: String): Int? = seedStateDao.version(name)
+
+                override suspend fun countAllBenefits(): Int = benefitDao.countAll()
+
+                override suspend fun countBundledSeedRows(bundledSourceTypes: List<String>): Int =
+                    benefitDao.countBundledSeedRows(bundledSourceTypes)
+
+                override suspend fun deleteRetiredBundledSeedRows(
+                    bundledSourceTypes: List<String>,
+                    retainedIds: List<String>,
+                ) = benefitDao.deleteRetiredBundledSeedRows(bundledSourceTypes, retainedIds)
+
+                override suspend fun upsertAllBenefits(benefits: List<BenefitEntity>) =
+                    benefitDao.upsertAll(benefits)
+
+                override suspend fun upsertSeedState(state: SeedStateEntity) =
+                    seedStateDao.upsert(state)
+            }
+            scope.block()
+        }
+}
+
+class BundledSeedSynchronizer internal constructor(
+    private val store: BundledSeedStore,
+    private val manifestSource: SeedJsonSource,
+    private val legacySeedSource: SeedJsonSource,
+    private val manualSeedSource: SeedJsonSource,
+    private val currentTimeMillis: () -> Long = System::currentTimeMillis,
+) : BundledSeedInstaller {
+    constructor(
+        database: BenefitDatabase,
+        manifestSource: SeedJsonSource,
+        legacySeedSource: SeedJsonSource,
+        manualSeedSource: SeedJsonSource,
+        currentTimeMillis: () -> Long = System::currentTimeMillis,
+    ) : this(
+        store = RoomBundledSeedStore(database),
+        manifestSource = manifestSource,
+        legacySeedSource = legacySeedSource,
+        manualSeedSource = manualSeedSource,
+        currentTimeMillis = currentTimeMillis,
+    )
+
+    override suspend fun synchronizeIfNeeded(): BundledSeedSyncResult {
+        // 모든 입력은 transaction 진입 전에 단일 읽기, checksum, parsing과 validation을 끝낸다.
+        val manifest = BundledSeedManifestLoader(manifestSource).loadAndValidate()
+
+        val legacyRawText = legacySeedSource.readText()
+        val actualSeedSha256 = sha256LfUtf8(legacyRawText)
+        if (actualSeedSha256 != manifest.seedSha256) {
+            throw BundledSeedValidationException(
+                "내장 seed SHA-256 checksum이 manifest와 일치하지 않습니다.",
+            )
+        }
+
+        val manualRawText = manualSeedSource.readText()
+        val actualManualSha256 = sha256LfUtf8(manualRawText)
+        if (actualManualSha256 != manifest.manualSeedSha256) {
+            throw BundledSeedValidationException(
+                "내장 manual seed SHA-256 checksum이 manifest와 일치하지 않습니다.",
+            )
+        }
+
+        val legacyEntities = LegacyBenefitSeedLoader(
+            jsonSource = SeedJsonSource { legacyRawText },
+            currentTimeMillis = currentTimeMillis,
+        ).loadAndValidate()
+        if (legacyEntities.size != manifest.totalCount) {
+            throw BundledSeedValidationException(
+                "내장 seed 건수가 manifest와 일치하지 않습니다. (예상: ${manifest.totalCount}, 실제: ${legacyEntities.size})",
+            )
+        }
+        val actualExactPins = legacyEntities.count { it.latitude != null && it.longitude != null }
+        val actualUnconfirmed = legacyEntities.count { it.latitude == null && it.longitude == null }
+        if (actualExactPins != manifest.exactPinCount ||
+            actualUnconfirmed != manifest.unconfirmedCoordinateCount
+        ) {
+            throw BundledSeedValidationException(
+                "내장 seed 지도 핀 건수가 manifest와 일치하지 않습니다. " +
+                    "(예상: ${manifest.exactPinCount}/${manifest.unconfirmedCoordinateCount}, " +
+                    "실제: $actualExactPins/$actualUnconfirmed)",
+            )
+        }
+
+        val manualEntities = ManualBenefitSeedLoader(
+            jsonSource = SeedJsonSource { manualRawText },
+            currentTimeMillis = currentTimeMillis,
+        ).loadAndValidate()
+        if (manualEntities.size != manifest.manualSeedCount) {
+            throw BundledSeedValidationException(
+                "내장 manual seed 건수가 manifest와 일치하지 않습니다. (예상: ${manifest.manualSeedCount}, 실제: ${manualEntities.size})",
+            )
+        }
+
+        val entities = legacyEntities + manualEntities
+        val expectedTotalCount = manifest.totalCount + manifest.manualSeedCount
+        validateCombinedEntities(entities)
+
+        return store.inTransaction {
+            val installedVersion = seedVersion(manifest.seedName)
+            if (installedVersion != null && installedVersion >= manifest.seedVersion) {
+                return@inTransaction BundledSeedSyncResult(
                     installed = false,
-                    storedCount = benefitDao.countAll(),
+                    storedCount = countAllBenefits(),
                 )
             }
 
-            validateCombinedEntities(entities)
-            benefitDao.deleteRetiredBundledSeedRows(
+            deleteRetiredBundledSeedRows(
                 bundledSourceTypes = BUNDLED_SEED_SOURCE_TYPES,
                 retainedIds = entities.map(BenefitEntity::id),
             )
-            benefitDao.upsertAll(entities)
-            seedStateDao.upsert(
+            upsertAllBenefits(entities)
+            upsertSeedState(
                 SeedStateEntity(
-                    name = BUNDLED_SEED_NAME,
-                    version = BUNDLED_SEED_VERSION,
+                    name = manifest.seedName,
+                    version = manifest.seedVersion,
                     installedAt = currentTimeMillis(),
                 ),
             )
-            val bundledStoredCount = benefitDao.countBundledSeedRows(BUNDLED_SEED_SOURCE_TYPES)
-            check(bundledStoredCount == BUNDLED_SEED_EXPECTED_COUNT) {
-                "내장 seed 저장 건수가 올바르지 않습니다. (예상: $BUNDLED_SEED_EXPECTED_COUNT, 실제: $bundledStoredCount)"
+            val bundledStoredCount = countBundledSeedRows(BUNDLED_SEED_SOURCE_TYPES)
+            check(bundledStoredCount == expectedTotalCount) {
+                "내장 seed 저장 건수가 올바르지 않습니다. (예상: $expectedTotalCount, 실제: $bundledStoredCount)"
             }
-            val storedCount = benefitDao.countAll()
-            BundledSeedSyncResult(installed = true, storedCount = storedCount)
+            BundledSeedSyncResult(installed = true, storedCount = countAllBenefits())
         }
     }
 

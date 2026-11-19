@@ -24,8 +24,19 @@ class ProductionSeedAssetTest {
     @Test
     fun productionReleaseSeedContainsOnlyOfficialCandidates() {
         val context = ApplicationProvider.getApplicationContext<android.content.Context>()
-        val benefits = LegacyBenefitSeedLoader(AssetJsonSource(context, "benefits.seed.json")).loadAndValidate()
+        val manifest = BundledSeedManifestLoader(
+            AssetJsonSource(context, "benefits.seed.manifest.json"),
+        ).loadAndValidate()
+        val legacyRawText = AssetJsonSource(context, "benefits.seed.json").readText()
+        val manualRawText = AssetJsonSource(context, "manual_benefits_seed.json").readText()
+        val benefits = LegacyBenefitSeedLoader(SeedJsonSource { legacyRawText }).loadAndValidate()
 
+        assertEquals(BUNDLED_SEED_VERSION, manifest.seedVersion)
+        assertEquals(manifest.totalCount, benefits.size)
+        assertEquals(manifest.exactPinCount, benefits.count { it.latitude != null && it.longitude != null })
+        assertEquals(manifest.unconfirmedCoordinateCount, benefits.count { it.latitude == null && it.longitude == null })
+        assertEquals(manifest.seedSha256, sha256LfUtf8(legacyRawText))
+        assertEquals(manifest.manualSeedSha256, sha256LfUtf8(manualRawText))
         assertEquals(249, benefits.size)
         assertEquals(111, benefits.count { it.latitude != null && it.longitude != null })
         assertEquals(138, benefits.count { it.latitude == null && it.longitude == null })

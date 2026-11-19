@@ -127,10 +127,17 @@ class BenefitXmlParserTest {
     }
 
     @Test
-    fun `필수 보안 기능을 지원하지 않는 parser는 fail closed 처리한다`() {
+    fun `Apache 전용 보안 기능이 없어도 정상 XML을 파싱한다`() {
+        withSaxParserFactory(RejectingSecurityFeatureSaxParserFactory::class.java) {
+            assertEquals(0, parse(emptySuccessXml()).totalCount)
+        }
+    }
+
+    @Test
+    fun `Apache 전용 보안 기능이 없어도 DOCTYPE을 거부한다`() {
         withSaxParserFactory(RejectingSecurityFeatureSaxParserFactory::class.java) {
             assertThrows(BenefitParsingException::class.java) {
-                parse(emptySuccessXml())
+                parse("<!DOCTYPE response>" + emptySuccessXml())
             }
         }
     }

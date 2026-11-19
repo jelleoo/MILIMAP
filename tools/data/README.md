@@ -1317,3 +1317,104 @@ Genuine failure observations retain their incomplete statuses without requiring 
 successful locator; failed parsing may supply SourceObservation=null only when
 adapter/count/location metadata is unobserved. No source matching or absence
 semantics, writer, RAW policy, History or production orchestration is introduced.
+
+## C-Lite PR 2C — inactive History persistence bridge (Issue #143)
+
+`lib/history/benefit-scoped-html-history.ps1` defines two inactive functions. It
+is not imported by production runners. Neither function calls Prepare/Commit,
+opens a writer, repairs indexes, changes RAW policy, or activates C-Lite.
+
+### Package boundary before Prepare
+
+`New-BenefitScopedHtmlHistoryPackage` accepts the same parameters as
+`New-BenefitScopedHtmlCaptureCandidate`: RunContext, SourceRecord, Benefit,
+BusinessId, BusinessIdentity, CanonicalPhone, Result, OperationalStatus, RunId,
+ObservedAt and RepositoryRevision. It calls that builder exactly once. Only
+the exact READY wrapper is eligible; every other or unexpected result rejects.
+
+The return wrapper has exactly Status, ReasonCode, Package. Success is
+`READY / C_LITE_HISTORY_PACKAGE_READY`; rejection is
+`REJECTED / C_LITE_HISTORY_PACKAGE_REJECTED / Package=null`. The Package contains
+only Observation and exactly three PreparedArtifacts, each in the existing
+`{ContentHash, Extension='json', Kind, Text}` Core format. The kinds are the E/S
+projections and BENEFIT_SCOPED_EVIDENCE. Core's existing UTF-8 payload conversion
+is used when the caller later prepares the package. RAW, reuse, extra/missing
+references and extra artifacts are rejected rather than filtered.
+
+Before returning, the bridge checks strict JSON/canonical bytes, UTF-8 encoding,
+hash/reference equality, original input/run/time ownership, existing I/E/S/X
+projections and operational assessment, capture provenance and existing byte
+budgets. The existing staged helper and Capture validator are reused without a
+fake COMMITTED manifest. RunId must be a bounded single path token starting
+with a letter/digit/underscore/hyphen and containing only those characters or
+dots, with no `..`; slash/backslash/colon traversal and alternate-stream syntax
+cannot reach Prepare. This is a bridge boundary, not a History Core/schema change.
+
+### Strict read-only committed verifier
+
+`Read-BenefitScopedHtmlCommittedCapture -Store <existing Core layout> -ObservationId <id>`
+returns exactly Status, ReasonCode, Capture. Success is
+`VERIFIED / C_LITE_COMMITTED_VERIFIED`; failure is
+`REJECTED / C_LITE_COMMITTED_REJECTED / Capture=null`. Capture has the same
+Observation/Artifacts shape as the original builder candidate, with canonical
+JSON Text and Reference for each artifact. It does not expose the shared run
+manifest, source HTML, exceptions or diagnostic details.
+
+The reader uses existing Core path/containment helpers, validates layout roots,
+and rejects reparse points/junctions/symlinks in the file and its ancestors.
+It opens existing files for read only and checks original UTF-8 bytes under
+bounded reads: observation/artifact <=65536 bytes, manifest <=16 MiB. The larger
+manifest budget accommodates existing shared-run membership arrays without
+inventing another manifest shape. Artifact bundle ceilings remain the existing
+C-Lite limits.
+
+Every record is passed through ConvertFrom-BenefitScopedEvidenceJson before any
+lossy decoding. Duplicate/escaped/case-colliding keys are rejected and timestamp
+strings retain their exact offsets/fractional digits. Artifact bytes must match
+their content addresses and exact canonical serialization. The real on-disk
+COMMITTED manifest and observation are supplied to the existing strict
+relationship validator; PREPARED/ABORTED/missing records reject. PROFILE_UNKNOWN
+and Legacy execution profiles cannot silently qualify as C-Lite. The required
+scoped reference never falls back to Legacy. E/S fingerprints are recomputed,
+I fingerprint links are checked (the full I projection is not persisted), and
+the frozen X profile is checked against the actual manifest revision.
+
+Observation and manifest are re-read at the end to reject detected changes
+during the scan; there is no automatic retry. The reader does not use or repair
+derived indexes. A real COMMITTED record remains verifiable after a Core commit
+returns IndexRepairRequired; this is terminal committed state, not permission
+to retry. Hash/link checks assume an authentic trusted Store; they do not provide
+a new signature system or reconstruct original source membership after HTML is
+absent. Persisted evidence remains the validated capture attestation.
+
+Both entry points isolate all redirectable helper streams and publish their
+result only after validation. Private exception text/raw source never belongs
+in the bounded rejection wrapper. Existing strict hashes and bounded locator
+validation remain; zero additional hashes is not claimed. No extra source HTTP,
+HTML tokenizer/parser/index creation, extraction or benefit evaluation is added.
+
+### Offline verification
+
+```powershell
+pwsh -NoProfile -File tools/data/test-benefit-scoped-html-history.ps1
+& ./tools/data/test-benefit-scoped-html-history.ps1
+```
+
+The test uses real Core Prepare/Commit only in GUID-named temporary Stores with
+checked cleanup paths. Coverage includes LOCATED_FIELDS, zero claims, mixed
+validation, PARTIAL/UNSUPPORTED and real parser-failure receipts; exact canonical
+UTF-8 package/committed round-trip; builder count=1; original input/cache
+immutability; pre-Prepare owner/scope/RAW/extra/missing/size/JSON faults; physical
+artifact deletion/corruption/exclusive locks; duplicate/escaped/case-colliding
+record and rehashed artifact JSON; lexical timestamps/types/fingerprints/manifest
+revision; layout/path and actual junction/symlink redirection; all-stream fault
+leakage; no extra source processing/writer/recovery work; existing staged
+comparison, BASELINE_MOVED, WRITER_LOCKED and COMMITTED+IndexRepairRequired.
+Fixtures are synthetic, never evidence of current official benefits.
+
+Legacy/C-Lite/History/incremental regressions and the sorted complete data suite
+remain delivery gates. Runtime activation, reuse audit v2, RecoverOnly/Inspector,
+new HTML RAW suppression and operator/scheduler integration require separate
+approved work. ProductionAction=NONE; LiveHTTP=NOT_AUTHORIZED;
+C-Lite activation=NOT_AUTHORIZED; RAW suppression=NOT_AUTHORIZED;
+P4-3B=BLOCKED; OCR dependency=NOT_APPROVED; Phase4=NOT_COMPLETE.

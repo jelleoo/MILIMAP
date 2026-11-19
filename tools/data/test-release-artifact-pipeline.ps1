@@ -1,4 +1,6 @@
-$ErrorActionPreference = 'Stop'
+﻿$ErrorActionPreference = 'Stop'
+
+. (Join-Path $PSScriptRoot 'lib/release/approval-release-contracts.ps1')
 
 function Assert-Equal {
     param(
@@ -22,6 +24,8 @@ $repositoryRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
 $canonicalCsv = Join-Path $repositoryRoot 'data\canonical\capital-area-military-benefits.csv'
 $reportsRoot = Join-Path $repositoryRoot 'data\canonical\reports'
 $appSeed = Join-Path $repositoryRoot 'apps\android\app\src\main\assets\benefits.seed.json'
+$appManualSeed = Join-Path $repositoryRoot 'apps\android\app\src\main\assets\manual_benefits_seed.json'
+$appManifest = Join-Path $repositoryRoot 'apps\android\app\src\main\assets\benefits.seed.manifest.json'
 $temporaryRoot = Join-Path ([IO.Path]::GetTempPath()) ('milimap-release-artifact-' + [guid]::NewGuid().ToString('N'))
 $sourceJson = Join-Path $temporaryRoot 'canonical-source.json'
 $candidateCsv = Join-Path $temporaryRoot 'official-release-candidates.csv'
@@ -58,6 +62,24 @@ try {
     Assert-Equal -Actual (@($releaseItems | Where-Object { $_.status -eq 'ACTIVE' }).Count) -Expected 249 -Message '출시 시드 항목은 모두 이용 가능 상태여야 합니다'
     Assert-Equal -Actual (@($releaseItems | Where-Object { $null -ne $_.latitude -and $null -ne $_.longitude }).Count) -Expected 111 -Message '엄격 POI 대조를 통과한 111건만 지도 핀을 가져야 합니다'
     Assert-Equal -Actual (Get-NormalizedJson -Path $releaseJson) -Expected (Get-NormalizedJson -Path $appSeed) -Message '정본 파이프라인 결과가 Android 내장 출시 시드와 일치해야 합니다'
+
+    if (-not (Test-Path -LiteralPath $appManifest -PathType Leaf)) {
+        throw "커밋된 출시 시드 매니페스트가 없습니다: $appManifest"
+    }
+    $manifestJsonOptions = @{}
+    if ((Get-Command ConvertFrom-Json).Parameters.ContainsKey('DateKind')) {
+        $manifestJsonOptions.DateKind = 'String'
+    }
+    $committedManifest = Read-ReleaseUtf8Text -Path $appManifest | ConvertFrom-Json @manifestJsonOptions
+    Assert-BenefitReleaseSeedManifest -Manifest $committedManifest
+    Assert-Equal -Actual ([int]$committedManifest.seedVersion) -Expected 7 -Message '기존 249건 시드 매니페스트의 seedVersion은 7이어야 합니다'
+    Assert-Equal -Actual ([int]$committedManifest.totalCount) -Expected 249 -Message '매니페스트 totalCount는 249여야 합니다'
+    Assert-Equal -Actual ([int]$committedManifest.exactPinCount) -Expected 111 -Message '매니페스트 exactPinCount는 111이어야 합니다'
+    Assert-Equal -Actual ([int]$committedManifest.unconfirmedCoordinateCount) -Expected 138 -Message '매니페스트 unconfirmedCoordinateCount는 138이어야 합니다'
+    Assert-Equal -Actual ([int]$committedManifest.manualSeedCount) -Expected 0 -Message '매니페스트 manualSeedCount는 0이어야 합니다'
+    Assert-Equal -Actual $committedManifest.canonicalCsvSha256 -Expected (Get-ReleaseFileNormalizedLfSha256 -Path $canonicalCsv) -Message '매니페스트 canonicalCsvSha256가 정본 CSV와 일치해야 합니다'
+    Assert-Equal -Actual $committedManifest.seedSha256 -Expected (Get-ReleaseFileNormalizedLfSha256 -Path $appSeed) -Message '매니페스트 seedSha256가 커밋된 benefits.seed.json과 일치해야 합니다'
+    Assert-Equal -Actual $committedManifest.manualSeedSha256 -Expected (Get-ReleaseFileNormalizedLfSha256 -Path $appManualSeed) -Message '매니페스트 manualSeedSha256가 커밋된 manual_benefits_seed.json과 일치해야 합니다'
 } finally {
     if (Test-Path -LiteralPath $temporaryRoot) {
         Remove-Item -LiteralPath $temporaryRoot -Recurse -Force

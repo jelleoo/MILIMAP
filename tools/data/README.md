@@ -1553,3 +1553,39 @@ and adds an opt-in `-HtmlEvidenceRetentionProfile` parameter (`'LEGACY'` default
   approved work (`ProductionAction=NONE`; `LiveHTTP=NOT_AUTHORIZED`;
   `C-Lite activation=NOT_AUTHORIZED`; `RAW suppression=NOT_AUTHORIZED`;
   `P4-3B=BLOCKED`; `OCR dependency=NOT_APPROVED`; `Phase4=NOT_COMPLETE`).
+
+## Read-Only Review Queue Summary Exporter (PR 1, Issue #155)
+
+`export-phase5-review-queue.ps1` reads committed Phase 3/5 and C-Lite History
+Store records via `Invoke-Phase3ReviewAudit` together with
+`data/canonical/capital-area-military-benefits.csv` without modifying the store,
+indexes, or repository files (`ProductionAction=NONE`, `ApprovalRequired=$true`).
+
+- **Latest Selection:** Defaults to the latest committed observation per
+  `(BusinessId, Domain)` ordered by UTC `ObservedAt` and ordinal
+  `ObservationId` (pass `-IncludeSuperseded` for full historical rows, or
+  `-Domain BENEFIT|LOCATION`).
+- **Verified Projections Only:** Hydrates structured fields exclusively through
+  fingerprint/hash-verified `Read-BenefitHistorySemanticProjection`,
+  `Read-LocationHistorySemanticProjection`, and `BENEFIT_EVIDENCE_PROJECTION`
+  (never reads or exports `RAW_SOURCE_PAYLOAD` or `BENEFIT_SCOPED_EVIDENCE`).
+- **3-Bucket Operator Triage:**
+  - `DIAGNOSTIC_HOLD`: `AUDIT_VERIFICATION` / `OPERATIONAL_DIAGNOSTIC` routes,
+    non-`COMPLETE` / non-comparable runs, missing canonical rows, or missing
+    semantic projections.
+  - `FAST_REVIEW`: operationally `COMPLETE` + comparable `RECORD_ONLY` rows that
+    are `GREEN + ACTIVE` (`BENEFIT`) or `GREEN` (`LOCATION`) — still requiring
+    explicit human sign-off.
+  - `DOMAIN_REVIEW`: all remaining operationally `COMPLETE` + comparable rows
+    (`HUMAN_DOMAIN_REVIEW`, `YELLOW`/`RED`, `NEEDS_VERIFICATION`/`ENDED`).
+- **External Outputs:** Atomically writes `review-queue-summary.json` (UTF-8
+  without BOM) and `review-queue-items.csv` strictly outside all Git repository
+  roots and non-overlapping with the History Store root (with reparse-point
+  rejection).
+
+```powershell
+pwsh -NoProfile -File .\tools\data\export-phase5-review-queue.ps1 `
+  -HistoryRoot 'C:\milimap-ops\history' `
+  -CanonicalCsvPath '.\data\canonical\capital-area-military-benefits.csv' `
+  -OutputDirectory 'C:\milimap-ops\review-queue'
+```

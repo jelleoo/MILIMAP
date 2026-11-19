@@ -377,6 +377,54 @@ try{
             Equal $requests.Urls.Count $cBeforeHttp 'P5-1 corrupted C-Lite recovery fetch0'
         }finally{[IO.File]::WriteAllBytes($b0ScopedPath,$origB0Scoped)}
 
+        # PR 3B: Opt-in P5-1 batch Execute wiring for C_LITE_V1 capture, reuse, and RecoverOnly.
+        $batchProfileCmd=Get-Command Get-InternalPhase5HtmlEvidenceRetentionProfile -ErrorAction SilentlyContinue
+        Check ($null -ne $batchProfileCmd) 'PR3B retention profile helper must exist for batch'
+        $origBatchProfileGetter=$batchProfileCmd.ScriptBlock
+        $ceStore=New-HistoryStoreLayout -Root (Join-Path $root 'clite-exec-batch-history')
+        $ceBatchRoot=Join-Path $root 'clite-exec-batch-ws'
+        $ceArgs1=@{CanonicalCsvPath=$csv;BusinessIds=@($ids[0],$ids[2]);Store=$ceStore;BatchWorkspaceRoot=$ceBatchRoot;ObservedAt='2026-11-19T15:00:00.000+09:00';RepositoryRevision=$args51.RepositoryRevision}
+        $cePlan1=New-Phase5BenefitBatchPlan @ceArgs1
+        Set-Item Function:Get-InternalPhase5HtmlEvidenceRetentionProfile -Value { return 'C_LITE_V1' }
+        try{
+            $ceRun1=Invoke-Phase5BenefitBatch @ceArgs1 @invokeArgs -BatchId $cePlan1.BatchId
+            Equal $ceRun1.Status FINISHED 'P5-1 C_LITE_V1 Execute batch1 finishes'
+            Equal $ceRun1.Summary.CommittedCount 2 'P5-1 C_LITE_V1 batch1 commits 2 items'
+            Equal $ceRun1.Summary.ExecutedCount 2 'P5-1 C_LITE_V1 batch1 executes 2 items'
+            Equal $ceRun1.Metrics.ReuseApplied.Total 0 'P5-1 C_LITE_V1 batch1 reuse0'
+            Equal $ceRun1.Metrics.ParseCount.Total 2 'P5-1 C_LITE_V1 batch1 parses both items'
+            Equal @(Get-ChildItem -LiteralPath $ceStore.ArtifactsRoot -Filter '*.html' -File).Count 0 'P5-1 C_LITE_V1 batch1 writes 0 .html files'
+            foreach($item in $ceRun1.Items){
+                $obs=Read-HistoryObservation -Store $ceStore -ObservationId $item.ObservationId
+                Equal @($obs.ArtifactReferences).Count 3 'P5-1 C_LITE_V1 batch1 capture has 3 artifacts'
+                Equal @($obs.ArtifactReferences | Where-Object Kind -CEQ 'RAW_SOURCE_PAYLOAD').Count 0 'P5-1 C_LITE_V1 batch1 capture has 0 RAW'
+            }
+
+            $ceArgs2=@{CanonicalCsvPath=$csv;BusinessIds=@($ids[0],$ids[2]);Store=$ceStore;BatchWorkspaceRoot=$ceBatchRoot;ObservedAt='2026-11-19T15:10:00.000+09:00';RepositoryRevision=$args51.RepositoryRevision}
+            $cePlan2=New-Phase5BenefitBatchPlan @ceArgs2
+            $ceRun2=Invoke-Phase5BenefitBatch @ceArgs2 @invokeArgs -BatchId $cePlan2.BatchId
+            Equal $ceRun2.Status FINISHED 'P5-1 C_LITE_V1 Execute batch2 finishes'
+            Equal $ceRun2.Summary.CommittedCount 2 'P5-1 C_LITE_V1 batch2 commits 2 reuse items'
+            Equal $ceRun2.Metrics.ReuseApplied.Total 2 'P5-1 C_LITE_V1 batch2 reuses both items'
+            Equal $ceRun2.Metrics.ParseCount.Total 0 'P5-1 C_LITE_V1 batch2 avoids parse completely'
+            Equal @(Get-ChildItem -LiteralPath $ceStore.ArtifactsRoot -Filter '*.html' -File).Count 0 'P5-1 C_LITE_V1 batch2 writes 0 .html files'
+            foreach($item in $ceRun2.Items){
+                $obs=Read-HistoryObservation -Store $ceStore -ObservationId $item.ObservationId
+                Equal @($obs.ArtifactReferences).Count 4 'P5-1 C_LITE_V1 batch2 reuse has 4 artifacts'
+                Equal @($obs.ArtifactReferences | Where-Object Kind -CEQ 'RAW_SOURCE_PAYLOAD').Count 0 'P5-1 C_LITE_V1 batch2 reuse has 0 RAW'
+            }
+
+            $ceBeforeHttp=$requests.Urls.Count
+            $ceBeforeInv=Inventory $ceStore.Root
+            $ceRec2=Invoke-Phase5BenefitBatch @ceArgs2 @invokeArgs -BatchId $cePlan2.BatchId -Mode RecoverOnly
+            Equal $ceRec2.Status FINISHED 'P5-1 C_LITE_V1 RecoverOnly succeeds on executed batch2'
+            Equal $ceRec2.Summary.RecoveredCount 2 'P5-1 C_LITE_V1 RecoverOnly recovers 2 items'
+            Equal $requests.Urls.Count $ceBeforeHttp 'P5-1 C_LITE_V1 RecoverOnly fetch0'
+            Equal (Inventory $ceStore.Root) $ceBeforeInv 'P5-1 C_LITE_V1 RecoverOnly History unchanged'
+        }finally{
+            Set-Item Function:Get-InternalPhase5HtmlEvidenceRetentionProfile -Value $origBatchProfileGetter
+        }
+
         Write-Host 'P5-1 Recovery PASS: recovered3 HTTP0 / History0 / stable ReviewKeys; residue preserved; mixed known2 missing1 total=null'
     }
     if($Group -cin @('Safety','All')){

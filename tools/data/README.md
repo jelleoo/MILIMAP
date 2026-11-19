@@ -1514,3 +1514,42 @@ without activating C-Lite in `Execute` mode (`C-Lite activation=NOT_AUTHORIZED`,
   committed `C_LITE_V1` captures and v2 reuses, lexical timestamp tampering,
   corrupted C-Lite artifacts, and concurrent comparison mutation during audit.
   Runner `Execute` activation and RAW suppression remain separate approved work.
+
+## C-Lite PR 3B — opt-in post-fetch runner wiring (Issue #149)
+
+`lib/history/benefit-incremental-reuse.ps1` imports `benefit-scoped-html-history.ps1`
+and adds an opt-in `-HtmlEvidenceRetentionProfile` parameter (`'LEGACY'` default, or
+`'C_LITE_V1'`) to `Get-BenefitIncrementalBaseline`, `Get-BenefitIncrementalNonReusableDecision`,
+`Get-BenefitIncrementalReuseDecision`, and `Invoke-BenefitIncrementalPostFetch`.
+
+- **Default safety preserved (`'LEGACY'`)**: default execution paths, RAW artifact
+  writing, legacy `BenefitReuseDecision` v1, and the 10-parameter public signature of
+  `Invoke-Phase5BenefitCycle` remain unchanged (`C-Lite activation=NOT_AUTHORIZED`,
+  `RAW suppression=NOT_AUTHORIZED`). `Get-InternalPhase5HtmlEvidenceRetentionProfile`
+  returns `'LEGACY'` until separate activation authorization is granted.
+- **Opt-in `'C_LITE_V1'` behavior**:
+  - Rejects complete non-HTML sources (`MMA` JSONP, `XLSX`, `PDF`, `HWPX`, `CSV`,
+    `UNSUPPORTED`) fail-closed with `C_LITE_HTML_SOURCE_REQUIRED`.
+  - Omits `RAW_SOURCE_PAYLOAD` creation (`0` `.html` artifacts) for HTML captures,
+    v2 reuses, and failed fetches.
+  - Verifies indexed `C_LITE_V1` comparable baselines strictly via
+    `Read-BenefitScopedHtmlCommittedCapture` / `Read-BenefitScopedHtmlCommittedReuse`
+    (corrupted prior records fail over to `PRIOR_ARTIFACT_INVALID` recompute without
+    comparison); `LEGACY` baselines trigger `EXECUTION_CHANGED` recompute; valid
+    zero-claim `LOCATED_FIELDS` captures return `SCOPED_EVIDENCE_NOT_REUSABLE`.
+  - Uses `New-BenefitScopedHtmlReusePackage` (`BenefitReuseDecision` v2) for
+    eligible reuse, `New-BenefitScopedHtmlHistoryPackage` for completed HTML captures
+    (`LOCATED_FIELDS` and `OUTCOME_ONLY`), and 2-artifact non-comparable records
+    (`SOURCE_FETCH_NOT_COMPLETE`) for failed fetches.
+  - After `Commit-HistoryRun` commits in `Invoke-Phase5BenefitCycle`,
+    `Assert-InternalPhase5CommittedObservationProfile` verifies the committed
+    observation matches the selected retention profile (`LEGACY` vs `C_LITE_V1`).
+- Offline checks in `test-benefit-incremental-reuse.ps1`, `test-phase5-benefit-cycle.ps1`,
+  and `test-phase5-benefit-batch.ps1` cover opt-in `C_LITE_V1` capture, multi-hop v2
+  reuse, failed-fetch 2-artifact records, `LEGACY -> C_LITE_V1` transitions, zero-claim
+  non-reusability, `OUTCOME_ONLY` receipts, corrupt-baseline recompute, non-HTML
+  rejection, CAS/lock protection, and Phase 5 cycle/batch `Execute` + `RecoverOnly`.
+  Default runtime activation and default HTML RAW suppression remain separate
+  approved work (`ProductionAction=NONE`; `LiveHTTP=NOT_AUTHORIZED`;
+  `C-Lite activation=NOT_AUTHORIZED`; `RAW suppression=NOT_AUTHORIZED`;
+  `P4-3B=BLOCKED`; `OCR dependency=NOT_APPROVED`; `Phase4=NOT_COMPLETE`).

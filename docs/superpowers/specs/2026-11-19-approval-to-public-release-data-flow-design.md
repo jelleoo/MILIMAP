@@ -14,8 +14,8 @@ MILIMAP now has an end-to-end internal verification core and immutable History p
 
 - **Phase 1 & 2:** Provider-neutral POI verification (`invoke-phase1-poi-shadow-mode.ps1`) and Benefit verification across HTML tables, MMA JSONP, XLSX, and bounded HWPX/PDF (`invoke-phase2-benefit-shadow-mode.ps1`).
 - **Phase 3:** Immutable file-based History Store, writer-lock serialization, optimistic CAS, 4-layer fingerprints (`I-E-S-X`), incremental reuse (`benefit-incremental-reuse.ps1`), and read-only audit/review projection (`invoke-phase3-review-audit.ps1`, emitting `Phase3ReviewItem` with `ReviewRoute`).
-- **Phase 4 (Partial):** Native HWPX (`P4-1`) and PdfPig native PDF (`P4-2B`) within bounded limits; scanned Korean OCR (`Issue #125`) remains blocked (`Phase4=NOT_COMPLETE`, `P4-3B=BLOCKED`, `OCR dependency=NOT_APPROVED`).
-- **Phase 5 & C-Lite (PR 1 ~ PR 3B):** Single-business cycle (`invoke-phase5-benefit-cycle.ps1`), bounded 10-business batch (`invoke-phase5-benefit-batch.ps1`), read-only Inspector (`inspect-phase5-benefit-batch.ps1`), strict network budget (`P5-2B` + `.NET 10.0.14`), and opt-in `C_LITE_V1` HTML capture + v2 reuse wiring (`benefit-scoped-html-history.ps1`, wired opt-in via PR #150 while default retention remains `'LEGACY'`).
+- **Phase 4 (Digital Complete / OCR Deferred):** Native HWPX (`P4-1`) and PdfPig native PDF (`P4-2B`) within bounded limits are complete; scanned Korean OCR (`Issue #125`) is formally **Deferred** (Option A manual transcription + PR #158 ledger for the 18/496 = 3.6% single Suwon PDF subset; `OCR dependency=NOT_APPROVED`, `P4-3B=BLOCKED`).
+- **Phase 5 & C-Lite (Merged on `dev`):** Single-business cycle (`invoke-phase5-benefit-cycle.ps1`), bounded 10-business batch (`invoke-phase5-benefit-batch.ps1`), read-only Inspector (`inspect-phase5-benefit-batch.ps1`), strict network budget (`P5-2B` + `.NET 10.0.14`), and default `C_LITE_V1` HTML activation (`RAW=0` for HTML via PR [#162](https://github.com/jelleoo/MILIMAP/pull/162), preserving `LEGACY` for MMA JSONP / XLSX / HWPX / PDF).
 - **Android XML Compatibility Fix (PR 0):** Replaced Apache-only `disallow-doctype-decl` feature with `xmlReader` + `DefaultHandler2` (`startDTD` + `resolveEntity`) in `BenefitXmlParser` (Issue [#153](https://github.com/jelleoo/MILIMAP/issues/153) / PR [#154](https://github.com/jelleoo/MILIMAP/pull/154), merged into `dev`).
 
 However, **the internal verification outputs and the public Android release pipeline are not yet connected through an explicit review-and-approval workflow**:
@@ -47,12 +47,11 @@ All stages in this flow MUST preserve MILIMAP's existing safety contracts ([docs
 3. **No Auto-Publish from `GREEN`, No Auto-`ENDED` from `NOT_FOUND` or Errors:**
    - `GREEN` / `RECORD_ONLY` is a fast-review candidate only; human approval is mandatory before public release artifacts change.
    - HTTP/fetch failures, parser failures, `OUTCOME_ONLY`, and `NOT_FOUND` never automatically flip a benefit to `ENDED` or delete a previously published benefit without explicit human review and strong official ending evidence.
-4. **Preserved Operational Gate Flags (Unchanged by This Design):**
+4. **Preserved Operational Gate Flags:**
    - `ProductionAction=NONE`
    - `LiveHTTP=NOT_AUTHORIZED` (`Issue #134`)
-   - `C-Lite activation=NOT_AUTHORIZED`
-   - `RAW suppression=NOT_AUTHORIZED`
-   - `P4-3B=BLOCKED`, `OCR dependency=NOT_APPROVED`, `Phase4=NOT_COMPLETE` (`Issue #125`)
+   - `C-Lite HTML activation=ACTIVE` (via PR [#162](https://github.com/jelleoo/MILIMAP/pull/162); `RAW=0` for HTML sources, `LEGACY` preserved for MMA JSONP / XLSX / HWPX / PDF)
+   - `P4-3B=BLOCKED`, `OCR dependency=NOT_APPROVED`, `Issue #125=DEFERRED` (Phase 4 digital adapters `COMPLETE`; see [`docs/handover/2026-11-20-phase4-ocr-deferral-and-digital-closeout.md`](../../handover/2026-11-20-phase4-ocr-deferral-and-digital-closeout.md))
 5. **Android Room SSOT & User Data Preservation:**
    - `BenefitDatabase` remains schema `v4` (`Room` SSOT; `Repository -> ViewModel -> UiState -> Compose`).
    - Any bundled or future remote seed replacement applies only to `LOCAL_GOV`, `MANUAL_SEED`, and `PUBLIC_EVIDENCE` rows while preserving `FavoriteEntity` (via stable `seed-<sha256[0..11]>` IDs), local user accounts, and `MMA_API` reconciliation (`BenefitReconciler.kt`).
@@ -201,8 +200,7 @@ Per [docs/architecture.md](../../architecture.md) and [docs/ai-development.md](.
 - Final HTTP API contract (`packages/contracts`, `services/api`) for public feed & admin portal
 - Periodic background scheduler / cron runner host environment
 - Official site automated HTTP clearance (`Issue #134`, `LiveHTTP=NOT_AUTHORIZED`)
-- Runtime activation of `C_LITE_V1` (`Get-InternalPhase5HtmlEvidenceRetentionProfile`) and default HTML RAW suppression
-- Phase 4 scanned PDF Korean OCR resolution (`Issue #125`, `OCR dependency=NOT_APPROVED`)
+- Phase 4 scanned PDF Korean OCR resolution (`Issue #125` formally deferred out of MVP scope; `OCR dependency=NOT_APPROVED`, `P4-3B=BLOCKED`)
 
 ---
 
@@ -211,8 +209,9 @@ Per [docs/architecture.md](../../architecture.md) and [docs/ai-development.md](.
 | Order | Scope | Files / Area | Status / Gate |
 | :--- | :--- | :--- | :--- |
 | **PR 0** | Android `BenefitXmlParser` DOCTYPE/runtime compatibility fix | `apps/android/.../BenefitXmlParser.kt`, `BenefitXmlParserTest.kt` | **Merged** ([#153](https://github.com/jelleoo/MILIMAP/issues/153) / [#154](https://github.com/jelleoo/MILIMAP/pull/154)) |
-| **Design** | Approval-to-Public-Release Data Distribution Flow Design v0.2 | `docs/superpowers/specs/2026-11-19-approval-to-public-release-data-flow-design.md` | **Ready to merge** ([#151](https://github.com/jelleoo/MILIMAP/issues/151) / [#152](https://github.com/jelleoo/MILIMAP/pull/152)) |
-| **PR 1** | **Read-Only Review Queue Summary Exporter** over committed History (external output only; zero RAW HTML; `ProductionAction=NONE`) | `tools/data/export-phase5-review-queue.ps1`, `test-export-phase5-review-queue.ps1`, `tools/data/README.md` | Follows Design v0.2 merge |
-| **PR 2** | **Approval Ledger Validator & Release Seed Manifest Builder** (`benefits.seed.manifest.json` generator + fail-closed ledger validator + parity extension) | `tools/data/lib/release/approval-release-contracts.ps1`, `validate-benefit-release-approvals.ps1`, `build-release-benefit-seed-manifest.ps1`, `test-approval-release-pipeline.ps1`, `test-release-artifact-pipeline.ps1`, `apps/android/app/src/main/assets/benefits.seed.manifest.json`, `tools/data/README.md` | Follows PR 1 merge |
-| **PR 3** | **Manifest-Driven `BundledSeedSynchronizer`** removing hardcoded `BUNDLED_SEED_EXPECTED_COUNT = 249` (Room `v4` unchanged) | `apps/android/.../data/seed/BundledSeedManifest.kt`, `BundledSeedSynchronizer.kt`, `MainActivity.kt`, unit & androidTest files | Follows PR 2 merge |
+| **Design** | Approval-to-Public-Release Data Distribution Flow Design v0.2 | `docs/superpowers/specs/2026-11-19-approval-to-public-release-data-flow-design.md` | **Merged** ([#151](https://github.com/jelleoo/MILIMAP/issues/151) / [#152](https://github.com/jelleoo/MILIMAP/pull/152)) |
+| **PR 1** | **Read-Only Review Queue Summary Exporter** over committed History (external output only; zero RAW HTML; `ProductionAction=NONE`) | `tools/data/export-phase5-review-queue.ps1`, `test-export-phase5-review-queue.ps1`, `tools/data/README.md` | **Merged** ([#155](https://github.com/jelleoo/MILIMAP/issues/155) / [#156](https://github.com/jelleoo/MILIMAP/pull/156)) |
+| **PR 2** | **Approval Ledger Validator & Release Seed Manifest Builder** (`benefits.seed.manifest.json` generator + fail-closed ledger validator + parity extension) | `tools/data/lib/release/approval-release-contracts.ps1`, `validate-benefit-release-approvals.ps1`, `build-release-benefit-seed-manifest.ps1`, `test-approval-release-pipeline.ps1`, `test-release-artifact-pipeline.ps1`, `apps/android/app/src/main/assets/benefits.seed.manifest.json`, `tools/data/README.md` | **Merged** ([#157](https://github.com/jelleoo/MILIMAP/issues/157) / [#158](https://github.com/jelleoo/MILIMAP/pull/158)) |
+| **PR 3** | **Manifest-Driven `BundledSeedSynchronizer`** removing hardcoded `BUNDLED_SEED_EXPECTED_COUNT = 249` (Room `v4` unchanged) | `apps/android/.../data/seed/BundledSeedManifest.kt`, `BundledSeedSynchronizer.kt`, `MainActivity.kt`, unit & androidTest files | **Merged** ([#159](https://github.com/jelleoo/MILIMAP/issues/159) / [#160](https://github.com/jelleoo/MILIMAP/pull/160)) |
+| **PR A** | **Default C-Lite HTML Retention Activation** (`RAW=0` for HTML, `LEGACY` preserved for non-HTML) | `tools/data/invoke-phase5-benefit-cycle.ps1`, `benefit-incremental-reuse.ps1`, Phase 5 tests, `tools/data/README.md` | **Merged** ([#161](https://github.com/jelleoo/MILIMAP/issues/161) / [#162](https://github.com/jelleoo/MILIMAP/pull/162)) |
 | **PR 4+** | **Release Data Cut PRs** & subsequent **Admin Web / Shared API ADR** (`services/api`, `packages/contracts`, Phase B remote snapshot sync) | Dedicated Issue/ADR per track | Future post-MVP work |

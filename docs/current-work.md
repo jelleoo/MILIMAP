@@ -2,14 +2,29 @@
 
 이 문서는 팀원과 Codex가 저장소를 clone한 뒤 가장 먼저 확인하는 현재 개발 진입점입니다.
 
+## 최신 `dev` 상태 (2026-11-20)
+
+- **Approval-to-Public-Release MVP & C-Lite 기본 활성화 완료:**
+  - PR 0 ([#153](https://github.com/jelleoo/MILIMAP/issues/153) / [#154](https://github.com/jelleoo/MILIMAP/pull/154)): Android `BenefitXmlParser` `DefaultHandler2` (`startDTD`/`resolveEntity`) 호환 수정
+  - Design v0.2 ([#151](https://github.com/jelleoo/MILIMAP/issues/151) / [#152](https://github.com/jelleoo/MILIMAP/pull/152)): 승인-배포 데이터 흐름 사양 확정
+  - PR 1 ([#155](https://github.com/jelleoo/MILIMAP/issues/155) / [#156](https://github.com/jelleoo/MILIMAP/pull/156)): 읽기 전용 Review Queue Summary Exporter (`tools/data/export-phase5-review-queue.ps1`)
+  - PR 2 ([#157](https://github.com/jelleoo/MILIMAP/issues/157) / [#158](https://github.com/jelleoo/MILIMAP/pull/158)): `BenefitReleaseApprovalLedger` 검증기 & `benefits.seed.manifest.json` 빌더
+  - PR 3 ([#159](https://github.com/jelleoo/MILIMAP/issues/159) / [#160](https://github.com/jelleoo/MILIMAP/pull/160)): Android 매니페스트 기반 `BundledSeedSynchronizer` (`SHA-256-LF-UTF8` 검증, Room `v4` 유지)
+  - PR A ([#161](https://github.com/jelleoo/MILIMAP/issues/161) / [#162](https://github.com/jelleoo/MILIMAP/pull/162)): HTML 소스 `C_LITE_V1` 기본 활성화 (`RAW_SOURCE_PAYLOAD = 0`, 비-HTML `MMA/XLSX/HWPX/PDF`는 `LEGACY` 유지)
+- **Phase 4 디지털 어댑터 완료 / 스캔 OCR 보류(Deferred):**
+  - `P4-0` foundation, `P4-1` HWPX native adapter, `P4-2B` PDF native ruled-grid adapter (`PdfPig 0.1.16`) 구현 완료.
+  - 스캔 PDF 한국어 OCR (`Issue #125` / `P4-3` / `P4-3B`)은 Option A 합의에 따라 **공식 보류(Deferred)** 처리(전체 `496`건 중 단일 수원 PDF `18`건=`3.6%`, 수동 전사 + `PR #158` 승인 원장 경로 적용). `OCR dependency=NOT_APPROVED`, `P4-3B=BLOCKED`.
+  - 상세 근거: [Phase 4 OCR deferral & digital closeout](handover/2026-11-20-phase4-ocr-deferral-and-digital-closeout.md)
+- **운영 게이트 유지:** `ProductionAction=NONE`, `LiveHTTP=NOT_AUTHORIZED` (`Issue #134`), `OCR dependency=NOT_APPROVED`, `P4-3B=BLOCKED`.
+
 ## 현재 기준선
 
 - 개발 기준 브랜치: `dev`
 - Phase 1 code baseline: `97d6070113196e922fb76af7508314b6eda8e7b7`
 - Phase 2 Task 6 merge baseline: `d43c00ee07b471a55ed7ece4abecc1dc242ed8ce`
 - Phase 2 Core Foundation: Issue #43 / Task 7 validation PR #50
-- current dev baseline: `24a64aa96338ddbc7fe7f315f5c1fa01aa21b7b1` (P4-2B preflight fetch, 2026-10-05)
-- 기준일: 2026-10-05
+- current dev baseline: `e013e3b980d25318c50941ec13778b961ec02d18` (PR #162 merged, 2026-11-20)
+- 기준일: 2026-11-20
 - Phase 1 A — Business Identity / Normalization: PR #37 merged
 - Phase 1 B — POI Discovery: PR #34 merged
 - Phase 1 C — POI Matching / Evaluation: PR #36 merged

@@ -222,12 +222,13 @@ function Get-BenefitRunHtmlObservation {
 
     $htmlValidationIndex = $template.HtmlValidationIndex
     $htmlTokens = if ($null -eq $htmlValidationIndex) { $null } else { @($htmlValidationIndex.Tokens) }
-    $units = @()
+    $units = [Collections.Generic.List[object]]::new($template.Rows.Count)
     foreach ($row in @($template.Rows)) {
-        $units += New-BenefitSourceContentUnit -Snapshot $snapshot -UnitReference $row.UnitReference -TableStart $row.TableStart -TableLength $row.TableLength -RawStart $row.RawStart -RawLength $row.RawLength -RawEvidenceText $row.RawEvidenceText -StructuredFields $row.StructuredFields -FieldReferences $row.FieldReferences -HtmlTokens $htmlTokens -HtmlValidationIndex $htmlValidationIndex
+        $units.Add((Copy-InternalHtmlSourceContentUnit -Snapshot $snapshot -Row $row))
     }
+    $unitArray = @($units.ToArray())
     [void]$Context.Attempts.Add([pscustomobject][ordered]@{Stage='PARSE';Key=$key;CacheHit=$cacheHit;Status=$template.AdapterStatus})
-    $observation = New-BenefitSourceObservation -SourceRowNumber $Document.SourceRowNumber -Snapshot $snapshot -AdapterId $adapterId -AdapterVersion $adapterVersion -AdapterStatus $template.AdapterStatus -ContentUnits $units -Diagnostics @($template.Diagnostics) -HtmlTokens $htmlTokens -HtmlValidationIndex $htmlValidationIndex
+    $observation = New-InternalBenefitHtmlSourceObservation -SourceRowNumber $Document.SourceRowNumber -Snapshot $snapshot -AdapterId $adapterId -AdapterVersion $adapterVersion -AdapterStatus $template.AdapterStatus -ContentUnits $unitArray -Diagnostics @($template.Diagnostics) -HtmlTokens $htmlTokens -HtmlValidationIndex $htmlValidationIndex
     if ($null -ne $htmlValidationIndex -and (Test-InternalBenefitHtmlRunContextTrust -Snapshot $snapshot -HtmlValidationIndex $htmlValidationIndex)) {
         $observation | Add-Member -NotePropertyName HtmlValidationIndex -NotePropertyValue $htmlValidationIndex
         $Document | Add-Member -NotePropertyName ValidatedHtmlSnapshot -NotePropertyValue $snapshot -Force

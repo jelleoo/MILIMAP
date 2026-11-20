@@ -1,4 +1,4 @@
-$ErrorActionPreference = 'Stop'
+﻿$ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'testdata/benefit-evidence-location/test-support.ps1')
 $path = Join-Path $PSScriptRoot 'lib/benefit-evidence-location-contracts.ps1'
 if (-not (Test-Path -LiteralPath $path)) { throw 'Scoped evidence contracts are missing' }
@@ -244,4 +244,72 @@ foreach ($format in @('PDF','HWPX')) {
     Assert-ScopeObservation -Observation $observation -DocumentValidationIndex $observation.DocumentValidationIndex
     Assert-ScopeEqual $observation.DocumentValidationIndex.SnapshotId $documentFixture.Snapshot.SnapshotId 'Observation carries snapshot-bound document index'
 }
+
+# Fast HTML validation lookup regressions: parity, tamper rejection, and nested-table fallback.
+$fastFx = New-ScopeContractFixture
+$fastSnap = $fastFx.Observation.Snapshot
+$fastIdx = New-ScopeHtmlValidationIndex -Snapshot $fastSnap
+Assert-ScopeHtmlUnit -Unit $fastFx.Units[0] -Snapshot $fastSnap -HtmlValidationIndex $fastIdx
+
+$fastIdxCopy = $fastIdx | Select-Object *
+$fastIdxCopy.Rows = @()
+Assert-ScopeThrows { Assert-ScopeHtmlUnit -Unit $fastFx.Units[0] -Snapshot $fastSnap -HtmlValidationIndex $fastIdxCopy } 'Mutated HtmlValidationIndex.Rows breaks fast lookup and fails closed'
+
+$badSnapText = New-ScopeContractFixture
+$badSnapIdx = New-ScopeHtmlValidationIndex -Snapshot $badSnapText.Observation.Snapshot
+$badSnapText.Observation.Snapshot.Text += ' '
+Assert-ScopeTrue ($null -eq (Get-InternalScopeHtmlFastLookup -HtmlValidationIndex $badSnapIdx -Snapshot $badSnapText.Observation.Snapshot)) 'Mutated Snapshot.Text invalidates fast lookup'
+
+$badInUnitText = New-ScopeContractFixture
+$badInUnitIdx = New-ScopeHtmlValidationIndex -Snapshot $badInUnitText.Observation.Snapshot
+$badInUnitText.Observation.Snapshot.Text = $badInUnitText.Observation.Snapshot.Text.Replace('10% 할인', '99% 할인')
+Assert-ScopeThrows { Assert-ScopeHtmlUnit -Unit $badInUnitText.Units[0] -Snapshot $badInUnitText.Observation.Snapshot -HtmlValidationIndex $badInUnitIdx } 'Mutated Snapshot.Text within unit fails closed'
+
+foreach ($tamper in @(
+    { param($u) $u.FieldReferences.BenefitDescription.CellStart++ },
+    { param($u) $u.FieldReferences.BenefitDescription.FieldReference = 'HTML_TABLE_1_ROW_99/BenefitDescription' },
+    { param($u) $u.StructuredFields['BenefitDescription'] = '99% 할인' }
+)) {
+    $tf = New-ScopeContractFixture
+    $tSnap = $tf.Observation.Snapshot
+    $tIdx = New-ScopeHtmlValidationIndex -Snapshot $tSnap
+    $tu = Copy-ScopeContractData $tf.Units[0]
+    & $tamper $tu
+    Assert-ScopeThrows { Assert-ScopeHtmlUnit -Unit $tu -Snapshot $tSnap -HtmlValidationIndex $tIdx } 'Fast lookup rejects tampered unit provenance or field value'
+}
+
+$nestedHtml = '<table><tr><td><table><tr><td>nested</td></tr></table></td></tr></table>'
+$nestedDoc = New-ScopeTestDocument -Html $nestedHtml
+$nestedSnap = New-BenefitSourceSnapshot -SourceUrl $nestedDoc.Url -SourceFormat HTML -Text $nestedHtml -ObservedAt $nestedDoc.ObservedAt
+$nestedIdx = New-ScopeHtmlValidationIndex -Snapshot $nestedSnap
+Assert-ScopeTrue ($null -ne $nestedIdx -and $null -eq (Get-InternalScopeHtmlFastLookup -HtmlValidationIndex $nestedIdx -Snapshot $nestedSnap)) 'Nested tables decline fast lookup and stay on fallback'
+$nestedOuterStart = $nestedHtml.IndexOf('<table>')
+$nestedInnerRowStart = $nestedHtml.LastIndexOf('<tr>')
+$nestedInnerRowLen = ($nestedHtml.IndexOf('</tr>', $nestedInnerRowStart) + 5) - $nestedInnerRowStart
+Assert-ScopeThrows {
+    New-BenefitSourceContentUnit -Snapshot $nestedSnap -UnitReference 'HTML_TABLE_1_ROW_1' -TableStart $nestedOuterStart -TableLength $nestedHtml.Length -RawStart $nestedInnerRowStart -RawLength $nestedInnerRowLen -RawEvidenceText 'nested' -StructuredFields @{} -FieldReferences @{} -HtmlValidationIndex $nestedIdx
+} 'Nested table fallback preserves exact mismatch rejection'
+
+$prefixExtraUnit = Copy-ScopeContractData $fastFx.Units[0]
+$prefixExtraUnit.RawFragment = $prefixExtraUnit.RawFragment + 'extra'
+Assert-ScopeThrows { Assert-ScopeHtmlUnit -Unit $prefixExtraUnit -Snapshot $fastSnap -HtmlValidationIndex $fastIdx } 'Fast lookup rejects RawFragment with matching prefix and extra trailing chars'
+
+$badRefSpanUnit = Copy-ScopeContractData $fastFx.Units[0]
+$badRefSpanUnit.UnitReference = 'BAD_REF'
+$badRefSpanUnit.RawStart = 999999
+$badRefSpanUnit.RawLength = -1
+$refErr = $null
+try {
+    Assert-ScopeHtmlUnit -Unit $badRefSpanUnit -Snapshot $fastSnap -HtmlValidationIndex $fastIdx
+} catch {
+    $refErr = $_.Exception.Message
+}
+Assert-ScopeEqual $refErr 'Invalid physical unit reference' 'Invalid UnitReference keeps exact error message even when span is invalid'
+
+Set-InternalBenefitHtmlRunContextSnapshotTrust -Snapshot $fastSnap
+Set-InternalBenefitHtmlRunContextTrust -Snapshot $fastSnap -HtmlValidationIndex $fastIdx
+. (Join-Path $PSScriptRoot 'lib/benefit-evidence-location-contracts.ps1')
+Assert-ScopeTrue ($null -ne (Get-InternalScopeHtmlFastLookup -HtmlValidationIndex $fastIdx -Snapshot $fastSnap)) 'Re-dot-sourcing preserves fast lookup WeakTable'
+Assert-ScopeTrue (Test-InternalBenefitHtmlRunContextTrust -Snapshot $fastSnap -HtmlValidationIndex $fastIdx) 'Re-dot-sourcing preserves HTML run-context trust WeakTable'
+
 Write-Host 'Benefit evidence location contract tests passed.'

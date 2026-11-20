@@ -3,9 +3,116 @@ $ErrorActionPreference = 'Stop'
 
 . (Join-Path $PSScriptRoot 'history-contracts.ps1')
 
+$script:HistoryHasNewtonsoftJson = $null -ne ('Newtonsoft.Json.JsonConvert' -as [type])
+
 function ConvertTo-HistoryJsonString {
     param([Parameter(Mandatory)][AllowEmptyString()][string]$Value)
+    if ($script:HistoryHasNewtonsoftJson) {
+        return [Newtonsoft.Json.JsonConvert]::ToString([string]$Value)
+    }
     return ConvertTo-Json -InputObject ([string]$Value) -Compress
+}
+
+function Write-HistoryCanonicalNode {
+    param(
+        [AllowNull()]$Value,
+        [Parameter(Mandatory)][AllowEmptyCollection()][Collections.Generic.HashSet[string]]$OrderInsensitive,
+        [Parameter(Mandatory)][Text.StringBuilder]$Builder,
+        [string]$Path=''
+    )
+
+    if ($null -eq $Value) { [void]$Builder.Append('null'); return }
+    if ($Value -is [string] -or $Value -is [char]) { [void]$Builder.Append((ConvertTo-HistoryJsonString ([string]$Value))); return }
+    if ($Value -is [bool]) { [void]$Builder.Append($(if ([bool]$Value) { 'true' } else { 'false' })); return }
+
+    if ($Value -is [byte] -or $Value -is [sbyte] -or
+        $Value -is [int16] -or $Value -is [uint16] -or
+        $Value -is [int32] -or $Value -is [uint32] -or
+        $Value -is [int64] -or $Value -is [uint64] -or
+        $Value -is [decimal]) {
+        [void]$Builder.Append(([IFormattable]$Value).ToString($null,[Globalization.CultureInfo]::InvariantCulture))
+        return
+    }
+    if ($Value -is [double]) {
+        if ([double]::IsNaN([double]$Value) -or [double]::IsInfinity([double]$Value)) { throw 'Non-finite double is not supported in history serialization' }
+        [void]$Builder.Append(([double]$Value).ToString('R',[Globalization.CultureInfo]::InvariantCulture))
+        return
+    }
+    if ($Value -is [single]) {
+        if ([single]::IsNaN([single]$Value) -or [single]::IsInfinity([single]$Value)) { throw 'Non-finite float is not supported in history serialization' }
+        [void]$Builder.Append(([single]$Value).ToString('R',[Globalization.CultureInfo]::InvariantCulture))
+        return
+    }
+
+    if ($Value -is [Collections.IDictionary]) {
+        $keys = [Collections.Generic.List[string]]::new($Value.Count)
+        foreach ($rawKey in $Value.Keys) {
+            if ($rawKey -isnot [string]) { throw 'History object dictionary keys must be strings' }
+            $keys.Add([string]$rawKey)
+        }
+        $keys.Sort([StringComparer]::CurrentCulture)
+        [void]$Builder.Append('{')
+        $first = $true
+        foreach ($key in $keys) {
+            if ($first) { $first = $false } else { [void]$Builder.Append(',') }
+            [void]$Builder.Append((ConvertTo-HistoryJsonString $key))
+            [void]$Builder.Append(':')
+            $childPath = if ([string]::IsNullOrEmpty($Path)) { $key } else { $Path + '.' + $key }
+            Write-HistoryCanonicalNode -Value $Value[$key] -OrderInsensitive $OrderInsensitive -Builder $Builder -Path $childPath
+        }
+        [void]$Builder.Append('}')
+        return
+    }
+
+    if ($Value -is [Collections.IEnumerable] -and $Value -isnot [string]) {
+        [void]$Builder.Append('[')
+        $childPath = $Path + '[]'
+        if ($OrderInsensitive.Contains($Path)) {
+            $items = [Collections.Generic.List[string]]::new()
+            foreach ($item in $Value) {
+                $itemBuilder = [Text.StringBuilder]::new()
+                Write-HistoryCanonicalNode -Value $item -OrderInsensitive $OrderInsensitive -Builder $itemBuilder -Path $childPath
+                $items.Add($itemBuilder.ToString())
+            }
+            $items.Sort([StringComparer]::CurrentCulture)
+            for ($i = 0; $i -lt $items.Count; $i++) {
+                if ($i -gt 0) { [void]$Builder.Append(',') }
+                [void]$Builder.Append($items[$i])
+            }
+        } else {
+            $first = $true
+            foreach ($item in $Value) {
+                if ($first) { $first = $false } else { [void]$Builder.Append(',') }
+                Write-HistoryCanonicalNode -Value $item -OrderInsensitive $OrderInsensitive -Builder $Builder -Path $childPath
+            }
+        }
+        [void]$Builder.Append(']')
+        return
+    }
+
+    if ($Value -is [pscustomobject]) {
+        $names = [Collections.Generic.List[string]]::new()
+        foreach ($prop in $Value.PSObject.Properties) {
+            $memberType = [string]$prop.MemberType
+            if ($memberType -ceq 'NoteProperty' -or $memberType -ceq 'Property' -or $memberType -ceq 'AliasProperty' -or $memberType -ceq 'ScriptProperty') {
+                $names.Add([string]$prop.Name)
+            }
+        }
+        $names.Sort([StringComparer]::CurrentCulture)
+        [void]$Builder.Append('{')
+        $first = $true
+        foreach ($name in $names) {
+            if ($first) { $first = $false } else { [void]$Builder.Append(',') }
+            [void]$Builder.Append((ConvertTo-HistoryJsonString $name))
+            [void]$Builder.Append(':')
+            $childPath = if ([string]::IsNullOrEmpty($Path)) { $name } else { $Path + '.' + $name }
+            Write-HistoryCanonicalNode -Value $Value.$name -OrderInsensitive $OrderInsensitive -Builder $Builder -Path $childPath
+        }
+        [void]$Builder.Append('}')
+        return
+    }
+
+    throw ('Unsupported history serialization type: ' + $Value.GetType().FullName)
 }
 
 function ConvertTo-HistoryCanonicalNode {
@@ -14,61 +121,9 @@ function ConvertTo-HistoryCanonicalNode {
         [Parameter(Mandatory)][AllowEmptyCollection()][Collections.Generic.HashSet[string]]$OrderInsensitive,
         [string]$Path=''
     )
-
-    if ($null -eq $Value) { return 'null' }
-    if ($Value -is [string] -or $Value -is [char]) { return ConvertTo-HistoryJsonString ([string]$Value) }
-    if ($Value -is [bool]) { return $(if ([bool]$Value) { 'true' } else { 'false' }) }
-
-    if ($Value -is [byte] -or $Value -is [sbyte] -or
-        $Value -is [int16] -or $Value -is [uint16] -or
-        $Value -is [int32] -or $Value -is [uint32] -or
-        $Value -is [int64] -or $Value -is [uint64] -or
-        $Value -is [decimal]) {
-        return ([IFormattable]$Value).ToString($null,[Globalization.CultureInfo]::InvariantCulture)
-    }
-    if ($Value -is [double]) {
-        if ([double]::IsNaN([double]$Value) -or [double]::IsInfinity([double]$Value)) { throw 'Non-finite double is not supported in history serialization' }
-        return ([double]$Value).ToString('R',[Globalization.CultureInfo]::InvariantCulture)
-    }
-    if ($Value -is [single]) {
-        if ([single]::IsNaN([single]$Value) -or [single]::IsInfinity([single]$Value)) { throw 'Non-finite float is not supported in history serialization' }
-        return ([single]$Value).ToString('R',[Globalization.CultureInfo]::InvariantCulture)
-    }
-
-    if ($Value -is [Collections.IDictionary]) {
-        $keys = @($Value.Keys | ForEach-Object {
-            if ($_ -isnot [string]) { throw 'History object dictionary keys must be strings' }
-            [string]$_
-        } | Sort-Object -CaseSensitive)
-        $parts = [Collections.Generic.List[string]]::new()
-        foreach ($key in $keys) {
-            $childPath = if ([string]::IsNullOrEmpty($Path)) { $key } else { $Path + '.' + $key }
-            $parts.Add((ConvertTo-HistoryJsonString $key) + ':' + (ConvertTo-HistoryCanonicalNode -Value $Value[$key] -OrderInsensitive $OrderInsensitive -Path $childPath))
-        }
-        return '{' + ($parts -join ',') + '}'
-    }
-
-    if ($Value -is [Collections.IEnumerable] -and $Value -isnot [string]) {
-        $parts = @($Value | ForEach-Object {
-            ConvertTo-HistoryCanonicalNode -Value $_ -OrderInsensitive $OrderInsensitive -Path ($Path + '[]')
-        })
-        if ($OrderInsensitive.Contains($Path)) {
-            $parts = @($parts | Sort-Object -CaseSensitive)
-        }
-        return '[' + ($parts -join ',') + ']'
-    }
-
-    if ($Value -is [pscustomobject]) {
-        $names = @($Value.PSObject.Properties | Where-Object { $_.MemberType -in @('NoteProperty','Property','AliasProperty','ScriptProperty') } | ForEach-Object { [string]$_.Name } | Sort-Object -CaseSensitive)
-        $parts = [Collections.Generic.List[string]]::new()
-        foreach ($name in $names) {
-            $childPath = if ([string]::IsNullOrEmpty($Path)) { $name } else { $Path + '.' + $name }
-            $parts.Add((ConvertTo-HistoryJsonString $name) + ':' + (ConvertTo-HistoryCanonicalNode -Value $Value.$name -OrderInsensitive $OrderInsensitive -Path $childPath))
-        }
-        return '{' + ($parts -join ',') + '}'
-    }
-
-    throw ('Unsupported history serialization type: ' + $Value.GetType().FullName)
+    $builder = [Text.StringBuilder]::new(256)
+    Write-HistoryCanonicalNode -Value $Value -OrderInsensitive $OrderInsensitive -Builder $builder -Path $Path
+    return $builder.ToString()
 }
 
 function ConvertTo-HistoryCanonicalJson {
@@ -81,7 +136,9 @@ function ConvertTo-HistoryCanonicalJson {
         if ([string]::IsNullOrWhiteSpace([string]$path)) { throw 'Order-insensitive path cannot be blank' }
         [void]$set.Add([string]$path)
     }
-    return ConvertTo-HistoryCanonicalNode -Value $Value -OrderInsensitive $set
+    $builder = [Text.StringBuilder]::new(512)
+    Write-HistoryCanonicalNode -Value $Value -OrderInsensitive $set -Builder $builder
+    return $builder.ToString()
 }
 
 function Get-HistorySha256 {

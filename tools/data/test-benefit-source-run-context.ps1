@@ -1,4 +1,4 @@
-$ErrorActionPreference = 'Stop'
+﻿$ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'testdata/benefit-evidence-hwpx/test-support.ps1')
 . (Join-Path $PSScriptRoot 'testdata/benefit-evidence-location/test-support.ps1')
 . (Join-Path $PSScriptRoot 'testdata/benefit-evidence-xlsx/test-support.ps1')
@@ -325,4 +325,32 @@ foreach($case in @(@{Sections=@((New-HwpxTestSection),'<broken');Expected='PARTI
     Assert-ScopeEqual $contextFailure.Metrics.AdapterParseCount 1 'Incomplete package parsed once'
     Assert-ScopeEqual $contextFailure.Metrics.AdapterReuseCount 1 'Incomplete template reused'
 }
+
+$isoCtx = New-BenefitSourceRunContext
+$isoHttp = { param($Uri) [pscustomobject]@{ StatusCode=200; ContentType='text/html'; Text=$html; Bytes=$null } }.GetNewClosure()
+$isoDoc2 = Get-BenefitRunSourceDocument -Context $isoCtx -Candidate (New-RunCandidate 2) -RequestInvoker $isoHttp
+$isoDoc3 = Get-BenefitRunSourceDocument -Context $isoCtx -Candidate (New-RunCandidate 3) -RequestInvoker $isoHttp
+$isoObs2 = Get-BenefitRunHtmlObservation -Context $isoCtx -Document $isoDoc2
+$origCellStart = [long]$isoObs2.ContentUnits[0].FieldReferences['BusinessName'].CellStart
+$isoObs2.ContentUnits[0].FieldReferences['BusinessName'].CellStart = $origCellStart + 10
+$isoObs3 = Get-BenefitRunHtmlObservation -Context $isoCtx -Document $isoDoc3
+$isoObs2Fresh = Get-BenefitRunHtmlObservation -Context $isoCtx -Document $isoDoc2
+Assert-ScopeEqual ([long]$isoObs3.ContentUnits[0].FieldReferences['BusinessName'].CellStart) $origCellStart 'FieldReferences clone must stay isolated across observations'
+Assert-ScopeEqual ([long]$isoObs2Fresh.ContentUnits[0].FieldReferences['BusinessName'].CellStart) $origCellStart 'FieldReferences clone must keep template cache isolated'
+
+$isoTplKey = "$($isoObs2.SnapshotId)|HTML_GENERIC|1"
+$savedRawText = $isoCtx.TemplateCache[$isoTplKey].Rows[0].RawEvidenceText
+$isoCtx.TemplateCache[$isoTplKey].Rows[0].RawEvidenceText = 'tampered-row-text'
+try {
+    Assert-ScopeThrows { Get-BenefitRunHtmlObservation -Context $isoCtx -Document $isoDoc3 } 'Mutated cached template RawEvidenceText must fail closed'
+} finally {
+    $isoCtx.TemplateCache[$isoTplKey].Rows[0].RawEvidenceText = $savedRawText
+}
+$isoCtx.TemplateCache[$isoTplKey].Rows[0].FieldReferences['BusinessName'].CellStart = $origCellStart + 10
+try {
+    Assert-ScopeThrows { Get-BenefitRunHtmlObservation -Context $isoCtx -Document $isoDoc3 } 'Mutated cached template CellStart must fail closed'
+} finally {
+    $isoCtx.TemplateCache[$isoTplKey].Rows[0].FieldReferences['BusinessName'].CellStart = $origCellStart
+}
+
 Write-Host 'Benefit source run context tests passed.'

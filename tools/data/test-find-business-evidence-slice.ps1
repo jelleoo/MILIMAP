@@ -1,4 +1,4 @@
-$ErrorActionPreference = 'Stop'
+﻿$ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'testdata/benefit-evidence-location/test-support.ps1')
 . (Join-Path $PSScriptRoot 'testdata/benefit-evidence-xlsx/test-support.ps1')
 . (Join-Path $PSScriptRoot 'lib/benefit-evidence/convert-html-source-observation.ps1')
@@ -235,4 +235,16 @@ foreach ($format in @('PDF','HWPX')) {
     $forgedObservation.DocumentValidationIndex = $wrongIndex
     Assert-ScopeThrows { Find-BenefitBusinessEvidence -Observation $forgedObservation -Business $business } 'Locator rejects another document snapshot index'
 }
+
+# Non-matching name with phone-only or address-only match must still produce IdentityReview conflicts.
+$phoneOnlyDifferentNameHtml = '<table><tr><th>업소명</th><th>주소</th><th>전화번호</th></tr><tr><td>다른 상호 B</td><td>서울특별시 마포구 다른로 99</td><td>02-0000-0012</td></tr></table>'
+$phoneOnlyDifferentNameResult = Find-BenefitBusinessEvidence -Observation (New-LocatorObservation -Html $phoneOnlyDifferentNameHtml) -Business $business -CanonicalPhone '02-0000-0012'
+Assert-ScopeEqual $phoneOnlyDifferentNameResult.Status 'NOT_FOUND' 'Different name with matching phone only stays NOT_FOUND'
+Assert-ScopeTrue (@($phoneOnlyDifferentNameResult.Diagnostics | Where-Object { $_.Code -eq 'LOCATOR_IDENTITY_CONFLICT' }).Count -eq 1) 'Different name with matching phone only retains IdentityReview diagnostic'
+
+$addrOnlyDifferentNameHtml = '<table><tr><th>업소명</th><th>주소</th><th>전화번호</th></tr><tr><td>다른 상호 C</td><td>서울특별시 마포구 테스트로 12</td><td>02-9999-9999</td></tr></table>'
+$addrOnlyDifferentNameResult = Find-BenefitBusinessEvidence -Observation (New-LocatorObservation -Html $addrOnlyDifferentNameHtml) -Business $business -CanonicalPhone '02-0000-0012'
+Assert-ScopeEqual $addrOnlyDifferentNameResult.Status 'NOT_FOUND' 'Different name with matching address only stays NOT_FOUND'
+Assert-ScopeTrue (@($addrOnlyDifferentNameResult.Diagnostics | Where-Object { $_.Code -eq 'LOCATOR_IDENTITY_CONFLICT' }).Count -eq 1) 'Different name with matching address only retains IdentityReview diagnostic'
+
 Write-Host 'Business evidence locator tests passed.'

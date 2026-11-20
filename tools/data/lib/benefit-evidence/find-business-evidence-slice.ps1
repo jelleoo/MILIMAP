@@ -22,20 +22,45 @@ function New-BenefitEvidenceLocatorDiagnostic {
 }
 
 function Get-BenefitEvidenceCandidate {
-    param([Parameter(Mandatory)]$Unit, [Parameter(Mandatory)]$Business, [AllowNull()][string]$CanonicalPhone='')
+    param(
+        [Parameter(Mandatory)]$Unit,
+        [Parameter(Mandatory)]$Business,
+        [AllowNull()][string]$CanonicalPhone='',
+        [AllowNull()][string]$BusinessNameComparison=$null,
+        [AllowNull()][string]$BusinessAddressComparison=$null,
+        [AllowNull()][string]$CanonicalPhoneDigits=$null
+    )
     $name = Get-BenefitEvidenceField -Unit $Unit -Name 'BusinessName'
+    $targetName = if ($null -ne $BusinessNameComparison) { $BusinessNameComparison } else { ConvertTo-IdentityComparisonText $Business.NormalizedName }
+    $nameComparison = ConvertTo-IdentityComparisonText $name
+    $nameMatch = [bool]($nameComparison -and ($nameComparison -ceq $targetName))
+    if (-not $nameMatch) {
+        $identityReview = $false
+        if ($name) {
+            $address = Get-BenefitEvidenceField -Unit $Unit -Name 'Address'
+            $targetAddress = if ($null -ne $BusinessAddressComparison) { $BusinessAddressComparison } elseif ($Business.PreferredAddress) { ConvertTo-IdentityComparisonText $Business.PreferredAddress } else { '' }
+            $fullAddressMatch = [bool]($targetAddress -and $address -and ($targetAddress -ceq (ConvertTo-IdentityComparisonText $address)))
+            if ($fullAddressMatch) {
+                $identityReview = $true
+            } else {
+                $phone = Get-BenefitEvidenceField -Unit $Unit -Name 'Phone'
+                $canonicalDigits = if ($null -ne $CanonicalPhoneDigits) { $CanonicalPhoneDigits } else { ConvertTo-BenefitEvidencePhone $CanonicalPhone }
+                $sourcePhoneDigits = if ($canonicalDigits -and $phone) { ConvertTo-BenefitEvidencePhone $phone } else { '' }
+                $identityReview = [bool]($canonicalDigits -and $sourcePhoneDigits -and ($canonicalDigits -ceq $sourcePhoneDigits))
+            }
+        }
+        return [pscustomobject]@{ Unit=$Unit; NameMatch=$false; Strong=$false; Conflict=$false; IdentityReview=$identityReview; Evidence=@(); Detail='EXPLICIT_NAME_MISMATCH' }
+    }
+
     $address = Get-BenefitEvidenceField -Unit $Unit -Name 'Address'
     $branch = Get-BenefitEvidenceField -Unit $Unit -Name 'Branch'
     $phone = Get-BenefitEvidenceField -Unit $Unit -Name 'Phone'
     $sourceAddress = Get-NormalizedAddressParts -RoadAddress $address -LotAddress '' -MetadataProvince '' -MetadataArea ''
-    $fullAddressMatch = $Business.PreferredAddress -and $address -and ((ConvertTo-IdentityComparisonText $Business.PreferredAddress) -ceq (ConvertTo-IdentityComparisonText $address))
-    $canonicalPhoneDigits = ConvertTo-BenefitEvidencePhone $CanonicalPhone
+    $targetAddress = if ($null -ne $BusinessAddressComparison) { $BusinessAddressComparison } elseif ($Business.PreferredAddress) { ConvertTo-IdentityComparisonText $Business.PreferredAddress } else { '' }
+    $fullAddressMatch = $targetAddress -and $address -and ($targetAddress -ceq (ConvertTo-IdentityComparisonText $address))
+    $canonicalPhoneDigits = if ($null -ne $CanonicalPhoneDigits) { $CanonicalPhoneDigits } else { ConvertTo-BenefitEvidencePhone $CanonicalPhone }
     $sourcePhoneDigits = ConvertTo-BenefitEvidencePhone $phone
     $phoneMatch = $canonicalPhoneDigits -and $sourcePhoneDigits -and ($canonicalPhoneDigits -ceq $sourcePhoneDigits)
-    $nameMatch = (ConvertTo-IdentityComparisonText $name) -and ((ConvertTo-IdentityComparisonText $name) -ceq (ConvertTo-IdentityComparisonText $Business.NormalizedName))
-    if (-not $nameMatch) {
-        return [pscustomobject]@{ Unit=$Unit; NameMatch=$false; Strong=$false; Conflict=$false; IdentityReview=([bool]($name -and ($fullAddressMatch -or $phoneMatch))); Evidence=@(); Detail='EXPLICIT_NAME_MISMATCH' }
-    }
 
     $evidence = @('FULL_NAME_MATCH')
     $conflicts = @()
@@ -81,7 +106,10 @@ function Find-BenefitBusinessEvidence {
         return New-BenefitEvidenceLocationResult -SourceRowNumber $Observation.SourceRowNumber -OperationalStatus $Observation.AdapterStatus -Status $null -Slices @() -CandidateReferences @() -Diagnostics $Observation.Diagnostics
     }
 
-    $candidates = @(foreach ($unit in $Observation.ContentUnits) { Get-BenefitEvidenceCandidate -Unit $unit -Business $Business -CanonicalPhone $CanonicalPhone })
+    $businessNameComparison = ConvertTo-IdentityComparisonText $Business.NormalizedName
+    $businessAddressComparison = if ($Business.PreferredAddress) { ConvertTo-IdentityComparisonText $Business.PreferredAddress } else { '' }
+    $canonicalPhoneDigits = ConvertTo-BenefitEvidencePhone $CanonicalPhone
+    $candidates = @(foreach ($unit in $Observation.ContentUnits) { Get-BenefitEvidenceCandidate -Unit $unit -Business $Business -CanonicalPhone $CanonicalPhone -BusinessNameComparison $businessNameComparison -BusinessAddressComparison $businessAddressComparison -CanonicalPhoneDigits $canonicalPhoneDigits })
     $named = @($candidates | Where-Object { $_.NameMatch })
     $references = @($named | ForEach-Object { [string]$_.Unit.UnitReference })
     $diagnostics = @()
@@ -98,6 +126,8 @@ function Find-BenefitBusinessEvidence {
         $selected = $strong[0]
         $slice = if ($Observation.SourceFormat -ceq 'XLSX') {
             New-InternalRelevantBenefitXlsxSlice -Observation $Observation -Unit $selected.Unit -IdentityEvidence $selected.Evidence -XlsxValidationIndex $XlsxValidationIndex
+        } elseif ($Observation.SourceFormat -ceq 'HTML') {
+            New-InternalRelevantBenefitHtmlSlice -Observation $Observation -Unit $selected.Unit -IdentityEvidence $selected.Evidence -HtmlTokens $htmlTokens -HtmlValidationIndex $htmlValidationIndex
         } else {
             New-RelevantBenefitEvidenceSlice -Observation $Observation -Unit $selected.Unit -IdentityEvidence $selected.Evidence -HtmlTokens $htmlTokens -HtmlValidationIndex $htmlValidationIndex -XlsxValidationIndex $XlsxValidationIndex -DocumentValidationIndex $documentValidationIndex
         }

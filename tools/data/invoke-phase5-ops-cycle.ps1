@@ -15,7 +15,8 @@ param(
     [switch]$IncludeSuperseded,
     [string]$PilotLogPath = '',
     [int]$MaxRolling24hPhysicalAttempts = 0,
-    [switch]$SkipReviewQueueExport
+    [switch]$SkipReviewQueueExport,
+    [switch]$ReuseBatchRunContext
 )
 
 Set-StrictMode -Version Latest
@@ -38,6 +39,7 @@ $script:OpsCycleCliParams = @{
     PilotLogPath = $PilotLogPath
     MaxRolling24hPhysicalAttempts = $MaxRolling24hPhysicalAttempts
     SkipReviewQueueExport = [bool]$SkipReviewQueueExport
+    ReuseBatchRunContext = [bool]$ReuseBatchRunContext
 }
 
 . (Join-Path $PSScriptRoot 'inspect-phase5-benefit-batch.ps1')
@@ -176,7 +178,8 @@ function Invoke-Phase5OpsCycle {
         [switch]$IncludeSuperseded,
         [string]$PilotLogPath = '',
         [int]$MaxRolling24hPhysicalAttempts = 0,
-        [switch]$SkipReviewQueueExport
+        [switch]$SkipReviewQueueExport,
+        [switch]$ReuseBatchRunContext
     )
 
     if ($MaxRolling24hPhysicalAttempts -lt 0) {
@@ -294,6 +297,7 @@ function Invoke-Phase5OpsCycle {
             ContractType = 'Phase5OpsCycleResult'
             ContractVersion = 1
             Mode = 'PlanOnly'
+            ReuseBatchRunContext = [bool]$ReuseBatchRunContext
             Status = $planStatus
             Code = $planCode
             BatchId = $plan.BatchId
@@ -318,6 +322,7 @@ function Invoke-Phase5OpsCycle {
             ContractType = 'Phase5OpsCycleResult'
             ContractVersion = 1
             Mode = 'Execute'
+            ReuseBatchRunContext = [bool]$ReuseBatchRunContext
             Status = 'BLOCKED'
             Code = 'OPS_ROLLING_24H_BUDGET_EXCEEDED'
             BatchId = $plan.BatchId
@@ -342,6 +347,7 @@ function Invoke-Phase5OpsCycle {
             ContractType = 'Phase5OpsCycleResult'
             ContractVersion = 1
             Mode = 'RecoverOnly'
+            ReuseBatchRunContext = [bool]$ReuseBatchRunContext
             Status = 'BLOCKED'
             Code = 'OPS_HISTORY_ROOT_MISSING'
             BatchId = $plan.BatchId
@@ -383,6 +389,9 @@ function Invoke-Phase5OpsCycle {
     }
     if ($null -ne $RequestInvoker) {
         $batchInvokeArgs.RequestInvoker = $RequestInvoker
+    }
+    if ($ReuseBatchRunContext) {
+        $batchInvokeArgs.ReuseBatchRunContext = $true
     }
 
     $batchResult = Invoke-Phase5BenefitBatch @batchInvokeArgs
@@ -434,6 +443,7 @@ function Invoke-Phase5OpsCycle {
         ContractType = 'Phase5OpsCycleSummary'
         ContractVersion = 1
         Mode = $Mode
+        ReuseBatchRunContext = [bool]$ReuseBatchRunContext
         Status = [string]$batchResult.Status
         Code = [string]$batchResult.Code
         BatchId = $plan.BatchId
@@ -464,6 +474,7 @@ function Invoke-Phase5OpsCycle {
         ContractType = 'Phase5OpsCycleResult'
         ContractVersion = 1
         Mode = $Mode
+        ReuseBatchRunContext = [bool]$ReuseBatchRunContext
         Status = [string]$batchResult.Status
         Code = [string]$batchResult.Code
         BatchId = $plan.BatchId

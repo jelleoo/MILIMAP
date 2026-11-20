@@ -198,7 +198,7 @@ function Restore-InternalPhase5BenefitCommittedCycle {
     return $Result
 }
 
-function Invoke-Phase5BenefitCycle {
+function Invoke-InternalPhase5BenefitCycle {
     param(
         [Parameter(Mandatory)]$Store,
         [Parameter(Mandatory)][AllowEmptyCollection()][object[]]$Rows,
@@ -209,7 +209,8 @@ function Invoke-Phase5BenefitCycle {
         [Parameter(Mandatory)][string]$OutputDirectory,
         [Parameter(Mandatory)][scriptblock]$RepositoryStateProvider,
         [int]$SourceRowNumberOffset=1,
-        [AllowNull()][scriptblock]$RequestInvoker=$null
+        [AllowNull()][scriptblock]$RequestInvoker=$null,
+        [AllowNull()]$SharedRunContext=$null
     )
     $view=[pscustomobject][ordered]@{
         RunId=$RunId;BusinessId=$BusinessId;SourceRowNumber=$null;ObservedAt=$ObservedAt;RepositoryRevision=$RepositoryRevision
@@ -248,7 +249,16 @@ function Invoke-Phase5BenefitCycle {
         # the same RunId, including the pre-fetch window. Never steal stale claims.
         if((Test-Path -LiteralPath $stagePath) -or (Test-Path -LiteralPath $terminalDirectory)){throw 'P5_STATE_CHANGED_BEFORE_FETCH'}
         $started=$true
-        $context=New-BenefitSourceRunContext
+        if($null -ne $SharedRunContext){
+            Assert-BenefitSourceRunContext $SharedRunContext
+            $context=$SharedRunContext
+        }else{
+            $context=New-BenefitSourceRunContext
+        }
+        $beforeExternalFetch=[int]$context.Metrics.ExternalFetchCount
+        $beforeFetchCacheHits=[int]$context.Metrics.FetchCacheHits
+        $beforeAdapterParse=[int]$context.Metrics.AdapterParseCount
+        $beforeAdapterReuse=[int]$context.Metrics.AdapterReuseCount
         $retentionProfile=Get-InternalPhase5HtmlEvidenceRetentionProfile -Candidate $candidate
         if($retentionProfile -cnotin @('LEGACY','C_LITE_V1')){throw 'P5_EXECUTION_PROFILE_UNKNOWN'}
         $run=Invoke-BenefitIncrementalPostFetch -Store $Store -RunId $RunId -ObservedAt $ObservedAt -RepositoryRevision $RepositoryRevision -BusinessId $BusinessId -Benefit $benefit -BusinessIdentity $business -CanonicalPhone $phone -Candidate $candidate -RunContext $context -RequestInvoker $RequestInvoker -RepositoryStateProvider $RepositoryStateProvider -HtmlEvidenceRetentionProfile $retentionProfile
@@ -256,8 +266,10 @@ function Invoke-Phase5BenefitCycle {
         $clearClaim=$view.CommitCode -ceq 'COMMITTED'
         $view.OperationalStatus=[string]$run.Observation.OperationalStatus
         $view.Metrics=$run.Metrics | Select-Object *
-        $view.Metrics | Add-Member NoteProperty FetchCacheHits $context.Metrics.FetchCacheHits
-        $view.Metrics | Add-Member NoteProperty AdapterReuseCount $context.Metrics.AdapterReuseCount
+        $view.Metrics.ExternalFetchCount=[int]$context.Metrics.ExternalFetchCount-$beforeExternalFetch
+        $view.Metrics.ParseCount=[int]$context.Metrics.AdapterParseCount-$beforeAdapterParse
+        $view.Metrics | Add-Member NoteProperty FetchCacheHits ([int]$context.Metrics.FetchCacheHits-$beforeFetchCacheHits)
+        $view.Metrics | Add-Member NoteProperty AdapterReuseCount ([int]$context.Metrics.AdapterReuseCount-$beforeAdapterReuse)
         if($view.CommitCode -ceq 'COMMITTED'){
             $committedManifest=Read-HistoryJsonFile -Store $Store -Path (Get-HistoryRunManifestPath -Store $Store -RunId $RunId) -Kind 'run manifest'
             if($null -eq $committedManifest){throw 'P5_COMMITTED_MANIFEST_MISSING'}
@@ -287,4 +299,20 @@ function Invoke-Phase5BenefitCycle {
         }
     }
     return $view
+}
+
+function Invoke-Phase5BenefitCycle {
+    param(
+        [Parameter(Mandatory)]$Store,
+        [Parameter(Mandatory)][AllowEmptyCollection()][object[]]$Rows,
+        [Parameter(Mandatory)][string]$BusinessId,
+        [Parameter(Mandatory)][string]$RunId,
+        [Parameter(Mandatory)][string]$ObservedAt,
+        [Parameter(Mandatory)][string]$RepositoryRevision,
+        [Parameter(Mandatory)][string]$OutputDirectory,
+        [Parameter(Mandatory)][scriptblock]$RepositoryStateProvider,
+        [int]$SourceRowNumberOffset=1,
+        [AllowNull()][scriptblock]$RequestInvoker=$null
+    )
+    return Invoke-InternalPhase5BenefitCycle @PSBoundParameters
 }

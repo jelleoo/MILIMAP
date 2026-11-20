@@ -35,6 +35,24 @@ $baseline = Compare-HistoryObservations -Previous $null -Current $current -Domai
 Assert-Equal $baseline.ChangeCandidates[0] 'BASELINE_ESTABLISHED' 'No previous observation must establish baseline'
 Assert-Equal $called 0 'Baseline must not call domain resolver'
 
+$firstFailed = New-HistoryObservation -ObservationId 'obs-first-failed' -RunId 'run-test' -BusinessId 'biz-0123456789abcdef0123456789abcdef' -Domain 'BENEFIT' -ObservedAt '2026-09-26T00:00:00Z' -OperationalStatus 'FAILED' -Comparable $false -NonComparableReasons @('SOURCE_UNSUPPORTED') -InputFingerprint ('1'*64) -EvidenceFingerprint ('2'*64) -SemanticFingerprint ('3'*64) -ExecutionFingerprint ('4'*64)
+$firstFailureComp = Compare-HistoryObservations -Previous $null -Current $firstFailed -DomainChangeResolver $resolver
+Assert-Equal $firstFailureComp.PreviousObservationId '' 'First-run failure must have empty PreviousObservationId'
+Assert-Equal $firstFailureComp.ComparisonStatus 'UNAVAILABLE' 'First-run failure must make comparison unavailable'
+Assert-True (@($firstFailureComp.ChangeCandidates) -contains 'OPERATIONAL_FAILURE') 'First-run failure must emit OPERATIONAL_FAILURE'
+Assert-True (@($firstFailureComp.ChangeCandidates) -contains 'COMPARISON_UNAVAILABLE') 'First-run failure must emit COMPARISON_UNAVAILABLE'
+Assert-True (@($firstFailureComp.ChangeCandidates) -notcontains 'BASELINE_ESTABLISHED') 'First-run failure must not establish baseline'
+Assert-True (@($firstFailureComp.ReasonCodes) -contains 'SOURCE_UNSUPPORTED') 'First-run failure must preserve non-comparable reason codes'
+Assert-Equal $called 0 'First-run failure must not call domain resolver'
+
+$firstNonComparableObs = New-TestObservation -ObservationId 'obs-first-noncomp' -OperationalStatus 'COMPLETE' -Comparable $false
+$firstNonCompResult = Compare-HistoryObservations -Previous $null -Current $firstNonComparableObs -DomainChangeResolver $resolver
+Assert-Equal $firstNonCompResult.PreviousObservationId '' 'First-run non-comparable must have empty PreviousObservationId'
+Assert-Equal $firstNonCompResult.ComparisonStatus 'UNAVAILABLE' 'First-run non-comparable must make comparison unavailable'
+Assert-Equal @($firstNonCompResult.ChangeCandidates).Count 1 'First-run non-comparable must emit one candidate'
+Assert-Equal $firstNonCompResult.ChangeCandidates[0] 'COMPARISON_UNAVAILABLE' 'First-run non-comparable must emit COMPARISON_UNAVAILABLE'
+Assert-Equal $called 0 'First-run non-comparable must not call domain resolver'
+
 $failed = New-TestObservation -ObservationId 'obs-failed' -OperationalStatus 'FAILED' -Comparable $false
 $failure = Compare-HistoryObservations -Previous $current -Current $failed -DomainChangeResolver $resolver
 Assert-True (@($failure.ChangeCandidates) -contains 'OPERATIONAL_FAILURE') 'FAILED current observation must emit OPERATIONAL_FAILURE'

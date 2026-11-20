@@ -258,6 +258,25 @@ try{
         Equal $failure.Items[2].OperationalStatus COMPLETE 'Next business not contaminated'
         Check ($failure.Items[1].BenefitState -cne 'ENDED' -and $failure.Items[1].BenefitState -cne 'ACTIVE') 'Failure never becomes benefit truth'
         Equal $failure.Metrics.ExtractionCount.Total 2 'Only successful located sources actually extract'
+
+        # Unprimed (no previous baseline) first-run unsupported HTML response must route to OPERATIONAL_DIAGNOSTIC without stopping batch.
+        $unprimedArgs=$args51.Clone();$unprimedArgs.BusinessIds=@($ids[0],$ids[2]);$unprimedArgs.Store=New-HistoryStoreLayout -Root (Join-Path $root 'unprimed-fail-history');$unprimedArgs.BatchWorkspaceRoot=Join-Path $root 'unprimed-fail-batches'
+        $unprimedPlan=New-Phase5BenefitBatchPlan @unprimedArgs
+        $unprimedCalls=[pscustomobject]@{Count=0}
+        $unprimedHttp={param($Uri);$unprimedCalls.Count++;if($unprimedCalls.Count -eq 1){return [pscustomobject]@{StatusCode=200;ContentType='text/html';Text='<html><body><h2>blocked stub</h2></body></html>';Bytes=$null}};[pscustomobject]@{StatusCode=200;ContentType='text/html';Text=$html;Bytes=$null}}.GetNewClosure()
+        $unprimed=Invoke-Phase5BenefitBatch @unprimedArgs -BatchId $unprimedPlan.BatchId -RepositoryStateProvider $invokeArgs.RepositoryStateProvider -RequestInvoker $unprimedHttp
+        Equal $unprimedCalls.Count 2 'Unprimed batch isolates first operational failure and continues to second business'
+        Equal $unprimed.Status FINISHED 'Unprimed operational failure routed cleanly as OPERATIONAL_DIAGNOSTIC'
+        Equal $unprimed.Summary.CommittedCount 2 'Both unprimed items commit'
+        Equal $unprimed.Summary.CommittedOperationalFailureCount 1 'Unprimed operational failure counted separately'
+        Equal $unprimed.Summary.CommittedOperationalCompleteCount 1 'Second business operational complete counted'
+        Equal $unprimed.Items[0].OperationalStatus FAILED 'First item stays operational FAILED'
+        Equal $unprimed.Items[0].Review.ReviewRoute OPERATIONAL_DIAGNOSTIC 'First-run operational failure routes to OPERATIONAL_DIAGNOSTIC'
+        Check (@($unprimed.Items[0].Comparison.ChangeCandidates) -contains 'OPERATIONAL_FAILURE') 'First-run failure comparison records OPERATIONAL_FAILURE'
+        Check (@($unprimed.Items[0].Comparison.ChangeCandidates) -notcontains 'BASELINE_ESTABLISHED') 'First-run failure does not claim BASELINE_ESTABLISHED'
+        Equal @(Get-ChildItem -LiteralPath $unprimedArgs.Store.ArtifactsRoot -Filter '*.html' -File).Count 0 'Unprimed C_LITE_V1 batch writes 0 .html files'
+        Equal $unprimed.Items[1].OperationalStatus COMPLETE 'Second business remains unaffected COMPLETE'
+
         Write-Host 'P5-1 Execution PASS: sequential3 / commits3 / shared-URL fetch3 parse3; middle committed failure isolated; no production writes'
     }
     if($Group -cin @('Recovery','All')){

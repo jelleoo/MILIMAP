@@ -30,6 +30,7 @@ try{
         # All integration I/O below is synthetic. Qualification itself is independently tested by the transport tests.
         function Get-Phase5NetworkTransportIdentity {[pscustomobject]@{Profile='P52_HTTP11_SINGLE_CONNECTION_V1';Framework='.NET 10.0.12';OS='Microsoft Windows 10.0.26300';Architecture='X64'}}
         $dispatch=Get-Command Invoke-InternalPhase5NetworkDispatch
+        $mmaDetail2740=''
         $networkProbe=[pscustomobject]@{Calls=0;Urls=[Collections.Generic.List[string]]::new();Timeout=$false;HeaderLimit=$false;Family='HTML'}
         function Invoke-InternalPhase5NetworkDispatch {
             param($State,$Uri,$Token)
@@ -38,7 +39,7 @@ try{
             if($networkProbe.HeaderLimit){$State.Accounting.Stop('RESPONSE_HEADERS_EXCEEDED');throw 'counted transport header limit'}
             $State.Accounting.Response($Token)
             if($networkProbe.Family -ceq 'MMA'){
-                $text=if([string]$Uri -like '*mmanrsrListAjaxJsonCallNew*'){$mmaList}else{$mmaDetail}
+                $text=if([string]$Uri -like '*mmanrsrListAjaxJsonCallNew*'){$mmaList}elseif([string]$Uri -like '*udgigwan_cd=2740*'){$mmaDetail2740}else{$mmaDetail}
                 return [pscustomobject]@{StatusCode=200;ContentType='application/json';Text=$text;Bytes=$null}
             }
             if($networkProbe.Family -ceq 'XLSX'){return [pscustomobject]@{StatusCode=200;ContentType='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';Text='';Bytes=$xlsxBytes}}
@@ -101,6 +102,7 @@ try{
             # Same exact existing MMA adapter and JSONP linkage; no new source implementation.
             $mmaList=([IO.File]::ReadAllText((Join-Path $PSScriptRoot 'testdata/benefit-evidence-mma/mma-list.fixture.jsonp'))) -replace '^MmaTestList','MmaBenefitList'
             $mmaDetail=([IO.File]::ReadAllText((Join-Path $PSScriptRoot 'testdata/benefit-evidence-mma/mma-detail-2789.fixture.jsonp'))) -replace '^MmaTestDetail','MmaBenefitDetail'
+            $mmaDetail2740=([IO.File]::ReadAllText((Join-Path $PSScriptRoot 'testdata/benefit-evidence-mma/mma-detail-2740.fixture.jsonp'))) -replace '^MmaTestDetail','MmaBenefitDetail'
             $mmaRows=$rows | ConvertTo-Json -Depth 10 | ConvertFrom-Json
             $mmaRows[0].업소명='(유)투투여행사';$mmaRows[0].소재지도로명주소='서울특별시 테스트구 여행로 2789';$mmaRows[0].업소전화번호='02-2789-0000';$mmaRows[0].출처유형='병무청 공식 자료';$mmaRows[0].출처URL='https://www.mma.go.kr/about/udgg/list.do?mc=mma0003357'
             $mmaCsv=Join-Path $root 'mma.csv';$mmaRows | Export-Csv -LiteralPath $mmaCsv -NoTypeInformation -Encoding utf8
@@ -155,6 +157,91 @@ try{
             Equal $headers.Summary.NotStartedCount 2 'No fabricated later failures'
             Equal $headers.NetworkExecution.FirstStopReason RESPONSE_HEADERS_EXCEEDED 'Exact stop reason retained outside SOURCE_FETCH_FAILED'
             $networkProbe.HeaderLimit=$false
+
+            # Opt-in -ReuseBatchRunContext Test A: HTML C_LITE_V1 3-business shared URL with MaxPhysicalAttempts = 1.
+            $networkProbe.Family='HTML';$networkProbe.Timeout=$false;$networkProbe.HeaderLimit=$false
+            $reuseA=$args51.Clone();$reuseA.Store=New-HistoryStoreLayout -Root (Join-Path $root 'reuse-html-history');$reuseA.BatchWorkspaceRoot=Join-Path $root 'reuse-html-batches';$reuseA.NetworkPolicy=New-Phase5BenefitNetworkPolicy -AllowedHttpsHosts @('city.example.go.kr') -MaxPhysicalAttempts 1
+            $reusePlan1=New-Phase5BenefitBatchPlan @reuseA;$reuseStart1=$networkProbe.Calls
+            $reuseRun1=Invoke-Phase5BenefitBatch @reuseA -BatchId $reusePlan1.BatchId -RepositoryStateProvider $invokeArgs.RepositoryStateProvider -ReuseBatchRunContext
+            Equal $reuseRun1.Status FINISHED 'ReuseBatchRunContext HTML batch1 finishes'
+            Equal $reuseRun1.Summary.CommittedCount 3 'ReuseBatchRunContext HTML batch1 commits 3 items'
+            Equal $reuseRun1.NetworkExecution.AttemptedCount 1 'ReuseBatchRunContext HTML batch1 AttemptedCount 1'
+            Equal ($networkProbe.Calls-$reuseStart1) 1 'ReuseBatchRunContext HTML batch1 underlying dispatch 1'
+            Equal $reuseRun1.Metrics.ExternalFetchCount.Total 1 'ReuseBatchRunContext HTML batch1 ExternalFetchCount 1'
+            Equal $reuseRun1.Metrics.ParseCount.Total 1 'ReuseBatchRunContext HTML batch1 ParseCount 1'
+            Equal $reuseRun1.Metrics.AdapterReuseCount.Total 2 'ReuseBatchRunContext HTML batch1 AdapterReuseCount 2'
+            Equal @(Get-ChildItem -LiteralPath $reuseA.Store.ArtifactsRoot -Filter '*.html' -File).Count 0 'ReuseBatchRunContext HTML batch1 stores 0 .html files'
+            Equal @($reuseRun1.Items.ObservationId | Select-Object -Unique).Count 3 'ReuseBatchRunContext HTML batch1 has 3 distinct ObservationIds'
+            Equal @($reuseRun1.Items.Review.ReviewKey | Select-Object -Unique).Count 3 'ReuseBatchRunContext HTML batch1 has 3 distinct ReviewKeys'
+            foreach($item in $reuseRun1.Items){
+                $obs=Read-HistoryObservation -Store $reuseA.Store -ObservationId $item.ObservationId
+                Equal @($obs.ArtifactReferences).Count 3 'ReuseBatchRunContext HTML batch1 capture has 3 artifacts'
+            }
+            $reuseInvBeforeRec=Inventory $reuseA.Store.Root;$reuseRecStart=$networkProbe.Calls
+            $reuseRec1=Invoke-Phase5BenefitBatch @reuseA -BatchId $reusePlan1.BatchId -Mode RecoverOnly -RepositoryStateProvider $invokeArgs.RepositoryStateProvider
+            Equal $reuseRec1.Status FINISHED 'ReuseBatchRunContext HTML batch1 RecoverOnly finishes'
+            Equal $reuseRec1.Summary.RecoveredCount 3 'ReuseBatchRunContext HTML batch1 RecoverOnly recovers 3 items'
+            Equal ($networkProbe.Calls-$reuseRecStart) 0 'ReuseBatchRunContext HTML batch1 RecoverOnly makes 0 network calls'
+            Equal (Inventory $reuseA.Store.Root) $reuseInvBeforeRec 'ReuseBatchRunContext HTML batch1 RecoverOnly History unchanged'
+
+            $reuseA2=$reuseA.Clone();$reuseA2.ObservedAt='2026-10-25T00:10:00Z'
+            $reusePlan2=New-Phase5BenefitBatchPlan @reuseA2;$reuseStart2=$networkProbe.Calls
+            $reuseRun2=Invoke-Phase5BenefitBatch @reuseA2 -BatchId $reusePlan2.BatchId -RepositoryStateProvider $invokeArgs.RepositoryStateProvider -ReuseBatchRunContext
+            Equal $reuseRun2.Status FINISHED 'ReuseBatchRunContext HTML batch2 finishes'
+            Equal $reuseRun2.Summary.CommittedCount 3 'ReuseBatchRunContext HTML batch2 commits 3 items'
+            Equal $reuseRun2.NetworkExecution.AttemptedCount 1 'ReuseBatchRunContext HTML batch2 AttemptedCount 1'
+            Equal ($networkProbe.Calls-$reuseStart2) 1 'ReuseBatchRunContext HTML batch2 underlying dispatch 1'
+            Equal $reuseRun2.Metrics.ExternalFetchCount.Total 1 'ReuseBatchRunContext HTML batch2 ExternalFetchCount 1'
+            Equal $reuseRun2.Metrics.ReuseApplied.Total 3 'ReuseBatchRunContext HTML batch2 ReuseApplied 3'
+            Equal $reuseRun2.Metrics.ParseCount.Total 0 'ReuseBatchRunContext HTML batch2 ParseCount 0'
+            Equal @(Get-ChildItem -LiteralPath $reuseA2.Store.ArtifactsRoot -Filter '*.html' -File).Count 0 'ReuseBatchRunContext HTML batch2 stores 0 .html files'
+            foreach($item in $reuseRun2.Items){
+                $obs=Read-HistoryObservation -Store $reuseA2.Store -ObservationId $item.ObservationId
+                Equal @($obs.ArtifactReferences).Count 4 'ReuseBatchRunContext HTML batch2 reuse has 4 artifacts'
+            }
+
+            # Opt-in -ReuseBatchRunContext Test B: cached FAILED payload must never bypass strict MaxPhysicalAttempts = 1.
+            $reuseB=$args51.Clone();$reuseB.Store=New-HistoryStoreLayout -Root (Join-Path $root 'reuse-timeout-history');$reuseB.BatchWorkspaceRoot=Join-Path $root 'reuse-timeout-batches';$reuseB.NetworkPolicy=New-Phase5BenefitNetworkPolicy -AllowedHttpsHosts @('city.example.go.kr') -MaxPhysicalAttempts 1
+            $reusePlanB=New-Phase5BenefitBatchPlan @reuseB;$reuseStartB=$networkProbe.Calls
+            $networkProbe.Timeout=$true
+            try{
+                $reuseRunB=Invoke-Phase5BenefitBatch @reuseB -BatchId $reusePlanB.BatchId -RepositoryStateProvider $invokeArgs.RepositoryStateProvider -ReuseBatchRunContext
+            }finally{$networkProbe.Timeout=$false}
+            Equal $reuseRunB.Code P52B_NETWORK_POLICY_STOP 'Cached FAILED payload never bypasses strict budget'
+            Equal $reuseRunB.Summary.CommittedCount 1 'Timeout item commits diagnostic failure before policy stop'
+            Equal $reuseRunB.Items[0].OperationalStatus FAILED 'Timeout item retains OperationalStatus FAILED'
+            Equal $reuseRunB.Summary.NotStartedCount 2 'Subsequent items stay NOT_STARTED after budget exhaustion'
+            Equal $reuseRunB.NetworkExecution.AttemptedCount 1 'Strict timeout attempted count 1'
+            Equal ($networkProbe.Calls-$reuseStartB) 1 'Strict timeout physical call count 1'
+
+            # Opt-in -ReuseBatchRunContext Test C: MMA JSONP 2-business shared LIST with strict MaxPhysicalAttempts = 3 (1 LIST + 2 DETAILs).
+            $mmaReuseRows=$rows | ConvertTo-Json -Depth 10 | ConvertFrom-Json
+            $mmaReuseRows[0].업소명='(유)투투여행사';$mmaReuseRows[0].소재지도로명주소='서울특별시 테스트구 여행로 2789';$mmaReuseRows[0].업소전화번호='02-2789-0000';$mmaReuseRows[0].출처유형='병무청 공식 자료';$mmaReuseRows[0].출처URL='https://www.mma.go.kr/about/udgg/list.do?mc=mma0003357'
+            $mmaReuseRows[2].업소명='(주) 예쁜떡 오늘';$mmaReuseRows[2].소재지도로명주소='서울특별시 테스트구 떡로 2740';$mmaReuseRows[2].업소전화번호='02-2740-0000';$mmaReuseRows[2].출처유형='병무청 공식 자료';$mmaReuseRows[2].출처URL='https://www.mma.go.kr/about/udgg/list.do?mc=mma0003357'
+            $mmaReuseCsv=Join-Path $root 'mma-reuse.csv';$mmaReuseRows | Export-Csv -LiteralPath $mmaReuseCsv -NoTypeInformation -Encoding utf8
+            $reuseC=$args51.Clone();$reuseC.CanonicalCsvPath=$mmaReuseCsv;$reuseC.BusinessIds=@($ids[0],$ids[2]);$reuseC.Store=New-HistoryStoreLayout -Root (Join-Path $root 'reuse-mma-history');$reuseC.BatchWorkspaceRoot=Join-Path $root 'reuse-mma-batches';$reuseC.NetworkPolicy=New-Phase5BenefitNetworkPolicy -AllowedHttpsHosts @('open.mma.go.kr') -MaxPhysicalAttempts 3
+            $reusePlanC=New-Phase5BenefitBatchPlan @reuseC;$reuseStartC=$networkProbe.Calls
+            $networkProbe.Family='MMA'
+            try{
+                $reuseRunC=Invoke-Phase5BenefitBatch @reuseC -BatchId $reusePlanC.BatchId -RepositoryStateProvider $invokeArgs.RepositoryStateProvider -ReuseBatchRunContext
+            }finally{$networkProbe.Family='HTML'}
+            Equal $reuseRunC.Status FINISHED 'ReuseBatchRunContext MMA shared-LIST batch finishes'
+            Equal $reuseRunC.Summary.CommittedCount 2 'ReuseBatchRunContext MMA batch commits 2 items'
+            Equal $reuseRunC.Summary.CommittedOperationalCompleteCount 2 'ReuseBatchRunContext MMA batch completes both items'
+            Equal ($networkProbe.Calls-$reuseStartC) 3 'ReuseBatchRunContext MMA batch dispatches 1 LIST + 2 DETAILs'
+            Equal $reuseRunC.NetworkExecution.AttemptedCount 3 'ReuseBatchRunContext MMA batch NetworkExecution AttemptedCount 3'
+            Equal $reuseRunC.Metrics.ExternalFetchCount.Total 3 'ReuseBatchRunContext MMA batch ExternalFetchCount 3'
+            Equal $reuseRunC.Metrics.FetchCacheHits.Total 1 'ReuseBatchRunContext MMA batch FetchCacheHits 1'
+            Equal $reuseRunC.Metrics.ParseCount.Total 3 'ReuseBatchRunContext MMA batch ParseCount 3'
+            Equal $reuseRunC.Metrics.AdapterReuseCount.Total 1 'ReuseBatchRunContext MMA batch AdapterReuseCount 1'
+            Equal @($reuseRunC.Items | Where-Object BenefitState -CEQ 'NEEDS_VERIFICATION').Count 2 'ReuseBatchRunContext MMA items stay NEEDS_VERIFICATION'
+            $reuseRecCStart=$networkProbe.Calls;$reuseRecCInv=Inventory $reuseC.Store.Root
+            $reuseRecC=Invoke-Phase5BenefitBatch @reuseC -BatchId $reusePlanC.BatchId -Mode RecoverOnly -RepositoryStateProvider $invokeArgs.RepositoryStateProvider
+            Equal $reuseRecC.Status FINISHED 'ReuseBatchRunContext MMA RecoverOnly finishes'
+            Equal $reuseRecC.Summary.RecoveredCount 2 'ReuseBatchRunContext MMA RecoverOnly recovers 2 items'
+            Equal ($networkProbe.Calls-$reuseRecCStart) 0 'ReuseBatchRunContext MMA RecoverOnly makes 0 network calls'
+            Equal (Inventory $reuseC.Store.Root) $reuseRecCInv 'ReuseBatchRunContext MMA RecoverOnly History unchanged'
+            Write-Host 'P5-2B ReuseBatchRunContext PASS: HTML C-Lite batch1/batch2 reuse, failed-payload budget guard, MMA shared LIST+2 DETAIL'
         }finally{Set-Item Function:Get-Phase5NetworkTransportIdentity $originalIdentity;Set-Item Function:Invoke-InternalPhase5NetworkDispatch $dispatch.ScriptBlock}
         Write-Host 'P5-2B Network batch PASS: policy-v2, budget0 cycle0/commit0, one-shot seal, stop-next-business, committed recovery0/0, custom-invoker rejection'
     }

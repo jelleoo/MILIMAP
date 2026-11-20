@@ -161,10 +161,20 @@ function Set-InternalPhase5BenefitBatchSummary {
     $Result.Metrics=[pscustomobject]$metrics
 }
 
+function Test-InternalPhase5BatchPayloadCachedComplete {
+    param([AllowNull()]$RunContext,[Parameter(Mandatory)][string]$SourceUrl)
+    if($null -eq $RunContext){return $false}
+    # MMA entries may still require a per-business DETAIL fetch after a cached LIST hit.
+    if(Test-MmaBenefitEntryUrl -Url $SourceUrl){return $false}
+    if(-not $RunContext.PayloadCache.ContainsKey($SourceUrl)){return $false}
+    $payload=$RunContext.PayloadCache[$SourceUrl]
+    return ($null -ne $payload -and [string]$payload.FetchStatus -ceq 'COMPLETE')
+}
+
 function Invoke-Phase5BenefitBatch {
-    param([Parameter(Mandatory)][string]$CanonicalCsvPath,[Parameter(Mandatory)][AllowEmptyCollection()][string[]]$BusinessIds,[Parameter(Mandatory)]$Store,[Parameter(Mandatory)][string]$BatchWorkspaceRoot,[Parameter(Mandatory)][string]$ObservedAt,[Parameter(Mandatory)][string]$RepositoryRevision,[Parameter(Mandatory)][string]$BatchId,[ValidateSet('Execute','RecoverOnly')][string]$Mode='Execute',[Parameter(Mandatory)][scriptblock]$RepositoryStateProvider,[AllowNull()][scriptblock]$RequestInvoker=$null,[AllowNull()]$NetworkPolicy=$null)
+    param([Parameter(Mandatory)][string]$CanonicalCsvPath,[Parameter(Mandatory)][AllowEmptyCollection()][string[]]$BusinessIds,[Parameter(Mandatory)]$Store,[Parameter(Mandatory)][string]$BatchWorkspaceRoot,[Parameter(Mandatory)][string]$ObservedAt,[Parameter(Mandatory)][string]$RepositoryRevision,[Parameter(Mandatory)][string]$BatchId,[ValidateSet('Execute','RecoverOnly')][string]$Mode='Execute',[Parameter(Mandatory)][scriptblock]$RepositoryStateProvider,[AllowNull()][scriptblock]$RequestInvoker=$null,[AllowNull()]$NetworkPolicy=$null,[switch]$ReuseBatchRunContext)
     $result=[pscustomobject][ordered]@{BatchId=$BatchId;Mode=$Mode;Status='BLOCKED';Code=$null;Reasons=@();Items=@();Summary=$null;Metrics=$null;OutputStatus='NOT_WRITTEN';ProductionAction='NONE'}
-    $guard=$null;$plan=$null;$release=$false;$started=$false;$network=$null;$strict=($null -ne $NetworkPolicy)
+    $guard=$null;$plan=$null;$release=$false;$started=$false;$network=$null;$strict=($null -ne $NetworkPolicy);$sharedRunContext=$null
     if($strict){$result | Add-Member NoteProperty NetworkExecution $null}
     try{
         if($strict -and $null -ne $RequestInvoker){$result.Code='P52B_CUSTOM_INVOKER_DENIED';throw 'P52B_CUSTOM_INVOKER_DENIED'}
@@ -188,6 +198,9 @@ function Invoke-Phase5BenefitBatch {
             $ownedState=$network
             $ownedRequest=Get-Command Invoke-InternalPhase5NetworkRequest -CommandType Function
             $RequestInvoker={param($Uri);& $ownedRequest -State $ownedState -Uri $Uri}.GetNewClosure()
+        }
+        if($ReuseBatchRunContext -and $Mode -ceq 'Execute'){
+            $sharedRunContext=New-BenefitSourceRunContext
         }
         $audit=Invoke-Phase3ReviewAudit -Store $Store
         foreach($inputRow in $resolved.Inputs){[void](Assert-InternalPhase5BenefitBatchIndex -Store $Store -BusinessId $inputRow.BusinessId -KnownReviews $audit.Items)}
@@ -218,11 +231,19 @@ function Invoke-Phase5BenefitBatch {
                 try{$item.OutputStatus='WRITTEN';Write-Phase5BenefitCycleOutput -Result $item -Directory $plan.OutputDirectory}catch{$item.OutputStatus='FAILED';$item.Code='OUTPUT_FAILED';$item.Reasons+=@($_.Exception.Message)}
             }elseif($Mode -ceq 'RecoverOnly'){continue}
             else{
-                if($null -ne $network -and -not $network.Accounting.CanStart()){$result.Status='STOPPED';$result.Code='P52B_NETWORK_POLICY_STOP';break}
+                if($null -ne $network){
+                    if($null -ne $network.Accounting.FirstStopReason){$result.Status='STOPPED';$result.Code='P52B_NETWORK_POLICY_STOP';break}
+                    $cachedComplete=Test-InternalPhase5BatchPayloadCachedComplete -RunContext $sharedRunContext -SourceUrl ([string]$inputRow.Candidate.Url)
+                    if(-not $cachedComplete -and -not $network.Accounting.CanStart()){$result.Status='STOPPED';$result.Code='P52B_NETWORK_POLICY_STOP';break}
+                }
                 $started=$true;$item.Action='EXECUTE'
                 $prior=Get-HistoryLatestEntry -Store $Store -BusinessId $item.BusinessId -Domain BENEFIT
                 $priorComparable=if($null -ne $prior){[string]$prior.LatestComparableObservationId}else{''}
-                $cycle=Invoke-Phase5BenefitCycle -Store $Store -Rows $resolved.Rows -BusinessId $item.BusinessId -RunId $item.RunId -ObservedAt $ObservedAt -RepositoryRevision $RepositoryRevision -OutputDirectory $plan.OutputDirectory -SourceRowNumberOffset 2 -RepositoryStateProvider $RepositoryStateProvider -RequestInvoker $RequestInvoker
+                $cycle=if($null -ne $sharedRunContext){
+                    Invoke-InternalPhase5BenefitCycle -Store $Store -Rows $resolved.Rows -BusinessId $item.BusinessId -RunId $item.RunId -ObservedAt $ObservedAt -RepositoryRevision $RepositoryRevision -OutputDirectory $plan.OutputDirectory -SourceRowNumberOffset 2 -RepositoryStateProvider $RepositoryStateProvider -RequestInvoker $RequestInvoker -SharedRunContext $sharedRunContext
+                }else{
+                    Invoke-Phase5BenefitCycle -Store $Store -Rows $resolved.Rows -BusinessId $item.BusinessId -RunId $item.RunId -ObservedAt $ObservedAt -RepositoryRevision $RepositoryRevision -OutputDirectory $plan.OutputDirectory -SourceRowNumberOffset 2 -RepositoryStateProvider $RepositoryStateProvider -RequestInvoker $RequestInvoker
+                }
                 foreach($property in $cycle.PSObject.Properties){if($null -ne $item.PSObject.Properties[$property.Name]){$item.($property.Name)=$property.Value}}
                 if($item.Recovered){$item.Action='RECOVER'}
                 if($item.CommitCode -ceq 'COMMITTED'){

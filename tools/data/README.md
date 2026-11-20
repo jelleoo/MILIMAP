@@ -1658,6 +1658,7 @@ Atomic external ops-cycle-summary.json (ProductionAction=NONE, ApprovalRequired=
 
 - **`PlanOnly` mode:** Validates external paths (non-overlapping, reparse-free, outside all repository roots), previews `BatchId` / per-item retention profile (`C_LITE_V1` vs `LEGACY`) / transport qualification / rolling-24h pilot budget with **zero HTTP** and **zero filesystem writes**.
 - **`Execute` & `RecoverOnly` modes:** Enforce `-MaxRolling24hPhysicalAttempts` (when configured with `-PilotLogPath`) before creating History directories or running batches, write `ops-cycle-summary.json` atomically outside the repo, and never touch `data/canonical/`, `data/seed/`, or `apps/android/`.
+- **Opt-in intra-batch shared context (`-ReuseBatchRunContext`):** Shares one batch-scoped `BenefitSourceRunContext` during `Execute` so same-source HTML batches (`www.ddc.go.kr`) and MMA JSONP lists (`open.mma.go.kr`) reuse in-memory fetch payloads and parsed templates within the batch instead of repeating identical requests and parses per item, while preserving default per-cycle isolation, `MaxBusinesses = 10`, strict `NetworkPolicy` enforcement, and `ProductionAction=NONE`.
 
 ```powershell
 pwsh -NoProfile -File .\tools\data\invoke-phase5-ops-cycle.ps1 `

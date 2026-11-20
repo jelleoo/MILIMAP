@@ -254,6 +254,105 @@ try {
     Assert-OpsEqual $cliResult.Status 'READY' 'Direct CLI PlanOnly returns READY'
     Assert-OpsTrue (-not (Test-Path -LiteralPath $cliHistory)) 'Direct CLI PlanOnly writes nothing'
 
+    # 8. Opt-in intra-batch RunContext reuse (-ReuseBatchRunContext) across shared-URL HTML businesses.
+    $rowHtml2 = New-ScopeTestRow -Name '운영테스트카페2호' -Building '16' -Phone '02-555-0102'
+    $rowHtml2 | Add-Member NoteProperty businessId 'biz-40000000000000000000000000000004'
+    Assert-OpsEqual $rowHtml2.'출처URL' $rowHtml.'출처URL' 'Shared HTML fixture uses identical SourceUrl'
+    $sharedIds = @($ids[0], 'biz-40000000000000000000000000000004')
+    $sharedCsvPath = Join-Path $tempRoot 'canonical-ops-shared.csv'
+    @($rowHtml, $rowHtml2) | Export-Csv -LiteralPath $sharedCsvPath -NoTypeInformation -Encoding utf8
+    $sharedHtml = '<table><tr><th>업소명</th><th>주소</th><th>전화번호</th><th>할인</th></tr>' +
+        "<tr><td>$($rowHtml.업소명)</td><td>$($rowHtml.소재지도로명주소)</td><td>$($rowHtml.업소전화번호)</td><td>10% 할인</td></tr>" +
+        "<tr><td>$($rowHtml2.업소명)</td><td>$($rowHtml2.소재지도로명주소)</td><td>$($rowHtml2.업소전화번호)</td><td>15% 할인</td></tr></table>"
+
+    $sharedHttpState = [pscustomobject]@{ Calls = 0 }
+    $sharedInvoker = {
+        param($Uri)
+        $sharedHttpState.Calls++
+        [pscustomobject]@{ StatusCode = 200; ContentType = 'text/html'; Text = $sharedHtml; Bytes = $null }
+    }.GetNewClosure()
+
+    $reuseHistory = Join-Path $tempRoot 'reuse-ops-history'
+    $reuseWorkspace = Join-Path $tempRoot 'reuse-ops-batches'
+    $reuseReviewOut = Join-Path $tempRoot 'reuse-ops-review'
+    $reuseRecoverOut = Join-Path $tempRoot 'reuse-ops-recover'
+    $reusePilotLog = Join-Path $tempRoot 'reuse-ops-pilot.ndjson'
+
+    $reusePlan = Invoke-Phase5OpsCycle `
+        -CanonicalCsvPath $sharedCsvPath `
+        -BusinessIds $sharedIds `
+        -HistoryRoot $reuseHistory `
+        -BatchWorkspaceRoot $reuseWorkspace `
+        -ReviewQueueOutputDirectory $reuseReviewOut `
+        -Mode 'PlanOnly' `
+        -ObservedAt '2026-11-20T04:00:00Z' `
+        -RepositoryRevision $headRev `
+        -PilotLogPath $reusePilotLog `
+        -MaxRolling24hPhysicalAttempts 2 `
+        -ReuseBatchRunContext
+
+    Assert-OpsEqual $reusePlan.Status 'READY' 'ReuseBatchRunContext PlanOnly READY'
+    Assert-OpsTrue $reusePlan.ReuseBatchRunContext 'ReuseBatchRunContext flag preserved in PlanOnly result'
+    Assert-OpsEqual $sharedHttpState.Calls 0 'ReuseBatchRunContext PlanOnly makes 0 HTTP calls'
+    Assert-OpsTrue (-not (Test-Path -LiteralPath $reuseHistory)) 'ReuseBatchRunContext PlanOnly writes no History'
+
+    $reuseExec = Invoke-Phase5OpsCycle `
+        -CanonicalCsvPath $sharedCsvPath `
+        -BusinessIds $sharedIds `
+        -HistoryRoot $reuseHistory `
+        -BatchWorkspaceRoot $reuseWorkspace `
+        -ReviewQueueOutputDirectory $reuseReviewOut `
+        -Mode 'Execute' `
+        -ObservedAt '2026-11-20T04:00:00Z' `
+        -RepositoryRevision $headRev `
+        -RequestInvoker $sharedInvoker `
+        -RepositoryStateProvider $cleanRepo `
+        -PilotLogPath $reusePilotLog `
+        -MaxRolling24hPhysicalAttempts 2 `
+        -ReuseBatchRunContext
+
+    Assert-OpsEqual $reuseExec.Status 'FINISHED' 'ReuseBatchRunContext Ops Execute finishes'
+    Assert-OpsTrue $reuseExec.ReuseBatchRunContext 'ReuseBatchRunContext flag preserved in Execute result'
+    Assert-OpsEqual $reuseExec.BatchResult.Summary.CommittedCount 2 'ReuseBatchRunContext Ops Execute commits both items'
+    Assert-OpsEqual $reuseExec.BatchResult.Metrics.ExternalFetchCount.Total 1 'ReuseBatchRunContext Ops Execute fetches once'
+    Assert-OpsEqual $reuseExec.BatchResult.Metrics.ParseCount.Total 1 'ReuseBatchRunContext Ops Execute parses once'
+    Assert-OpsEqual $reuseExec.BatchResult.Metrics.AdapterReuseCount.Total 1 'ReuseBatchRunContext Ops Execute reuses parsed template once'
+    Assert-OpsEqual $sharedHttpState.Calls 1 'ReuseBatchRunContext Ops Execute underlying HTTP calls = 1'
+    Assert-OpsEqual $reuseExec.Inspection.HistoryState 'VERIFIED' 'ReuseBatchRunContext Ops Inspection verifies History'
+    Assert-OpsEqual @($reuseExec.Inspection.Items | Where-Object FingerprintState -CEQ 'MATCH').Count 2 'ReuseBatchRunContext Ops Inspection verifies both item fingerprints'
+    Assert-OpsEqual $reuseExec.ReviewQueueExport.Summary.ExportedItemCount 2 'ReuseBatchRunContext Ops exports 2 review queue items'
+    Assert-OpsEqual @(Get-ChildItem -LiteralPath (Join-Path $reuseHistory 'artifacts/sha256') -Filter '*.html' -File).Count 0 'ReuseBatchRunContext Ops writes 0 .html RAW files'
+
+    $reusePilotLines = @([IO.File]::ReadAllLines($reusePilotLog, [Text.UTF8Encoding]::new($false, $true)) | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
+    Assert-OpsEqual $reusePilotLines.Count 1 'ReuseBatchRunContext Ops writes 1 pilot log entry'
+    $reusePilotEntry = $reusePilotLines[0] | ConvertFrom-Json
+    Assert-OpsEqual ([long]$reusePilotEntry.AttemptedCount) 1L 'ReuseBatchRunContext Ops pilot log AttemptedCount = 1'
+    Assert-OpsEqual ([int]$reusePilotEntry.CommittedCount) 2 'ReuseBatchRunContext Ops pilot log CommittedCount = 2'
+
+    $reuseSummaryJson = [IO.File]::ReadAllText($reuseExec.ReceiptPath, [Text.UTF8Encoding]::new($false, $true)) | ConvertFrom-Json
+    Assert-OpsTrue $reuseSummaryJson.ReuseBatchRunContext 'ops-cycle-summary.json records ReuseBatchRunContext = true'
+    Assert-OpsEqual $reuseSummaryJson.ProductionAction 'NONE' 'ops-cycle-summary.json keeps ProductionAction = NONE'
+
+    $invReuseBefore = (@(Get-ChildItem -LiteralPath $reuseHistory -Recurse -File | Sort-Object FullName | ForEach-Object { "$($_.FullName):$((Get-FileHash -LiteralPath $_.FullName).Hash)" }) -join '|')
+    $reuseRec = Invoke-Phase5OpsCycle `
+        -CanonicalCsvPath $sharedCsvPath `
+        -BusinessIds $sharedIds `
+        -HistoryRoot $reuseHistory `
+        -BatchWorkspaceRoot $reuseWorkspace `
+        -ReviewQueueOutputDirectory $reuseRecoverOut `
+        -Mode 'RecoverOnly' `
+        -ObservedAt '2026-11-20T04:00:00Z' `
+        -RepositoryRevision $headRev `
+        -RepositoryStateProvider $cleanRepo `
+        -ReuseBatchRunContext
+
+    Assert-OpsEqual $reuseRec.Status 'FINISHED' 'ReuseBatchRunContext Ops RecoverOnly finishes'
+    Assert-OpsTrue $reuseRec.ReuseBatchRunContext 'ReuseBatchRunContext flag preserved in RecoverOnly result'
+    Assert-OpsEqual $reuseRec.BatchResult.Summary.RecoveredCount 2 'ReuseBatchRunContext Ops RecoverOnly recovers 2 items'
+    Assert-OpsEqual $sharedHttpState.Calls 1 'ReuseBatchRunContext Ops RecoverOnly makes 0 additional HTTP calls'
+    $invReuseAfter = (@(Get-ChildItem -LiteralPath $reuseHistory -Recurse -File | Sort-Object FullName | ForEach-Object { "$($_.FullName):$((Get-FileHash -LiteralPath $_.FullName).Hash)" }) -join '|')
+    Assert-OpsEqual $invReuseAfter $invReuseBefore 'ReuseBatchRunContext Ops RecoverOnly never mutates History files'
+
     Write-Host 'PASS: Phase 5 operational cycle runner tests'
 } finally {
     $full = [IO.Path]::GetFullPath($tempRoot)

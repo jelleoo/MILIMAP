@@ -112,7 +112,14 @@ function Resolve-InternalPhase5BenefitInput {
 }
 
 function Get-InternalPhase5HtmlEvidenceRetentionProfile {
-    return 'LEGACY'
+    param([AllowNull()]$Candidate=$null)
+
+    if($null -eq $Candidate -or [string]::IsNullOrWhiteSpace([string]$Candidate.Url)){return 'C_LITE_V1'}
+    $uri=[Uri]$Candidate.Url
+    if($uri.Host -ceq 'www.mma.go.kr' -and $uri.AbsolutePath -ceq '/about/udgg/list.do' -and (Test-MmaBenefitEntryUrl -Url $Candidate.Url)){return 'LEGACY'}
+    $extension=[IO.Path]::GetExtension($uri.AbsolutePath).ToLowerInvariant()
+    if($extension -in @('.xlsx','.hwpx','.pdf')){return 'LEGACY'}
+    return 'C_LITE_V1'
 }
 
 function Assert-InternalPhase5CommittedObservationProfile {
@@ -242,7 +249,7 @@ function Invoke-Phase5BenefitCycle {
         if((Test-Path -LiteralPath $stagePath) -or (Test-Path -LiteralPath $terminalDirectory)){throw 'P5_STATE_CHANGED_BEFORE_FETCH'}
         $started=$true
         $context=New-BenefitSourceRunContext
-        $retentionProfile=Get-InternalPhase5HtmlEvidenceRetentionProfile
+        $retentionProfile=Get-InternalPhase5HtmlEvidenceRetentionProfile -Candidate $candidate
         if($retentionProfile -cnotin @('LEGACY','C_LITE_V1')){throw 'P5_EXECUTION_PROFILE_UNKNOWN'}
         $run=Invoke-BenefitIncrementalPostFetch -Store $Store -RunId $RunId -ObservedAt $ObservedAt -RepositoryRevision $RepositoryRevision -BusinessId $BusinessId -Benefit $benefit -BusinessIdentity $business -CanonicalPhone $phone -Candidate $candidate -RunContext $context -RequestInvoker $RequestInvoker -RepositoryStateProvider $RepositoryStateProvider -HtmlEvidenceRetentionProfile $retentionProfile
         $view.CommitCode=[string]$run.Commit.Code;$view.Code=$view.CommitCode;$view.RetryRequired=[bool]$run.Commit.RetryRequired

@@ -714,6 +714,15 @@ try {
     }
     Assert-Equal $cliteLocked.Commit.Code WRITER_LOCKED 'C_LITE_V1 writer lock preserves WRITER_LOCKED'
     Assert-True (-not (Test-Path -LiteralPath (Get-HistoryObservationPath -Store $casStore -ObservationId $cliteLocked.Observation.ObservationId))) 'C_LITE_V1 writer-locked observation is not written'
+
+    # 10. Non-fresh ObservedAt/RunId under C_LITE_V1 falls back cleanly via NON_FRESH_OBSERVATION_IDENTITY to fresh 3-artifact capture.
+    $nonFreshRun = Invoke-BenefitIncrementalPostFetch -Store $cliteStore -RunId 'run-clite-pr3b-nonfresh' -ObservedAt '2026-11-19T12:30:00.000+09:00' -RepositoryRevision $cliteRev -BusinessId $cliteBusinessId -Benefit $cliteBenefit -BusinessIdentity $cliteBusiness -CanonicalPhone $cliteRow.업소전화번호 -Candidate $cliteCandidate -RunContext (New-BenefitSourceRunContext) -RequestInvoker $cliteHttp -RepositoryStateProvider $cliteRepoClean -HtmlEvidenceRetentionProfile 'C_LITE_V1'
+    Assert-Equal $nonFreshRun.Commit.Code COMMITTED 'C_LITE_V1 same ObservedAt fallback commits fresh capture'
+    Assert-True (-not $nonFreshRun.ReuseDecision.ReuseApplied) 'C_LITE_V1 same ObservedAt rejects reuse'
+    Assert-True ($nonFreshRun.ReuseDecision.ReasonCodes -contains 'NON_FRESH_OBSERVATION_IDENTITY') 'C_LITE_V1 same ObservedAt records NON_FRESH_OBSERVATION_IDENTITY'
+    Assert-Equal @($nonFreshRun.Observation.ArtifactReferences).Count 3 'C_LITE_V1 non-fresh fallback writes 3 capture artifacts'
+    Assert-Equal @($nonFreshRun.Observation.ArtifactReferences | Where-Object Kind -eq 'RAW_SOURCE_PAYLOAD').Count 0 'C_LITE_V1 non-fresh fallback writes 0 RAW'
+    Assert-Equal (Read-BenefitScopedHtmlCommittedCapture -Store $cliteStore -ObservationId $nonFreshRun.Observation.ObservationId).Status VERIFIED 'C_LITE_V1 non-fresh fallback capture verifies strictly'
 } finally {
     if (Test-Path -LiteralPath $clitePr3bRoot) { Remove-Item -LiteralPath $clitePr3bRoot -Recurse -Force }
 }

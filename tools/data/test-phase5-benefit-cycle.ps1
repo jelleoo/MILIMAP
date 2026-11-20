@@ -62,6 +62,10 @@ try{
         Equal $first.OutputStatus WRITTEN 'Derived result written once'
         Equal $first.ProductionAction NONE 'No production action'
         Equal $requests.Count 1 'Invalid controls did not spend requests'
+        Equal @(Get-ChildItem -LiteralPath $store.ArtifactsRoot -Filter '*.html' -File).Count 0 'Default P5-0 first capture writes 0 .html files'
+        $firstObs=Read-HistoryObservation -Store $store -ObservationId $first.ObservationId
+        Equal @($firstObs.ArtifactReferences).Count 3 'Default P5-0 first capture writes 3 C_LITE_V1 artifacts'
+        Equal @($firstObs.ArtifactReferences | Where-Object Kind -CEQ 'RAW_SOURCE_PAYLOAD').Count 0 'Default P5-0 first capture has 0 RAW references'
         Write-Host 'P5-0 Base PASS: first fetch1 / parse1 / extraction1 / evaluation1 / COMMITTED; invalid fetch0'
     }
     if($Group -cin @('Recovery','All')){
@@ -78,7 +82,7 @@ try{
         $historyAfter=@(Get-ChildItem -LiteralPath $store.Root -Recurse -File | Sort-Object FullName | ForEach-Object {"$($_.FullName):$((Get-FileHash -LiteralPath $_.FullName).Hash)"})
         Equal ($historyAfter -join ',') ($historyBefore -join ',') 'Committed recovery cannot write History'
 
-        $unchanged=Invoke-Phase5BenefitCycle @args50 -RunId 'run-unchanged'
+        $unchanged=Invoke-Phase5BenefitCycle @args50 -RunId 'run-unchanged' -ObservedAt '2026-10-24T00:01:00Z'
         Equal $unchanged.CommitCode COMMITTED 'Fresh unchanged run commits a fresh observation'
         Equal $unchanged.Metrics.ExternalFetchCount 1 'New RunId still fetches current source once'
         Equal $unchanged.Metrics.ParseCount 0 'Eligible new RunId avoids parsing'
@@ -87,13 +91,17 @@ try{
         Equal $unchanged.Metrics.ReuseApplied 1 'Eligible reuse actually applies'
         Equal $unchanged.Review.ReviewRoute RECORD_ONLY 'Unchanged result routed by comparator'
         Equal @($unchanged.Comparison.ChangeCandidates).Count 0 'No apparent-equality review override'
+        Equal @(Get-ChildItem -LiteralPath $store.ArtifactsRoot -Filter '*.html' -File).Count 0 'Default P5-0 reuse writes 0 .html files'
+        $unchangedObs=Read-HistoryObservation -Store $store -ObservationId $unchanged.ObservationId
+        Equal @($unchangedObs.ArtifactReferences).Count 4 'Default P5-0 reuse has 4 C_LITE_V1 artifacts'
+        Equal @($unchangedObs.ArtifactReferences | Where-Object Kind -CEQ 'RAW_SOURCE_PAYLOAD').Count 0 'Default P5-0 reuse has 0 RAW references'
         $old=Invoke-Phase5BenefitCycle @args50 -RunId 'run-recovery-first'
         Equal $old.ObservationId $one.ObservationId 'Recovery selects supplied RunId, not newer latest index'
 
         $changedHtml=$html.Replace('10% 할인','20% 할인')
         $changedArgs=$args50.Clone()
         $changedArgs.RequestInvoker={param($Uri);$requests.Count++;[pscustomobject]@{StatusCode=200;ContentType='text/html';Text=$changedHtml;Bytes=$null}}.GetNewClosure()
-        $changed=Invoke-Phase5BenefitCycle @changedArgs -RunId 'run-changed'
+        $changed=Invoke-Phase5BenefitCycle @changedArgs -RunId 'run-changed' -ObservedAt '2026-10-24T00:02:00Z'
         Equal $changed.Review.ReviewRoute HUMAN_DOMAIN_REVIEW 'Actual material change preserves existing ReviewRoute'
         Check (@($changed.Comparison.ChangeCandidates) -contains 'BENEFIT_CHANGE_SUSPECTED') 'Domain comparison is retained'
 
@@ -105,12 +113,12 @@ try{
 
         $outputTarget=Join-Path $args50.OutputDirectory 'run-output-failure.json'
         [void][IO.Directory]::CreateDirectory($outputTarget)
-        $failedOutput=Invoke-Phase5BenefitCycle @args50 -RunId 'run-output-failure'
+        $failedOutput=Invoke-Phase5BenefitCycle @args50 -RunId 'run-output-failure' -ObservedAt '2026-10-24T00:03:00Z'
         Equal $failedOutput.CommitCode COMMITTED 'Output failure cannot erase successful commit'
         Equal $failedOutput.OutputStatus FAILED 'Real filesystem output failure is visible'
         [IO.Directory]::Delete($outputTarget)
         $before=$requests.Count
-        $recovered=Invoke-Phase5BenefitCycle @args50 -RunId 'run-output-failure'
+        $recovered=Invoke-Phase5BenefitCycle @args50 -RunId 'run-output-failure' -ObservedAt '2026-10-24T00:03:00Z'
         Equal $recovered.CommitCode COMMITTED 'Missing view reconstructed from committed records'
         Equal $recovered.OutputStatus WRITTEN 'Recovered view materialized once'
         Equal $requests.Count $before 'Output recovery does not rerun work'
@@ -182,43 +190,50 @@ try{
             Check ($badScoped.Status -ceq 'BLOCKED' -and $null -eq $badScoped.Review) 'P5-0 rejects corrupted C-Lite scoped artifact on reuse recovery'
         }finally{[IO.File]::WriteAllBytes($scopedPath,$origScoped)}
 
-        # PR 3B: Opt-in P5-0 Execute wiring for C_LITE_V1 capture, reuse, and recovery.
+        # Step A: Default P5-0 Execute wiring for C_LITE_V1 HTML retention and LEGACY non-HTML preservation.
         $profileCmd=Get-Command Get-InternalPhase5HtmlEvidenceRetentionProfile -ErrorAction SilentlyContinue
         Check ($null -ne $profileCmd) 'PR3B retention profile helper must exist'
         $origProfileGetter=$profileCmd.ScriptBlock
-        Equal (& $origProfileGetter) LEGACY 'Default P5-0 HTML retention profile remains LEGACY'
+        Equal (& $origProfileGetter) C_LITE_V1 'Default P5-0 HTML retention profile is C_LITE_V1'
+        foreach($pair in @(
+            @{Url='https://www.ddc.go.kr/ddc/contents.do?key=1570';Expected='C_LITE_V1'},
+            @{Url='https://www.paju.go.kr/user/board/BD_board.view.do';Expected='C_LITE_V1'},
+            @{Url='https://city.example.go.kr/benefits.html';Expected='C_LITE_V1'},
+            @{Url='https://www.mma.go.kr/about/udgg/list.do?mc=mma0003357';Expected='LEGACY'},
+            @{Url='https://city.example.go.kr/list.xlsx';Expected='LEGACY'},
+            @{Url='https://city.example.go.kr/notice.hwpx';Expected='LEGACY'},
+            @{Url='https://www.suwon.go.kr/benefit.pdf';Expected='LEGACY'}
+        )){
+            $resolvedProfile=Get-InternalPhase5HtmlEvidenceRetentionProfile -Candidate ([pscustomobject]@{Url=$pair.Url})
+            Equal $resolvedProfile $pair.Expected "Candidate profile for $($pair.Url)"
+        }
         $cliteExecStore=New-HistoryStoreLayout -Root (Join-Path $root 'clite-exec-p50-history')
         $cliteExecOut=Join-Path $root 'clite-exec-p50-output'
         $cliteExecArgs=@{Store=$cliteExecStore;Rows=@($cliteRow);BusinessId=$id;SourceRowNumberOffset=2;RepositoryRevision=$cliteRev;OutputDirectory=$cliteExecOut;RequestInvoker=$http;RepositoryStateProvider={ [pscustomobject]@{IsClean=$true} }}
-        Set-Item Function:Get-InternalPhase5HtmlEvidenceRetentionProfile -Value { return 'C_LITE_V1' }
-        try{
-            $execCap=Invoke-Phase5BenefitCycle @cliteExecArgs -RunId 'run-clite-exec-cap' -ObservedAt '2026-11-19T14:00:00.000+09:00'
-            Equal $execCap.CommitCode COMMITTED 'P5-0 C_LITE_V1 Execute capture commits'
-            Equal $execCap.Metrics.ParseCount 1 'P5-0 C_LITE_V1 capture parses once'
-            Equal $execCap.Metrics.ArtifactWrites 3 'P5-0 C_LITE_V1 capture writes 3 artifacts'
-            Equal @(Get-ChildItem -LiteralPath $cliteExecStore.ArtifactsRoot -Filter '*.html' -File).Count 0 'P5-0 C_LITE_V1 capture writes 0 .html files'
-            $execCapObs=Read-HistoryObservation -Store $cliteExecStore -ObservationId $execCap.ObservationId
-            Equal @($execCapObs.ArtifactReferences | Where-Object Kind -CEQ 'RAW_SOURCE_PAYLOAD').Count 0 'P5-0 C_LITE_V1 capture has 0 RAW references'
+        $execCap=Invoke-Phase5BenefitCycle @cliteExecArgs -RunId 'run-clite-exec-cap' -ObservedAt '2026-11-19T14:00:00.000+09:00'
+        Equal $execCap.CommitCode COMMITTED 'P5-0 default C_LITE_V1 Execute capture commits'
+        Equal $execCap.Metrics.ParseCount 1 'P5-0 default C_LITE_V1 capture parses once'
+        Equal $execCap.Metrics.ArtifactWrites 3 'P5-0 default C_LITE_V1 capture writes 3 artifacts'
+        Equal @(Get-ChildItem -LiteralPath $cliteExecStore.ArtifactsRoot -Filter '*.html' -File).Count 0 'P5-0 default C_LITE_V1 capture writes 0 .html files'
+        $execCapObs=Read-HistoryObservation -Store $cliteExecStore -ObservationId $execCap.ObservationId
+        Equal @($execCapObs.ArtifactReferences | Where-Object Kind -CEQ 'RAW_SOURCE_PAYLOAD').Count 0 'P5-0 default C_LITE_V1 capture has 0 RAW references'
 
-            $execReuse=Invoke-Phase5BenefitCycle @cliteExecArgs -RunId 'run-clite-exec-reuse' -ObservedAt '2026-11-19T14:10:00.000+09:00'
-            Equal $execReuse.CommitCode COMMITTED 'P5-0 C_LITE_V1 Execute reuse commits'
-            Equal $execReuse.Metrics.ReuseApplied 1 'P5-0 C_LITE_V1 Execute reuse applies'
-            Equal $execReuse.Metrics.ParseCount 0 'P5-0 C_LITE_V1 Execute reuse avoids parse'
-            Equal $execReuse.Metrics.ArtifactWrites 1 'P5-0 C_LITE_V1 Execute reuse writes only v2 decision artifact'
-            Equal @(Get-ChildItem -LiteralPath $cliteExecStore.ArtifactsRoot -Filter '*.html' -File).Count 0 'P5-0 C_LITE_V1 reuse writes 0 .html files'
-            $execReuseObs=Read-HistoryObservation -Store $cliteExecStore -ObservationId $execReuse.ObservationId
-            Equal @($execReuseObs.ArtifactReferences).Count 4 'P5-0 C_LITE_V1 reuse has 4 artifact references'
-            Equal @($execReuseObs.ArtifactReferences | Where-Object Kind -CEQ 'RAW_SOURCE_PAYLOAD').Count 0 'P5-0 C_LITE_V1 reuse has 0 RAW references'
+        $execReuse=Invoke-Phase5BenefitCycle @cliteExecArgs -RunId 'run-clite-exec-reuse' -ObservedAt '2026-11-19T14:10:00.000+09:00'
+        Equal $execReuse.CommitCode COMMITTED 'P5-0 default C_LITE_V1 Execute reuse commits'
+        Equal $execReuse.Metrics.ReuseApplied 1 'P5-0 default C_LITE_V1 Execute reuse applies'
+        Equal $execReuse.Metrics.ParseCount 0 'P5-0 default C_LITE_V1 Execute reuse avoids parse'
+        Equal $execReuse.Metrics.ArtifactWrites 1 'P5-0 default C_LITE_V1 Execute reuse writes only v2 decision artifact'
+        Equal @(Get-ChildItem -LiteralPath $cliteExecStore.ArtifactsRoot -Filter '*.html' -File).Count 0 'P5-0 default C_LITE_V1 reuse writes 0 .html files'
+        $execReuseObs=Read-HistoryObservation -Store $cliteExecStore -ObservationId $execReuse.ObservationId
+        Equal @($execReuseObs.ArtifactReferences).Count 4 'P5-0 default C_LITE_V1 reuse has 4 artifact references'
+        Equal @($execReuseObs.ArtifactReferences | Where-Object Kind -CEQ 'RAW_SOURCE_PAYLOAD').Count 0 'P5-0 default C_LITE_V1 reuse has 0 RAW references'
 
-            $reenterBefore=$requests.Count
-            $recExecCap=Invoke-Phase5BenefitCycle @cliteExecArgs -RunId 'run-clite-exec-cap' -ObservedAt '2026-11-19T14:00:00.000+09:00'
-            $recExecReuse=Invoke-Phase5BenefitCycle @cliteExecArgs -RunId 'run-clite-exec-reuse' -ObservedAt '2026-11-19T14:10:00.000+09:00'
-            Check ($recExecCap.Recovered -and $recExecCap.CommitCode -ceq 'COMMITTED' -and $null -eq $recExecCap.Metrics) 'P5-0 recovers Execute C_LITE_V1 capture'
-            Check ($recExecReuse.Recovered -and $recExecReuse.CommitCode -ceq 'COMMITTED' -and $null -eq $recExecReuse.Metrics) 'P5-0 recovers Execute C_LITE_V1 reuse'
-            Equal $requests.Count $reenterBefore 'P5-0 C_LITE_V1 Execute recovery fetch0'
-        }finally{
-            Set-Item Function:Get-InternalPhase5HtmlEvidenceRetentionProfile -Value $origProfileGetter
-        }
+        $reenterBefore=$requests.Count
+        $recExecCap=Invoke-Phase5BenefitCycle @cliteExecArgs -RunId 'run-clite-exec-cap' -ObservedAt '2026-11-19T14:00:00.000+09:00'
+        $recExecReuse=Invoke-Phase5BenefitCycle @cliteExecArgs -RunId 'run-clite-exec-reuse' -ObservedAt '2026-11-19T14:10:00.000+09:00'
+        Check ($recExecCap.Recovered -and $recExecCap.CommitCode -ceq 'COMMITTED' -and $null -eq $recExecCap.Metrics) 'P5-0 recovers default C_LITE_V1 capture'
+        Check ($recExecReuse.Recovered -and $recExecReuse.CommitCode -ceq 'COMMITTED' -and $null -eq $recExecReuse.Metrics) 'P5-0 recovers default C_LITE_V1 reuse'
+        Equal $requests.Count $reenterBefore 'P5-0 default C_LITE_V1 Execute recovery fetch0'
 
         Write-Host 'P5-0 Recovery PASS: same RunId fetch0; fresh unchanged fetch1 / parse0 / reuse1; output recovery metrics=null; material route preserved'
     }
@@ -281,19 +296,19 @@ try{
         Equal $collision.OuterCount 1 'Owner never retries'
 
         $lock=[IO.File]::Open((Join-Path $safeStore.Root '.writer-lock'),[IO.FileMode]::OpenOrCreate,[IO.FileAccess]::ReadWrite,[IO.FileShare]::None)
-        try{$locked=Invoke-Phase5BenefitCycle @safeArgs -RunId 'run-writer-locked'}finally{$lock.Dispose()}
+        try{$locked=Invoke-Phase5BenefitCycle @safeArgs -RunId 'run-writer-locked' -ObservedAt '2026-10-24T00:05:00Z'}finally{$lock.Dispose()}
         Equal $locked.CommitCode WRITER_LOCKED 'Existing writer lock code preserved'
         Equal $locked.Metrics.ExternalFetchCount 1 'Writer lock does not enclose fetch'
         Equal $locked.Metrics.ParseCount 0 'Identical baseline uses existing reuse even when commit is locked'
         Check ($null -eq $locked.Review -and $null -eq $locked.Comparison) 'Uncommitted reused observation/comparison not published as Review'
         $before=$requests.Count
-        $lockedAgain=Invoke-Phase5BenefitCycle @safeArgs -RunId 'run-writer-locked'
+        $lockedAgain=Invoke-Phase5BenefitCycle @safeArgs -RunId 'run-writer-locked' -ObservedAt '2026-10-24T00:05:00Z'
         Equal $lockedAgain.CommitCode WRITER_LOCKED 'Blocked prior attempt keeps its reason'
         Equal $requests.Count $before 'No silent retry of writer-locked attempt'
 
         $failedArgs=$safeArgs.Clone()
         $failedArgs.RequestInvoker={param($Uri);$requests.Count++;throw 'synthetic timeout'}.GetNewClosure()
-        $failed=Invoke-Phase5BenefitCycle @failedArgs -RunId 'run-fetch-failed'
+        $failed=Invoke-Phase5BenefitCycle @failedArgs -RunId 'run-fetch-failed' -ObservedAt '2026-10-24T00:06:00Z'
         Equal $failed.CommitCode COMMITTED 'Operational failure can be recorded as committed history'
         Equal $failed.OperationalStatus FAILED 'Commit success is not operational success'
         Check ($failed.BenefitState -cne 'ENDED' -and $failed.BenefitState -cne 'ACTIVE') 'Fetch failure cannot produce lifecycle success'
@@ -301,13 +316,30 @@ try{
         Check (@($failed.Comparison.ChangeCandidates | Where-Object {$_ -cin @('BENEFIT_ABSENCE_SUSPECTED','BENEFIT_CHANGE_SUSPECTED')}).Count -eq 0) 'No absence/change from fetch failure'
         Equal $failed.Metrics.ParseCount 0 'Fetch failure parser0'
         Equal $failed.Metrics.ExtractionCount 0 'Fetch failure extraction0'
+        Equal @(Get-ChildItem -LiteralPath $safeStore.ArtifactsRoot -Filter '*.html' -File).Count 0 'C_LITE_V1 failed fetch writes 0 .html files'
+        $failedObs=Read-HistoryObservation -Store $safeStore -ObservationId $failed.ObservationId
+        Equal @($failedObs.ArtifactReferences | Where-Object Kind -CEQ 'RAW_SOURCE_PAYLOAD').Count 0 'C_LITE_V1 failed fetch has 0 RAW references'
 
         $unsupportedArgs=$safeArgs.Clone()
         $unsupportedArgs.RequestInvoker={param($Uri);$requests.Count++;[pscustomobject]@{StatusCode=200;ContentType='text/csv';Text='unusable';Bytes=$null}}.GetNewClosure()
-        $unsupported=Invoke-Phase5BenefitCycle @unsupportedArgs -RunId 'run-response-unsupported'
-        Check ($unsupported.OperationalStatus -cne 'COMPLETE' -and $unsupported.BenefitState -cne 'ENDED') 'Unknown response format stays fail-closed'
-        Equal $unsupported.Metrics.ParseCount 0 'Unsupported response never parsed as HTML'
+        $unsupported=Invoke-Phase5BenefitCycle @unsupportedArgs -RunId 'run-response-unsupported' -ObservedAt '2026-10-24T00:07:00Z'
+        Equal $unsupported.Status FAILED 'C_LITE_V1 rejects HTML URL returning text/csv fail-closed'
+        Equal $unsupported.Code P5_CYCLE_FAILED 'Unsupported response under C_LITE_V1 fails cleanly'
+        Check (@($unsupported.Reasons) -contains 'C_LITE_HTML_SOURCE_REQUIRED') 'Unsupported response under C_LITE_V1 records C_LITE_HTML_SOURCE_REQUIRED'
+        Check ($null -eq $unsupported.Metrics -and $unsupported.OperationalStatus -cne 'COMPLETE' -and $unsupported.BenefitState -cne 'ENDED') 'Unknown response format stays fail-closed'
         Equal $unsupported.ProductionAction NONE 'Unsupported response has no production action'
+        Equal @(Get-ChildItem -LiteralPath $safeStore.ArtifactsRoot -Filter '*.html' -File).Count 0 'Rejected unsupported response writes 0 .html files'
+
+        $origUnsupportedProfileGetter=(Get-Command Get-InternalPhase5HtmlEvidenceRetentionProfile).ScriptBlock
+        Set-Item Function:Get-InternalPhase5HtmlEvidenceRetentionProfile -Value { return 'LEGACY' }
+        try{
+            $unsupportedLegacy=Invoke-Phase5BenefitCycle @unsupportedArgs -RunId 'run-response-unsupported-legacy' -ObservedAt '2026-10-24T00:08:00Z'
+        }finally{
+            Set-Item Function:Get-InternalPhase5HtmlEvidenceRetentionProfile -Value $origUnsupportedProfileGetter
+        }
+        Check ($unsupportedLegacy.OperationalStatus -cne 'COMPLETE' -and $unsupportedLegacy.BenefitState -cne 'ENDED') 'LEGACY unknown response format stays fail-closed'
+        Equal $unsupportedLegacy.Metrics.ParseCount 0 'LEGACY unsupported response never parsed as HTML'
+        Equal $unsupportedLegacy.ProductionAction NONE 'LEGACY unsupported response has no production action'
 
         $originalCommit=(Get-Command Commit-HistoryRun).ScriptBlock
         $race=[pscustomobject]@{Injected=$false;CompetingId='obs-cccccccccccccccccccccccccccccccc'}
@@ -325,7 +357,7 @@ try{
             }
             return & $originalCommit -Store $Store -PreparedRun $PreparedRun -ExpectedBaselines $ExpectedBaselines
         }
-        try{$moved=Invoke-Phase5BenefitCycle @safeArgs -RunId 'run-cas-moved'}finally{Set-Item Function:Commit-HistoryRun $originalCommit}
+        try{$moved=Invoke-Phase5BenefitCycle @safeArgs -RunId 'run-cas-moved' -ObservedAt '2026-10-24T00:10:00Z'}finally{Set-Item Function:Commit-HistoryRun $originalCommit}
         Equal $moved.CommitCode BASELINE_MOVED 'Real CAS movement preserved'
         Check $moved.RetryRequired 'CAS movement requests explicit retry only'
         Equal $moved.Metrics.ExternalFetchCount 1 'CAS movement fetch1, no automatic retry'
@@ -334,7 +366,7 @@ try{
         $latest=Get-HistoryLatestEntry -Store $safeStore -BusinessId $id -Domain BENEFIT -ComparableOnly
         Equal $latest.LatestComparableObservationId $race.CompetingId 'Competing baseline remains authoritative'
         $before=$requests.Count
-        $movedAgain=Invoke-Phase5BenefitCycle @safeArgs -RunId 'run-cas-moved'
+        $movedAgain=Invoke-Phase5BenefitCycle @safeArgs -RunId 'run-cas-moved' -ObservedAt '2026-10-24T00:10:00Z'
         Equal $movedAgain.CommitCode BASELINE_MOVED 'CAS failed attempt remains distinguishable on reentry'
         Equal $requests.Count $before 'No silent retry after CAS rejection'
         Write-Host 'P5-0 Safety PASS: overlapping RunId blocked before fetch; writer/CAS fetch1; no stale Review; failure parse0 / extraction0; ProductionAction NONE'

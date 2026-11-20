@@ -304,7 +304,9 @@ function Get-BenefitIncrementalReuseDecision {
         [Parameter(Mandatory)][string]$CurrentInputFingerprint,
         [Parameter(Mandatory)][string]$CurrentExecutionFingerprint,
         [Parameter(Mandatory)][scriptblock]$RepositoryStateProvider,
-        [ValidateSet('LEGACY','C_LITE_V1')][string]$HtmlEvidenceRetentionProfile='LEGACY'
+        [ValidateSet('LEGACY','C_LITE_V1')][string]$HtmlEvidenceRetentionProfile='LEGACY',
+        [string]$CurrentRunId='',
+        [string]$CurrentObservedAt=''
     )
 
     Assert-HistoryBusinessId -Value $BusinessId
@@ -355,6 +357,10 @@ function Get-BenefitIncrementalReuseDecision {
     if ($HtmlEvidenceRetentionProfile -ceq 'C_LITE_V1') {
         if ($Document.SourceFormat -cne 'HTML' -or $null -eq $baseline.ScopedEvidence -or -not (Test-BenefitScopedEvidenceReuseEligible -Evidence $baseline.ScopedEvidence)) {
             return New-BenefitIncrementalReuseDecision -ReuseApplied $false -Capability $capability -Baseline $baseline -PreviousPayloadCheckpoint $previousCheckpoint -CurrentPayloadCheckpoint $currentCheckpoint -InputMatch $true -ExecutionMatch $true -PayloadMatch $true -RepositoryClean $true -ReasonCodes @('SCOPED_EVIDENCE_NOT_REUSABLE')
+        }
+        if ((-not [string]::IsNullOrEmpty($CurrentRunId) -and ($CurrentRunId -ceq [string]$baseline.Observation.RunId -or $CurrentRunId -ceq [string]$baseline.ScopedEvidence.Capture.RunId)) -or
+            (-not [string]::IsNullOrEmpty($CurrentObservedAt) -and ($CurrentObservedAt -ceq [string]$baseline.Observation.ObservedAt -or $CurrentObservedAt -ceq [string]$baseline.ScopedEvidence.Capture.ObservedAt))) {
+            return New-BenefitIncrementalReuseDecision -ReuseApplied $false -Capability $capability -Baseline $baseline -PreviousPayloadCheckpoint $previousCheckpoint -CurrentPayloadCheckpoint $currentCheckpoint -InputMatch $true -ExecutionMatch $true -PayloadMatch $true -RepositoryClean $true -ReasonCodes @('NON_FRESH_OBSERVATION_IDENTITY')
         }
     }
     return New-BenefitIncrementalReuseDecision -ReuseApplied $true -Capability $capability -Baseline $baseline -PreviousPayloadCheckpoint $previousCheckpoint -CurrentPayloadCheckpoint $currentCheckpoint -InputMatch $true -ExecutionMatch $true -PayloadMatch $true -RepositoryClean $true -ReasonCodes @('REUSE_ELIGIBLE')
@@ -507,7 +513,7 @@ function Invoke-BenefitIncrementalPostFetch {
         $input=ConvertTo-BenefitHistoryInputProjection -BusinessId $BusinessId -Benefit $Benefit -BusinessIdentity $BusinessIdentity -CanonicalPhone $CanonicalPhone
         $executionConfig=if($HtmlEvidenceRetentionProfile -ceq 'C_LITE_V1'){[pscustomobject]@{HtmlEvidenceRetentionProfile='C_LITE_V1'}}else{$null}
         $execution=ConvertTo-BenefitHistoryExecutionProjection -RepositoryRevision $RepositoryRevision -ExecutionConfiguration $executionConfig
-        $decision=Get-BenefitIncrementalReuseDecision -Store $Store -BusinessId $BusinessId -Candidate $Candidate -Document $document -CurrentSnapshot $snapshot -CurrentInputFingerprint (Get-HistoryFingerprint -Projection $input -SchemaVersion $script:FingerprintSchemaVersion) -CurrentExecutionFingerprint (Get-HistoryFingerprint -Projection $execution -SchemaVersion $script:FingerprintSchemaVersion) -RepositoryStateProvider $RepositoryStateProvider -HtmlEvidenceRetentionProfile $HtmlEvidenceRetentionProfile
+        $decision=Get-BenefitIncrementalReuseDecision -Store $Store -BusinessId $BusinessId -Candidate $Candidate -Document $document -CurrentSnapshot $snapshot -CurrentInputFingerprint (Get-HistoryFingerprint -Projection $input -SchemaVersion $script:FingerprintSchemaVersion) -CurrentExecutionFingerprint (Get-HistoryFingerprint -Projection $execution -SchemaVersion $script:FingerprintSchemaVersion) -RepositoryStateProvider $RepositoryStateProvider -HtmlEvidenceRetentionProfile $HtmlEvidenceRetentionProfile -CurrentRunId $RunId -CurrentObservedAt $ObservedAt
     }
     if($decision.ReuseApplied){
         if($HtmlEvidenceRetentionProfile -ceq 'C_LITE_V1'){

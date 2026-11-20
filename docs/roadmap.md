@@ -1,10 +1,10 @@
 # MILIMAP Development Roadmap
 
 - Status: Directional roadmap
-- Date: 2026-09-28
+- Date: 2026-11-20
 - Current development branch: `dev`
-- Current state: Phase 1 COMPLETE; Phase 2 Benefit Verification Core COMPLETE; bounded Phase 3 Snapshot / Incremental Change Detection closeout COMPLETE
-- Next gate: Phase 3 이후 product/UX 작업을 별도 설계·Issue로 시작
+- Current state: Phase 1~3 COMPLETE; Phase 4 digital adapters (`P4-0`/`P4-1`/`P4-2B`) COMPLETE, scanned PDF OCR (`P4-3`/`Issue #125`) formally DEFERRED; Phase 5 + C-Lite HTML (`RAW=0`) & Approval-to-Release MVP merged with `LiveHTTP=NOT_AUTHORIZED` (`Issue #134`)
+- Next gate: Issue #134 DDC terms/`robots.txt` + team 24h clearance + explicit 1-GET human go/no-go; post-MVP Phase B/Admin Web ADR (`Pending`)
 
 이 문서는 MILIMAP의 장기 개발 방향을 팀원이 한눈에 확인하기 위한 로드맵입니다.
 
@@ -165,6 +165,12 @@ POI 위치가 아니라 **군인 혜택 자체가 현재 유효한지**를 검�
 
 ## Phase 4 — Multi-source Adapters
 
+### 상태 (2026-11-20 Bounded Closeout)
+
+- **디지털 문서 어댑터 완료:** `P4-0` Document Adapter Foundation (PR #112), `P4-1` HWPX Generic Adapter (PR #114), `P4-2B` Bounded Native PDF Ruled-Grid Adapter (PdfPig `0.1.16`, Issue #117 / PR #118)가 `dev`에 병합됐다.
+- **스캔 PDF OCR 공식 보류(`DEFERRED`):** `P4-3A` / `P4-3A2` / `Redesign 2` / `Redesign 3A` / `Redesign 3B` 모두 한국어 cell fidelity 게이트에서 `REJECTED` 판정을 받았다. 정본 `496`건 중 PDF는 단일 수원 URL `18`건(`3.6%`)뿐이므로, Issue [#125](https://github.com/jelleoo/MILIMAP/issues/125)는 Option A(수동 전사 + `PR #158` `BenefitReleaseApprovalLedger` + Data PR 검증)로 공식 보류됐다. 상세 근거는 [Phase 4 OCR deferral & digital closeout](handover/2026-11-20-phase4-ocr-deferral-and-digital-closeout.md)를 확인한다.
+- **보존 게이트:** `OCR dependency=NOT_APPROVED`, `P4-3B=BLOCKED`, `ProductionAction=NONE`.
+
 ### 방향
 
 검증 가능한 데이터 출처를 확장해 특정 단일 소스에 의존하지 않는 구조를 만듭니다.
@@ -183,6 +189,11 @@ POI 위치가 아니라 **군인 혜택 자체가 현재 유효한지**를 검�
 ---
 
 ## Phase 5 — Periodic Execution
+
+### 상태 (2026-11-20 Bounded Operational Core + Approval-Release MVP)
+
+- Bounded Phase 5 cycle (`P5-0`), 10-business batch (`P5-1`), read-only inspector (`P5-2A`), strict HTTP/1.1 network budget & `.NET 10.0.14` transport qualification (`P5-2B`, PR #136), `C_LITE_V1` default HTML activation (`RAW=0`, PR [#162](https://github.com/jelleoo/MILIMAP/pull/162)), and Stage 1~4 Approval-to-Release MVP (PR #156/#158/#160)가 `dev`에 병합됐다.
+- `LiveHTTP=NOT_AUTHORIZED` (`Issue #134`: DDC 이용약관/`robots.txt`/팀 24h 파일럿 확인/명시적 1-GET 승인 전 live 요청 금지), `ProductionAction=NONE`.
 
 ### 방향
 

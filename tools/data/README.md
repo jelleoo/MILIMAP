@@ -1617,3 +1617,21 @@ verification and cross-platform release seed manifest generation while keeping
 - **`test-release-artifact-pipeline.ps1`:** Preserves all 2026-09 parity
   checks and validates the committed `benefits.seed.manifest.json` counts and
   normalized `SHA-256-LF-UTF8` digests.
+
+## C-Lite Default HTML Activation (Step A)
+
+`Get-InternalPhase5HtmlEvidenceRetentionProfile` in `invoke-phase5-benefit-cycle.ps1`
+now activates `C_LITE_V1` by default for HTML source candidates (`RAW_SOURCE_PAYLOAD = 0`,
+`0` `.html` files stored), while preserving `LEGACY` automatically for non-HTML
+source families (`MMA` JSONP entry URL, `.xlsx`, `.hwpx`, `.pdf`).
+
+- **Non-fresh Identity Safe Fallback:** When a `C_LITE_V1` HTML run shares the same
+  `RunId` or `ObservedAt` as its baseline, `Get-BenefitIncrementalReuseDecision`
+  returns `NON_FRESH_OBSERVATION_IDENTITY` (`ReuseApplied = $false`) so the cycle
+  commits a verified 3-artifact scoped HTML capture (`0` RAW) instead of failing
+  in `New-BenefitScopedHtmlReusePackage`.
+- **Fail-closed Constraints Preserved:** Low-level `benefit-incremental-reuse.ps1`
+  functions keep `'LEGACY'` as their parameter default unless `'C_LITE_V1'` is
+  passed; HTML candidates that unexpectedly serve non-HTML content (e.g. `text/csv`)
+  under `C_LITE_V1` fail closed with `C_LITE_HTML_SOURCE_REQUIRED`.
+  `ProductionAction=NONE`; `LiveHTTP=NOT_AUTHORIZED`.

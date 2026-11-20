@@ -1,4 +1,4 @@
-$ErrorActionPreference = 'Stop'
+﻿$ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'testdata/benefit-evidence-location/test-support.ps1')
 
 function Assert-ScopeNoThrow {
@@ -97,5 +97,50 @@ $forgedObservationUnit.StructuredFields.BusinessName = 'forged business'
 Assert-ScopeThrows {
     New-BenefitSourceObservation -SourceRowNumber 2 -Snapshot $listObservation.Snapshot -AdapterId MMA_JSONP_LIST -AdapterVersion '1' -AdapterStatus COMPLETE -ContentUnits @($forgedObservationUnit) -Diagnostics @()
 } 'JSONP observation fast path still rejects forged unit provenance'
+
+$dupPropJsonp = 'MmaTestDetail({"success":true,"udgigwanVO":{"udgigwan_cd":"2789","udgigwan_cd":"9999","udgigwan_yhnm":"dup"}});'
+$dupPropSnap = New-BenefitSourceSnapshot -SourceUrl 'https://open.mma.go.kr/caisGGGS/mmanrsrSangSeAjaxJsonCall.json?udgigwan_cd=dup' -SourceFormat JSONP -Text $dupPropJsonp -ObservedAt '2026-09-25T00:00:00Z'
+$dupObj = '{"udgigwan_cd":"2789","udgigwan_cd":"9999","udgigwan_yhnm":"dup"}'
+$dupObjStart = $dupPropJsonp.IndexOf($dupObj)
+$dupUnit = [pscustomobject][ordered]@{
+    ContractType='SourceContentUnit'; ContractVersion=1; SnapshotId=$dupPropSnap.SnapshotId
+    UnitType='JSON_OBJECT'; UnitReference='JSONP_DETAIL_OBJECT'; RawStart=$dupObjStart; RawLength=$dupObj.Length
+    RawFragment=$dupObj; RawEvidenceText='2789'
+    StructuredFields=[ordered]@{ InstitutionCode='2789' }
+    FieldReferences=[ordered]@{ InstitutionCode=[pscustomobject][ordered]@{ PropertyName='udgigwan_cd'; FieldReference='JSONP_DETAIL_OBJECT/udgigwan_cd'; ValueStart=$dupPropJsonp.IndexOf('"2789"'); ValueLength='"2789"'.Length } }
+}
+Assert-ScopeThrows { Assert-ScopeJsonpUnitCore -Unit $dupUnit -Snapshot $dupPropSnap } 'Duplicate JSONP property key in raw object must be rejected'
+
+$prefixFragUnit = Copy-ScopeContractData $detailObservation.ContentUnits[0]
+$prefixFragUnit.RawFragment = $prefixFragUnit.RawFragment + ' '
+Assert-ScopeThrows { Assert-ScopeJsonpUnitCore -Unit $prefixFragUnit -Snapshot $detailObservation.Snapshot } 'JSONP validation rejects RawFragment with trailing characters'
+
+$mutSnap = New-BenefitSourceSnapshot -SourceUrl $detailObservation.Snapshot.SourceUrl -SourceFormat JSONP -Text $detail2789Text -ObservedAt $detailObservation.Snapshot.ObservedAt
+$mutUnit = [pscustomobject][ordered]@{
+    ContractType='SourceContentUnit'; ContractVersion=1; SnapshotId=$mutSnap.SnapshotId
+    UnitType='JSON_OBJECT'; UnitReference=$detailObservation.ContentUnits[0].UnitReference
+    RawStart=$detailObservation.ContentUnits[0].RawStart; RawLength=$detailObservation.ContentUnits[0].RawLength
+    RawFragment=$detailObservation.ContentUnits[0].RawFragment; RawEvidenceText=$detailObservation.ContentUnits[0].RawEvidenceText
+    StructuredFields=(Copy-ScopeContractData $detailObservation.ContentUnits[0].StructuredFields)
+    FieldReferences=(Copy-ScopeContractData $detailObservation.ContentUnits[0].FieldReferences)
+}
+Assert-ScopeJsonpUnitCore -Unit $mutUnit -Snapshot $mutSnap
+$mutSnap.Text = $mutSnap.Text.Replace('서비스 이용료 3% 할인', '서비스 이용료 9% 할인')
+Assert-ScopeThrows { Assert-ScopeJsonpUnitCore -Unit $mutUnit -Snapshot $mutSnap } 'Mutating Snapshot.Text invalidates JSONP fast lookup and fails closed'
+
+$scalarTypesText = 'MmaTestDetail({"s":" abc ","i":42,"bTrue":true,"bFalse":false,"n":null});'
+$scalarTypesSnap = New-BenefitSourceSnapshot -SourceUrl 'https://open.mma.go.kr/caisGGGS/mmanrsrSangSeAjaxJsonCall.json?udgigwan_cd=types' -SourceFormat JSONP -Text $scalarTypesText -ObservedAt '2026-09-25T00:00:00Z'
+$scalarObjText = '{"s":" abc ","i":42,"bTrue":true,"bFalse":false,"n":null}'
+$scalarObjStart = $scalarTypesText.IndexOf($scalarObjText)
+$scalarUnit = New-BenefitJsonpSourceContentUnit -Snapshot $scalarTypesSnap -UnitReference 'JSONP_DETAIL_OBJECT' -RawStart $scalarObjStart -RawLength $scalarObjText.Length -RawEvidenceText 'abc' `
+    -StructuredFields ([ordered]@{ BusinessName='abc'; Code='42'; FlagT='True'; FlagF='False'; Empty='' }) `
+    -FieldReferences ([ordered]@{
+        BusinessName=[pscustomobject][ordered]@{ PropertyName='s'; FieldReference='JSONP_DETAIL_OBJECT/s'; ValueStart=$scalarTypesText.IndexOf('" abc "'); ValueLength='" abc "'.Length }
+        Code=[pscustomobject][ordered]@{ PropertyName='i'; FieldReference='JSONP_DETAIL_OBJECT/i'; ValueStart=$scalarTypesText.IndexOf('42'); ValueLength='42'.Length }
+        FlagT=[pscustomobject][ordered]@{ PropertyName='bTrue'; FieldReference='JSONP_DETAIL_OBJECT/bTrue'; ValueStart=$scalarTypesText.IndexOf('true'); ValueLength='true'.Length }
+        FlagF=[pscustomobject][ordered]@{ PropertyName='bFalse'; FieldReference='JSONP_DETAIL_OBJECT/bFalse'; ValueStart=$scalarTypesText.IndexOf('false'); ValueLength='false'.Length }
+        Empty=[pscustomobject][ordered]@{ PropertyName='n'; FieldReference='JSONP_DETAIL_OBJECT/n'; ValueStart=$scalarTypesText.IndexOf('null'); ValueLength='null'.Length }
+    })
+Assert-ScopeJsonpUnitCore -Unit $scalarUnit -Snapshot $scalarTypesSnap
 
 Write-Host 'MMA JSONP source observation parser tests passed.'

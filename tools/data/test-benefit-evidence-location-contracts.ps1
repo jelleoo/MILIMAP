@@ -308,8 +308,13 @@ Assert-ScopeEqual $refErr 'Invalid physical unit reference' 'Invalid UnitReferen
 
 Set-InternalBenefitHtmlRunContextSnapshotTrust -Snapshot $fastSnap
 Set-InternalBenefitHtmlRunContextTrust -Snapshot $fastSnap -HtmlValidationIndex $fastIdx
+$reJsonpSnap = New-BenefitSourceSnapshot -SourceUrl 'https://open.mma.go.kr/caisGGGS/mmanrsrListAjaxJsonCallNew.json?callback=Cb' -SourceFormat JSONP -Text 'Cb({"success":true});' -ObservedAt '2026-09-25T00:00:00Z'
+Set-InternalBenefitJsonpRunContextSnapshotTrust -Snapshot $reJsonpSnap
+$reJsonpFast = Get-InternalScopeJsonpFastLookup -Snapshot $reJsonpSnap
 . (Join-Path $PSScriptRoot 'lib/benefit-evidence-location-contracts.ps1')
 Assert-ScopeTrue ($null -ne (Get-InternalScopeHtmlFastLookup -HtmlValidationIndex $fastIdx -Snapshot $fastSnap)) 'Re-dot-sourcing preserves fast lookup WeakTable'
 Assert-ScopeTrue (Test-InternalBenefitHtmlRunContextTrust -Snapshot $fastSnap -HtmlValidationIndex $fastIdx) 'Re-dot-sourcing preserves HTML run-context trust WeakTable'
+Assert-ScopeTrue (Test-InternalBenefitJsonpRunContextSnapshotTrust -Snapshot $reJsonpSnap) 'Re-dot-sourcing preserves JSONP run-context trust WeakTable'
+Assert-ScopeTrue ([object]::ReferenceEquals($reJsonpFast, (Get-InternalScopeJsonpFastLookup -Snapshot $reJsonpSnap))) 'Re-dot-sourcing preserves JSONP fast lookup WeakTable'
 
 Write-Host 'Benefit evidence location contract tests passed.'

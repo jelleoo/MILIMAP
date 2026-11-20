@@ -12,6 +12,16 @@ if (-not (Test-Path Variable:script:InternalBenefitHtmlRunContextSnapshotTrusts)
 if (-not (Test-Path Variable:script:InternalBenefitHtmlRunContextIndexTrusts)) {
     $script:InternalBenefitHtmlRunContextIndexTrusts = [Runtime.CompilerServices.ConditionalWeakTable[object, object]]::new()
 }
+if (-not (Test-Path Variable:script:InternalBenefitJsonpRunContextSnapshotTrusts)) {
+    $script:InternalBenefitJsonpRunContextSnapshotTrusts = [Runtime.CompilerServices.ConditionalWeakTable[object, object]]::new()
+}
+if (-not (Test-Path Variable:script:InternalScopeJsonpFastLookups)) {
+    $script:InternalScopeJsonpFastLookups = [Runtime.CompilerServices.ConditionalWeakTable[object, object]]::new()
+}
+$script:JsonQuoteOrEscapeChars = [char[]]@('"', '\')
+$script:JsonObjectScanChars = [char[]]@('"', '{', '}')
+$script:JsonArrayScanChars = [char[]]@('"', '[', ']')
+$script:JsonScalarStopChars = [char[]]@(',', '}', ']', ' ', "`t", "`r", "`n")
 
 # These contracts are deliberately separate from the existing core registry.
 # They describe source preparation, never officiality or benefit lifecycle.
@@ -207,12 +217,14 @@ function Copy-ScopeContractData {
 function Get-BenefitJsonStringEnd {
     param([Parameter(Mandatory)][string]$JsonText, [int]$Start)
     if ($Start -lt 0 -or $Start -ge $JsonText.Length -or $JsonText[$Start] -cne '"') { throw 'JSON string must start with a quote' }
-    $escaped = $false
-    for ($i=$Start+1; $i -lt $JsonText.Length; $i++) {
-        $character = $JsonText[$i]
-        if ($escaped) { $escaped=$false; continue }
-        if ($character -ceq '\') { $escaped=$true; continue }
-        if ($character -ceq '"') { return $i+1 }
+    $pos = $Start + 1
+    $chars = $script:JsonQuoteOrEscapeChars
+    $len = $JsonText.Length
+    while ($pos -lt $len) {
+        $idx = $JsonText.IndexOfAny($chars, $pos)
+        if ($idx -lt 0) { break }
+        if ($JsonText[$idx] -ceq '"') { return $idx + 1 }
+        $pos = $idx + 2
     }
     throw 'Unterminated JSON string'
 }
@@ -224,58 +236,173 @@ function Skip-BenefitJsonWhitespace {
 }
 function Get-BenefitJsonValueEnd {
     param([Parameter(Mandatory)][string]$JsonText, [int]$Start)
-    $index = Skip-BenefitJsonWhitespace $JsonText $Start
-    if ($index -ge $JsonText.Length) { throw 'Missing JSON value' }
-    if ($JsonText[$index] -ceq '"') { return Get-BenefitJsonStringEnd $JsonText $index }
-    if ($JsonText[$index] -notin @('{','[')) {
-        $end=$index
-        while ($end -lt $JsonText.Length -and $JsonText[$end] -notin @(',','}',']') -and -not [char]::IsWhiteSpace($JsonText[$end])) { $end++ }
+    $len = $JsonText.Length
+    $index = $Start
+    while ($index -lt $len -and [char]::IsWhiteSpace($JsonText[$index])) { $index++ }
+    if ($index -ge $len) { throw 'Missing JSON value' }
+    $ch = $JsonText[$index]
+    $quoteOrEsc = $script:JsonQuoteOrEscapeChars
+    if ($ch -ceq '"') {
+        $sPos = $index + 1
+        while ($sPos -lt $len) {
+            $qIdx = $JsonText.IndexOfAny($quoteOrEsc, $sPos)
+            if ($qIdx -lt 0) { break }
+            if ($JsonText[$qIdx] -ceq '"') { return $qIdx + 1 }
+            $sPos = $qIdx + 2
+        }
+        throw 'Unterminated JSON string'
+    }
+    if ($ch -cne '{' -and $ch -cne '[') {
+        $stopIdx = $JsonText.IndexOfAny($script:JsonScalarStopChars, $index)
+        $limit = if ($stopIdx -lt 0) { $len } else { $stopIdx }
+        $end = $index
+        while ($end -lt $limit -and -not [char]::IsWhiteSpace($JsonText[$end])) { $end++ }
         if ($end -eq $index) { throw 'Invalid JSON scalar value' }
         return $end
     }
-    $open=$JsonText[$index]; $close=if ($open -ceq '{') { '}' } else { ']' }
-    $depth=0; $inString=$false; $escaped=$false
-    for ($i=$index; $i -lt $JsonText.Length; $i++) {
-        $character=$JsonText[$i]
-        if ($inString) {
-            if ($escaped) { $escaped=$false; continue }
-            if ($character -ceq '\') { $escaped=$true; continue }
-            if ($character -ceq '"') { $inString=$false }
+    $open = $ch
+    $scanChars = if ($open -ceq '{') { $script:JsonObjectScanChars } else { $script:JsonArrayScanChars }
+    $depth = 0
+    $pos = $index
+    while ($pos -lt $len) {
+        $idx = $JsonText.IndexOfAny($scanChars, $pos)
+        if ($idx -lt 0) { break }
+        $c = $JsonText[$idx]
+        if ($c -ceq '"') {
+            $sPos = $idx + 1
+            $sEnd = -1
+            while ($sPos -lt $len) {
+                $qIdx = $JsonText.IndexOfAny($quoteOrEsc, $sPos)
+                if ($qIdx -lt 0) { break }
+                if ($JsonText[$qIdx] -ceq '"') { $sEnd = $qIdx + 1; break }
+                $sPos = $qIdx + 2
+            }
+            if ($sEnd -lt 0) { throw 'Unterminated JSON string' }
+            $pos = $sEnd
             continue
         }
-        if ($character -ceq '"') { $inString=$true; continue }
-        if ($character -ceq $open) { $depth++; continue }
-        if ($character -ceq $close) {
+        if ($c -ceq $open) {
+            $depth++
+        } else {
             $depth--
-            if ($depth -eq 0) { return $i+1 }
+            if ($depth -eq 0) { return $idx + 1 }
             if ($depth -lt 0) { break }
         }
+        $pos = $idx + 1
     }
     throw 'Unterminated JSON container'
 }
 function Get-BenefitJsonTopLevelPropertySpanIndex {
     param([Parameter(Mandatory)][string]$JsonText)
-    $rootStart=Skip-BenefitJsonWhitespace $JsonText 0
-    if ($rootStart -ge $JsonText.Length -or $JsonText[$rootStart] -cne '{') { throw 'MMA JSONP root must start with an object' }
-    $rootEnd=Get-BenefitJsonValueEnd $JsonText $rootStart
-    if ((Skip-BenefitJsonWhitespace $JsonText $rootEnd) -ne $JsonText.Length) { throw 'JSONP root has trailing data' }
-    $position=$rootStart+1
-    $index=[Collections.Generic.Dictionary[string,object]]::new([StringComparer]::Ordinal)
+    $len = $JsonText.Length
+    $rootStart = 0
+    while ($rootStart -lt $len -and [char]::IsWhiteSpace($JsonText[$rootStart])) { $rootStart++ }
+    if ($rootStart -ge $len -or $JsonText[$rootStart] -cne '{') { throw 'MMA JSONP root must start with an object' }
+    $quoteOrEsc = $script:JsonQuoteOrEscapeChars
+    $scalarStops = $script:JsonScalarStopChars
+    $objScan = $script:JsonObjectScanChars
+    $arrScan = $script:JsonArrayScanChars
+    $rootEnd = Get-BenefitJsonValueEnd $JsonText $rootStart
+    $trailPos = $rootEnd
+    while ($trailPos -lt $len -and [char]::IsWhiteSpace($JsonText[$trailPos])) { $trailPos++ }
+    if ($trailPos -ne $len) { throw 'JSONP root has trailing data' }
+    $position = $rootStart + 1
+    $index = [Collections.Generic.Dictionary[string,object]]::new([StringComparer]::Ordinal)
     while ($true) {
-        $position=Skip-BenefitJsonWhitespace $JsonText $position
+        while ($position -lt $len -and [char]::IsWhiteSpace($JsonText[$position])) { $position++ }
         if ($position -ge $rootEnd) { throw 'Unterminated JSON root object' }
         if ($JsonText[$position] -ceq '}') { break }
-        $keyStart=$position; $keyEnd=Get-BenefitJsonStringEnd $JsonText $keyStart
-        try { $key=[string](('{"value":' + $JsonText.Substring($keyStart,$keyEnd-$keyStart) + '}') | ConvertFrom-Json -ErrorAction Stop | Select-Object -ExpandProperty value) }
-        catch { throw 'JSONP property name cannot be decoded' }
-        $position=Skip-BenefitJsonWhitespace $JsonText $keyEnd
+        $keyStart = $position
+        if ($JsonText[$keyStart] -cne '"') { throw 'JSON string must start with a quote' }
+        $sPos = $keyStart + 1
+        $keyEnd = -1
+        while ($sPos -lt $len) {
+            $idx = $JsonText.IndexOfAny($quoteOrEsc, $sPos)
+            if ($idx -lt 0) { break }
+            if ($JsonText[$idx] -ceq '"') { $keyEnd = $idx + 1; break }
+            $sPos = $idx + 2
+        }
+        if ($keyEnd -lt 0) { throw 'Unterminated JSON string' }
+        $rawKeyLen = $keyEnd - $keyStart - 2
+        $canFastKey = ($rawKeyLen -ge 0 -and $JsonText.IndexOf([char]'\', $keyStart + 1, $rawKeyLen) -lt 0)
+        if ($canFastKey) {
+            for ($kIdx = $keyStart + 1; $kIdx -lt ($keyEnd - 1); $kIdx++) {
+                if ([int][char]$JsonText[$kIdx] -lt 0x20) { $canFastKey = $false; break }
+            }
+        }
+        if ($canFastKey) {
+            $key = $JsonText.Substring($keyStart + 1, $rawKeyLen)
+        } else {
+            try { $key = [string][System.Text.Json.JsonSerializer]::Deserialize($JsonText.Substring($keyStart, $keyEnd - $keyStart), [string]) }
+            catch { throw 'JSONP property name cannot be decoded' }
+        }
+        $position = $keyEnd
+        while ($position -lt $len -and [char]::IsWhiteSpace($JsonText[$position])) { $position++ }
         if ($position -ge $rootEnd -or $JsonText[$position] -cne ':') { throw 'JSONP property is missing a colon' }
-        $valueStart=Skip-BenefitJsonWhitespace $JsonText ($position+1)
-        $valueEnd=Get-BenefitJsonValueEnd $JsonText $valueStart
-        $span=[pscustomobject][ordered]@{ Start=[long]$valueStart; Length=[long]($valueEnd-$valueStart); Fragment=$JsonText.Substring($valueStart,$valueEnd-$valueStart) }
-        if (-not $index.ContainsKey($key)) { $index[$key]=[Collections.Generic.List[object]]::new() }
-        ([Collections.Generic.List[object]]$index[$key]).Add($span)
-        $position=Skip-BenefitJsonWhitespace $JsonText $valueEnd
+        $valueStart = $position + 1
+        while ($valueStart -lt $len -and [char]::IsWhiteSpace($JsonText[$valueStart])) { $valueStart++ }
+        if ($valueStart -ge $len) { throw 'Missing JSON value' }
+        $vCh = $JsonText[$valueStart]
+        $valueEnd = -1
+        if ($vCh -ceq '"') {
+            $sPos = $valueStart + 1
+            while ($sPos -lt $len) {
+                $idx = $JsonText.IndexOfAny($quoteOrEsc, $sPos)
+                if ($idx -lt 0) { break }
+                if ($JsonText[$idx] -ceq '"') { $valueEnd = $idx + 1; break }
+                $sPos = $idx + 2
+            }
+            if ($valueEnd -lt 0) { throw 'Unterminated JSON string' }
+        } elseif ($vCh -cne '{' -and $vCh -cne '[') {
+            $stopIdx = $JsonText.IndexOfAny($scalarStops, $valueStart)
+            $limit = if ($stopIdx -lt 0) { $len } else { $stopIdx }
+            $end = $valueStart
+            while ($end -lt $limit -and -not [char]::IsWhiteSpace($JsonText[$end])) { $end++ }
+            if ($end -eq $valueStart) { throw 'Invalid JSON scalar value' }
+            $valueEnd = $end
+        } else {
+            $open = $vCh
+            $scanChars = if ($open -ceq '{') { $objScan } else { $arrScan }
+            $depth = 0
+            $cPos = $valueStart
+            while ($cPos -lt $len) {
+                $idx = $JsonText.IndexOfAny($scanChars, $cPos)
+                if ($idx -lt 0) { break }
+                $c = $JsonText[$idx]
+                if ($c -ceq '"') {
+                    $strPos = $idx + 1
+                    $strEnd = -1
+                    while ($strPos -lt $len) {
+                        $qIdx = $JsonText.IndexOfAny($quoteOrEsc, $strPos)
+                        if ($qIdx -lt 0) { break }
+                        if ($JsonText[$qIdx] -ceq '"') { $strEnd = $qIdx + 1; break }
+                        $strPos = $qIdx + 2
+                    }
+                    if ($strEnd -lt 0) { throw 'Unterminated JSON string' }
+                    $cPos = $strEnd
+                    continue
+                }
+                if ($c -ceq $open) {
+                    $depth++
+                } else {
+                    $depth--
+                    if ($depth -eq 0) { $valueEnd = $idx + 1; break }
+                    if ($depth -lt 0) { break }
+                }
+                $cPos = $idx + 1
+            }
+            if ($valueEnd -lt 0) { throw 'Unterminated JSON container' }
+        }
+        $vLen = $valueEnd - $valueStart
+        $span = [pscustomobject][ordered]@{ Start=[long]$valueStart; Length=[long]$vLen; Fragment=$JsonText.Substring($valueStart, $vLen) }
+        [object]$existingList = $null
+        if (-not $index.TryGetValue($key, [ref]$existingList)) {
+            $existingList = [Collections.Generic.List[object]]::new()
+            $index[$key] = $existingList
+        }
+        ([Collections.Generic.List[object]]$existingList).Add($span)
+        $position = $valueEnd
+        while ($position -lt $len -and [char]::IsWhiteSpace($JsonText[$position])) { $position++ }
         if ($position -ge $rootEnd) { throw 'Unterminated JSON root object' }
         if ($JsonText[$position] -ceq '}') { break }
         if ($JsonText[$position] -cne ',') { throw 'JSONP root has invalid property separator' }
@@ -786,38 +913,191 @@ function Assert-ScopeHtmlUnit {
         if ($headerIndex -lt 0 -or $cellIndex -ne $headerIndex) { throw 'Header and cell must use the same original column' }
     }
 }
+function ConvertFrom-InternalJsonElementToBenefitText {
+    param([Parameter(Mandatory)][System.Text.Json.JsonElement]$Element)
+    switch ($Element.ValueKind) {
+        'String' { return ($Element.GetString()).Trim() }
+        'Null' { return '' }
+        'True' { return 'True' }
+        'False' { return 'False' }
+        'Number' {
+            [long]$l = 0
+            if ($Element.TryGetInt64([ref]$l)) { return [string]$l }
+            [double]$d = 0
+            if ($Element.TryGetDouble([ref]$d)) { return [string]$d }
+            return $Element.GetRawText().Trim()
+        }
+        default {
+            $val = (('{"value":' + $Element.GetRawText() + '}') | ConvertFrom-Json -ErrorAction Stop | Select-Object -ExpandProperty value)
+            return ConvertTo-BenefitText $val
+        }
+    }
+}
+function Set-InternalBenefitJsonpRunContextSnapshotTrust {
+    param([Parameter(Mandatory)]$Snapshot)
+    if ($Snapshot.SourceFormat -cne 'JSONP' -or $Snapshot.Text -isnot [string] -or [string]::IsNullOrWhiteSpace($Snapshot.Text)) { throw 'JSONP run-context trust requires a JSONP text snapshot' }
+    [object]$existing = $null
+    if ($script:InternalBenefitJsonpRunContextSnapshotTrusts.TryGetValue($Snapshot, [ref]$existing)) { throw 'JSONP run-context snapshot trust is already initialized' }
+    $script:InternalBenefitJsonpRunContextSnapshotTrusts.Add($Snapshot, [pscustomobject]@{ Snapshot=$Snapshot; Text=$Snapshot.Text; SnapshotId=$Snapshot.SnapshotId; ContentHash=$Snapshot.ContentHash; Token=[object]::new() })
+}
+function Test-InternalBenefitJsonpRunContextSnapshotTrust {
+    param([Parameter(Mandatory)]$Snapshot)
+    if ($Snapshot.SourceFormat -cne 'JSONP') { return $false }
+    [object]$binding = $null
+    if (-not $script:InternalBenefitJsonpRunContextSnapshotTrusts.TryGetValue($Snapshot, [ref]$binding)) { return $false }
+    return ($null -ne $binding -and [object]::ReferenceEquals($binding.Snapshot, $Snapshot) -and [object]::ReferenceEquals($binding.Text, $Snapshot.Text) -and [string]$binding.SnapshotId -ceq [string]$Snapshot.SnapshotId -and [string]$binding.ContentHash -ceq [string]$Snapshot.ContentHash -and $null -ne $binding.Token)
+}
+function Get-InternalScopeJsonpFastLookup {
+    param([Parameter(Mandatory)]$Snapshot)
+    [object]$entry = $null
+    if ($script:InternalScopeJsonpFastLookups.TryGetValue($Snapshot, [ref]$entry)) {
+        if ($null -ne $entry -and [object]::ReferenceEquals($entry.Text, $Snapshot.Text)) {
+            return $entry
+        }
+        [void]$script:InternalScopeJsonpFastLookups.Remove($Snapshot)
+    }
+    $fresh = [pscustomobject]@{
+        Text = $Snapshot.Text
+        ObjectsBySpan = [Collections.Generic.Dictionary[string, object]]::new([StringComparer]::Ordinal)
+    }
+    $script:InternalScopeJsonpFastLookups.Add($Snapshot, $fresh)
+    return $fresh
+}
 function Assert-ScopeJsonpUnitCore {
-    param([AllowNull()]$Unit, [Parameter(Mandatory)]$Snapshot)
-    Assert-ScopeObject $Unit 'SourceContentUnit' @('SnapshotId','UnitType','UnitReference','RawStart','RawLength','RawFragment','RawEvidenceText','StructuredFields','FieldReferences')
+    param([AllowNull()]$Unit, [Parameter(Mandatory)]$Snapshot, [AllowNull()]$FastLookup=$null)
+    if ($null -eq $Unit -or $Unit -isnot [pscustomobject]) {
+        Assert-ScopeObject $Unit 'SourceContentUnit' @('SnapshotId','UnitType','UnitReference','RawStart','RawLength','RawFragment','RawEvidenceText','StructuredFields','FieldReferences')
+    }
+    $shapeOk = $false
+    try {
+        if ($Unit.ContractType -ceq 'SourceContentUnit' -and
+            $Unit.ContractVersion -eq 1 -and
+            $null -ne $Unit.SnapshotId -and
+            $null -ne $Unit.UnitType -and
+            $null -ne $Unit.UnitReference -and
+            $null -ne $Unit.RawStart -and
+            $null -ne $Unit.RawLength -and
+            $null -ne $Unit.RawFragment -and
+            $null -ne $Unit.RawEvidenceText -and
+            $null -ne $Unit.StructuredFields -and
+            $null -ne $Unit.FieldReferences) {
+            $shapeOk = $true
+        }
+    } catch {
+        $shapeOk = $false
+    }
+    if (-not $shapeOk) {
+        Assert-ScopeObject $Unit 'SourceContentUnit' @('SnapshotId','UnitType','UnitReference','RawStart','RawLength','RawFragment','RawEvidenceText','StructuredFields','FieldReferences')
+    }
     if ($Snapshot.SourceFormat -cne 'JSONP' -or $Unit.UnitType -cne 'JSON_OBJECT' -or $Unit.SnapshotId -cne $Snapshot.SnapshotId) { throw 'JSONP unit source/type mismatch' }
-    if ($Unit.UnitReference -cnotmatch '^JSONP_(?:LIST_ITEM_[1-9]\d*|DETAIL_OBJECT)$') { throw 'Invalid JSONP unit reference' }
-    Assert-ScopeSpan $Unit.RawStart $Unit.RawLength 0 $Snapshot.Text.Length
-    if ($Snapshot.Text.Substring([int]$Unit.RawStart,[int]$Unit.RawLength) -cne $Unit.RawFragment) { throw 'JSONP raw fragment mismatch' }
-    Assert-ScopeText $Unit.RawEvidenceText 'RawEvidenceText'
+    $unitRef = [string]$Unit.UnitReference
+    $validRef = $false
+    if ($unitRef -ceq 'JSONP_DETAIL_OBJECT') {
+        $validRef = $true
+    } elseif ($unitRef.Length -gt 16 -and $unitRef.StartsWith('JSONP_LIST_ITEM_', [StringComparison]::Ordinal)) {
+        $firstDigit = $unitRef[16]
+        if ($firstDigit -ge '1' -and $firstDigit -le '9') {
+            $validRef = $true
+            for ($ri = 17; $ri -lt $unitRef.Length; $ri++) {
+                $rc = $unitRef[$ri]
+                if ($rc -lt '0' -or $rc -gt '9') { $validRef = $false; break }
+            }
+        }
+    }
+    if (-not $validRef) { throw 'Invalid JSONP unit reference' }
+    [long]$rStart = [long]$Unit.RawStart
+    [long]$rLen = [long]$Unit.RawLength
+    [long]$textLen = [long]$Snapshot.Text.Length
+    if ($rStart -lt 0 -or $rLen -le 0 -or $rLen -gt $textLen -or $rStart -gt ($textLen - $rLen)) { throw 'Source span is outside its container' }
+    if ($Unit.RawFragment -isnot [string] -or
+        $Unit.RawFragment.Length -ne [int]$rLen -or
+        $Snapshot.Text.Substring([int]$rStart, [int]$rLen) -cne $Unit.RawFragment) {
+        throw 'JSONP raw fragment mismatch'
+    }
+    if ($Unit.RawEvidenceText -isnot [string] -or [string]::IsNullOrWhiteSpace($Unit.RawEvidenceText)) { throw 'RawEvidenceText must be nonempty text' }
     if ($Unit.StructuredFields -isnot [Collections.IDictionary] -or $Unit.FieldReferences -isnot [Collections.IDictionary] -or
         $Unit.StructuredFields.Count -ne $Unit.FieldReferences.Count) { throw 'JSONP fields and references must be matching dictionaries' }
-    try { $rawObject = $Unit.RawFragment | ConvertFrom-Json -ErrorAction Stop }
-    catch { throw 'JSONP unit raw fragment must be a valid JSON object' }
-    if ($null -eq $rawObject -or $rawObject -is [array]) { throw 'JSONP unit raw fragment must be a JSON object' }
-    $propertySpans=Get-BenefitJsonTopLevelPropertySpanIndex -JsonText $Unit.RawFragment
-    foreach ($key in $Unit.StructuredFields.Keys) {
-        if (-not $Unit.FieldReferences.Contains($key)) { throw 'Missing JSONP field reference' }
-        $reference = $Unit.FieldReferences[$key]
-        if ($null -eq $reference) { throw 'Null JSONP field reference' }
-        foreach ($property in @('PropertyName','FieldReference','ValueStart','ValueLength')) {
-            if ($reference.PSObject.Properties.Name -notcontains $property) { throw "JSONP field reference is missing $property" }
+    $fast = if ($null -ne $FastLookup) { $FastLookup } else { Get-InternalScopeJsonpFastLookup -Snapshot $Snapshot }
+    $spanKey = "$rStart|$rLen"
+    [object]$parsedEntry = $null
+    if (-not $fast.ObjectsBySpan.TryGetValue($spanKey, [ref]$parsedEntry)) {
+        try {
+            $jsonDoc = [System.Text.Json.JsonDocument]::Parse($Unit.RawFragment)
+        } catch {
+            throw 'JSONP unit raw fragment must be a valid JSON object'
         }
-        Assert-ScopeText $reference.PropertyName 'JSONP PropertyName'
-        if ($reference.FieldReference -cne ($Unit.UnitReference + '/' + $reference.PropertyName)) { throw 'JSONP field reference must belong to selected object' }
-        if ($rawObject.PSObject.Properties.Name -notcontains $reference.PropertyName) { throw 'JSONP field reference property is absent from selected raw object' }
-        Assert-ScopeSpan $reference.ValueStart $reference.ValueLength $Unit.RawStart $Unit.RawLength
-        if (-not $propertySpans.ContainsKey([string]$reference.PropertyName) -or @($propertySpans[[string]$reference.PropertyName]).Count -ne 1) { throw 'JSONP field reference property must occur exactly once in selected raw object' }
-        $propertySpan = @($propertySpans[[string]$reference.PropertyName])[0]
-        if ($reference.ValueStart -ne ($Unit.RawStart + $propertySpan.Start) -or $reference.ValueLength -ne $propertySpan.Length) { throw 'JSONP field value span does not match the selected raw property span' }
-        try { $rawValue=('{"value":' + $Snapshot.Text.Substring([int]$reference.ValueStart,[int]$reference.ValueLength) + '}') | ConvertFrom-Json -ErrorAction Stop | Select-Object -ExpandProperty value }
-        catch { throw 'JSONP field value span is not valid source JSON' }
-        if ((ConvertTo-BenefitText $rawValue) -cne (ConvertTo-BenefitText $Unit.StructuredFields[$key])) { throw 'JSONP field value span does not match semantic field' }
-        if ((ConvertTo-BenefitText $rawObject.($reference.PropertyName)) -cne (ConvertTo-BenefitText $Unit.StructuredFields[$key])) { throw 'JSONP field value does not match selected raw property' }
+        try {
+            if ($jsonDoc.RootElement.ValueKind -cne 'Object') {
+                throw 'JSONP unit raw fragment must be a JSON object'
+            }
+            $propertySpans = Get-BenefitJsonTopLevelPropertySpanIndex -JsonText $Unit.RawFragment
+            $propMap = [Collections.Generic.Dictionary[string, object]]::new([StringComparer]::Ordinal)
+            foreach ($jp in $jsonDoc.RootElement.EnumerateObject()) {
+                $pName = [string]$jp.Name
+                if (-not $propMap.ContainsKey($pName)) {
+                    $spanList = [Collections.Generic.List[object]]$propertySpans[$pName]
+                    $propMap[$pName] = [pscustomobject]@{
+                        SpanCount = $spanList.Count
+                        Start = [long]$spanList[0].Start
+                        Length = [long]$spanList[0].Length
+                        BenefitText = (ConvertFrom-InternalJsonElementToBenefitText $jp.Value)
+                    }
+                }
+            }
+            $parsedEntry = [pscustomobject]@{ PropMap = $propMap }
+            $fast.ObjectsBySpan[$spanKey] = $parsedEntry
+        } finally {
+            $jsonDoc.Dispose()
+        }
+    }
+    $expectedPrefix = $unitRef + '/'
+    $fieldRefs = $Unit.FieldReferences
+    $propMapRef = $parsedEntry.PropMap
+    foreach ($entry in $Unit.StructuredFields.GetEnumerator()) {
+        $key = $entry.Key
+        if (-not $fieldRefs.Contains($key)) { throw 'Missing JSONP field reference' }
+        $reference = $fieldRefs[$key]
+        if ($null -eq $reference) { throw 'Null JSONP field reference' }
+        $refPropName = $null
+        $refFieldRef = $null
+        $refValStart = $null
+        $refValLen = $null
+        $refReadOk = $false
+        try {
+            $refPropName = $reference.PropertyName
+            $refFieldRef = $reference.FieldReference
+            $refValStart = $reference.ValueStart
+            $refValLen = $reference.ValueLength
+            $refReadOk = ($null -ne $refPropName -and $null -ne $refFieldRef -and $null -ne $refValStart -and $null -ne $refValLen)
+        } catch {
+            $refReadOk = $false
+        }
+        if (-not $refReadOk) {
+            $refProps = $reference.PSObject.Properties
+            foreach ($property in @('PropertyName','FieldReference','ValueStart','ValueLength')) {
+                if ($null -eq $refProps[$property]) { throw "JSONP field reference is missing $property" }
+            }
+            $refPropName = $reference.PropertyName
+            $refFieldRef = $reference.FieldReference
+            $refValStart = $reference.ValueStart
+            $refValLen = $reference.ValueLength
+        }
+        if ($refPropName -isnot [string] -or [string]::IsNullOrWhiteSpace($refPropName)) { throw 'JSONP PropertyName must be nonempty text' }
+        if ($refFieldRef -cne ($expectedPrefix + $refPropName)) { throw 'JSONP field reference must belong to selected object' }
+        [object]$propInfo = $null
+        if (-not $propMapRef.TryGetValue($refPropName, [ref]$propInfo)) {
+            throw 'JSONP field reference property is absent from selected raw object'
+        }
+        [long]$vStart = [long]$refValStart
+        [long]$vLen = [long]$refValLen
+        if ($vStart -lt $rStart -or $vLen -le 0 -or $vLen -gt $rLen -or ($vStart - $rStart) -gt ($rLen - $vLen)) {
+            throw 'Source span is outside its container'
+        }
+        if ($propInfo.SpanCount -ne 1) { throw 'JSONP field reference property must occur exactly once in selected raw object' }
+        if ($vStart -ne ($rStart + $propInfo.Start) -or $vLen -ne $propInfo.Length) { throw 'JSONP field value span does not match the selected raw property span' }
+        $fieldVal = $entry.Value
+        $fieldText = if ($fieldVal -is [string]) { $fieldVal.Trim() } elseif ($null -eq $fieldVal) { '' } else { ([string]$fieldVal).Trim() }
+        if ($fieldText -cne $propInfo.BenefitText) { throw 'JSONP field value span does not match semantic field' }
     }
 }
 function Assert-ScopeJsonpUnit {
@@ -892,10 +1172,14 @@ function Assert-ScopeUnit {
         Assert-ScopeXlsxUnit -Unit $Unit -Snapshot $Snapshot -XlsxValidationIndex $XlsxValidationIndex
         return
     }
+    if ($Snapshot.SourceFormat -ceq 'JSONP') {
+        if (-not (Test-InternalBenefitJsonpRunContextSnapshotTrust -Snapshot $Snapshot)) { Assert-ScopeSnapshot $Snapshot }
+        Assert-ScopeJsonpUnitCore -Unit $Unit -Snapshot $Snapshot
+        return
+    }
     if ($null -ne $HtmlValidationIndex) { Assert-ScopeHtmlValidationIndex -HtmlValidationIndex $HtmlValidationIndex -Snapshot $Snapshot }
     else { Assert-ScopeSnapshot $Snapshot }
     if ($Snapshot.SourceFormat -ceq 'HTML') { Assert-ScopeHtmlUnit -Unit $Unit -Snapshot $Snapshot -HtmlTokens $HtmlTokens -HtmlValidationIndex $HtmlValidationIndex; return }
-    if ($Snapshot.SourceFormat -ceq 'JSONP') { Assert-ScopeJsonpUnit $Unit $Snapshot; return }
     throw 'Unsupported scoped source format'
 }
 function Copy-InternalHtmlSourceContentUnit {
@@ -996,6 +1280,70 @@ function New-BenefitSourceContentUnit {
     Assert-ScopeUnit -Unit $result -Snapshot $Snapshot -HtmlTokens $HtmlTokens -HtmlValidationIndex $HtmlValidationIndex
     return $result
 }
+function Copy-InternalJsonpSourceContentUnit {
+    # Internal run-context helper. Clones one JSONP template/unit row into an
+    # isolated SourceContentUnit without deep recursive reflection walks.
+    param([Parameter(Mandatory)]$Snapshot, [Parameter(Mandatory)]$Unit)
+    [long]$rStart = [long]$Unit.RawStart
+    [long]$rLen = [long]$Unit.RawLength
+    [long]$textLen = [long]$Snapshot.Text.Length
+    if ($rStart -lt 0 -or $rLen -le 0 -or $rLen -gt $textLen -or $rStart -gt ($textLen - $rLen)) { throw 'Source span is outside its container' }
+    $fields = $Unit.StructuredFields
+    $fieldsCopy = $null
+    if ($fields -is [Collections.IDictionary]) {
+        $tmpFields = [ordered]@{}
+        $fastFieldsOk = $true
+        foreach ($entry in $fields.GetEnumerator()) {
+            if ($entry.Key -isnot [string] -or $entry.Value -isnot [string]) {
+                $fastFieldsOk = $false
+                break
+            }
+            $tmpFields[$entry.Key] = $entry.Value
+        }
+        if ($fastFieldsOk) { $fieldsCopy = $tmpFields }
+    }
+    if ($null -eq $fieldsCopy) { $fieldsCopy = Copy-ScopeContractData $fields }
+
+    $refs = $Unit.FieldReferences
+    $refsCopy = $null
+    if ($refs -is [Collections.IDictionary]) {
+        $tmpRefs = [ordered]@{}
+        $fastRefsOk = $true
+        foreach ($entry in $refs.GetEnumerator()) {
+            $r = $entry.Value
+            if ($entry.Key -isnot [string] -or $r -isnot [pscustomobject]) {
+                $fastRefsOk = $false
+                break
+            }
+            try {
+                $pn = $r.PropertyName
+                $fr = $r.FieldReference
+                $vs = $r.ValueStart
+                $vl = $r.ValueLength
+                if ($pn -isnot [string] -or $fr -isnot [string] -or $vs -isnot [long] -or $vl -isnot [long]) {
+                    $fastRefsOk = $false
+                    break
+                }
+                $tmpRefs[$entry.Key] = [pscustomobject][ordered]@{
+                    PropertyName=$pn; FieldReference=$fr
+                    ValueStart=$vs; ValueLength=$vl
+                }
+            } catch {
+                $fastRefsOk = $false
+                break
+            }
+        }
+        if ($fastRefsOk) { $refsCopy = $tmpRefs }
+    }
+    if ($null -eq $refsCopy) { $refsCopy = Copy-ScopeContractData $refs }
+
+    return [pscustomobject][ordered]@{
+        ContractType='SourceContentUnit'; ContractVersion=1; SnapshotId=$Snapshot.SnapshotId
+        UnitType='JSON_OBJECT'; UnitReference=$Unit.UnitReference; RawStart=$rStart
+        RawLength=$rLen; RawFragment=$Snapshot.Text.Substring([int]$rStart,[int]$rLen)
+        RawEvidenceText=$Unit.RawEvidenceText; StructuredFields=$fieldsCopy; FieldReferences=$refsCopy
+    }
+}
 function New-BenefitJsonpSourceContentUnit {
     param([Parameter(Mandatory)]$Snapshot, [Parameter(Mandatory)][string]$UnitReference,
         [long]$RawStart, [long]$RawLength, [Parameter(Mandatory)][string]$RawEvidenceText,
@@ -1029,7 +1377,8 @@ function Assert-ScopeObservation {
     Assert-BenefitSourceRowNumber $Observation.SourceRowNumber
     $trustedXlsx = ($Observation.SourceFormat -ceq 'XLSX' -and (Test-InternalBenefitXlsxRunContextTrust -Snapshot $Observation.Snapshot -XlsxValidationIndex $XlsxValidationIndex))
     $trustedHtml = ($Observation.SourceFormat -ceq 'HTML' -and (Test-InternalBenefitHtmlRunContextTrust -Snapshot $Observation.Snapshot -HtmlValidationIndex $HtmlValidationIndex))
-    if (-not $trustedXlsx -and -not $trustedHtml) { Assert-ScopeSnapshot $Observation.Snapshot }
+    $trustedJsonp = ($Observation.SourceFormat -ceq 'JSONP' -and (Test-InternalBenefitJsonpRunContextSnapshotTrust -Snapshot $Observation.Snapshot))
+    if (-not $trustedXlsx -and -not $trustedHtml -and -not $trustedJsonp) { Assert-ScopeSnapshot $Observation.Snapshot }
     if ($Observation.SourceFormat -cin @('PDF','HWPX') -and $null -ne $DocumentValidationIndex) {
         Assert-InternalBenefitDocumentValidationIndex -ValidationIndex $DocumentValidationIndex -Snapshot $Observation.Snapshot
         if ($Observation.AdapterId -cne $DocumentValidationIndex.AdapterId -or $Observation.AdapterVersion -cne $DocumentValidationIndex.AdapterVersion) { throw 'Observation adapter must match document index' }
@@ -1049,13 +1398,16 @@ function Assert-ScopeObservation {
     $fastLookup = if ($Observation.SourceFormat -ceq 'HTML' -and $null -ne $HtmlValidationIndex) {
         Get-InternalScopeHtmlFastLookup -HtmlValidationIndex $HtmlValidationIndex -Snapshot $Observation.Snapshot
     } else { $null }
+    $jsonpFastLookup = if ($Observation.SourceFormat -ceq 'JSONP') {
+        Get-InternalScopeJsonpFastLookup -Snapshot $Observation.Snapshot
+    } else { $null }
     $references = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
     foreach ($unit in $Observation.ContentUnits) {
         if ($Observation.SourceFormat -cin @('PDF','HWPX')) {
             if ($null -eq $DocumentValidationIndex) { throw 'Document validation index is required' }
             Assert-ScopeDocumentUnitCore -Unit $unit -Snapshot $Observation.Snapshot -ValidationIndex $DocumentValidationIndex
         } elseif ($Observation.SourceFormat -ceq 'JSONP') {
-            Assert-ScopeJsonpUnitCore -Unit $unit -Snapshot $Observation.Snapshot
+            Assert-ScopeJsonpUnitCore -Unit $unit -Snapshot $Observation.Snapshot -FastLookup $jsonpFastLookup
         } elseif ($Observation.SourceFormat -ceq 'XLSX') {
             Assert-ScopeXlsxUnitCore -Unit $unit -Snapshot $Observation.Snapshot -XlsxValidationIndex $XlsxValidationIndex
         } elseif ($Observation.SourceFormat -ceq 'HTML') {
@@ -1066,6 +1418,23 @@ function Assert-ScopeObservation {
         if (-not $references.Add([string]$unit.UnitReference)) { throw 'Duplicate content unit reference' }
     }
     Assert-ScopeDiagnostics $Observation.Diagnostics
+}
+function New-InternalBenefitJsonpSourceObservation {
+    # Internal run-context helper. Callers supply freshly materialized JSONP units
+    # built against the current snapshot, so validation runs once at observation boundary.
+    param([int]$SourceRowNumber, [Parameter(Mandatory)]$Snapshot, [Parameter(Mandatory)][string]$AdapterId,
+        [Parameter(Mandatory)][string]$AdapterVersion, [Parameter(Mandatory)][string]$AdapterStatus,
+        [AllowEmptyCollection()][object[]]$ContentUnits=@(), [AllowEmptyCollection()][object[]]$Diagnostics=@())
+    $trustedJsonp = ($Snapshot.SourceFormat -ceq 'JSONP' -and (Test-InternalBenefitJsonpRunContextSnapshotTrust -Snapshot $Snapshot))
+    if (-not $trustedJsonp) { Assert-ScopeSnapshot $Snapshot }
+    $result = [pscustomobject][ordered]@{
+        ContractType='SourceObservation'; ContractVersion=1; SourceRowNumber=$SourceRowNumber
+        SnapshotId=$Snapshot.SnapshotId; SourceUrl=$Snapshot.SourceUrl; SourceFormat=$Snapshot.SourceFormat; ObservedAt=$Snapshot.ObservedAt
+        Snapshot=$(if ($trustedJsonp) { $Snapshot } else { Copy-ScopeContractData $Snapshot }); AdapterId=$AdapterId; AdapterVersion=$AdapterVersion; AdapterStatus=$AdapterStatus
+        ContentUnits=@($ContentUnits); Diagnostics=(Copy-ScopeContractData $Diagnostics)
+    }
+    Assert-ScopeObservation -Observation $result
+    return $result
 }
 function New-InternalBenefitHtmlSourceObservation {
     # Internal run-context helper. Callers supply freshly materialized HTML units
@@ -1092,7 +1461,8 @@ function New-BenefitSourceObservation {
         [AllowNull()][object[]]$HtmlTokens=$null, [AllowNull()]$HtmlValidationIndex=$null, [AllowNull()]$XlsxValidationIndex=$null,[AllowNull()]$DocumentValidationIndex=$null)
     $trustedXlsx = ($Snapshot.SourceFormat -ceq 'XLSX' -and (Test-InternalBenefitXlsxRunContextTrust -Snapshot $Snapshot -XlsxValidationIndex $XlsxValidationIndex))
     $trustedHtml = ($Snapshot.SourceFormat -ceq 'HTML' -and (Test-InternalBenefitHtmlRunContextTrust -Snapshot $Snapshot -HtmlValidationIndex $HtmlValidationIndex))
-    if (-not $trustedXlsx -and -not $trustedHtml) { Assert-ScopeSnapshot $Snapshot }
+    $trustedJsonp = ($Snapshot.SourceFormat -ceq 'JSONP' -and (Test-InternalBenefitJsonpRunContextSnapshotTrust -Snapshot $Snapshot))
+    if (-not $trustedXlsx -and -not $trustedHtml -and -not $trustedJsonp) { Assert-ScopeSnapshot $Snapshot }
     $result = [pscustomobject][ordered]@{
         ContractType='SourceObservation'; ContractVersion=1; SourceRowNumber=$SourceRowNumber
         SnapshotId=$Snapshot.SnapshotId; SourceUrl=$Snapshot.SourceUrl; SourceFormat=$Snapshot.SourceFormat; ObservedAt=$Snapshot.ObservedAt
@@ -1143,7 +1513,8 @@ function Assert-ScopeSliceAgainstSnapshot {
     Assert-ScopeSliceShape $Slice $SourceRowNumber
     $trustedXlsx = ($Snapshot.SourceFormat -ceq 'XLSX' -and (Test-InternalBenefitXlsxRunContextTrust -Snapshot $Snapshot -XlsxValidationIndex $XlsxValidationIndex))
     $trustedHtml = ($Snapshot.SourceFormat -ceq 'HTML' -and (Test-InternalBenefitHtmlRunContextTrust -Snapshot $Snapshot -HtmlValidationIndex $HtmlValidationIndex))
-    if (-not $trustedXlsx -and -not $trustedHtml) { Assert-ScopeSnapshot $Snapshot }
+    $trustedJsonp = ($Snapshot.SourceFormat -ceq 'JSONP' -and (Test-InternalBenefitJsonpRunContextSnapshotTrust -Snapshot $Snapshot))
+    if (-not $trustedXlsx -and -not $trustedHtml -and -not $trustedJsonp) { Assert-ScopeSnapshot $Snapshot }
     foreach ($key in @('SnapshotId','ContentHash','SourceUrl','SourceFormat','ObservedAt')) {
         if ($Slice.$key -cne $Snapshot.$key) { throw 'Slice must preserve original source snapshot' }
     }
@@ -1244,6 +1615,40 @@ function New-InternalRelevantBenefitHtmlSlice {
         IdentityEvidence=(Copy-ScopeContractData $IdentityEvidence)
     }
     Assert-ScopeSliceAgainstSnapshot -Slice $result -Snapshot $Observation.Snapshot -SourceRowNumber $Observation.SourceRowNumber -HtmlTokens $HtmlTokens -HtmlValidationIndex $HtmlValidationIndex
+    return $result
+}
+function New-InternalRelevantBenefitJsonpSlice {
+    # Internal locator helper. Find-BenefitBusinessEvidence has already run
+    # Assert-ScopeObservation once, so this avoids re-validating every unit.
+    param([Parameter(Mandatory)]$Observation, [Parameter(Mandatory)]$Unit, [AllowEmptyCollection()][object[]]$IdentityEvidence=@())
+    if ($Observation.SourceFormat -cne 'JSONP' -or $Observation.AdapterStatus -cne 'COMPLETE') {
+        throw 'Trusted JSONP slice requires a complete JSONP observation'
+    }
+    Assert-ScopeUnit -Unit $Unit -Snapshot $Observation.Snapshot
+    $matched = [Collections.Generic.List[object]]::new()
+    foreach ($candidateUnit in $Observation.ContentUnits) {
+        if ($candidateUnit.UnitReference -ceq $Unit.UnitReference) {
+            $matched.Add($candidateUnit)
+        }
+    }
+    if ($matched.Count -ne 1) {
+        throw 'Slice unit must be an exact member of its observation'
+    }
+    if (-not [object]::ReferenceEquals($matched[0], $Unit)) {
+        if ((ConvertTo-Json -InputObject $matched[0] -Depth 20 -Compress) -cne (ConvertTo-Json -InputObject $Unit -Depth 20 -Compress)) {
+            throw 'Slice unit must be an exact member of its observation'
+        }
+    }
+    $result = [pscustomobject][ordered]@{
+        ContractType='RelevantEvidenceSlice'; ContractVersion=1; SourceRowNumber=$Observation.SourceRowNumber
+        SnapshotId=$Observation.SnapshotId; ContentHash=$Observation.Snapshot.ContentHash
+        SourceUrl=$Observation.SourceUrl; SourceFormat=$Observation.SourceFormat; ObservedAt=$Observation.ObservedAt
+        LocatorMethod='STRUCTURED_JSONP_OBJECT'; ScopeType='JSON_OBJECT'; EvidenceReference=$Unit.UnitReference
+        RawStart=$Unit.RawStart; RawLength=$Unit.RawLength; RawFragment=$Unit.RawFragment; RawEvidenceText=$Unit.RawEvidenceText
+        StructuredFields=(Copy-ScopeContractData $Unit.StructuredFields); FieldReferences=(Copy-ScopeContractData $Unit.FieldReferences)
+        IdentityEvidence=(Copy-ScopeContractData $IdentityEvidence)
+    }
+    Assert-ScopeSliceAgainstSnapshot -Slice $result -Snapshot $Observation.Snapshot -SourceRowNumber $Observation.SourceRowNumber
     return $result
 }
 function New-RelevantBenefitEvidenceSlice {

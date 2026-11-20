@@ -1635,3 +1635,36 @@ source families (`MMA` JSONP entry URL, `.xlsx`, `.hwpx`, `.pdf`).
   passed; HTML candidates that unexpectedly serve non-HTML content (e.g. `text/csv`)
   under `C_LITE_V1` fail closed with `C_LITE_HTML_SOURCE_REQUIRED`.
   `ProductionAction=NONE`; `LiveHTTP=NOT_AUTHORIZED`.
+
+## Bounded Operational Cycle Runner (Step D, Issue #164)
+
+`invoke-phase5-ops-cycle.ps1` (`Invoke-Phase5OpsCycle`) provides a single bounded
+entrypoint chaining Phase 5 planning/execution, read-only History inspection,
+optional external rolling-24h pilot logging, and external review-queue summary export:
+
+```text
+New-Phase5BenefitBatchPlan (Plan v1 / strict Plan v2)
+        ↓
+[Optional rolling-24h NDJSON pilot log check]
+        ↓
+Invoke-Phase5BenefitBatch (Execute | RecoverOnly)
+        ↓
+Inspect-Phase5BenefitBatch (read-only History verification)
+        ↓
+Export-Phase5ReviewQueue (review-queue-summary.json + review-queue-items.csv)
+        ↓
+Atomic external ops-cycle-summary.json (ProductionAction=NONE, ApprovalRequired=$true)
+```
+
+- **`PlanOnly` mode:** Validates external paths (non-overlapping, reparse-free, outside all repository roots), previews `BatchId` / per-item retention profile (`C_LITE_V1` vs `LEGACY`) / transport qualification / rolling-24h pilot budget with **zero HTTP** and **zero filesystem writes**.
+- **`Execute` & `RecoverOnly` modes:** Enforce `-MaxRolling24hPhysicalAttempts` (when configured with `-PilotLogPath`) before creating History directories or running batches, write `ops-cycle-summary.json` atomically outside the repo, and never touch `data/canonical/`, `data/seed/`, or `apps/android/`.
+
+```powershell
+pwsh -NoProfile -File .\tools\data\invoke-phase5-ops-cycle.ps1 `
+  -CanonicalCsvPath '.\data\canonical\capital-area-military-benefits.csv' `
+  -BusinessIds @('biz-9ce1e89346d64746910af8d98cdb34a4') `
+  -HistoryRoot 'C:\milimap-ops\history' `
+  -BatchWorkspaceRoot 'C:\milimap-ops\batches' `
+  -ReviewQueueOutputDirectory 'C:\milimap-ops\review-queue' `
+  -Mode PlanOnly
+```

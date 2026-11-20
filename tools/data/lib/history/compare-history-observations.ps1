@@ -33,21 +33,23 @@ function Compare-HistoryObservations {
 
     $previousId = if ($null -eq $Previous) { '' } else { [string]$Previous.ObservationId }
     $comparisonId = New-HistoryComparisonId -RunId ([string]$Current.RunId) -BusinessId ([string]$Current.BusinessId) -Domain ([string]$Current.Domain) -PreviousObservationId $previousId -CurrentObservationId ([string]$Current.ObservationId)
-
-    if ($null -eq $Previous) {
-        return New-ObservationComparison -ComparisonId $comparisonId -RunId $Current.RunId -BusinessId $Current.BusinessId -Domain $Current.Domain -PreviousObservationId '' -CurrentObservationId $Current.ObservationId -ComparisonStatus 'COMPLETE' -DeltaDimensions @() -ComparatorVersion 1 -ChangeCandidates @('BASELINE_ESTABLISHED') -ReasonCodes @()
+    [string[]]$deltas = @()
+    if ($null -ne $Previous) {
+        $deltas = @(Get-HistoryDeltaDimensions -Previous $Previous -Current $Current)
     }
-
-    $deltas = @(Get-HistoryDeltaDimensions -Previous $Previous -Current $Current)
 
     if ([string]$Current.OperationalStatus -ne 'COMPLETE') {
         $reasons = @($Current.NonComparableReasons)
-        return New-ObservationComparison -ComparisonId $comparisonId -RunId $Current.RunId -BusinessId $Current.BusinessId -Domain $Current.Domain -PreviousObservationId $Previous.ObservationId -CurrentObservationId $Current.ObservationId -ComparisonStatus 'UNAVAILABLE' -DeltaDimensions $deltas -ComparatorVersion 1 -ChangeCandidates @('OPERATIONAL_FAILURE','COMPARISON_UNAVAILABLE') -ReasonCodes $reasons
+        return New-ObservationComparison -ComparisonId $comparisonId -RunId $Current.RunId -BusinessId $Current.BusinessId -Domain $Current.Domain -PreviousObservationId $previousId -CurrentObservationId $Current.ObservationId -ComparisonStatus 'UNAVAILABLE' -DeltaDimensions $deltas -ComparatorVersion 1 -ChangeCandidates @('OPERATIONAL_FAILURE','COMPARISON_UNAVAILABLE') -ReasonCodes $reasons
     }
 
     if (-not [bool]$Current.Comparable) {
         $reasons = @($Current.NonComparableReasons)
-        return New-ObservationComparison -ComparisonId $comparisonId -RunId $Current.RunId -BusinessId $Current.BusinessId -Domain $Current.Domain -PreviousObservationId $Previous.ObservationId -CurrentObservationId $Current.ObservationId -ComparisonStatus 'UNAVAILABLE' -DeltaDimensions $deltas -ComparatorVersion 1 -ChangeCandidates @('COMPARISON_UNAVAILABLE') -ReasonCodes $reasons
+        return New-ObservationComparison -ComparisonId $comparisonId -RunId $Current.RunId -BusinessId $Current.BusinessId -Domain $Current.Domain -PreviousObservationId $previousId -CurrentObservationId $Current.ObservationId -ComparisonStatus 'UNAVAILABLE' -DeltaDimensions $deltas -ComparatorVersion 1 -ChangeCandidates @('COMPARISON_UNAVAILABLE') -ReasonCodes $reasons
+    }
+
+    if ($null -eq $Previous) {
+        return New-ObservationComparison -ComparisonId $comparisonId -RunId $Current.RunId -BusinessId $Current.BusinessId -Domain $Current.Domain -PreviousObservationId '' -CurrentObservationId $Current.ObservationId -ComparisonStatus 'COMPLETE' -DeltaDimensions @() -ComparatorVersion 1 -ChangeCandidates @('BASELINE_ESTABLISHED') -ReasonCodes @()
     }
 
     if (-not [bool]$Previous.Comparable -or [string]$Previous.OperationalStatus -ne 'COMPLETE') {

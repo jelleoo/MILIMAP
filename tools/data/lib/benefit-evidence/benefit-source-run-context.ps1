@@ -186,15 +186,58 @@ function Get-BenefitRunMmaJsonpObservation {
     param([Parameter(Mandatory)]$Context, [Parameter(Mandatory)]$Document, [Parameter(Mandatory)][ValidateSet('LIST','DETAIL')][string]$Role, [Parameter(Mandatory)][string]$ExpectedCallback)
     Assert-BenefitSourceRunContext $Context; Assert-BenefitSourceDocument $Document
     if ($Document.FetchStatus -cne 'COMPLETE' -or $Document.SourceFormat -cne 'JSONP') { throw 'MMA JSONP observation requires a successful JSONP document' }
-    $snapshot=New-BenefitSourceSnapshot -SourceUrl $Document.Url -SourceFormat JSONP -Text $Document.Text -ObservedAt $Document.ObservedAt
-    $adapterId="MMA_JSONP_$Role"; $key="$($snapshot.SnapshotId)|$adapterId|1"
-    if ($Context.TemplateCache.ContainsKey($key)) { $Context.Metrics.AdapterReuseCount++; $template=$Context.TemplateCache[$key]; $cacheHit=$true }
-    else {
-        $template=if ($Role -ceq 'LIST') { ConvertTo-MmaJsonpListObservation -Document $Document -ExpectedCallback $ExpectedCallback } else { ConvertTo-MmaJsonpDetailObservation -Document $Document -ExpectedCallback $ExpectedCallback }
-        $Context.TemplateCache.Add($key,$template); $Context.Metrics.AdapterParseCount++; $cacheHit=$false
+    $payloadKey = "EXPLICIT_JSONP|$($Document.Url)"
+    $snapshot = $null
+    if ($Context.PayloadCache.ContainsKey($payloadKey)) {
+        $payload = $Context.PayloadCache[$payloadKey]
+        $trustedWrapper = ($null -ne $Document.PSObject.Properties['RunContextPayload'] -and
+            [object]::ReferenceEquals($Document.RunContextPayload, $payload) -and
+            [string]$payload.Url -ceq [string]$Document.Url -and
+            [string]$payload.SourceFormat -ceq 'JSONP' -and
+            [string]$payload.FetchStatus -ceq 'COMPLETE' -and
+            [object]::ReferenceEquals($payload.Text, $Document.Text))
+        if ($trustedWrapper) {
+            if ($null -eq $payload.PSObject.Properties['SourceSnapshot']) {
+                $createdSnapshot = New-BenefitSourceSnapshot -SourceUrl $payload.Url -SourceFormat JSONP -Text $payload.Text -ObservedAt $payload.ObservedAt
+                Set-InternalBenefitJsonpRunContextSnapshotTrust -Snapshot $createdSnapshot
+                $payload | Add-Member -NotePropertyName SourceSnapshot -NotePropertyValue $createdSnapshot
+            }
+            $snapshot = $payload.SourceSnapshot
+        }
     }
-    [void]$Context.Attempts.Add([pscustomobject][ordered]@{Stage='PARSE';Key=$key;CacheHit=$cacheHit;Status=$template.AdapterStatus})
-    return New-BenefitSourceObservation -SourceRowNumber $Document.SourceRowNumber -Snapshot $snapshot -AdapterId $template.AdapterId -AdapterVersion $template.AdapterVersion -AdapterStatus $template.AdapterStatus -ContentUnits $template.ContentUnits -Diagnostics $template.Diagnostics
+    if ($null -eq $snapshot) {
+        $snapshot = New-BenefitSourceSnapshot -SourceUrl $Document.Url -SourceFormat JSONP -Text $Document.Text -ObservedAt $Document.ObservedAt
+    }
+    $adapterId="MMA_JSONP_$Role"; $key="$($snapshot.SnapshotId)|$adapterId|1"
+    if ($Context.TemplateCache.ContainsKey($key)) {
+        $Context.Metrics.AdapterReuseCount++
+        $template=$Context.TemplateCache[$key]
+        $cacheHit=$true
+        [void]$Context.Attempts.Add([pscustomobject][ordered]@{Stage='PARSE';Key=$key;CacheHit=$cacheHit;Status=$template.AdapterStatus})
+        $units=[Collections.Generic.List[object]]::new($template.ContentUnits.Count)
+        foreach ($u in @($template.ContentUnits)) {
+            $units.Add((Copy-InternalJsonpSourceContentUnit -Snapshot $snapshot -Unit $u))
+        }
+        return New-InternalBenefitJsonpSourceObservation -SourceRowNumber $Document.SourceRowNumber -Snapshot $snapshot -AdapterId $template.AdapterId -AdapterVersion $template.AdapterVersion -AdapterStatus $template.AdapterStatus -ContentUnits @($units.ToArray()) -Diagnostics $template.Diagnostics
+    } else {
+        $parsedObs=ConvertTo-MmaJsonpObservation -Document $Document -ExpectedCallback $ExpectedCallback -Role $Role -Snapshot $snapshot
+        $templateUnits=[Collections.Generic.List[object]]::new($parsedObs.ContentUnits.Count)
+        foreach ($u in @($parsedObs.ContentUnits)) {
+            $templateUnits.Add((Copy-InternalJsonpSourceContentUnit -Snapshot $snapshot -Unit $u))
+        }
+        $template=[pscustomobject][ordered]@{
+            AdapterId=$parsedObs.AdapterId
+            AdapterVersion=$parsedObs.AdapterVersion
+            AdapterStatus=$parsedObs.AdapterStatus
+            ContentUnits=@($templateUnits.ToArray())
+            Diagnostics=(Copy-ScopeContractData $parsedObs.Diagnostics)
+        }
+        $Context.TemplateCache.Add($key,$template)
+        $Context.Metrics.AdapterParseCount++
+        $cacheHit=$false
+        [void]$Context.Attempts.Add([pscustomobject][ordered]@{Stage='PARSE';Key=$key;CacheHit=$cacheHit;Status=$template.AdapterStatus})
+        return $parsedObs
+    }
 }
 
 function Get-BenefitRunHtmlObservation {

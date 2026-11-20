@@ -353,4 +353,48 @@ try {
     $isoCtx.TemplateCache[$isoTplKey].Rows[0].FieldReferences['BusinessName'].CellStart = $origCellStart
 }
 
+$jsonpText = 'MmaBenefitList({"success":true,"list":[{"udgigwan_cd":"2789","udgigwan_yhnm":"가게A","addr":"서울시 중구 1","udgigwan_telno":"02-1111-2222","udggeopjong_gbnm":"식당"}]});'
+$jsonpHttp = { param($Uri) [pscustomobject]@{ StatusCode=200; ContentType='application/json'; Text=$jsonpText; Bytes=$null } }.GetNewClosure()
+$jsonpCtx = New-BenefitSourceRunContext
+$jsonpCand2 = New-BenefitSourceCandidate -SourceRowNumber 2 -Url 'https://open.mma.go.kr/caisGGGS/mmanrsrListAjaxJsonCallNew.json?callback=MmaBenefitList' -SourceKind PUBLIC_OFFICIAL -DiscoveryMethod MMA_JSONP_LIST
+$jsonpCand3 = New-BenefitSourceCandidate -SourceRowNumber 3 -Url $jsonpCand2.Url -SourceKind PUBLIC_OFFICIAL -DiscoveryMethod MMA_JSONP_LIST
+$jsonpDoc2 = Get-BenefitRunExplicitDocument -Context $jsonpCtx -Candidate $jsonpCand2 -SourceFormat JSONP -RequestInvoker $jsonpHttp
+$jsonpDoc3 = Get-BenefitRunExplicitDocument -Context $jsonpCtx -Candidate $jsonpCand3 -SourceFormat JSONP -RequestInvoker $jsonpHttp
+$jsonpHashCalls = [pscustomobject]@{ Count=0 }
+$origJsonpHash = (Get-Item Function:Get-BenefitEvidenceTextHash).ScriptBlock
+$countJsonpHash = { param([string]$Text) $jsonpHashCalls.Count++; & $origJsonpHash -Text $Text }.GetNewClosure()
+Set-Item Function:Get-BenefitEvidenceTextHash -Value $countJsonpHash
+try {
+    $jsonpObs2 = Get-BenefitRunMmaJsonpObservation -Context $jsonpCtx -Document $jsonpDoc2 -Role LIST -ExpectedCallback 'MmaBenefitList'
+    $afterFirstJsonpHash = $jsonpHashCalls.Count
+    $jsonpObs3 = Get-BenefitRunMmaJsonpObservation -Context $jsonpCtx -Document $jsonpDoc3 -Role LIST -ExpectedCallback 'MmaBenefitList'
+} finally { Set-Item Function:Get-BenefitEvidenceTextHash -Value $origJsonpHash }
+Assert-ScopeTrue ($afterFirstJsonpHash -gt 0) 'Initial trusted JSONP run-context snapshot hashes once'
+Assert-ScopeEqual $jsonpHashCalls.Count $afterFirstJsonpHash 'Cached JSONP observation reuse must not rehash payload'
+Assert-ScopeTrue (Test-InternalBenefitJsonpRunContextSnapshotTrust -Snapshot $jsonpObs2.Snapshot) 'Trusted JSONP run-context snapshot binding is attached'
+
+$origJsonpValueStart = [long]$jsonpObs2.ContentUnits[0].FieldReferences['BusinessName'].ValueStart
+$jsonpObs2.ContentUnits[0].StructuredFields['BusinessName'] = 'mutated-jsonp'
+$jsonpObs2.ContentUnits[0].FieldReferences['BusinessName'].ValueStart = $origJsonpValueStart + 5
+$jsonpObs3Fresh = Get-BenefitRunMmaJsonpObservation -Context $jsonpCtx -Document $jsonpDoc3 -Role LIST -ExpectedCallback 'MmaBenefitList'
+$jsonpObs2Fresh = Get-BenefitRunMmaJsonpObservation -Context $jsonpCtx -Document $jsonpDoc2 -Role LIST -ExpectedCallback 'MmaBenefitList'
+Assert-ScopeEqual $jsonpObs3Fresh.ContentUnits[0].StructuredFields.BusinessName '가게A' 'JSONP StructuredFields clone must remain isolated across observations'
+Assert-ScopeEqual ([long]$jsonpObs3Fresh.ContentUnits[0].FieldReferences['BusinessName'].ValueStart) $origJsonpValueStart 'JSONP FieldReferences clone must remain isolated across observations'
+Assert-ScopeEqual ([long]$jsonpObs2Fresh.ContentUnits[0].FieldReferences['BusinessName'].ValueStart) $origJsonpValueStart 'JSONP template cache FieldReferences must remain isolated'
+
+$jsonpTplKey = "$($jsonpObs2.SnapshotId)|MMA_JSONP_LIST|1"
+$origTplRawText = $jsonpCtx.TemplateCache[$jsonpTplKey].ContentUnits[0].RawEvidenceText
+$jsonpCtx.TemplateCache[$jsonpTplKey].ContentUnits[0].RawEvidenceText = ''
+try {
+    Assert-ScopeThrows { Get-BenefitRunMmaJsonpObservation -Context $jsonpCtx -Document $jsonpDoc3 -Role LIST -ExpectedCallback 'MmaBenefitList' } 'Mutated cached JSONP template RawEvidenceText must fail closed'
+} finally {
+    $jsonpCtx.TemplateCache[$jsonpTplKey].ContentUnits[0].RawEvidenceText = $origTplRawText
+}
+$jsonpCtx.TemplateCache[$jsonpTplKey].ContentUnits[0].FieldReferences['BusinessName'].ValueStart = $origJsonpValueStart + 5
+try {
+    Assert-ScopeThrows { Get-BenefitRunMmaJsonpObservation -Context $jsonpCtx -Document $jsonpDoc3 -Role LIST -ExpectedCallback 'MmaBenefitList' } 'Mutated cached JSONP template ValueStart must fail closed'
+} finally {
+    $jsonpCtx.TemplateCache[$jsonpTplKey].ContentUnits[0].FieldReferences['BusinessName'].ValueStart = $origJsonpValueStart
+}
+
 Write-Host 'Benefit source run context tests passed.'

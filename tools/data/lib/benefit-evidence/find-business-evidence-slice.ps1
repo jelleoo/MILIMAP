@@ -30,31 +30,32 @@ function Get-BenefitEvidenceCandidate {
         [AllowNull()][string]$BusinessAddressComparison=$null,
         [AllowNull()][string]$CanonicalPhoneDigits=$null
     )
-    $name = Get-BenefitEvidenceField -Unit $Unit -Name 'BusinessName'
+    $fields = $Unit.StructuredFields
+    $name = if ($fields.Contains('BusinessName')) { [string]$fields['BusinessName'] } else { '' }
     $targetName = if ($null -ne $BusinessNameComparison) { $BusinessNameComparison } else { ConvertTo-IdentityComparisonText $Business.NormalizedName }
     $nameComparison = ConvertTo-IdentityComparisonText $name
     $nameMatch = [bool]($nameComparison -and ($nameComparison -ceq $targetName))
     if (-not $nameMatch) {
         $identityReview = $false
         if ($name) {
-            $address = Get-BenefitEvidenceField -Unit $Unit -Name 'Address'
+            $address = if ($fields.Contains('Address')) { [string]$fields['Address'] } else { '' }
             $targetAddress = if ($null -ne $BusinessAddressComparison) { $BusinessAddressComparison } elseif ($Business.PreferredAddress) { ConvertTo-IdentityComparisonText $Business.PreferredAddress } else { '' }
             $fullAddressMatch = [bool]($targetAddress -and $address -and ($targetAddress -ceq (ConvertTo-IdentityComparisonText $address)))
             if ($fullAddressMatch) {
                 $identityReview = $true
             } else {
-                $phone = Get-BenefitEvidenceField -Unit $Unit -Name 'Phone'
+                $phone = if ($fields.Contains('Phone')) { [string]$fields['Phone'] } else { '' }
                 $canonicalDigits = if ($null -ne $CanonicalPhoneDigits) { $CanonicalPhoneDigits } else { ConvertTo-BenefitEvidencePhone $CanonicalPhone }
-                $sourcePhoneDigits = if ($canonicalDigits -and $phone) { ConvertTo-BenefitEvidencePhone $phone } else { '' }
+                $sourcePhoneDigits = if ($canonicalDigits -and $phone) { (([string]$phone) -replace '[^0-9]', '') } else { '' }
                 $identityReview = [bool]($canonicalDigits -and $sourcePhoneDigits -and ($canonicalDigits -ceq $sourcePhoneDigits))
             }
         }
         return [pscustomobject]@{ Unit=$Unit; NameMatch=$false; Strong=$false; Conflict=$false; IdentityReview=$identityReview; Evidence=@(); Detail='EXPLICIT_NAME_MISMATCH' }
     }
 
-    $address = Get-BenefitEvidenceField -Unit $Unit -Name 'Address'
-    $branch = Get-BenefitEvidenceField -Unit $Unit -Name 'Branch'
-    $phone = Get-BenefitEvidenceField -Unit $Unit -Name 'Phone'
+    $address = if ($fields.Contains('Address')) { [string]$fields['Address'] } else { '' }
+    $branch = if ($fields.Contains('Branch')) { [string]$fields['Branch'] } else { '' }
+    $phone = if ($fields.Contains('Phone')) { [string]$fields['Phone'] } else { '' }
     $sourceAddress = Get-NormalizedAddressParts -RoadAddress $address -LotAddress '' -MetadataProvince '' -MetadataArea ''
     $targetAddress = if ($null -ne $BusinessAddressComparison) { $BusinessAddressComparison } elseif ($Business.PreferredAddress) { ConvertTo-IdentityComparisonText $Business.PreferredAddress } else { '' }
     $fullAddressMatch = $targetAddress -and $address -and ($targetAddress -ceq (ConvertTo-IdentityComparisonText $address))
@@ -128,6 +129,8 @@ function Find-BenefitBusinessEvidence {
             New-InternalRelevantBenefitXlsxSlice -Observation $Observation -Unit $selected.Unit -IdentityEvidence $selected.Evidence -XlsxValidationIndex $XlsxValidationIndex
         } elseif ($Observation.SourceFormat -ceq 'HTML') {
             New-InternalRelevantBenefitHtmlSlice -Observation $Observation -Unit $selected.Unit -IdentityEvidence $selected.Evidence -HtmlTokens $htmlTokens -HtmlValidationIndex $htmlValidationIndex
+        } elseif ($Observation.SourceFormat -ceq 'JSONP') {
+            New-InternalRelevantBenefitJsonpSlice -Observation $Observation -Unit $selected.Unit -IdentityEvidence $selected.Evidence
         } else {
             New-RelevantBenefitEvidenceSlice -Observation $Observation -Unit $selected.Unit -IdentityEvidence $selected.Evidence -HtmlTokens $htmlTokens -HtmlValidationIndex $htmlValidationIndex -XlsxValidationIndex $XlsxValidationIndex -DocumentValidationIndex $documentValidationIndex
         }

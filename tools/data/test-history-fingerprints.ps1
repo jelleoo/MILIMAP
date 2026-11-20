@@ -1,4 +1,4 @@
-$ErrorActionPreference = 'Stop'
+﻿$ErrorActionPreference = 'Stop'
 
 . (Join-Path $PSScriptRoot 'lib/history/history-contracts.ps1')
 . (Join-Path $PSScriptRoot 'lib/history/history-fingerprints.ps1')
@@ -58,5 +58,17 @@ Assert-Equal ((Get-HistoryDeltaDimensions -Previous $base -Current (New-TestObse
 Assert-Equal @((Get-HistoryDeltaDimensions -Previous $base -Current $base)).Count 0 'Identical fingerprints have no deltas'
 
 Assert-Throws { ConvertTo-HistoryCanonicalJson ([IO.FileInfo]::new('x')) } 'Opaque unsupported types must fail closed'
+
+$samples = @('', '할인 10%', "quote`"and'single", 'back\slash', '<tag>&''+test', "line1`nline2`t`r")
+for ($cp = 0; $cp -le 0x1F; $cp++) {
+    $samples += ([string][char]$cp)
+}
+foreach ($sample in $samples) {
+    $expected = ConvertTo-Json -InputObject ([string]$sample) -Compress
+    $actual = ConvertTo-HistoryCanonicalJson $sample
+    Assert-Equal $actual $expected "String escaping must match ConvertTo-Json exactly for sample length $($sample.Length)"
+}
+Assert-Equal (ConvertTo-HistoryCanonicalJson ([pscustomobject][ordered]@{ ClaimType='a'; Claims=@() })) '{"Claims":[],"ClaimType":"a"}' 'Object keys must sort Claims before ClaimType matching CurrentCulture Sort-Object'
+Assert-Equal (ConvertTo-HistoryCanonicalJson ([ordered]@{ ClaimType='a'; Claims=@() })) '{"Claims":[],"ClaimType":"a"}' 'Dictionary keys must sort Claims before ClaimType matching CurrentCulture Sort-Object'
 
 Write-Host 'History fingerprint tests passed.'

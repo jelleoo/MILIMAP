@@ -1,4 +1,4 @@
-$ErrorActionPreference='Stop'
+﻿$ErrorActionPreference='Stop'
 . (Join-Path $PSScriptRoot 'testdata/benefit-evidence-location/test-support.ps1')
 . (Join-Path $PSScriptRoot 'lib/benefit-evidence/invoke-scoped-benefit-source.ps1')
 $builderPath=Join-Path $PSScriptRoot 'lib/history/benefit-scoped-html-capture-builder.ps1'
@@ -296,4 +296,27 @@ try{
     if(-not $resolved.StartsWith($tempPrefix,[StringComparison]::OrdinalIgnoreCase) -or [IO.Path]::GetFileName($resolved) -cnotmatch '^milimap-pr2b-oracle-[0-9a-f]{32}$'){throw 'Unsafe oracle cleanup path'}
     Remove-Item -LiteralPath $resolved -Recurse -Force
 }
+
+# Regressions for C_LITE_TEMPLATE_UNIT fast equality and duplicate UnitReference checks.
+$pCase=New-BuilderFixture
+$origFields=$pCase.SourceRecord.Observation.ContentUnits[0].StructuredFields
+$mutFields=[ordered]@{}
+foreach($fk in $origFields.Keys){
+    $newKey=if($fk -ceq 'BusinessName'){'businessname'}else{$fk}
+    $mutFields[$newKey]=$origFields[$fk]
+}
+$pCase.SourceRecord.Observation.ContentUnits[0].StructuredFields=$mutFields
+Expect-BuilderRejected $pCase 'C_LITE_TEMPLATE_UNIT case-mutated StructuredFields key'
+
+$pCell=New-BuilderFixture
+$pCell.SourceRecord.Observation.ContentUnits[0].FieldReferences['BenefitDescription'].CellStart++
+Expect-BuilderRejected $pCell 'C_LITE_TEMPLATE_UNIT tampered observation CellStart'
+
+$pDup=New-BuilderFixture
+$dupUrl=$pDup.SourceRecord.Document.Url
+$dupSnap=$pDup.RunContext.PayloadCache[$dupUrl].SourceSnapshot
+$dupKey=$dupSnap.SnapshotId+'|HTML_GENERIC|1'
+$pDup.RunContext.TemplateCache[$dupKey].Rows+=@($pDup.RunContext.TemplateCache[$dupKey].Rows[0])
+Expect-BuilderRejected $pDup 'C_LITE_TEMPLATE_UNIT duplicate UnitReference in template rows'
+
 Write-Host "PASS: C-Lite builder assertions=$script:BuilderChecks"

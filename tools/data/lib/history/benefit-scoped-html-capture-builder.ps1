@@ -65,6 +65,70 @@ function Assert-InternalScopedHtmlCandidate {
     Assert-BenefitScopedEvidenceBundleSize -ScopedJson $aj -EvidenceJson $ej -SemanticJson $sj
 }
 
+function Test-InternalScopedStringMapEqual {
+    param($Left,$Right)
+    if($null -eq $Left -or $null -eq $Right){return ($null -eq $Left -and $null -eq $Right)}
+    if($Left -isnot [Collections.IDictionary] -or $Right -isnot [Collections.IDictionary]){
+        return ((ConvertTo-HistoryCanonicalJson $Left) -ceq (ConvertTo-HistoryCanonicalJson $Right))
+    }
+    if($Left.Count -ne $Right.Count){return $false}
+    $leftKeys=[Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
+    foreach($entry in $Left.GetEnumerator()){
+        if($entry.Key -isnot [string] -or $entry.Value -isnot [string] -or -not $leftKeys.Add($entry.Key)){
+            return ((ConvertTo-HistoryCanonicalJson $Left) -ceq (ConvertTo-HistoryCanonicalJson $Right))
+        }
+        if(-not $Right.Contains($entry.Key)){return $false}
+        $rVal=$Right[$entry.Key]
+        if($rVal -isnot [string] -or $rVal -cne $entry.Value){return $false}
+    }
+    foreach($k in $Right.Keys){
+        if($k -isnot [string] -or -not $leftKeys.Contains($k)){return $false}
+    }
+    return $true
+}
+
+function Test-InternalScopedFieldRefMapEqual {
+    param($Left,$Right)
+    if($null -eq $Left -or $null -eq $Right){return ($null -eq $Left -and $null -eq $Right)}
+    if($Left -isnot [Collections.IDictionary] -or $Right -isnot [Collections.IDictionary]){
+        return ((ConvertTo-HistoryCanonicalJson $Left) -ceq (ConvertTo-HistoryCanonicalJson $Right))
+    }
+    if($Left.Count -ne $Right.Count){return $false}
+    $leftKeys=[Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
+    foreach($entry in $Left.GetEnumerator()){
+        if($entry.Key -isnot [string] -or -not $leftKeys.Add($entry.Key)){
+            return ((ConvertTo-HistoryCanonicalJson $Left) -ceq (ConvertTo-HistoryCanonicalJson $Right))
+        }
+        if(-not $Right.Contains($entry.Key)){return $false}
+        $lv=$entry.Value;$rv=$Right[$entry.Key]
+        if($lv -isnot [pscustomobject] -or $rv -isnot [pscustomobject]){
+            return ((ConvertTo-HistoryCanonicalJson $Left) -ceq (ConvertTo-HistoryCanonicalJson $Right))
+        }
+        $lp=$lv.PSObject.Properties;$rp=$rv.PSObject.Properties
+        if(@($lp).Count -ne 6 -or @($rp).Count -ne 6){
+            return ((ConvertTo-HistoryCanonicalJson $Left) -ceq (ConvertTo-HistoryCanonicalJson $Right))
+        }
+        foreach($numKey in @('HeaderStart','HeaderLength','CellStart','CellLength')){
+            $lpn=$lp[$numKey];$rpn=$rp[$numKey]
+            if($null -eq $lpn -or $null -eq $rpn -or $lpn.Name -cne $numKey -or $rpn.Name -cne $numKey){
+                return ((ConvertTo-HistoryCanonicalJson $Left) -ceq (ConvertTo-HistoryCanonicalJson $Right))
+            }
+            if(([long]$lpn.Value) -ne ([long]$rpn.Value)){return $false}
+        }
+        foreach($strKey in @('OriginalHeader','FieldReference')){
+            $lps=$lp[$strKey];$rps=$rp[$strKey]
+            if($null -eq $lps -or $null -eq $rps -or $lps.Name -cne $strKey -or $rps.Name -cne $strKey -or $lps.Value -isnot [string] -or $rps.Value -isnot [string]){
+                return ((ConvertTo-HistoryCanonicalJson $Left) -ceq (ConvertTo-HistoryCanonicalJson $Right))
+            }
+            if($lps.Value -cne $rps.Value){return $false}
+        }
+    }
+    foreach($k in $Right.Keys){
+        if($k -isnot [string] -or -not $leftKeys.Contains($k)){return $false}
+    }
+    return $true
+}
+
 function New-BenefitScopedHtmlCaptureCandidate {
     # Untyped boundary parameters allow contract failures to be caught here instead
     # of exposing source values in PowerShell's parameter-binding error messages.
@@ -121,15 +185,22 @@ function New-BenefitScopedHtmlCaptureCandidate {
                 if(-not $RunContext.TemplateCache.ContainsKey($templateKey)){throw 'C_LITE_TEMPLATE_MISSING'}
                 $template=$RunContext.TemplateCache[$templateKey]
                 if($obs.AdapterStatus -cne $template.AdapterStatus -or $obs.ContentUnits.Count -ne $template.Rows.Count){throw 'C_LITE_TEMPLATE_OUTCOME'}
+                $templateRowsByRef=[Collections.Generic.Dictionary[string,object]]::new([StringComparer]::Ordinal)
+                $duplicateTemplateRefs=[Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
+                foreach($templateRow in $template.Rows){
+                    $refKey=[string]$templateRow.UnitReference
+                    if(-not $templateRowsByRef.TryAdd($refKey,$templateRow)){[void]$duplicateTemplateRefs.Add($refKey)}
+                }
                 foreach($unit in $obs.ContentUnits){
-                    $rows=@($template.Rows|Where-Object UnitReference -CEQ $unit.UnitReference)
-                    if($rows.Count -ne 1){throw 'C_LITE_TEMPLATE_UNIT'}
+                    $unitRef=[string]$unit.UnitReference
+                    if($duplicateTemplateRefs.Contains($unitRef)){throw 'C_LITE_TEMPLATE_UNIT'}
+                    [object]$matchedRow=$null
+                    if(-not $templateRowsByRef.TryGetValue($unitRef,[ref]$matchedRow)){throw 'C_LITE_TEMPLATE_UNIT'}
                     foreach($key in @('TableStart','TableLength','RawStart','RawLength','RawEvidenceText')){
-                        if($unit.$key -cne $rows[0].$key){throw 'C_LITE_TEMPLATE_UNIT'}
+                        if($unit.$key -cne $matchedRow.$key){throw 'C_LITE_TEMPLATE_UNIT'}
                     }
-                    foreach($key in @('StructuredFields','FieldReferences')){
-                        if((ConvertTo-HistoryCanonicalJson $unit.$key) -cne (ConvertTo-HistoryCanonicalJson $rows[0].$key)){throw 'C_LITE_TEMPLATE_UNIT'}
-                    }
+                    if(-not (Test-InternalScopedStringMapEqual $unit.StructuredFields $matchedRow.StructuredFields)){throw 'C_LITE_TEMPLATE_UNIT'}
+                    if(-not (Test-InternalScopedFieldRefMapEqual $unit.FieldReferences $matchedRow.FieldReferences)){throw 'C_LITE_TEMPLATE_UNIT'}
                 }
                 if($obs.AdapterStatus -ceq 'COMPLETE' -or ($obs.AdapterStatus -ceq 'PARTIAL' -and $obs.ContentUnits.Count -gt 0)){
                     if(-not $trusted){throw 'C_LITE_INDEX_REQUIRED'}
@@ -148,9 +219,6 @@ function New-BenefitScopedHtmlCaptureCandidate {
                             $sourceDocument.SourceFormat -cne 'HTML' -or $sourceDocument.FetchStatus -cne 'COMPLETE' -or
                             $sourceDocument.SourceRowNumber -ne $row){throw 'C_LITE_DOCUMENT_INDEX_REQUIRED'}
                     }
-                }
-                Assert-ScopeObservation -Observation $obs -HtmlValidationIndex $(if($trusted){$index}else{$null})
-                if($obs.AdapterStatus -ceq 'COMPLETE'){
                     $located=Find-BenefitBusinessEvidence -Observation $obs -Business $BusinessIdentity -CanonicalPhone $CanonicalPhone
                     $supplied=$SourceRecord.LocationResult
                     if($null -eq $supplied -or $supplied.Status -cne $located.Status -or $supplied.OperationalStatus -cne $located.OperationalStatus -or
@@ -165,6 +233,7 @@ function New-BenefitScopedHtmlCaptureCandidate {
                         if($binding.BusinessBindingStatus -cne $SourceRecord.Bound.BusinessBindingStatus){throw 'C_LITE_BINDING_MISMATCH'}
                     }elseif($SourceRecord.Slices.Count -ne 0){throw 'C_LITE_UNLOCATED_SLICE'}
                 }else{
+                    Assert-ScopeObservation -Observation $obs -HtmlValidationIndex $(if($trusted){$index}else{$null})
                     $supplied=$SourceRecord.LocationResult
                     if($null -eq $supplied -or $supplied.OperationalStatus -cne $obs.AdapterStatus -or $null -ne $supplied.Status -or
                         $supplied.CandidateReferences.Count -ne 0 -or $SourceRecord.Slices.Count -ne 0){throw 'C_LITE_INCOMPLETE_LOCATION'}
@@ -280,7 +349,7 @@ function New-BenefitScopedHtmlCaptureCandidate {
                 Adapter=[pscustomobject]@{Id=$(if($null -eq $obs){$null}else{$obs.AdapterId});Version=$(if($null -eq $obs){$null}else{$obs.AdapterVersion})}
                 Outcome=$outcome;Scope=$scope;Fields=@($fields);Claims=@($claims)
             }
-            Assert-BenefitScopedEvidenceCapture -Evidence $evidence -Document $d -EvidenceSlice $slice -Extraction $SourceRecord.Extraction -Validation $SourceRecord.Validation -Result $Result -SourceObservation $obs -Business $BusinessIdentity -QualifiedSource $qualified -CanonicalPhone $CanonicalPhone
+            Assert-InternalBenefitScopedEvidenceCapture -Evidence $evidence -Document $d -EvidenceSlice $slice -Extraction $SourceRecord.Extraction -Validation $SourceRecord.Validation -Result $Result -SourceObservation $obs -Business $BusinessIdentity -QualifiedSource $qualified -CanonicalPhone $CanonicalPhone -PrecomputedLocation $located
             $aj=ConvertTo-HistoryCanonicalJson $evidence;$arHash=Get-HistorySha256 $aj
             $ar=New-HistoryArtifactReference -Kind BENEFIT_SCOPED_EVIDENCE -ContentHash $arHash -RelativePath ('artifacts/sha256/'+$arHash+'.json')
             $o=New-HistoryObservation -ObservationId $oid -RunId $RunId -BusinessId $BusinessId -Domain BENEFIT -ObservedAt $ObservedAt -OperationalStatus $assessment.OperationalStatus -Comparable $assessment.Comparable -InputFingerprint $fps.InputFingerprint -EvidenceFingerprint $fps.EvidenceFingerprint -SemanticFingerprint $fps.SemanticFingerprint -ExecutionFingerprint $fps.ExecutionFingerprint -ArtifactReferences @($er,$sr,$ar) -SemanticResultReference $sr.RelativePath -NonComparableReasons @($assessment.NonComparableReasons)

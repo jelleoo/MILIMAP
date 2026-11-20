@@ -375,6 +375,10 @@ function Assert-BenefitScopedEvidenceRelationship {
 }
 function Assert-BenefitScopedEvidenceCapture {
     param([Parameter(Mandatory)]$Evidence,[Parameter(Mandatory)]$Document,[AllowNull()]$EvidenceSlice,[Parameter(Mandatory)]$Extraction,[Parameter(Mandatory)]$Validation,[Parameter(Mandatory)]$Result,[Parameter(Mandatory)][AllowNull()]$SourceObservation,[Parameter(Mandatory)]$Business,[Parameter(Mandatory)]$QualifiedSource,[string]$CanonicalPhone=$null)
+    Assert-InternalBenefitScopedEvidenceCapture -Evidence $Evidence -Document $Document -EvidenceSlice $EvidenceSlice -Extraction $Extraction -Validation $Validation -Result $Result -SourceObservation $SourceObservation -Business $Business -QualifiedSource $QualifiedSource -CanonicalPhone $CanonicalPhone
+}
+function Assert-InternalBenefitScopedEvidenceCapture {
+    param([Parameter(Mandatory)]$Evidence,[Parameter(Mandatory)]$Document,[AllowNull()]$EvidenceSlice,[Parameter(Mandatory)]$Extraction,[Parameter(Mandatory)]$Validation,[Parameter(Mandatory)]$Result,[Parameter(Mandatory)][AllowNull()]$SourceObservation,[Parameter(Mandatory)]$Business,[Parameter(Mandatory)]$QualifiedSource,[string]$CanonicalPhone=$null,[AllowNull()]$PrecomputedLocation=$null)
     Assert-BenefitScopedEvidence $Evidence
     Assert-BenefitSourceDocument $Document
     if($Document.FetchStatus -cne 'COMPLETE' -or $Document.SourceFormat -cne 'HTML' -or $Document.Url -cne $Evidence.Source.Url -or $Document.ObservedAt -cne $Evidence.Source.ObservedAt -or $Document.Text.Length -ne $Evidence.Source.TextLengthUtf16 -or (Get-BenefitEvidenceTextHash $Document.Text) -cne $Evidence.Source.ContentHash){throw 'C_LITE_CAPTURE_DOCUMENT'}
@@ -407,7 +411,7 @@ function Assert-BenefitScopedEvidenceCapture {
         if($SourceObservation.Snapshot.Text -cne $Document.Text -or $SourceObservation.SourceUrl -cne $Document.Url -or $SourceObservation.ObservedAt -cne $Document.ObservedAt -or $SourceObservation.SourceFormat -cne 'HTML'){throw 'C_LITE_TRUSTED_SOURCE'}
         if($Evidence.Adapter.Id -cne $SourceObservation.AdapterId -or $Evidence.Adapter.Version -cne $SourceObservation.AdapterVersion -or $Evidence.Outcome.AdapterStatus -cne $SourceObservation.AdapterStatus -or ($null -ne $Evidence.Outcome.ContentUnitCount -and $Evidence.Outcome.ContentUnitCount -ne $SourceObservation.ContentUnits.Count)){throw 'C_LITE_TRUSTED_ADAPTER'}
         if($SourceObservation.AdapterStatus -ceq 'COMPLETE'){
-            $located=Find-BenefitBusinessEvidence -Observation $SourceObservation -Business $Business -CanonicalPhone $CanonicalPhone
+            $located=if($null -ne $PrecomputedLocation){$PrecomputedLocation}else{Find-BenefitBusinessEvidence -Observation $SourceObservation -Business $Business -CanonicalPhone $CanonicalPhone}
             if($located.OperationalStatus -cne $Evidence.Outcome.LocationOperationalStatus -or $located.Status -cne $Evidence.Outcome.LocationStatus){throw 'C_LITE_TRUSTED_LOCATION'}
             if($null -eq $Evidence.Outcome.CandidateReferenceCount -or $Evidence.Outcome.CandidateReferenceCount -ne @($located.CandidateReferences).Count -or (ConvertTo-HistoryCanonicalJson @($located.CandidateReferences|Sort-Object -CaseSensitive)) -cne (ConvertTo-HistoryCanonicalJson @($Evidence.Outcome.CandidateReferences|Sort-Object -CaseSensitive))){throw 'C_LITE_CANDIDATE_LINK'}
         }else{

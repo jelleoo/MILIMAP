@@ -55,7 +55,7 @@ class BundledSeedSynchronizerTest {
         assertEquals(261, database.benefitDao().countAll())
         assertEquals(BUNDLED_SEED_VERSION, database.seedStateDao().version(BUNDLED_SEED_NAME))
         assertEquals(0, normalizedDuplicateCount(database.benefitDao().getAllOnce()))
-        assertEquals(111, database.benefitDao().getAllOnce().count {
+        assertEquals(238, database.benefitDao().getAllOnce().count {
             it.latitude != null && it.longitude != null
         })
 

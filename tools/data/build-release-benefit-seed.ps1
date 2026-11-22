@@ -1,4 +1,4 @@
-[CmdletBinding()]
+﻿[CmdletBinding()]
 param(
     [Parameter(Mandatory = $true)]
     [string]$CanonicalCsv,
@@ -146,6 +146,9 @@ foreach ($candidate in $candidates) {
     $item.usageCondition = Get-RowValue $candidate '출시이용조건'
     $item.verificationMethod = Get-RequiredRowValue $candidate '출시인증방법'
     $item.sourceLabel = "$(Get-RequiredRowValue $candidate '출처유형') · 최신 확인"
+    if ($item.sourceType -eq 'MMA_API') {
+        $item.sourceType = 'PUBLIC_EVIDENCE'
+    }
     $item.sourceUrl = Get-RequiredRowValue $candidate '출처URL'
     $item.lastVerifiedAt = Get-RequiredRowValue $candidate '최근확인일'
     $item.status = 'ACTIVE'

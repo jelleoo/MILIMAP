@@ -10,6 +10,7 @@ param(
     [string]$YangjuComparisonCsv,
     [Parameter(Mandatory = $true)]
     [string]$OutputCsv,
+    [string]$MmaComparisonCsv = '',
     [string]$PajuProgramSourceUrl = 'https://www.paju.go.kr/www/www_02/health/health_03/health_03_09/health_03_09_01.jsp',
     [string]$YangjuSourceUrl = 'https://www.yangju.go.kr/health/selectBbsNttView.do?key=2716&bbsNo=81&nttNo=208699',
     [string]$VerifiedOn = '2026-09-06'
@@ -191,6 +192,29 @@ foreach ($comparison in $yangjuRows | Where-Object {
         -SourceUrl $YangjuSourceUrl `
         -DecisionReason '양주시 공식 목록에서 상호·주소·전화·메뉴·개별 할인 확인' `
         -RowVerifiedOn (Get-RowValue $comparison '확인일'))
+}
+
+if (-not [string]::IsNullOrWhiteSpace($MmaComparisonCsv)) {
+    $mmaRows = @(Import-Csv -LiteralPath $MmaComparisonCsv -Encoding utf8)
+    foreach ($comparison in $mmaRows | Where-Object {
+        (Get-RowValue $_ '판정') -eq '현재 공식 목록 일치 후보' -and
+        -not [string]::IsNullOrWhiteSpace((Get-RowValue $_ '공식할인정보'))
+    }) {
+        $resolved = Resolve-Canonical $comparison
+        $canonical = $resolved.Row
+        Add-Candidate (New-ReleaseCandidate `
+            -Canonical $canonical `
+            -RowNumber $resolved.RowNumber `
+            -CopyType '세부' `
+            -Description (Get-RequiredRowValue $comparison '공식할인정보') `
+            -EligibleTarget (Get-RequiredRowValue $canonical '적용대상') `
+            -UsageCondition (Get-RowValue $canonical '이용조건') `
+            -VerificationMethod (Get-RequiredRowValue $canonical '인증방법') `
+            -SourceType '병무청 나라사랑가게' `
+            -SourceUrl (Get-RequiredRowValue $canonical '출처URL') `
+            -DecisionReason '병무청 나라사랑가게 공식 목록 실전 매칭 및 다중 API 좌표 교차검증 승인' `
+            -RowVerifiedOn (Get-RowValue $comparison '확인일'))
+    }
 }
 
 $resolvedOutput = [IO.Path]::GetFullPath($OutputCsv)

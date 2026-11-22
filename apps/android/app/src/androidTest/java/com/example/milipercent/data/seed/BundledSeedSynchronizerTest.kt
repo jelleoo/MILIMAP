@@ -39,7 +39,7 @@ class BundledSeedSynchronizerTest {
     }
 
     @Test
-    fun verifiedBundledAssetsInstallOnceAs249Rows() = runBlocking {
+    fun verifiedBundledAssetsInstallOnceAs261Rows() = runBlocking {
         val synchronizer = BundledSeedSynchronizer(
             database = database,
             manifestSource = AssetJsonSource(context, "benefits.seed.manifest.json"),
@@ -51,8 +51,8 @@ class BundledSeedSynchronizerTest {
         val first = synchronizer.synchronizeIfNeeded()
 
         assertTrue(first.installed)
-        assertEquals(249, first.storedCount)
-        assertEquals(249, database.benefitDao().countAll())
+        assertEquals(261, first.storedCount)
+        assertEquals(261, database.benefitDao().countAll())
         assertEquals(BUNDLED_SEED_VERSION, database.seedStateDao().version(BUNDLED_SEED_NAME))
         assertEquals(0, normalizedDuplicateCount(database.benefitDao().getAllOnce()))
         assertEquals(111, database.benefitDao().getAllOnce().count {
@@ -62,8 +62,8 @@ class BundledSeedSynchronizerTest {
         val second = synchronizer.synchronizeIfNeeded()
 
         assertFalse(second.installed)
-        assertEquals(249, second.storedCount)
-        assertEquals(249, database.benefitDao().countAll())
+        assertEquals(261, second.storedCount)
+        assertEquals(261, database.benefitDao().countAll())
     }
 
     @Test
@@ -94,7 +94,7 @@ class BundledSeedSynchronizerTest {
         val result = synchronizer.synchronizeIfNeeded()
 
         assertTrue(result.installed)
-        assertEquals(251, result.storedCount)
+        assertEquals(263, result.storedCount)
         assertTrue(database.favoriteDao().contains(userId, retainedBundled.id))
         assertFalse(database.favoriteDao().contains(userId, retiredBundled.id))
         assertNull(database.benefitDao().getByIdOnce(retiredBundled.id))

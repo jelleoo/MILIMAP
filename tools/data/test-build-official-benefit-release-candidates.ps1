@@ -1,4 +1,4 @@
-$ErrorActionPreference = 'Stop'
+﻿$ErrorActionPreference = 'Stop'
 
 function Assert-Equal {
     param(
@@ -38,6 +38,32 @@ Assert-Equal -Actual $paju.출처URL -Expected 'https://www.paju.go.kr/www/www_0
 $yangju = @($rows | Where-Object { $_.업소명 -eq '양주 업소' })[0]
 Assert-Equal -Actual $yangju.혜택문구유형 -Expected '세부' -Message '양주 공식 개별 할인은 세부 문구로 유지해야 합니다'
 Assert-Equal -Actual $yangju.출시할인정보 -Expected '돈가스: 10% 할인' -Message '양주 공식 메뉴와 할인 정보를 함께 표시해야 합니다'
+Assert-Equal -Actual $ddc.최근확인일 -Expected '2026-09-06' -Message '비교 CSV에 확인일이 없으면 기본 VerifiedOn(2026-09-06)을 사용해야 합니다'
+
+$datedDdcPath = Join-Path ([IO.Path]::GetTempPath()) ('official-benefit-release-candidates-dated-' + [guid]::NewGuid().ToString('N') + '.csv')
+$datedOutputPath = Join-Path ([IO.Path]::GetTempPath()) ('official-benefit-release-candidates-dated-out-' + [guid]::NewGuid().ToString('N') + '.csv')
+@'
+정본CSV행번호,업소명,소재지도로명주소,공식할인정보,판정,확인일
+2,동두천 업소,테스트로 1,전 메뉴 15% 할인,현재 공식 목록 일치 후보,2026-11-20
+'@ | Set-Content -LiteralPath $datedDdcPath -Encoding utf8
+
+try {
+    & $scriptPath `
+        -CanonicalCsv (Join-Path $fixtureRoot 'canonical.csv') `
+        -DdcComparisonCsv $datedDdcPath `
+        -PajuComparisonCsv (Join-Path $fixtureRoot 'paju.csv') `
+        -YangjuComparisonCsv (Join-Path $fixtureRoot 'yangju.csv') `
+        -OutputCsv $datedOutputPath
+
+    $datedRows = @(Import-Csv -LiteralPath $datedOutputPath -Encoding utf8)
+    $datedDdc = @($datedRows | Where-Object { $_.업소명 -eq '동두천 업소' })[0]
+    $datedPaju = @($datedRows | Where-Object { $_.업소명 -eq '파주 업소' })[0]
+    Assert-Equal -Actual $datedDdc.최근확인일 -Expected '2026-11-20' -Message '비교 CSV에 행별 확인일이 있으면 해당 날짜를 우선 사용해야 합니다'
+    Assert-Equal -Actual $datedPaju.최근확인일 -Expected '2026-09-06' -Message '확인일 컬럼이 없는 행은 기본 VerifiedOn으로 폴백해야 합니다'
+} finally {
+    if (Test-Path -LiteralPath $datedDdcPath) { Remove-Item -LiteralPath $datedDdcPath -Force }
+    if (Test-Path -LiteralPath $datedOutputPath) { Remove-Item -LiteralPath $datedOutputPath -Force }
+}
 
 $mismatchDdcPath = Join-Path ([IO.Path]::GetTempPath()) ('official-benefit-release-candidates-mismatch-' + [guid]::NewGuid().ToString('N') + '.csv')
 $mismatchOutputPath = Join-Path ([IO.Path]::GetTempPath()) ('official-benefit-release-candidates-mismatch-output-' + [guid]::NewGuid().ToString('N') + '.csv')

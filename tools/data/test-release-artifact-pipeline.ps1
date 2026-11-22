@@ -46,7 +46,7 @@ try {
         -CanonicalCsv $canonicalCsv `
         -DdcComparisonCsv (Join-Path $reportsRoot 'ddc-benefit-comparison-20261120.csv') `
         -PajuComparisonCsv (Join-Path $reportsRoot 'paju-benefit-comparison-20260906.csv') `
-        -YangjuComparisonCsv (Join-Path $reportsRoot 'yangju-benefit-comparison-20260906.csv') `
+        -YangjuComparisonCsv (Join-Path $reportsRoot 'yangju-benefit-comparison-20261122.csv') `
         -OutputCsv $candidateCsv
     Assert-Equal -Actual (@(Import-Csv -LiteralPath $candidateCsv -Encoding utf8).Count) -Expected 261 -Message '공식 최신 근거 출시 후보는 261건이어야 합니다'
 
@@ -61,8 +61,11 @@ try {
     Assert-Equal -Actual $releaseItems.Count -Expected 261 -Message '출시 시드는 공식 최신 근거 261건만 포함해야 합니다'
     Assert-Equal -Actual (@($releaseItems | Where-Object { $_.status -eq 'ACTIVE' }).Count) -Expected 261 -Message '출시 시드 항목은 모두 이용 가능 상태여야 합니다'
     Assert-Equal -Actual (@($releaseItems | Where-Object { $null -ne $_.latitude -and $null -ne $_.longitude }).Count) -Expected 111 -Message '엄격 POI 대조를 통과한 111건만 지도 핀을 가져야 합니다'
+    Assert-Equal -Actual (@($releaseItems | Where-Object { $_.lastVerifiedAt -eq '2026-11-22' }).Count) -Expected 24 -Message '2026-11-22 승인 반영 양주시 24건만 2026-11-22 확인일을 가져야 합니다'
     Assert-Equal -Actual (@($releaseItems | Where-Object { $_.lastVerifiedAt -eq '2026-11-20' }).Count) -Expected 46 -Message '2026-11-20 승인 반영 동두천시 46건만 2026-11-20 확인일을 가져야 합니다'
-    Assert-Equal -Actual (@($releaseItems | Where-Object { $_.lastVerifiedAt -eq '2026-09-06' }).Count) -Expected 215 -Message '기존 확인일 유지 항목 215건은 2026-09-06 확인일을 유지해야 합니다'
+    Assert-Equal -Actual (@($releaseItems | Where-Object { $_.lastVerifiedAt -eq '2026-09-06' }).Count) -Expected 191 -Message '기존 확인일 유지 항목 191건은 2026-09-06 확인일을 유지해야 합니다'
+    Assert-Equal -Actual (@($releaseItems | Where-Object { $_.sourceUrl -like '*nttNo=208699*' }).Count) -Expected 27 -Message '양주시 시드 27건은 현행 공식 안내 URL(nttNo=208699)을 가리켜야 합니다'
+    Assert-Equal -Actual (@($releaseItems | Where-Object { $_.sourceUrl -like '*nttNo=206761*' }).Count) -Expected 0 -Message '삭제된 양주시 구 안내 URL(nttNo=206761)을 참조하면 안 됩니다'
     Assert-Equal -Actual (Get-NormalizedJson -Path $releaseJson) -Expected (Get-NormalizedJson -Path $appSeed) -Message '정본 파이프라인 결과가 Android 내장 출시 시드와 일치해야 합니다'
 
     if (-not (Test-Path -LiteralPath $appManifest -PathType Leaf)) {
@@ -74,7 +77,7 @@ try {
     }
     $committedManifest = Read-ReleaseUtf8Text -Path $appManifest | ConvertFrom-Json @manifestJsonOptions
     Assert-BenefitReleaseSeedManifest -Manifest $committedManifest
-    Assert-Equal -Actual ([int]$committedManifest.seedVersion) -Expected 8 -Message '현재 261건 시드 매니페스트의 seedVersion은 8이어야 합니다'
+    Assert-Equal -Actual ([int]$committedManifest.seedVersion) -Expected 9 -Message '현재 261건 시드 매니페스트의 seedVersion은 9여야 합니다'
     Assert-Equal -Actual ([int]$committedManifest.totalCount) -Expected 261 -Message '매니페스트 totalCount는 261이어야 합니다'
     Assert-Equal -Actual ([int]$committedManifest.exactPinCount) -Expected 111 -Message '매니페스트 exactPinCount는 111이어야 합니다'
     Assert-Equal -Actual ([int]$committedManifest.unconfirmedCoordinateCount) -Expected 150 -Message '매니페스트 unconfirmedCoordinateCount는 150이어야 합니다'

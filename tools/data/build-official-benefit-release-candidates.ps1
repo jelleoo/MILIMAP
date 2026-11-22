@@ -11,7 +11,7 @@ param(
     [Parameter(Mandatory = $true)]
     [string]$OutputCsv,
     [string]$PajuProgramSourceUrl = 'https://www.paju.go.kr/www/www_02/health/health_03/health_03_09/health_03_09_01.jsp',
-    [string]$YangjuSourceUrl = 'https://www.yangju.go.kr/health/selectBbsNttView.do?key=2716&bbsNo=81&nttNo=206761',
+    [string]$YangjuSourceUrl = 'https://www.yangju.go.kr/health/selectBbsNttView.do?key=2716&bbsNo=81&nttNo=208699',
     [string]$VerifiedOn = '2026-09-06'
 )
 

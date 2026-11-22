@@ -8,7 +8,7 @@ import com.example.milipercent.data.local.SeedStateEntity
 import java.util.Locale
 
 const val BUNDLED_SEED_NAME = "benefits"
-const val BUNDLED_SEED_VERSION = 8
+const val BUNDLED_SEED_VERSION = 9
 private val BUNDLED_SEED_SOURCE_TYPES = listOf(
     BenefitSourceType.LOCAL_GOV.name,
     BenefitSourceType.MANUAL_SEED.name,

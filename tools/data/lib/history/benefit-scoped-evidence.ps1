@@ -173,13 +173,13 @@ function Assert-BenefitScopedEvidence {
         if($null -ne $a.Scope -or $a.Fields.Count -ne 0 -or $a.Claims.Count -ne 0){throw 'C_LITE_OUTCOME_HAS_FIELDS'}
     }else{
         foreach($key in @('ObservationOperationalStatus','FetchStatus','AdapterStatus','LocationOperationalStatus','ExtractionStatus','ValidationStatus')){if($o.$key -cne 'COMPLETE'){throw 'C_LITE_INCOMPLETE_SCOPED'}}
-        if(-not $o.Comparable -or $o.OfficialityStatus -cne 'VERIFIED_OFFICIAL' -or $o.LocationStatus -cne 'LOCATED' -or $o.BindingStatus -cne 'STRONG' -or $null -eq $o.ClaimValidationCounts -or $null -eq $o.ContentUnitCount -or $o.ContentUnitCount -lt 1 -or $o.CandidateReferenceCount -ne 1){throw 'C_LITE_INCOMPLETE_SCOPED'}
+        if(-not $o.Comparable -or $o.OfficialityStatus -cne 'VERIFIED_OFFICIAL' -or $o.LocationStatus -cne 'LOCATED' -or $o.BindingStatus -cne 'STRONG' -or $null -eq $o.ClaimValidationCounts -or $null -eq $o.ContentUnitCount -or $o.ContentUnitCount -lt 1 -or $o.CandidateReferenceCount -lt 1){throw 'C_LITE_INCOMPLETE_SCOPED'}
         $counts=$o.ClaimValidationCounts
         if($counts.Invalid+$counts.Conflict+$counts.Unknown -ne 0 -or $counts.Total -ne $a.Claims.Count){throw 'C_LITE_INCOMPLETE_CLAIMS'}
         Assert-InternalScopedObject $a.Scope @('Type','Reference','TableStart','TableLength','RowStart','RowLength')
         Assert-InternalScopedCode $a.Scope.Type @('TABLE_ROW')
         Assert-InternalScopedString $a.Scope.Reference 128 '^HTML_TABLE_[1-9][0-9]*_ROW_[1-9][0-9]*$'
-        if($o.CandidateReferences[0] -cne $a.Scope.Reference){throw 'C_LITE_SCOPE_REFERENCE'}
+        if($a.Scope.Reference -cnotin $o.CandidateReferences){throw 'C_LITE_SCOPE_REFERENCE'}
         Assert-InternalScopedSpan $a.Scope.TableStart $a.Scope.TableLength 0 $a.Source.TextLengthUtf16
         Assert-InternalScopedSpan $a.Scope.RowStart $a.Scope.RowLength $a.Scope.TableStart $a.Scope.TableLength
         $keys=[Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)

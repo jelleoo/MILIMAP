@@ -215,6 +215,29 @@ Assert-ScopeEqual $partialXlsxObservation.AdapterStatus PARTIAL 'Partial XLSX ob
 Assert-ScopeEqual $partialLocation.OperationalStatus PARTIAL 'Partial XLSX location remains operationally partial'
 Assert-ScopeTrue ($null -eq $partialLocation.Status) 'Partial XLSX cannot claim semantic NOT_FOUND'
 
+$decodedTextXlsxHttp = {
+    param($Uri)
+    [pscustomobject]@{
+        StatusCode  = 200
+        ContentType = 'application/octer-stream; charset=UTF-8'
+        Text        = [Text.Encoding]::UTF8.GetString($xlsxBytes)
+        Bytes       = $xlsxBytes
+    }
+}.GetNewClosure()
+$decodedTextXlsxCtx = New-BenefitSourceRunContext
+$decodedTextXlsxCandidate = New-RunCandidate -RowNumber 2 -Url 'https://city.example.go.kr/downloadBbsFile.do?atchmnflNo=204211'
+$decodedTextXlsxDoc = Get-BenefitRunSourceDocument -Context $decodedTextXlsxCtx -Candidate $decodedTextXlsxCandidate -RequestInvoker $decodedTextXlsxHttp
+$decodedTextXlsxSnap = Get-BenefitRunSourceSnapshot -Context $decodedTextXlsxCtx -Document $decodedTextXlsxDoc
+Assert-ScopeEqual $decodedTextXlsxSnap.SourceFormat 'XLSX' 'Binary download ending in .do still classifies as XLSX'
+Assert-ScopeEqual $decodedTextXlsxSnap.Text '' 'XLSX byte-backed snapshot must clear decoded HTTP response Text'
+Assert-ScopeTrue ($decodedTextXlsxSnap.Bytes.Length -eq $xlsxBytes.Length) 'XLSX byte-backed snapshot retains original Bytes'
+$decodedTextXlsxObs = Get-BenefitRunXlsxObservation -Context $decodedTextXlsxCtx -Document $decodedTextXlsxDoc
+Assert-ScopeEqual $decodedTextXlsxObs.AdapterStatus 'COMPLETE' 'XLSX observation with decoded response Text completes'
+$decodedTextXlsxScoped = Invoke-ScopedPhase2BenefitSourceCandidate -Candidate $decodedTextXlsxCandidate -Business $xlsxBusiness -CanonicalPhone '031-861-4800' -RunContext $decodedTextXlsxCtx -RequestInvoker $decodedTextXlsxHttp
+Assert-ScopeEqual $decodedTextXlsxScoped.LocationResult.Status 'LOCATED' 'XLSX scoped downstream locates business when HTTP response also supplied Text'
+Assert-ScopeEqual $decodedTextXlsxScoped.Bound.BusinessBindingStatus 'STRONG' 'XLSX scoped downstream preserves strong binding when HTTP response supplied Text'
+Assert-ScopeEqual $decodedTextXlsxScoped.Validation.Status 'COMPLETE' 'XLSX scoped downstream validates claim when HTTP response supplied Text'
+
 # The run-context fast path covers the complete scoped HTML chain, not just
 # observation creation.  Once the fetch boundary created its trusted snapshot,
 # no later locator/binding/extraction/validation step may hash the same text.

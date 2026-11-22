@@ -1,4 +1,4 @@
-$ErrorActionPreference='Stop'
+﻿$ErrorActionPreference='Stop'
 $module=Join-Path $PSScriptRoot 'lib/history/benefit-scoped-evidence.ps1'
 if(-not (Test-Path -LiteralPath $module)){ throw 'RED: inactive C-Lite contract module is missing' }
 . $module
@@ -607,4 +607,21 @@ Check (-not (Test-InternalBenefitHtmlRunContextSnapshotTrust $publicParameters.S
 $measured=Measure-CaptureTokenizer $publicParameters
 Check ($null -eq $measured.Failure -and $measured.Calls -gt 0) 'standalone public PARTIAL retains strict validation'
 Write-Host "PR2A standalone public strict additional tokenizer calls=$($measured.Calls)"
+$aMulti0=Copy-Case $c.Artifact
+$aMulti0.Outcome.CandidateReferences=@($c.Artifact.Scope.Reference,'HTML_TABLE_1_ROW_3')
+$aMulti0.Outcome.CandidateReferenceCount=2
+Assert-BenefitScopedEvidence $aMulti0
+Check ($aMulti0.Outcome.CandidateReferenceCount -eq 2) 'multi-candidate LOCATED_FIELDS accepts index 0 match'
+
+$aMulti1=Copy-Case $c.Artifact
+$aMulti1.Outcome.CandidateReferences=@('HTML_TABLE_1_ROW_3',$c.Artifact.Scope.Reference)
+$aMulti1.Outcome.CandidateReferenceCount=2
+Assert-BenefitScopedEvidence $aMulti1
+Check ($aMulti1.Outcome.CandidateReferenceCount -eq 2) 'multi-candidate LOCATED_FIELDS accepts index 1 match'
+
+$aMultiMissing=Copy-Case $c.Artifact
+$aMultiMissing.Outcome.CandidateReferences=@('HTML_TABLE_1_ROW_3','HTML_TABLE_1_ROW_4')
+$aMultiMissing.Outcome.CandidateReferenceCount=2
+Reject {Assert-BenefitScopedEvidence $aMultiMissing} 'multi-candidate LOCATED_FIELDS rejects Scope.Reference absent from CandidateReferences'
+
 Write-Host "PASS: complete PR2A assertions=$script:checks"

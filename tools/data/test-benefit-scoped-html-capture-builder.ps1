@@ -319,4 +319,14 @@ $dupKey=$dupSnap.SnapshotId+'|HTML_GENERIC|1'
 $pDup.RunContext.TemplateCache[$dupKey].Rows+=@($pDup.RunContext.TemplateCache[$dupKey].Rows[0])
 Expect-BuilderRejected $pDup 'C_LITE_TEMPLATE_UNIT duplicate UnitReference in template rows'
 
+# Regression: disambiguated multi-candidate LOCATED_FIELDS keeps all name candidates and locates either index.
+$disambigHtml='<table><tr><th>업소명</th><th>주소</th><th>할인</th></tr><tr><td>여명양평해장국</td><td>서울특별시 마포구 테스트로 12</td><td>10% 할인</td></tr><tr><td>여명 양평해장국</td><td>서울특별시 마포구 테스트로 99</td><td>10% 할인</td></tr></table>'
+foreach($caseSpec in @(@{Name='여명양평해장국';Building='12';ExpectedRef='HTML_TABLE_1_ROW_2'},@{Name='여명 양평해장국';Building='99';ExpectedRef='HTML_TABLE_1_ROW_3'})){
+    $pDisambig=New-BuilderFixture -Html $disambigHtml -Name $caseSpec.Name -Building $caseSpec.Building
+    $bDisambig=New-BenefitScopedHtmlCaptureCandidate @pDisambig
+    Check-Builder ($bDisambig.Status -ceq 'READY') "disambiguated multi-candidate $($caseSpec.ExpectedRef) READY"
+    $eDisambig=Get-BuilderEvidence $bDisambig
+    Check-Builder ($eDisambig.Mode -ceq 'LOCATED_FIELDS' -and $eDisambig.Outcome.LocationStatus -ceq 'LOCATED' -and $eDisambig.Outcome.CandidateReferenceCount -eq 2 -and $eDisambig.Scope.Reference -ceq $caseSpec.ExpectedRef -and ($eDisambig.Scope.Reference -cin $eDisambig.Outcome.CandidateReferences)) "disambiguated multi-candidate $($caseSpec.ExpectedRef) retains all candidates"
+}
+
 Write-Host "PASS: C-Lite builder assertions=$script:BuilderChecks"

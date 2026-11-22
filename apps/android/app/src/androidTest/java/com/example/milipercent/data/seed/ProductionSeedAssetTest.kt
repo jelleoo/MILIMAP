@@ -38,8 +38,8 @@ class ProductionSeedAssetTest {
         assertEquals(manifest.seedSha256, sha256LfUtf8(legacyRawText))
         assertEquals(manifest.manualSeedSha256, sha256LfUtf8(manualRawText))
         assertEquals(261, benefits.size)
-        assertEquals(111, benefits.count { it.latitude != null && it.longitude != null })
-        assertEquals(150, benefits.count { it.latitude == null && it.longitude == null })
+        assertEquals(238, benefits.count { it.latitude != null && it.longitude != null })
+        assertEquals(23, benefits.count { it.latitude == null && it.longitude == null })
         assertTrue(benefits.all { it.sourceLabel.endsWith("최신 확인") })
     }
 }

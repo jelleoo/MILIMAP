@@ -1,4 +1,4 @@
-Set-StrictMode -Version Latest
+﻿Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
 . (Join-Path (Split-Path -Parent $PSScriptRoot) 'benefit-verification-contracts.ps1')
@@ -124,7 +124,7 @@ function Invoke-BenefitEvidenceExtraction {
             if (-not $EvidenceSlice.StructuredFields.Contains($field) -or -not $EvidenceSlice.FieldReferences.Contains($field)) { continue }
             $value = [string]$EvidenceSlice.StructuredFields[$field]
             if ([string]::IsNullOrWhiteSpace($value)) { continue }
-            if ($field -ceq 'ValidUntilObserved' -and $value -ceq '9999-12-31') { continue }
+            if ($field -ceq 'ValidUntilObserved' -and ($value -ceq '9999-12-31' -or $value -ceq '9999년 12월 31일')) { continue }
             $reference = $EvidenceSlice.FieldReferences[$field]
             if ($null -eq $reference -or [string]::IsNullOrWhiteSpace([string]$reference.FieldReference)) { continue }
             $claim = New-ExtractedBenefitClaim -ClaimType $detailMap[$field] -Value $value -EvidenceText $value -EvidenceReference $reference.FieldReference -SourceUrl $Document.Url -ExtractionMethod $method

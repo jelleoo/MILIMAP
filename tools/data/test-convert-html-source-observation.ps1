@@ -1,4 +1,4 @@
-$ErrorActionPreference = 'Stop'
+﻿$ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'testdata/benefit-evidence-location/test-support.ps1')
 $parserPath = Join-Path $PSScriptRoot 'lib/benefit-evidence/convert-html-source-observation.ps1'
 if (-not (Test-Path -LiteralPath $parserPath)) { throw 'Generic HTML observation parser is missing' }
@@ -94,5 +94,25 @@ $datedPage = (Get-ScopeTestHtml) + '<p>2026-12-31까지 안내</p>'
 $datedObservation = ConvertTo-BenefitHtmlObservation -Document (New-ScopeTestDocument -Html $datedPage)
 Assert-ScopeTrue (-not $datedObservation.ContentUnits[0].StructuredFields.Contains('ValidUntil')) 'Page dates cannot invent ValidUntil evidence'
 Assert-ScopeTrue (-not $datedObservation.ContentUnits[0].StructuredFields.Contains('CurrentApplicability')) 'Page dates cannot invent currentness evidence'
+
+$pajuHtml = '<table><tr><th scope="col">연번</th><th scope="col">지역</th><th scope="col">업종</th><th scope="col">업소명<br/>(할인현황)</th><th scope="col">소재지</th><th scope="col">전화번호</th></tr><tr class="bg-whiteblue"><td colspan="3">계</td><td colspan="3" id="totalCnt"></td></tr><tr><td>1</td><td>광탄면</td><td>일반음식점</td><td>두둑한한판<br/></td><td>파주시 광탄면 보광로 646</td><td>031-949-7646</td></tr></table>'
+$pajuObs = ConvertTo-BenefitHtmlObservation -Document (New-ScopeTestDocument -Html $pajuHtml)
+Assert-ParserStatus $pajuObs 'COMPLETE' 'Paju composite header and aggregate summary total row must parse completely'
+Assert-ScopeEqual @($pajuObs.ContentUnits).Count 1 'Aggregate summary row must be skipped without fabricating a unit'
+Assert-ScopeEqual $pajuObs.ContentUnits[0].UnitReference 'HTML_TABLE_1_ROW_3' 'Skipped summary row must preserve exact physical row numbering'
+Assert-ScopeEqual $pajuObs.ContentUnits[0].StructuredFields.BusinessName '두둑한한판' 'Paju business name extracts from composite header column'
+Assert-ScopeEqual $pajuObs.ContentUnits[0].StructuredFields.Address '파주시 광탄면 보광로 646' 'Paju address extracts cleanly'
+Assert-ScopeEqual $pajuObs.ContentUnits[0].StructuredFields.Phone '031-949-7646' 'Paju phone extracts cleanly'
+Assert-ScopeEqual $pajuObs.ContentUnits[0].FieldReferences.BusinessName.OriginalHeader '업소명 (할인현황)' 'Original header text preserves composite header wording'
+
+foreach ($badSummaryHtml in @(
+    '<table><tr><th>업소명 (할인현황)</th><th>소재지</th><th>전화번호</th></tr><tr><td colspan="2" rowspan="2">계</td><td></td></tr><tr><td>가게</td><td>주소</td><td>031-000-0000</td></tr></table>',
+    '<table><tr><th>업소명 (할인현황)</th><th>소재지</th><th>전화번호</th></tr><tr><td colspan="2">계</td><td colspan="2"></td></tr><tr><td>가게</td><td>주소</td><td>031-000-0000</td></tr></table>',
+    '<table><tr><th>연번</th><th>지역</th><th>업종</th><th>업소명 (할인현황)</th><th>소재지</th><th>전화번호</th></tr><tr><td colspan="3">계</td><td colspan="3">가게명</td></tr></table>'
+)) {
+    $badSummaryObs = ConvertTo-BenefitHtmlObservation -Document (New-ScopeTestDocument -Html $badSummaryHtml)
+    Assert-ParserStatus $badSummaryObs 'PARTIAL' 'Malformed, rowspan-bearing, or business-bearing spanned rows must still fail closed'
+    Assert-ScopeEqual @($badSummaryObs.ContentUnits).Count 0 'Unsafe spanned rows must emit zero units'
+}
 
 Write-Host 'Generic HTML source observation parser tests passed.'

@@ -1,4 +1,4 @@
-Set-StrictMode -Version Latest
+﻿Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
 . (Join-Path $PSScriptRoot '../benefit-evidence-location-contracts.ps1')
@@ -42,6 +42,54 @@ function Test-A1HtmlCellSpanSafe {
         if (-not [int]::TryParse($value, [ref]$number) -or $number -ne 1) { return $false }
     }
     if ($OpenTag -match '\b(?:rowspan|colspan)\b' -and $matches.Count -eq 0) { return $false }
+    return $true
+}
+
+function Test-A1HtmlAggregateSummaryRow {
+    param(
+        [string]$Text,
+        [object[]]$Headers,
+        [object[]]$Cells,
+        [int]$ExpectedColumnCount
+    )
+
+    # Skip only non-business aggregate total rows (e.g. Paju `<td colspan="3">계</td><td colspan="3" id="totalCnt"></td>`)
+    # while keeping any spanned row containing business text fail-closed.
+    if ($Headers.Count -ne 0 -or $Cells.Count -lt 2 -or $Cells.Count -ge $ExpectedColumnCount) { return $false }
+
+    $spanTotal = 0
+    foreach ($cell in $Cells) {
+        $openTag = $Text.Substring([int]$cell.Start, [int]$cell.OpenLength)
+        $rowSpanMatches = [regex]::Matches($openTag, '\browspan\s*=\s*(?<value>"[^"]*"|''[^'']*''|[^\s>]+)', [Text.RegularExpressions.RegexOptions]::IgnoreCase, [TimeSpan]::FromSeconds(1))
+        if ($openTag -match '\browspan\b' -and $rowSpanMatches.Count -eq 0) { return $false }
+        foreach ($m in $rowSpanMatches) {
+            $num = 0
+            $raw = $m.Groups['value'].Value.Trim().Trim('"', '''').Trim()
+            if (-not [int]::TryParse($raw, [ref]$num) -or $num -ne 1) { return $false }
+        }
+
+        $colSpanMatches = [regex]::Matches($openTag, '\bcolspan\s*=\s*(?<value>"[^"]*"|''[^'']*''|[^\s>]+)', [Text.RegularExpressions.RegexOptions]::IgnoreCase, [TimeSpan]::FromSeconds(1))
+        if ($openTag -match '\bcolspan\b' -and $colSpanMatches.Count -ne 1) { return $false }
+        if ($colSpanMatches.Count -eq 1) {
+            $colSpan = 0
+            $rawCol = $colSpanMatches[0].Groups['value'].Value.Trim().Trim('"', '''').Trim()
+            if (-not [int]::TryParse($rawCol, [ref]$colSpan) -or $colSpan -lt 1) { return $false }
+            $spanTotal += $colSpan
+        } else {
+            $spanTotal += 1
+        }
+    }
+    if ($spanTotal -ne $ExpectedColumnCount) { return $false }
+
+    $firstText = ConvertFrom-ScopeHtmlText -Text $Text.Substring([int]$Cells[0].Start, [int]($Cells[0].End - $Cells[0].Start))
+    if ($firstText -cnotin @('계', '합계', '총계', '소계')) { return $false }
+
+    for ($i = 1; $i -lt $Cells.Count; $i++) {
+        $cellText = ConvertFrom-ScopeHtmlText -Text $Text.Substring([int]$Cells[$i].Start, [int]($Cells[$i].End - $Cells[$i].Start))
+        if (-not [string]::IsNullOrWhiteSpace($cellText) -and $cellText -cnotmatch '^\d+(?:\s*(?:건|개|개소))?$') {
+            return $false
+        }
+    }
     return $true
 }
 
@@ -89,6 +137,7 @@ function Get-A1HtmlTableTemplate {
         if ($row.Start -eq $headerRow.Row.Start) { continue }
         $headers = @(Get-A1ContainedHtmlPairs -Pairs $HeaderPairs -Start $row.Start -End $row.End)
         $cells = @(Get-A1ContainedHtmlPairs -Pairs $CellPairs -Start $row.Start -End $row.End)
+        if (Test-A1HtmlAggregateSummaryRow -Text $Text -Headers $headers -Cells $cells -ExpectedColumnCount $headerRow.Headers.Count) { continue }
         if ($headers.Count -gt 0 -or $cells.Count -ne $headerRow.Headers.Count) {
             return [pscustomobject]@{ IsCandidate=$true; IsSafe=$false; Rows=@(); Diagnostic=(New-A1HtmlDiagnostic 'HTML_TABLE_UNSAFE' 'Data cells cannot be aligned with the header' "HTML_TABLE_$PhysicalTableIndex") }
         }

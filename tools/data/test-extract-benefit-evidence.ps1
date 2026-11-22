@@ -1,4 +1,4 @@
-$ErrorActionPreference = 'Stop'
+﻿$ErrorActionPreference = 'Stop'
 
 $contractPath = Join-Path $PSScriptRoot 'lib/benefit-verification-contracts.ps1'
 $extractionPath = Join-Path $PSScriptRoot 'lib/benefit-evidence/extract-benefit-evidence.ps1'
@@ -205,4 +205,22 @@ Assert-Equal $hwpxExtraction.Claims.Count 1 'HWPX extracts selected benefit only
 Assert-Equal $hwpxExtraction.Claims[0].Value '합성 A 혜택' 'No cross-business benefit leakage'
 Assert-Equal $hwpxExtraction.Claims[0].ExtractionMethod SCOPED_HWPX_CELL 'HWPX method is explicit, not HTML'
 Assert-Equal $hwpxExtraction.Claims[0].EvidenceReference HWPX_SECTION_1_TABLE_1_ROW_2/BenefitDescription 'Exact physical field reference'
+
+. (Join-Path $PSScriptRoot 'lib/benefit-evidence/convert-mma-jsonp-source-observation.ps1')
+$mmaSentinelJsonp = 'MmaTestDetail({"success":true,"udgigwanVO":{"udgigwan_cd":"3348","udgigwan_yhnm":"민간","udae_ggm":"우동명가기리야마본진","addr":"서울특별시강남구강남대로84길23","udgigwan_telno":"02-567-0068","udggeopjong_gbnm":"음식점","udsangse_cn":"서비스 이용료의 20% 할인","uddaesang_cn":"복무중인사람(현역병)","udjyjehan_cn":"없음","udjbjaryo_cn":"복무확인서","hyjeokyong_sjdt":"2024년 11월 12일","hyjeokyong_jrdt":"9999년 12월 31일"}});'
+$mmaSentinelDoc = New-TestDocument -Url 'https://open.mma.go.kr/caisGGGS/mmanrsrSangSeAjaxJsonCall.json?udgigwan_cd=3348&callback=MmaTestDetail' -SourceFormat 'JSONP' -Text $mmaSentinelJsonp
+$mmaSentinelObs = ConvertTo-MmaJsonpDetailObservation -Document $mmaSentinelDoc -ExpectedCallback 'MmaTestDetail'
+$mmaSentinelSlice = New-RelevantBenefitEvidenceSlice -Observation $mmaSentinelObs -Unit $mmaSentinelObs.ContentUnits[0] -IdentityEvidence @('MMA_LIST_LINKAGE')
+$mmaSentinelExtraction = Invoke-BenefitEvidenceExtraction -Source (New-TestBoundSource -Document $mmaSentinelDoc) -Document $mmaSentinelDoc -EvidenceSlice $mmaSentinelSlice
+Assert-Equal $mmaSentinelExtraction.Status 'COMPLETE' 'Scoped MMA JSONP detail extraction with Korean sentinel completes'
+Assert-Equal @($mmaSentinelExtraction.Claims | Where-Object { $_.ClaimType -eq 'BENEFIT_DESCRIPTION' -and $_.Value -eq '서비스 이용료의 20% 할인' }).Count 1 'Scoped MMA JSONP detail extracts benefit description'
+Assert-Equal @($mmaSentinelExtraction.Claims | Where-Object { $_.ClaimType -eq 'VALID_UNTIL' }).Count 0 'Korean open-ended expiry sentinel 9999년 12월 31일 produces no VALID_UNTIL claim'
+
+$mmaFiniteJsonp = $mmaSentinelJsonp.Replace('9999년 12월 31일', '2026년 12월 31일')
+$mmaFiniteDoc = New-TestDocument -Url 'https://open.mma.go.kr/caisGGGS/mmanrsrSangSeAjaxJsonCall.json?udgigwan_cd=3348&callback=MmaTestDetail' -SourceFormat 'JSONP' -Text $mmaFiniteJsonp
+$mmaFiniteObs = ConvertTo-MmaJsonpDetailObservation -Document $mmaFiniteDoc -ExpectedCallback 'MmaTestDetail'
+$mmaFiniteSlice = New-RelevantBenefitEvidenceSlice -Observation $mmaFiniteObs -Unit $mmaFiniteObs.ContentUnits[0] -IdentityEvidence @('MMA_LIST_LINKAGE')
+$mmaFiniteExtraction = Invoke-BenefitEvidenceExtraction -Source (New-TestBoundSource -Document $mmaFiniteDoc) -Document $mmaFiniteDoc -EvidenceSlice $mmaFiniteSlice
+Assert-Equal @($mmaFiniteExtraction.Claims | Where-Object { $_.ClaimType -eq 'VALID_UNTIL' -and $_.Value -eq '2026년 12월 31일' }).Count 1 'Finite Korean agreement end date produces one VALID_UNTIL claim'
+
 Write-Host 'Benefit evidence extraction tests passed.'

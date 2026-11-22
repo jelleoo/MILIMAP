@@ -143,4 +143,21 @@ $scalarUnit = New-BenefitJsonpSourceContentUnit -Snapshot $scalarTypesSnap -Unit
     })
 Assert-ScopeJsonpUnitCore -Unit $scalarUnit -Snapshot $scalarTypesSnap
 
+$liveListText = 'MmaTestList({"success":true,"list":[{"udgigwan_cd":"0001","udgigwan_yhnm":"민간","udae_ggm":"","addr":"서울특별시 제외구","udgigwan_telno":"","udggeopjong_gbnm":"기타"},{"udgigwan_cd":"3348","udgigwan_yhnm":"민간","udae_ggm":"우동명가기리야마본진","addr":"서울특별시강남구강남대로84길23(역삼동, (한라클래식 지하1층))","udgigwan_telno":"02-567-0068","udggeopjong_gbnm":"음식점"}]});'
+$liveListDocument = New-BenefitSourceDocument -SourceRowNumber 2 -Url 'https://open.mma.go.kr/caisGGGS/mmanrsrListAjaxJsonCallNew.json?callback=MmaTestList' -SourceFormat JSONP -FetchStatus COMPLETE -ContentType 'application/json' -Text $liveListText -ObservedAt '2026-11-22T00:00:00Z'
+$liveListObservation = ConvertTo-MmaJsonpListObservation -Document $liveListDocument -ExpectedCallback 'MmaTestList'
+Assert-ScopeEqual $liveListObservation.AdapterStatus COMPLETE 'Live MMA list schema with udae_ggm parses completely'
+Assert-ScopeEqual @($liveListObservation.ContentUnits).Count 1 'Empty udae_ggm record is skipped even when udgigwan_yhnm contains category text'
+Assert-ScopeEqual $liveListObservation.ContentUnits[0].UnitReference JSONP_LIST_ITEM_2 'Live MMA list preserves physical index after skipping empty udae_ggm'
+Assert-ScopeEqual $liveListObservation.ContentUnits[0].StructuredFields.BusinessName '우동명가기리야마본진' 'Live MMA list maps BusinessName from udae_ggm over udgigwan_yhnm'
+Assert-ScopeEqual $liveListObservation.ContentUnits[0].FieldReferences.BusinessName.FieldReference 'JSONP_LIST_ITEM_2/udae_ggm' 'Live MMA list field reference records udae_ggm provenance'
+
+$liveDetailText = 'MmaTestDetail({"success":true,"udgigwanVO":{"udgigwan_cd":"3348","udgigwan_yhnm":"민간","udae_ggm":"우동명가기리야마본진","addr":"서울특별시강남구강남대로84길23(역삼동, (한라클래식 지하1층))","udgigwan_telno":"02-567-0068","udggeopjong_gbnm":"음식점","udsangse_cn":"서비스 이용료의 20% 할인","uddaesang_cn":"복무중인사람(현역병)","udjyjehan_cn":"없음","udjbjaryo_cn":"복무확인서","hyjeokyong_sjdt":"2024년 11월 12일","hyjeokyong_jrdt":"9999년 12월 31일"}});'
+$liveDetailDocument = New-BenefitSourceDocument -SourceRowNumber 2 -Url 'https://open.mma.go.kr/caisGGGS/mmanrsrSangSeAjaxJsonCall.json?udgigwan_cd=3348&callback=MmaTestDetail' -SourceFormat JSONP -FetchStatus COMPLETE -ContentType 'application/json' -Text $liveDetailText -ObservedAt '2026-11-22T00:00:00Z'
+$liveDetailObservation = ConvertTo-MmaJsonpDetailObservation -Document $liveDetailDocument -ExpectedCallback 'MmaTestDetail'
+Assert-ScopeEqual $liveDetailObservation.AdapterStatus COMPLETE 'Live MMA detail schema with udae_ggm parses completely'
+Assert-ScopeEqual $liveDetailObservation.ContentUnits[0].StructuredFields.BusinessName '우동명가기리야마본진' 'Live MMA detail maps BusinessName from udae_ggm over udgigwan_yhnm'
+Assert-ScopeEqual $liveDetailObservation.ContentUnits[0].FieldReferences.BusinessName.FieldReference 'JSONP_DETAIL_OBJECT/udae_ggm' 'Live MMA detail field reference records udae_ggm provenance'
+Assert-ScopeEqual $liveDetailObservation.ContentUnits[0].StructuredFields.ValidUntilObserved '9999년 12월 31일' 'Live MMA Korean open-ended expiry sentinel remains raw observed data'
+
 Write-Host 'MMA JSONP source observation parser tests passed.'

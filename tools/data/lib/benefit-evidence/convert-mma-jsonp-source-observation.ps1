@@ -162,10 +162,15 @@ function ConvertTo-MmaJsonpListTemplate {
     $parsedItems=@($listProp.Value)
     if ($objectSpans.Count -ne $parsedItems.Count) { throw 'MMA JSONP list item spans do not match parsed list' }
     $fastLookup = Get-InternalScopeJsonpFastLookup -Snapshot $Snapshot
-    $rows=[Collections.Generic.List[object]]::new($objectSpans.Count); $fieldMap=@{ BusinessName='udgigwan_yhnm'; Address='addr'; Phone='udgigwan_telno'; Category='udggeopjong_gbnm'; InstitutionCode='udgigwan_cd' }
+    $rows=[Collections.Generic.List[object]]::new($objectSpans.Count)
+    $legacyFieldMap=@{ BusinessName='udgigwan_yhnm'; Address='addr'; Phone='udgigwan_telno'; Category='udggeopjong_gbnm'; InstitutionCode='udgigwan_cd' }
+    $liveFieldMap=@{ BusinessName='udae_ggm'; Address='addr'; Phone='udgigwan_telno'; Category='udggeopjong_gbnm'; InstitutionCode='udgigwan_cd' }
     for ($i=0; $i -lt $objectSpans.Count; $i++) {
         $span=$objectSpans[$i]; $reference='JSONP_LIST_ITEM_' + ($i+1); $parsedItem=$parsedItems[$i]
-        $nameProp = $parsedItem.PSObject.Properties['udgigwan_yhnm']
+        $hasLiveNameProp = ($null -ne $parsedItem.PSObject.Properties['udae_ggm'])
+        $nameKey = if ($hasLiveNameProp) { 'udae_ggm' } else { 'udgigwan_yhnm' }
+        $fieldMap = if ($hasLiveNameProp) { $liveFieldMap } else { $legacyFieldMap }
+        $nameProp = $parsedItem.PSObject.Properties[$nameKey]
         if ($null -eq $nameProp -or [string]::IsNullOrWhiteSpace((ConvertTo-BenefitText $nameProp.Value))) {
             continue
         }
@@ -185,7 +190,8 @@ function ConvertTo-MmaJsonpDetailTemplate {
     $span=Get-BenefitJsonTopLevelPropertySpan -JsonText $envelope.JsonText -PropertyName 'udgigwanVO'
     if ($span.Fragment[0] -cne '{') { throw 'MMA JSONP detail must be an object' }
     $fastLookup = Get-InternalScopeJsonpFastLookup -Snapshot $Snapshot
-    $fieldMap=@{ BusinessName='udgigwan_yhnm'; Address='addr'; Phone='udgigwan_telno'; Category='udggeopjong_gbnm'; InstitutionCode='udgigwan_cd'; BenefitDescription='udsangse_cn'; EligibleTarget='uddaesang_cn'; UsageCondition='udjyjehan_cn'; VerificationMethod='udjbjaryo_cn'; ValidFrom='hyjeokyong_sjdt'; ValidUntilObserved='hyjeokyong_jrdt' }
+    $detailNameKey = if ($null -ne $voProp.Value.PSObject.Properties['udae_ggm']) { 'udae_ggm' } else { 'udgigwan_yhnm' }
+    $fieldMap=@{ BusinessName=$detailNameKey; Address='addr'; Phone='udgigwan_telno'; Category='udggeopjong_gbnm'; InstitutionCode='udgigwan_cd'; BenefitDescription='udsangse_cn'; EligibleTarget='uddaesang_cn'; UsageCondition='udjyjehan_cn'; VerificationMethod='udjbjaryo_cn'; ValidFrom='hyjeokyong_sjdt'; ValidUntilObserved='hyjeokyong_jrdt' }
     $data=Get-MmaJsonpStructuredData -ObjectText $span.Fragment -UnitReference 'JSONP_DETAIL_OBJECT' -FieldMap $fieldMap -ObjectStart ($envelope.JsonStart+$span.Start) -ParsedObject $voProp.Value -FastLookup $fastLookup
     return [pscustomobject][ordered]@{ Rows=@([pscustomobject][ordered]@{ UnitReference='JSONP_DETAIL_OBJECT'; RawStart=[long]($envelope.JsonStart+$span.Start); RawLength=$span.Length; RawEvidenceText=$data.StructuredFields.BenefitDescription; StructuredFields=$data.StructuredFields; FieldReferences=$data.FieldReferences }) }
 }

@@ -200,6 +200,7 @@ try{
             @{Url='https://www.paju.go.kr/user/board/BD_board.view.do';Expected='C_LITE_V1'},
             @{Url='https://city.example.go.kr/benefits.html';Expected='C_LITE_V1'},
             @{Url='https://www.mma.go.kr/about/udgg/list.do?mc=mma0003357';Expected='LEGACY'},
+            @{Url='https://www.yangju.go.kr/health/downloadBbsFile.do?key=2716&bbsNo=81&atchmnflNo=204211';Expected='LEGACY'},
             @{Url='https://city.example.go.kr/list.xlsx';Expected='LEGACY'},
             @{Url='https://city.example.go.kr/notice.hwpx';Expected='LEGACY'},
             @{Url='https://www.suwon.go.kr/benefit.pdf';Expected='LEGACY'}

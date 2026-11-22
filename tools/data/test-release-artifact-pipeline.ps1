@@ -44,11 +44,11 @@ try {
 
     & (Join-Path $PSScriptRoot 'build-official-benefit-release-candidates.ps1') `
         -CanonicalCsv $canonicalCsv `
-        -DdcComparisonCsv (Join-Path $reportsRoot 'ddc-benefit-comparison-20260908.csv') `
+        -DdcComparisonCsv (Join-Path $reportsRoot 'ddc-benefit-comparison-20261120.csv') `
         -PajuComparisonCsv (Join-Path $reportsRoot 'paju-benefit-comparison-20260906.csv') `
         -YangjuComparisonCsv (Join-Path $reportsRoot 'yangju-benefit-comparison-20260906.csv') `
         -OutputCsv $candidateCsv
-    Assert-Equal -Actual (@(Import-Csv -LiteralPath $candidateCsv -Encoding utf8).Count) -Expected 249 -Message '공식 최신 근거 출시 후보는 249건이어야 합니다'
+    Assert-Equal -Actual (@(Import-Csv -LiteralPath $candidateCsv -Encoding utf8).Count) -Expected 261 -Message '공식 최신 근거 출시 후보는 261건이어야 합니다'
 
     & (Join-Path $PSScriptRoot 'build-release-benefit-seed.ps1') `
         -CanonicalCsv $canonicalCsv `
@@ -58,9 +58,11 @@ try {
         -DestinationJson $releaseJson
 
     $releaseItems = @(Get-Content -Raw -Encoding utf8 -LiteralPath $releaseJson | ConvertFrom-Json)
-    Assert-Equal -Actual $releaseItems.Count -Expected 249 -Message '출시 시드는 공식 최신 근거 249건만 포함해야 합니다'
-    Assert-Equal -Actual (@($releaseItems | Where-Object { $_.status -eq 'ACTIVE' }).Count) -Expected 249 -Message '출시 시드 항목은 모두 이용 가능 상태여야 합니다'
+    Assert-Equal -Actual $releaseItems.Count -Expected 261 -Message '출시 시드는 공식 최신 근거 261건만 포함해야 합니다'
+    Assert-Equal -Actual (@($releaseItems | Where-Object { $_.status -eq 'ACTIVE' }).Count) -Expected 261 -Message '출시 시드 항목은 모두 이용 가능 상태여야 합니다'
     Assert-Equal -Actual (@($releaseItems | Where-Object { $null -ne $_.latitude -and $null -ne $_.longitude }).Count) -Expected 111 -Message '엄격 POI 대조를 통과한 111건만 지도 핀을 가져야 합니다'
+    Assert-Equal -Actual (@($releaseItems | Where-Object { $_.lastVerifiedAt -eq '2026-11-20' }).Count) -Expected 46 -Message '2026-11-20 승인 반영 동두천시 46건만 2026-11-20 확인일을 가져야 합니다'
+    Assert-Equal -Actual (@($releaseItems | Where-Object { $_.lastVerifiedAt -eq '2026-09-06' }).Count) -Expected 215 -Message '기존 확인일 유지 항목 215건은 2026-09-06 확인일을 유지해야 합니다'
     Assert-Equal -Actual (Get-NormalizedJson -Path $releaseJson) -Expected (Get-NormalizedJson -Path $appSeed) -Message '정본 파이프라인 결과가 Android 내장 출시 시드와 일치해야 합니다'
 
     if (-not (Test-Path -LiteralPath $appManifest -PathType Leaf)) {
@@ -72,10 +74,10 @@ try {
     }
     $committedManifest = Read-ReleaseUtf8Text -Path $appManifest | ConvertFrom-Json @manifestJsonOptions
     Assert-BenefitReleaseSeedManifest -Manifest $committedManifest
-    Assert-Equal -Actual ([int]$committedManifest.seedVersion) -Expected 7 -Message '기존 249건 시드 매니페스트의 seedVersion은 7이어야 합니다'
-    Assert-Equal -Actual ([int]$committedManifest.totalCount) -Expected 249 -Message '매니페스트 totalCount는 249여야 합니다'
+    Assert-Equal -Actual ([int]$committedManifest.seedVersion) -Expected 8 -Message '현재 261건 시드 매니페스트의 seedVersion은 8이어야 합니다'
+    Assert-Equal -Actual ([int]$committedManifest.totalCount) -Expected 261 -Message '매니페스트 totalCount는 261이어야 합니다'
     Assert-Equal -Actual ([int]$committedManifest.exactPinCount) -Expected 111 -Message '매니페스트 exactPinCount는 111이어야 합니다'
-    Assert-Equal -Actual ([int]$committedManifest.unconfirmedCoordinateCount) -Expected 138 -Message '매니페스트 unconfirmedCoordinateCount는 138이어야 합니다'
+    Assert-Equal -Actual ([int]$committedManifest.unconfirmedCoordinateCount) -Expected 150 -Message '매니페스트 unconfirmedCoordinateCount는 150이어야 합니다'
     Assert-Equal -Actual ([int]$committedManifest.manualSeedCount) -Expected 0 -Message '매니페스트 manualSeedCount는 0이어야 합니다'
     Assert-Equal -Actual $committedManifest.canonicalCsvSha256 -Expected (Get-ReleaseFileNormalizedLfSha256 -Path $canonicalCsv) -Message '매니페스트 canonicalCsvSha256가 정본 CSV와 일치해야 합니다'
     Assert-Equal -Actual $committedManifest.seedSha256 -Expected (Get-ReleaseFileNormalizedLfSha256 -Path $appSeed) -Message '매니페스트 seedSha256가 커밋된 benefits.seed.json과 일치해야 합니다'

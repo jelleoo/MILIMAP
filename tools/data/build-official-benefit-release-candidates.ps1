@@ -1,4 +1,4 @@
-[CmdletBinding()]
+﻿[CmdletBinding()]
 param(
     [Parameter(Mandatory = $true)]
     [string]$CanonicalCsv,
@@ -69,8 +69,11 @@ function New-ReleaseCandidate {
         [string]$VerificationMethod,
         [string]$SourceType,
         [string]$SourceUrl,
-        [string]$DecisionReason
+        [string]$DecisionReason,
+        [string]$RowVerifiedOn = ''
     )
+
+    $effectiveVerifiedOn = if ([string]::IsNullOrWhiteSpace($RowVerifiedOn)) { $VerifiedOn } else { $RowVerifiedOn.Trim() }
 
     return [pscustomobject][ordered]@{
         정본CSV행번호 = $RowNumber
@@ -84,7 +87,7 @@ function New-ReleaseCandidate {
         출시인증방법 = $VerificationMethod
         출처유형 = $SourceType
         출처URL = $SourceUrl
-        최근확인일 = $VerifiedOn
+        최근확인일 = $effectiveVerifiedOn
         결정근거 = $DecisionReason
     }
 }
@@ -144,7 +147,8 @@ foreach ($comparison in $ddcRows | Where-Object {
         -VerificationMethod '동두천시 공식 군장병 할인업소 목록' `
         -SourceType '지자체 공식 자료' `
         -SourceUrl (Get-RequiredRowValue $canonical '출처URL') `
-        -DecisionReason '동두천시 공식 목록에서 상호·주소·전화·개별 할인 일치')
+        -DecisionReason '동두천시 공식 목록에서 상호·주소·전화·개별 할인 일치' `
+        -RowVerifiedOn (Get-RowValue $comparison '확인일'))
 }
 
 $pajuRows = @(Import-Csv -LiteralPath $PajuComparisonCsv -Encoding utf8)
@@ -163,7 +167,8 @@ foreach ($comparison in $pajuRows | Where-Object {
         -VerificationMethod '파주시 공식 군장병 할인업소 목록 및 운영 안내' `
         -SourceType '지자체 공식 자료' `
         -SourceUrl "$PajuProgramSourceUrl | $(Get-RequiredRowValue $comparison '공식출처URL')" `
-        -DecisionReason '파주시 공식 참여업소 목록 일치, 공식 공통 할인 정책 적용')
+        -DecisionReason '파주시 공식 참여업소 목록 일치, 공식 공통 할인 정책 적용' `
+        -RowVerifiedOn (Get-RowValue $comparison '확인일'))
 }
 
 $yangjuRows = @(Import-Csv -LiteralPath $YangjuComparisonCsv -Encoding utf8)
@@ -184,7 +189,8 @@ foreach ($comparison in $yangjuRows | Where-Object {
         -VerificationMethod '양주시 공식 군장병 할인·우대 업소 목록' `
         -SourceType '지자체 공식 자료' `
         -SourceUrl $YangjuSourceUrl `
-        -DecisionReason '양주시 공식 목록에서 상호·주소·전화·메뉴·개별 할인 확인')
+        -DecisionReason '양주시 공식 목록에서 상호·주소·전화·메뉴·개별 할인 확인' `
+        -RowVerifiedOn (Get-RowValue $comparison '확인일'))
 }
 
 $resolvedOutput = [IO.Path]::GetFullPath($OutputCsv)

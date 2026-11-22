@@ -63,10 +63,48 @@ function Get-NormalizedAddressParts {
  $parsed=Get-AdministrativeAddressParts $preferred;$meta=Get-AdministrativeAddressParts "$MetadataProvince $MetadataArea"
  foreach($key in @('Province','City','District','Dong')) { $pv=[string]$parsed.$key;$mv=[string]$meta.$key;if($pv -and $mv -and $pv -ne $mv){$parsed.$key='';$partial=$true}elseif(-not $pv -and $mv){$parsed.$key=$mv} }
  if($road){
-  $roadText=($road -replace '^.*(?:시|구|군|동|읍|면)(?=[가-힣A-Za-z0-9]+(?:번길|길|로))','')
-  $rm=[regex]::Match($roadText,'(?<road>[가-힣A-Za-z0-9]+(?:번길|길|로))\s*(?<tail>\d+(?:\s*-\s*\d+)?)(?=$|[\s,()])')
+  $roadText=$road.Trim()
+  $hadProvince=$false
+  foreach($p in $script:Provinces){
+   if($roadText -match ('^(?:'+([regex]::Escape($p))+')\s*')){$roadText=$roadText.Substring($matches[0].Length);$hadProvince=$true;break}
+  }
+  if(-not $hadProvince -and $roadText -match '^서울시\s*'){$roadText=$roadText.Substring($matches[0].Length);$hadProvince=$true}
+  $guCities=@('수원시','성남시','안양시','부천시','고양시','용인시','안산시','화성시')
+  $expectGluedGu=($parsed.Province -in @('서울특별시','인천광역시','부산광역시','대구광역시','광주광역시','대전광역시','울산광역시'))
+  if($parsed.City -and $roadText -match ('^(?:'+([regex]::Escape($parsed.City))+')\s*')){
+   $roadText=$roadText.Substring($matches[0].Length)
+   if($parsed.City -in $guCities){$expectGluedGu=$true}
+  }elseif($roadText -match '^[가-힣]+(?:광역시|특별시|특별자치시|시)\s+'){
+   $matchedCity=($matches[0]).Trim()
+   $roadText=$roadText.Substring($matches[0].Length)
+   if($matchedCity -in $guCities){$expectGluedGu=$true}
+  }elseif($hadProvince -and $roadText -match '^[가-힣]{1,5}시(?=[가-힣A-Za-z0-9]+(?:구|군|읍|면|로|길))'){
+   $matchedCity=$matches[0]
+   $roadText=$roadText.Substring($matchedCity.Length)
+   if($matchedCity -in $guCities){$expectGluedGu=$true}
+  }
+  if($parsed.District -and $roadText -match ('^(?:'+([regex]::Escape($parsed.District))+')\s*')){
+   $roadText=$roadText.Substring($matches[0].Length)
+  }elseif($roadText -match '^[가-힣]+(?:구|군)\s+'){
+   $roadText=$roadText.Substring($matches[0].Length)
+  }elseif(($expectGluedGu -or $hadProvince) -and $roadText -match '^[가-힣]{1,4}군(?=[가-힣A-Za-z0-9]+(?:읍|면|로|길))'){
+   $roadText=$roadText.Substring($matches[0].Length)
+  }elseif($expectGluedGu -and $roadText -match '^[가-힣]{1,4}구(?=[가-힣A-Za-z0-9]+(?:읍|면|로|길))'){
+   $roadText=$roadText.Substring($matches[0].Length)
+  }
+  if($parsed.Dong -and $parsed.Dong -match '(?:읍|면)$' -and $roadText -match ('^(?:'+([regex]::Escape($parsed.Dong))+')\s*')){
+   $roadText=$roadText.Substring($matches[0].Length)
+  }elseif($roadText -match '^[가-힣]+(?:읍|면)\s+'){
+   $roadText=$roadText.Substring($matches[0].Length)
+  }elseif($hadProvince -and $roadText -match '^[가-힣]{1,4}(?:읍|면)(?=[가-힣A-Za-z0-9]+(?:로|길))'){
+   $roadText=$roadText.Substring($matches[0].Length)
+  }
+  if($roadText -match '^[가-힣]+동\s+'){
+   $roadText=$roadText.Substring($matches[0].Length)
+  }
+  $rm=[regex]::Match($roadText,'(?<road>[가-힣A-Za-z0-9]+(?:번안길|번길|길|로))\s*(?<tail>\d+(?:\s*-\s*\d+)?)(?=$|[\s,()]|[A-Za-z]+동|상가\d*동)')
   if($rm.Success){$roadName=$rm.Groups['road'].Value;$tail=$rm.Groups['tail'].Value;if($tail -match '^\d+\s*-\s*\d+$'){$parts=$tail -split '\s*-\s*';$main=$parts[0];$sub=$parts[1]}else{$main=$tail}}
-  else { $roadOnly=[regex]::Match($roadText,'(?<road>[가-힣A-Za-z0-9]+(?:번길|길|로))');if($roadOnly.Success){$roadName=$roadOnly.Groups['road'].Value;$partial=$true} }
+  else { $roadOnly=[regex]::Match($roadText,'(?<road>[가-힣A-Za-z0-9]+(?:번안길|번길|길|로))');if($roadOnly.Success){$roadName=$roadOnly.Groups['road'].Value;$partial=$true} }
   if($road -match '(?:번길|길|로)\d+\s*-\s*\d+층'){$main='';$sub='';$ambiguous=$true;$warnings+='BUILDING_NUMBER_UNCERTAIN';$warnings+='FLOOR_UNIT_UNCERTAIN'}
   $floors=[regex]::Matches($road,'(?<![가-힣A-Za-z0-9])((?:지하\s*|B\s*)?\d+)\s*층',[Text.RegularExpressions.RegexOptions]::IgnoreCase);$units=[regex]::Matches($road,'(?<![가-힣A-Za-z0-9-])([A-Za-z]\s*-\s*\d+|\d+)\s*호')
   if($road -match '[~]|\d+호\s*,\s*\d+호|\d+\s*-\s*\d+\s*호|(?<![A-Za-z0-9])[A-Za-z]\s*\d+\s*호' -or $floors.Count -gt 1 -or $units.Count -gt 1){$ambiguous=$true;$warnings+='FLOOR_UNIT_UNCERTAIN'}else{if($floors.Count -eq 1){$floor=($floors[0].Groups[1].Value -replace '\s+','')};if($units.Count -eq 1){$unit=($units[0].Groups[1].Value -replace '\s+','').ToUpperInvariant()}}

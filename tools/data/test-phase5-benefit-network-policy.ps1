@@ -127,7 +127,7 @@ public sealed class P52CountingServer : IDisposable {
   }
  }
  private readonly TcpListener listener;private readonly CancellationTokenSource cancel=new CancellationTokenSource();private readonly Task worker;private int requests,connections;
- public string LastError {get;private set;} public int Requests=>requests; public int Connections=>connections; public Uri Url {get;} public X509Certificate2 Certificate {get;}
+ public string LastError {get;private set;} public string LastRequestHeaders {get;private set;} public int Requests=>requests; public int Connections=>connections; public Uri Url {get;} public X509Certificate2 Certificate {get;}
  public P52CountingServer(string mode){
   if(mode=="aia"){Certificate=AiaCertificate();}else using(var key=RSA.Create(2048)){
    var req=new CertificateRequest("CN=localhost",key,HashAlgorithmName.SHA256,RSASignaturePadding.Pkcs1);
@@ -146,7 +146,7 @@ public sealed class P52CountingServer : IDisposable {
       await ssl.AuthenticateAsServerAsync(new SslServerAuthenticationOptions{ServerCertificateContext=serverContext},cancel.Token);
       var bytes=new MemoryStream();byte[] one=new byte[1];
       while(bytes.Length<10000){int n=await ssl.ReadAsync(one,cancel.Token);if(n==0)break;bytes.WriteByte(one[0]);if(bytes.Length>=4 && Encoding.ASCII.GetString(bytes.ToArray()).EndsWith("\r\n\r\n"))break;}
-      if(bytes.Length==0)continue;Interlocked.Increment(ref requests);
+      if(bytes.Length==0)continue;LastRequestHeaders=Encoding.ASCII.GetString(bytes.ToArray());Interlocked.Increment(ref requests);
       if(mode=="reset"){client.Client.LingerState=new LingerOption(true,0);continue;}
       if(mode=="timeout"){await Task.Delay(2000,cancel.Token);continue;}
       if(mode=="delayed"){await Task.Delay(200,cancel.Token);}
@@ -209,7 +209,7 @@ public sealed class P52CountingServer : IDisposable {
                 $token=$account.Reserve();$response=$null;$caught=$null;$beforeHeaders=$account.RespondedCount
                 $exchangeDeadline=[Threading.CancellationTokenSource]::new($(if($case -ceq 'timeout'){200}else{1500}))
                 try{$response=$exchange.Invoke($null,@($server.Url,$handler,[int]1500,[long]16,$account,[long]$token,$exchangeDeadline.Token))}catch{$caught=$_.Exception.ToString()}finally{$account.Finish($token,($account.RespondedCount -eq $beforeHeaders));$exchangeDeadline.Dispose()}
-                if($case -cin @('ok','auth')){Check ($null -eq $caught) "$case completes without transport retry: $caught server=$($server.LastError)";Equal $response.StatusCode $(if($case -ceq 'ok'){200}else{401}) 'Actual response status'}else{Check ($null -ne $caught) "$case fails closed"}
+                if($case -cin @('ok','auth')){Check ($null -eq $caught) "$case completes without transport retry: $caught server=$($server.LastError)";Equal $response.StatusCode $(if($case -ceq 'ok'){200}else{401}) 'Actual response status';if($case -ceq 'ok'){Check ($server.LastRequestHeaders -match '(?im)^User-Agent:\s*MILIMAP-BenefitVerifier/1\.0\r?$') 'Transport sends neutral MILIMAP User-Agent header'}}else{Check ($null -ne $caught) "$case fails closed"}
             }
             if($case -ceq 'aia'){continue}
             Equal $account.AttemptedCount $iterations "$case actual dispatch count"

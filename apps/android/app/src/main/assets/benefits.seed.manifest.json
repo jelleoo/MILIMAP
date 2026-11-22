@@ -4,7 +4,7 @@
   "seedVersion": 8,
   "hashAlgorithm": "SHA-256-LF-UTF8",
   "generatedAt": "2026-11-22T00:00:00+09:00",
-  "canonicalCsvSha256": "cb772565894937db43618d6ccdc0f5499b908e4d5feefbe993df21ab82e00604",
+  "canonicalCsvSha256": "d97ec5eb6c90b658dab66a438b69225d12f4b955bab192a3f814dd53baec858d",
   "totalCount": 261,
   "exactPinCount": 111,
   "unconfirmedCoordinateCount": 150,

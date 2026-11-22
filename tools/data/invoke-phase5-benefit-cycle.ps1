@@ -117,6 +117,7 @@ function Get-InternalPhase5HtmlEvidenceRetentionProfile {
     if($null -eq $Candidate -or [string]::IsNullOrWhiteSpace([string]$Candidate.Url)){return 'C_LITE_V1'}
     $uri=[Uri]$Candidate.Url
     if($uri.Host -ceq 'www.mma.go.kr' -and $uri.AbsolutePath -ceq '/about/udgg/list.do' -and (Test-MmaBenefitEntryUrl -Url $Candidate.Url)){return 'LEGACY'}
+    if($uri.Host -ceq 'www.yangju.go.kr' -and $uri.AbsolutePath -ceq '/health/downloadBbsFile.do'){return 'LEGACY'}
     $extension=[IO.Path]::GetExtension($uri.AbsolutePath).ToLowerInvariant()
     if($extension -in @('.xlsx','.hwpx','.pdf')){return 'LEGACY'}
     return 'C_LITE_V1'

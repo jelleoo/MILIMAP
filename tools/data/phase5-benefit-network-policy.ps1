@@ -101,7 +101,7 @@ namespace Milimap.P52 {
    try{
    using(handler)using(var client=new HttpClient(handler)){client.Timeout=Timeout.InfiniteTimeSpan;
     using(var request=new HttpRequestMessage(HttpMethod.Get,uri)){
-     request.Version=HttpVersion.Version11;request.VersionPolicy=HttpVersionPolicy.RequestVersionExact;request.Headers.ConnectionClose=true;request.Headers.TryAddWithoutValidation("Accept-Encoding","identity");
+     request.Version=HttpVersion.Version11;request.VersionPolicy=HttpVersionPolicy.RequestVersionExact;request.Headers.ConnectionClose=true;request.Headers.TryAddWithoutValidation("Accept-Encoding","identity");request.Headers.TryAddWithoutValidation("User-Agent","MILIMAP-BenefitVerifier/1.0");
      cancellation.ThrowIfCancellationRequested();accounting.Dispatch(token);
      using(var response=client.SendAsync(request,HttpCompletionOption.ResponseHeadersRead,cancellation).GetAwaiter().GetResult()){
       accounting.Response(token);
@@ -141,7 +141,7 @@ function Assert-InternalPhase5NetworkImplementation {
     $digest=Get-HistorySha256 -Text $source.Replace("`r`n","`n")
     # This is the digest of the already-qualified transport source, not a caller/type claim.
     # A transport change requires an explicit qualification-manifest update.
-    if($digest -cne 'ac2e86899fa9f4aca57feb42af32b5b72a0b115a650d9e5d4424194ae8831fcd'){throw 'P52B_TRANSPORT_SOURCE_UNQUALIFIED'}
+    if($digest -cne 'c7b06a99d5cfb02b4bf87aff7f4d8407609a7f221943bbdb54d7ba66cfafb77e'){throw 'P52B_TRANSPORT_SOURCE_UNQUALIFIED'}
     $boundary='Milimap.P52.NetworkBoundary' -as [type]
     $accounting='Milimap.P52.Accounting' -as [type]
     $response='Milimap.P52.ResponseData' -as [type]

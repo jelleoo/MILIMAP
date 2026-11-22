@@ -88,7 +88,7 @@ function Get-BenefitRunSourceSnapshot {
         }
     }
     if ($payload.PSObject.Properties.Name -notcontains 'SourceSnapshot') {
-        $snapshotText = if ($payload.SourceFormat -cin @('HWPX','PDF')) { '' } else { $payload.Text }
+        $snapshotText = if ($payload.SourceFormat -cin @('XLSX','HWPX','PDF')) { '' } else { $payload.Text }
         $snapshot = New-BenefitSourceSnapshot -SourceUrl $payload.Url -SourceFormat $payload.SourceFormat -Text $snapshotText -Bytes $payload.Bytes -ObservedAt $payload.ObservedAt
         if ($snapshot.SourceFormat -ceq 'HTML') { Set-InternalBenefitHtmlRunContextSnapshotTrust -Snapshot $snapshot }
         $payload | Add-Member -NotePropertyName SourceSnapshot -NotePropertyValue $snapshot

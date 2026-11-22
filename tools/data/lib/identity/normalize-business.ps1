@@ -37,7 +37,23 @@ function Get-AdministrativeAddressParts {
  param([AllowNull()]$Address)
  $text=ConvertTo-PoiText $Address; $province='';$city='';$district='';$dong=''
  foreach($p in $script:Provinces){if($text -match ('(^|[\s,])'+[regex]::Escape($p)+'(?=$|[\s,])')){$province=$p;break}}
- foreach($t in ($text -split '[\s,()]+'|Where-Object{$_})) { if ($t -in $script:Provinces) { continue }; if(-not $city -and $t -match '시$'){ $city=$t;continue }; if(-not $district -and $t -match '(구|군)$'){ $district=$t;continue };if(-not $dong -and (($t -match '(읍|면)$') -or (Test-AdministrativeDongToken $t))){ $dong=$t } }
+ foreach($rawToken in ($text -split '[\s,()]+'|Where-Object{$_})) {
+  $t=$rawToken
+  if ($t -in $script:Provinces) { continue }
+  foreach ($p in $script:Provinces) {
+   if ($t.StartsWith($p, [StringComparison]::Ordinal)) {
+    $rest=$t.Substring($p.Length)
+    if ($rest -match '^[가-힣]+(시|구|군)$') {
+     if (-not $province) { $province=$p }
+     $t=$rest
+     break
+    }
+   }
+  }
+  if(-not $city -and $t -match '시$'){ $city=$t;continue }
+  if(-not $district -and $t -match '(구|군)$'){ $district=$t;continue }
+  if(-not $dong -and (($t -match '(읍|면)$') -or (Test-AdministrativeDongToken $t))){ $dong=$t }
+ }
  [pscustomobject][ordered]@{Province=$province;City=$city;District=$district;Dong=$dong}
 }
 function Get-NormalizedAddressParts {

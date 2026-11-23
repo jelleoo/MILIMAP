@@ -119,6 +119,14 @@ interface BenefitDao {
     @Query("DELETE FROM benefits WHERE id = :id AND sourceType = :sourceType")
     suspend fun deleteByIdAndSource(id: String, sourceType: String): Int
 
+    @Query(
+        """
+        INSERT OR IGNORE INTO favorites (userId, benefitId, createdAt)
+        SELECT userId, :replacementId, createdAt FROM favorites WHERE benefitId = :previousId
+        """,
+    )
+    suspend fun copyFavoritesToReplacement(previousId: String, replacementId: String)
+
     @Transaction
     suspend fun replaceBySource(
         sourceType: String,
@@ -127,7 +135,18 @@ interface BenefitDao {
         require(benefits.all { it.sourceType == sourceType }) {
             "교체하려는 데이터의 sourceType이 일치하지 않습니다."
         }
-        val diff = computeBenefitSourceDiff(getBySource(sourceType), benefits)
+        val existing = getBySource(sourceType)
+        val diff = computeBenefitSourceDiff(existing, benefits)
+        if (sourceType == MMA_SOURCE_TYPE && diff.removedIds.isNotEmpty()) {
+            val publishedIds = getAllOnce().uniquePublishedBenefitIdsByIdentity()
+            val removedIds = diff.removedIds.toHashSet()
+            for (previous in existing) {
+                if (previous.id !in removedIds) continue
+                val replacementId = publishedIds[BenefitIdentity.normalizedKey(previous.name, previous.address)]
+                    ?: continue
+                copyFavoritesToReplacement(previous.id, replacementId)
+            }
+        }
         diff.removedIds.chunked(SQLITE_DELETE_CHUNK_SIZE).forEach { chunk ->
             deleteBySourceAndIds(sourceType, chunk)
         }

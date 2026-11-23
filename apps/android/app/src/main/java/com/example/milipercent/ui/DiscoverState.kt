@@ -88,8 +88,40 @@ fun orderedCategories(benefits: List<Benefit>): List<String> {
     return head + middle + tail
 }
 
+internal data class SearchableBenefit(
+    val benefit: Benefit,
+    val searchableText: String,
+)
+
+internal fun List<Benefit>.toSearchableBenefits(): List<SearchableBenefit> = map { benefit ->
+    val text = listOfNotNull(benefit.name, benefit.address, benefit.district, benefit.category)
+        .joinToString("\u0000") { it.lowercase() }
+    SearchableBenefit(benefit = benefit, searchableText = text)
+}
+
+private val benefitItemComparator = compareBy<BenefitListItem> { it.distanceKm ?: Double.MAX_VALUE }
+    .thenBy { it.benefit.name }
+
 fun createBenefitListItems(
     benefits: List<Benefit>,
+    category: String,
+    district: BenefitDistrict,
+    activeSearch: String,
+    center: GeoPoint,
+    currentLocation: GeoPoint?,
+    searchBounds: GeoBounds? = null,
+): List<BenefitListItem> = createBenefitListItemsFromIndex(
+    indexedBenefits = benefits.toSearchableBenefits(),
+    category = category,
+    district = district,
+    activeSearch = activeSearch,
+    center = center,
+    currentLocation = currentLocation,
+    searchBounds = searchBounds,
+)
+
+internal fun createBenefitListItemsFromIndex(
+    indexedBenefits: List<SearchableBenefit>,
     category: String,
     district: BenefitDistrict,
     activeSearch: String,
@@ -104,26 +136,47 @@ fun createBenefitListItems(
         query.isBlank() && currentLocation != null -> currentLocation
         else -> center
     }
-    return benefits.asSequence()
-        .filter { it.status != BenefitStatus.ENDED }
-        .filter { category == "전체" || it.category == category }
-        .filter { district == BenefitDistrict.ALL || it.district == district.districtName }
-        .filter { benefit ->
+    return indexedBenefits.asSequence()
+        .filter { it.benefit.status != BenefitStatus.ENDED }
+        .filter { category == "전체" || it.benefit.category == category }
+        .filter { district == BenefitDistrict.ALL || it.benefit.district == district.districtName }
+        .filter { entry ->
             if (searchBounds == null) return@filter true
-            val lat = benefit.latitude ?: return@filter false
-            val lng = benefit.longitude ?: return@filter false
+            val lat = entry.benefit.latitude ?: return@filter false
+            val lng = entry.benefit.longitude ?: return@filter false
             searchBounds.contains(lat, lng)
         }
-        .filter { benefit ->
+        .filter { entry ->
             if (query.isBlank()) return@filter true
-            val textMatch = listOf(benefit.name, benefit.address, benefit.district, benefit.category)
-                .filterNotNull()
-                .any { it.lowercase().contains(query) }
-            val presetMatch = presetCenter?.let { distanceKm(it, benefit) }?.let { it <= PRESET_RADIUS_KM } ?: false
+            val textMatch = entry.searchableText.contains(query)
+            val presetMatch = presetCenter?.let { distanceKm(it, entry.benefit) }?.let { it <= PRESET_RADIUS_KM } ?: false
             textMatch || presetMatch
         }
-        .map { benefit -> BenefitListItem(benefit, distanceKm(distanceOrigin, benefit)) }
-        .sortedWith(compareBy<BenefitListItem> { it.distanceKm ?: Double.MAX_VALUE }.thenBy { it.benefit.name })
+        .map { entry -> BenefitListItem(entry.benefit, distanceKm(distanceOrigin, entry.benefit)) }
+        .sortedWith(benefitItemComparator)
+        .toList()
+}
+
+internal fun reRankBenefitListItems(
+    items: List<BenefitListItem>,
+    origin: GeoPoint,
+): List<BenefitListItem> = items
+    .map { item -> BenefitListItem(item.benefit, distanceKm(origin, item.benefit)) }
+    .sortedWith(benefitItemComparator)
+
+fun createSavedBenefitListItems(
+    benefitsById: Map<String, Benefit>,
+    favoriteIds: Set<String>,
+    center: GeoPoint,
+    currentLocation: GeoPoint?,
+): List<BenefitListItem> {
+    if (favoriteIds.isEmpty()) return emptyList()
+    val origin = currentLocation ?: center
+    return favoriteIds.asSequence()
+        .mapNotNull { id -> benefitsById[id] }
+        .filter { it.status != BenefitStatus.ENDED }
+        .map { benefit -> BenefitListItem(benefit, distanceKm(origin, benefit)) }
+        .sortedWith(benefitItemComparator)
         .toList()
 }
 

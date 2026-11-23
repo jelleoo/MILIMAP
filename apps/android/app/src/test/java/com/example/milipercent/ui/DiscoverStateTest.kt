@@ -139,6 +139,26 @@ class DiscoverStateTest {
         )
     }
 
+    @Test
+    fun savedBenefitListItemsFiltersOnlyFavoritesExcludesEndedAndSortsByDistance() {
+        val origin = GeoPoint(37.55, 126.92)
+        val far = benefit("far", "먼 가게", "서울", "음식", "강남구", latitude = 37.50, longitude = 127.03)
+        val near = benefit("near", "가까운 가게", "서울", "음식", "마포구", latitude = 37.551, longitude = 126.921)
+        val unfavored = benefit("other", "찜아님", "서울", "음식", "마포구", latitude = 37.5501, longitude = 126.9201)
+        val endedFav = benefit("ended", "종료된 가게", "서울", "음식", "마포구", status = BenefitStatus.ENDED, latitude = 37.5501, longitude = 126.9201)
+        val byId = listOf(far, near, unfavored, endedFav).associateBy(Benefit::id)
+
+        val result = createSavedBenefitListItems(
+            benefitsById = byId,
+            favoriteIds = setOf("far", "near", "ended", "missing"),
+            center = SEOUL_CENTER,
+            currentLocation = origin,
+        )
+
+        assertEquals(listOf("near", "far"), result.map { it.benefit.id })
+        assertTrue((result[0].distanceKm ?: 1.0) < 0.5)
+    }
+
     private fun benefit(
         id: String, name: String, address: String, category: String, district: String,
         status: BenefitStatus = BenefitStatus.ACTIVE, latitude: Double? = null, longitude: Double? = null,

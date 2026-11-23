@@ -15,6 +15,29 @@ function Assert-ReleaseCutEqual {
     }
 }
 
+function Assert-ReleaseCutFailure {
+    param(
+        [scriptblock]$Operation,
+        [string]$ExpectedError
+    )
+
+    try {
+        [void](& $Operation)
+    } catch {
+        if ($_.Exception.Message -match $ExpectedError) {
+            return
+        }
+        throw
+    }
+    throw "Expected release cut to fail with $ExpectedError"
+}
+
+function Get-ReleaseCutFileHash {
+    param([string]$Path)
+
+    return (Get-FileHash -LiteralPath $Path -Algorithm SHA256).Hash
+}
+
 $repoRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../..'))
 $committedManifest = Get-Content -Raw -Encoding utf8 -LiteralPath (Join-Path $repoRoot 'apps/android/app/src/main/assets/benefits.seed.manifest.json') | ConvertFrom-Json
 
@@ -67,27 +90,129 @@ try {
 
     [IO.File]::WriteAllText($manualJson, '{"items":[]}', [Text.UTF8Encoding]::new($false))
 
-    $applied = Invoke-BenefitSeedReleaseCut `
-        -CanonicalCsv $canonicalCsv `
-        -DdcComparisonCsv $ddcCsv `
-        -PajuComparisonCsv $pajuCsv `
-        -YangjuComparisonCsv $yangjuCsv `
-        -MmaComparisonCsv $mmaCsv `
-        -CoordinateReviewCsv $coordCsv `
-        -ManualSeedJson $manualJson `
-        -SeedVersion 99 `
-        -CandidateOutputCsv $candOutCsv `
-        -DestinationSeedJson $destSeedJson `
-        -DestinationManifestPath $destManifestJson `
-        -Apply
+    $applyParams = @{
+        CanonicalCsv = $canonicalCsv
+        DdcComparisonCsv = $ddcCsv
+        PajuComparisonCsv = $pajuCsv
+        YangjuComparisonCsv = $yangjuCsv
+        MmaComparisonCsv = $mmaCsv
+        CoordinateReviewCsv = $coordCsv
+        ManualSeedJson = $manualJson
+        SeedVersion = 99
+        CandidateOutputCsv = $candOutCsv
+        DestinationSeedJson = $destSeedJson
+        DestinationManifestPath = $destManifestJson
+        Apply = $true
+    }
+
+    $applied = Invoke-BenefitSeedReleaseCut @applyParams
 
     Assert-ReleaseCutEqual $applied.Mode 'APPLY' 'Apply run must report APPLY mode'
     Assert-ReleaseCutEqual $applied.SeedVersion 99 'Apply run must stamp SeedVersion 99'
     Assert-ReleaseCutEqual $applied.TotalCount 4 'Apply run must package 4 release items'
     Assert-ReleaseCutEqual $applied.ExactPinCount 3 'Apply run must expose 3 exact pins'
     Assert-ReleaseCutEqual $applied.UnconfirmedCoordinateCount 1 'Apply run must leave 1 unconfirmed row as list-only'
-    if (-not (Test-Path -LiteralPath $destSeedJson) -or -not (Test-Path -LiteralPath $destManifestJson) -or -not (Test-Path -LiteralPath $candOutCsv)) {
-        throw 'Apply mode must write destination seed JSON, manifest JSON, and candidates CSV'
+
+    # Use non-default encodings and line endings so rollback must preserve the exact original bytes.
+    $manifestText = [IO.File]::ReadAllText($destManifestJson).Replace([string][char]10, ([string][char]13 + [char]10))
+    [IO.File]::WriteAllText($destManifestJson, $manifestText, [Text.UTF8Encoding]::new($true))
+    $originalSeed = Get-ReleaseCutFileHash $destSeedJson
+    $originalManifest = Get-ReleaseCutFileHash $destManifestJson
+    $originalCandidates = Get-ReleaseCutFileHash $candOutCsv
+
+    $repeated = Invoke-BenefitSeedReleaseCut @applyParams
+    Assert-ReleaseCutEqual $repeated.SeedVersion 99 'An identical release can reuse the installed version'
+    Assert-ReleaseCutEqual (Get-ReleaseCutFileHash $destSeedJson) $originalSeed 'An identical release must preserve the seed bytes'
+    Assert-ReleaseCutEqual (Get-ReleaseCutFileHash $destManifestJson) $originalManifest 'An identical release must preserve the manifest bytes'
+
+    $applyParams.SeedVersion = 98
+    Assert-ReleaseCutFailure { Invoke-BenefitSeedReleaseCut @applyParams } 'RELEASE_CUT_VERSION_NOT_NEWER'
+    $applyParams.SeedVersion = 99
+
+    $collisionParams = $applyParams.Clone()
+    $collisionParams.CandidateOutputCsv = $canonicalCsv
+    Assert-ReleaseCutFailure { Invoke-BenefitSeedReleaseCut @collisionParams } 'RELEASE_CUT_PATH_COLLISION'
+    $collisionParams.CandidateOutputCsv = Join-Path (Split-Path -Parent $destSeedJson) ('./' + (Split-Path -Leaf $destSeedJson))
+    Assert-ReleaseCutFailure { Invoke-BenefitSeedReleaseCut @collisionParams } 'RELEASE_CUT_PATH_COLLISION'
+    $collisionParams.CandidateOutputCsv = Split-Path -Parent $destSeedJson
+    Assert-ReleaseCutFailure { Invoke-BenefitSeedReleaseCut @collisionParams } 'RELEASE_CUT_OUTPUT_NOT_FILE'
+
+    [IO.File]::WriteAllText($manualJson, '{"items":[{"id":"manual-v100"}]}', [Text.UTF8Encoding]::new($false))
+    Assert-ReleaseCutFailure { Invoke-BenefitSeedReleaseCut @applyParams } 'RELEASE_CUT_VERSION_NOT_NEWER'
+    [IO.File]::WriteAllText($manualJson, '{"items":[]}', [Text.UTF8Encoding]::new($false))
+    $canonicalBefore = [IO.File]::ReadAllBytes($canonicalCsv)
+    $canonicalRows = Import-Csv -LiteralPath $canonicalCsv -Encoding utf8
+    $canonicalRows[0].비고 = 'Provenance-only fixture edit'
+    $canonicalRows | Export-Csv -LiteralPath $canonicalCsv -NoTypeInformation -Encoding utf8
+    $previewParams = $applyParams.Clone()
+    $previewParams.Apply = $false
+    $preview = Invoke-BenefitSeedReleaseCut @previewParams
+    Assert-ReleaseCutEqual $preview.SeedSha256 $applied.SeedSha256 'The provenance change must leave the rendered seed unchanged'
+    Assert-ReleaseCutFailure { Invoke-BenefitSeedReleaseCut @applyParams } 'RELEASE_CUT_VERSION_NOT_NEWER'
+    [IO.File]::WriteAllBytes($canonicalCsv, $canonicalBefore)
+
+    $changedRows = Import-Csv -LiteralPath $ddcCsv -Encoding utf8
+    $changedRows[0].공식할인정보 = '15% 할인'
+    $changedRows | Export-Csv -LiteralPath $ddcCsv -NoTypeInformation -Encoding utf8
+    Assert-ReleaseCutFailure { Invoke-BenefitSeedReleaseCut @applyParams } 'RELEASE_CUT_VERSION_NOT_NEWER'
+    Assert-ReleaseCutEqual (Get-ReleaseCutFileHash $destSeedJson) $originalSeed 'The version and path gates must preserve the installed seed'
+    Assert-ReleaseCutEqual (Get-ReleaseCutFileHash $destManifestJson) $originalManifest 'The version and path gates must preserve the installed manifest'
+    Assert-ReleaseCutEqual (Get-ReleaseCutFileHash $candOutCsv) $originalCandidates 'The version and path gates must preserve the candidates'
+
+    $applyParams.SeedVersion = 100
+    foreach ($scenario in @('existing', 'missing-candidates', 'fresh')) {
+        $failureParams = $applyParams.Clone()
+        if ($scenario -eq 'missing-candidates') {
+            [IO.File]::Delete($candOutCsv)
+        } elseif ($scenario -eq 'fresh') {
+            $freshOut = Join-Path $tempDir 'fresh'
+            $failureParams.DestinationSeedJson = Join-Path $freshOut 'benefits.seed.json'
+            $failureParams.DestinationManifestPath = Join-Path $freshOut 'benefits.seed.manifest.json'
+            $failureParams.CandidateOutputCsv = Join-Path $freshOut 'candidates.csv'
+        }
+        & {
+            # Let the real copies publish the seed and manifest, then fail the candidates copy.
+            function Copy-Item {
+                [CmdletBinding()]
+                param([string]$LiteralPath, [string]$Destination)
+
+                if ([IO.Path]::GetFileName($LiteralPath) -ceq 'candidates.csv') {
+                    $installed = Get-Content -Raw -Encoding utf8 -LiteralPath $failureParams.DestinationManifestPath | ConvertFrom-Json
+                    Assert-ReleaseCutEqual $installed.seedVersion 100 'The manifest must have been published before the injected failure'
+                    if ((Get-ReleaseCutFileHash $failureParams.DestinationSeedJson) -ceq $originalSeed) {
+                        throw 'The changed seed must have been published before the injected failure'
+                    }
+                    [IO.File]::WriteAllBytes($Destination, [byte[]]@(0, 255, 1))
+                    $LiteralPath = Join-Path $tempDir 'injected-missing-source.csv'
+                }
+                [IO.File]::Copy($LiteralPath, $Destination, $true)
+            }
+
+            Assert-ReleaseCutFailure { Invoke-BenefitSeedReleaseCut @failureParams } 'injected-missing-source.csv'
+        }
+        $outputDir = Split-Path -Parent $failureParams.DestinationSeedJson
+        if (Get-ChildItem -LiteralPath $outputDir -Force -Filter '.milimap-release-cut-*.tmp') {
+            throw 'A late copy failure must remove temporary output files'
+        }
+        if ($scenario -eq 'fresh') {
+            if (Get-ChildItem -LiteralPath $outputDir -Force) {
+                throw 'A late copy failure must remove newly created seed, manifest, and candidates outputs'
+            }
+        } else {
+            Assert-ReleaseCutEqual (Get-ReleaseCutFileHash $destSeedJson) $originalSeed 'A late copy failure must restore the original seed bytes'
+            Assert-ReleaseCutEqual (Get-ReleaseCutFileHash $destManifestJson) $originalManifest 'A late copy failure must restore the original manifest bytes'
+            if ($scenario -eq 'existing') {
+                Assert-ReleaseCutEqual (Get-ReleaseCutFileHash $candOutCsv) $originalCandidates 'A partial copy must preserve the original candidates bytes'
+            } elseif (Test-Path -LiteralPath $candOutCsv) {
+                throw 'A late copy failure must leave absent candidates absent'
+            }
+        }
+    }
+
+    $upgraded = Invoke-BenefitSeedReleaseCut @applyParams
+    Assert-ReleaseCutEqual $upgraded.SeedVersion 100 'A version bump must allow changed data to apply after rollback'
+    if ($upgraded.SeedSha256 -ceq $applied.SeedSha256) {
+        throw 'The changed official benefit must yield a changed seed payload'
     }
 
     # 3. Zero-Kakao coordinate provenance guard
@@ -122,5 +247,10 @@ try {
 } finally {
     Remove-Item -LiteralPath $tempDir -Recurse -Force -ErrorAction SilentlyContinue
 }
+
+$cli = & (Join-Path $PSScriptRoot 'invoke-benefit-seed-release-cut.ps1')
+Assert-ReleaseCutEqual $cli.Mode 'DRY_RUN' 'Bare script execution must report DRY_RUN'
+Assert-ReleaseCutEqual $cli.SeedVersion 14 'Bare script execution must read the bundled manifest version'
+Assert-ReleaseCutEqual $cli.SeedSha256 $dryRun.SeedSha256 'Bare script execution must stage the same seed as library mode'
 
 Write-Output 'PASS: benefit seed release cut tests'

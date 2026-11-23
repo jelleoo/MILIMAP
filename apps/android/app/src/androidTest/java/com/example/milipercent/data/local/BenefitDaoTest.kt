@@ -7,6 +7,9 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -146,6 +149,48 @@ class BenefitDaoTest {
         assertEquals(0, dao.deleteByIdAndSource("manual_seed_same", MANUAL_LOCAL_SOURCE_TYPE))
         assertEquals(1, dao.deleteByIdAndSource("manual_local_delete", MANUAL_LOCAL_SOURCE_TYPE))
         assertEquals("manual_seed_same", dao.observeById("manual_seed_same").first()?.id)
+    }
+
+    @Test
+    fun replaceBySourcePreservesFavoritesForRetainedBenefitsAndDeletesRemovedFavorites() = runBlocking {
+        val userId = database.accountDao().insert(
+            UserEntity(email = "fav@example.com", displayName = "사용자", passwordSalt = "salt", passwordHash = "hash", isAdmin = false),
+        )
+        val keptOld = entity(id = "mma_keep", rowNumber = 1, name = "유지 가게").copy(lastVerifiedAt = "2026-10-01")
+        val dropped = entity(id = "mma_drop", rowNumber = 2, name = "종료 가게")
+        dao.insertAll(listOf(keptOld, dropped))
+        database.favoriteDao().insert(FavoriteEntity(userId, "mma_keep", 10L))
+        database.favoriteDao().insert(FavoriteEntity(userId, "mma_drop", 20L))
+
+        val keptNew = keptOld.copy(lastVerifiedAt = "2026-11-23", syncedAt = 200L)
+        val addedNew = entity(id = "mma_new", rowNumber = 3, name = "신규 가게")
+        dao.replaceBySource(MMA_SOURCE_TYPE, listOf(keptNew, addedNew))
+
+        assertTrue(database.favoriteDao().contains(userId, "mma_keep"))
+        assertFalse(database.favoriteDao().contains(userId, "mma_drop"))
+        assertEquals("2026-11-23", dao.getByIdOnce("mma_keep")?.lastVerifiedAt)
+        assertNull(dao.getByIdOnce("mma_drop"))
+        assertNotNull(dao.getByIdOnce("mma_new"))
+    }
+
+    @Test
+    fun deleteRetiredBundledSeedRowsHandlesOverThousandRetainedIds() = runBlocking {
+        val keep = entity(id = "seed_keep_1", rowNumber = null, name = "유지 시드", sourceType = BenefitSourceType.LOCAL_GOV.name)
+        val retire = entity(id = "seed_retire_1", rowNumber = null, name = "은퇴 시드", sourceType = BenefitSourceType.LOCAL_GOV.name)
+        dao.insertAll(listOf(keep, retire))
+
+        val retainedIds = listOf("seed_keep_1") + (1..1100).map { "seed_other_$it" }
+        dao.deleteRetiredBundledSeedRows(
+            bundledSourceTypes = listOf(
+                BenefitSourceType.LOCAL_GOV.name,
+                BenefitSourceType.MANUAL_SEED.name,
+                BenefitSourceType.PUBLIC_EVIDENCE.name,
+            ),
+            retainedIds = retainedIds,
+        )
+
+        assertNotNull(dao.getByIdOnce("seed_keep_1"))
+        assertNull(dao.getByIdOnce("seed_retire_1"))
     }
 
     private fun entity(

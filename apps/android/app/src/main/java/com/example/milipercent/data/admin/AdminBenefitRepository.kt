@@ -53,7 +53,7 @@ class RoomAdminBenefitRepository(
     override suspend fun create(input: AdminBenefitInput): String {
         validate(input)
         val id = "manual_local_${uuidFactory()}"
-        database.benefitDao().insertAll(
+        database.benefitDao().upsertAll(
             listOf(input.toEntity(id, currentTimeMillis(), BenefitSourceType.MANUAL_LOCAL.name)),
         )
         return id
@@ -63,7 +63,7 @@ class RoomAdminBenefitRepository(
         validate(input)
         database.withTransaction {
             val current = requireManual(id)
-            database.benefitDao().insertAll(
+            database.benefitDao().upsertAll(
                 listOf(input.toEntity(current.id, current.syncedAt, current.sourceType)),
             )
         }
@@ -72,7 +72,7 @@ class RoomAdminBenefitRepository(
     override suspend fun end(id: String) {
         database.withTransaction {
             val current = requireManual(id)
-            database.benefitDao().insertAll(listOf(current.copy(status = BenefitStatus.ENDED.name)))
+            database.benefitDao().upsertAll(listOf(current.copy(status = BenefitStatus.ENDED.name)))
         }
     }
 

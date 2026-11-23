@@ -5,6 +5,8 @@ import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.example.milipercent.data.local.BenefitDatabase
 import com.example.milipercent.data.local.BenefitSourceType
+import com.example.milipercent.data.local.FavoriteEntity
+import com.example.milipercent.data.local.UserEntity
 import com.example.milipercent.model.BenefitStatus
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
@@ -53,6 +55,23 @@ class RoomAdminBenefitRepositoryTest {
         assertTrue(runCatching { repository.create(input(name = " ")) }.isFailure)
         assertTrue(runCatching { repository.create(input(benefitDescription = " ")) }.isFailure)
         assertTrue(runCatching { repository.create(input(sourceLabel = " ")) }.isFailure)
+    }
+
+    @Test
+    fun updateAndEndPreserveFavoriteDbRowWhileEndedIsHiddenFromUserVisible() = runBlocking {
+        val userId = database.accountDao().insert(
+            UserEntity(email = "user@example.com", displayName = "사용자", passwordSalt = "salt", passwordHash = "hash", isAdmin = false),
+        )
+        val id = repository.create(input(name = "수동 가게"))
+        database.favoriteDao().insert(FavoriteEntity(userId, id, 100L))
+
+        repository.update(id, input(name = "수정된 수동 가게"))
+        assertTrue(database.favoriteDao().contains(userId, id))
+        assertEquals("수정된 수동 가게", database.benefitDao().getByIdOnce(id)?.name)
+
+        repository.end(id)
+        assertTrue(database.favoriteDao().contains(userId, id))
+        assertTrue(database.benefitDao().observeUserVisible(BenefitStatus.ENDED.name).first().none { it.id == id })
     }
 
     private fun input(

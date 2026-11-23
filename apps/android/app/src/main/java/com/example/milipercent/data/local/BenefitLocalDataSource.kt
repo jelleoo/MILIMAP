@@ -48,7 +48,7 @@ class RoomBenefitLocalDataSource(
         dao.countBySource(sourceType)
 
     override suspend fun upsertBenefit(benefit: BenefitEntity) {
-        dao.insertAll(listOf(benefit))
+        dao.upsertAll(listOf(benefit))
     }
 
     override suspend fun deleteBenefit(id: String, sourceType: String): Boolean =

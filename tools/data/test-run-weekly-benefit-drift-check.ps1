@@ -1,4 +1,4 @@
-﻿Set-StrictMode -Version Latest
+Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
 . (Join-Path $PSScriptRoot 'run-weekly-benefit-drift-check.ps1') -LibraryOnly
@@ -41,6 +41,31 @@ if (-not $rejectedMissingList) {
     throw 'Expected ConvertFrom-WeeklyMmaJsonpListText to reject payload missing list array'
 }
 
+
+function Assert-WeeklyThrows {
+    param([scriptblock]$Action, [string]$Expected, [string]$Message)
+
+    try {
+        & $Action | Out-Null
+    } catch {
+        if ($_.Exception.Message -like $Expected) { return }
+        throw
+    }
+    throw "Assertion failed: $Message"
+}
+
+foreach ($invalidJsonp in @(
+    'WrongCallback({"success":true,"list":[{}]});',
+    'MmaBenefitList({"success":false,"list":[{}]});',
+    'MmaBenefitList({"success":true,"list":{"addr":"서울 종로구"}});',
+    'MmaBenefitList({"success":true,"list":[]});',
+    'MmaBenefitList({"success":true,"list":[{},null]});',
+    'MmaBenefitList({"success":true,"list":[{},]});',
+    'MmaBenefitList([{"success":true,"list":[{}]}]);'
+)) {
+    Assert-WeeklyThrows { ConvertFrom-WeeklyMmaJsonpListText -RawText $invalidJsonp } 'WEEKLY_MMA_*' "Unusable MMA JSONP must be rejected: $invalidJsonp"
+}
+
 # 2. Metro comparison: cd= match, normalized (name, addr) fallback, content drift (DISCOUNT|PHONE), new candidate, missing canonical, non-metro ignore, ended ignore
 $liveItems = @(
     [pscustomobject]@{ udgigwan_cd = '1001'; udae_ggm = '코드매칭점'; addr = '서울특별시 종로구 종로 1'; udgigwan_telno = '02-000-9999'; udsangse_cn = '전 메뉴 20% 할인'; uddaesang_cn = '현역병'; udggeopjong_gbnm = '카페'; jbc_nm = '서울'; hyhaeje_yn = '' },
@@ -73,17 +98,118 @@ Assert-WeeklyEqual -Actual $drift.newCandidates[0].InstitutionCode -Expected '10
 Assert-WeeklyEqual -Actual $drift.missingCanonicalCount -Expected 1 -Message 'Exactly 1 missing active canonical MMA row expected'
 Assert-WeeklyEqual -Actual $drift.missingCanonical[0].BusinessId -Expected 'biz-3' -Message 'Missing canonical row must be biz-3'
 
+
+$blankClaims = [pscustomobject]@{
+    udgigwan_cd = '1001'; udae_ggm = '코드매칭점'; addr = '서울특별시 종로구 종로 1'
+    udsangse_cn = ' '; uddaesang_cn = $null; udgigwan_telno = ''
+}
+$blankDrift = Compare-WeeklyMmaMetroToCanonical -LiveItems @($blankClaims) -CanonicalRows $canonicalRows
+Assert-WeeklyEqual $blankDrift.changedCandidates[0].ChangedFields 'DISCOUNT|TARGET|PHONE' 'Present but blank MMA claims must be reported'
+Assert-WeeklyEqual $blankDrift.changedCandidates[0].LiveDiscount '' 'Whitespace-only discount is recorded as empty'
+Assert-WeeklyEqual $blankDrift.changedCandidates[0].LiveTarget '' 'Explicit null eligibility is recorded as empty'
+Assert-WeeklyEqual $blankDrift.changedCandidates[0].LivePhone '' 'Blank phone is recorded as empty'
+
+$omittedClaims = [pscustomobject]@{
+    institutionCode = '1001'; businessName = '코드매칭점'; roadAddress = '서울특별시 종로구 종로 1'
+}
+$omittedDrift = Compare-WeeklyMmaMetroToCanonical -LiveItems @($omittedClaims) -CanonicalRows $canonicalRows
+Assert-WeeklyEqual $omittedDrift.changedCount 0 'Omitted MMA claim aliases do not erase canonical claims'
+
+$omittedClaims | Add-Member -NotePropertyName eligibleTarget -NotePropertyValue ' '
+$aliasedDrift = Compare-WeeklyMmaMetroToCanonical -LiveItems @($omittedClaims) -CanonicalRows $canonicalRows
+Assert-WeeklyEqual $aliasedDrift.changedCandidates[0].ChangedFields 'TARGET' 'A present blank alias is observed even when the primary field is omitted'
+
+Assert-WeeklyThrows {
+    Compare-WeeklyMmaMetroToCanonical -LiveItems $liveItems[3..5] -CanonicalRows $canonicalRows
+} 'WEEKLY_MMA_*' 'An out-of-scope MMA list must not create missing canonical candidates'
 # 2b. Yangju XLSX attachment hash check
-$yjSampleBytes = [Text.Encoding]::UTF8.GetBytes('yangju-xlsx-sample-v1')
+. (Join-Path $PSScriptRoot 'testdata/benefit-evidence-xlsx/test-support.ps1')
+$yjSampleBytes = [byte[]](New-XlsxTestBytes)
 $yjSampleHash = [BitConverter]::ToString([Security.Cryptography.SHA256]::HashData($yjSampleBytes)).Replace('-', '').ToLowerInvariant()
 $yjOk = Test-WeeklyYangjuAttachmentDrift -AttachmentBytes $yjSampleBytes -BaselineHash $yjSampleHash -BaselineByteSize $yjSampleBytes.Length
 Assert-WeeklyEqual -Actual $yjOk.status -Expected 'OK' -Message 'Matching SHA-256 hash should yield OK'
 Assert-WeeklyEqual -Actual $yjOk.hashMatched -Expected $true -Message 'hashMatched should be true when bytes match'
 
-$yjChangedBytes = [Text.Encoding]::UTF8.GetBytes('yangju-xlsx-sample-v2')
+$yjChangedBytes = [byte[]](New-XlsxTestBytes -Benefit '10% 할인')
 $yjDrift = Test-WeeklyYangjuAttachmentDrift -AttachmentBytes $yjChangedBytes -BaselineHash $yjSampleHash -BaselineByteSize $yjSampleBytes.Length
 Assert-WeeklyEqual -Actual $yjDrift.status -Expected 'DRIFT_DETECTED' -Message 'Modified bytes should yield DRIFT_DETECTED'
 Assert-WeeklyEqual -Actual $yjDrift.hashMatched -Expected $false -Message 'hashMatched should be false when bytes differ'
+
+
+Assert-WeeklyThrows {
+    Test-WeeklyYangjuAttachmentDrift -AttachmentBytes ([Text.Encoding]::UTF8.GetBytes('<html>not a workbook</html>')) -BaselineHash $yjSampleHash
+} 'WEEKLY_YANGJU_*' 'HTML downloads must be rejected before hash comparison'
+
+# Exercise the command with fixture responses at the HTTP boundary.
+$yangjuList = @'
+<a href="./selectBbsNttView.do?key=2716&amp;bbsNo=81&amp;nttNo=200411">군장병 할인·우대 업소현황 (이전)</a>
+<a href="./selectBbsNttView.do?key=2716&amp;bbsNo=81&amp;nttNo=210000">군장병 행사 일정</a>
+<a href="https://example.invalid/health/selectBbsNttView.do?key=2716&amp;bbsNo=81&amp;nttNo=209999">군장병 할인·우대 업소현황</a>
+<a href="./selectBbsNttView.do?key=2716&amp;bbsNo=99&amp;nttNo=209998">군장병 할인·우대 업소현황</a>
+<a href='./selectBbsNttView.do?key=2716&amp;bbsNo=81&amp;nttNo=208699&amp;pageIndex=1'>군장병 할인&middot;우대 업소 참여 모집 및 <strong>업소현황</strong>(2026.10.01.기준)</a>
+'@
+$yangjuNotice = @'
+<li><div class="down_view"><span>군장병 우대업소 참여신청서.hwp</span><a href="/health/downloadBbsFile.do?key=2716&amp;bbsNo=81&amp;atchmnflNo=204210">다운로드</a></div></li>
+<li><div class="down_view"><span><img alt="xlsx파일첨부" />군장병 할인우대업소 현황(2026.10.01.기준).xlsx</span><a href="/health/downloadBbsFile.do?key=2716&amp;bbsNo=81&amp;atchmnflNo=204211">다운로드</a></div></li>
+'@
+$badNotice = '<li><div class="down_view"><span>군장병 할인우대업소 현황.xlsx</span><a href="https://example.invalid/health/downloadBbsFile.do?key=2716&amp;bbsNo=81&amp;atchmnflNo=204211">다운로드</a></div></li>'
+$fixtureResponse = @{ Mma = $validJsonp; Notice = $yangjuNotice; Requests = [Collections.Generic.List[string]]::new() }
+
+function Invoke-WebRequest {
+    [CmdletBinding()]
+    param([uri]$Uri, [hashtable]$Headers, [int]$MaximumRedirection, [int]$TimeoutSec)
+
+    $fixtureResponse.Requests.Add($Uri.AbsoluteUri)
+    switch ($Uri.AbsolutePath) {
+        '/caisGGGS/mmanrsrListAjaxJsonCallNew.json' { return [pscustomobject]@{ StatusCode = 200; Content = $fixtureResponse.Mma } }
+        '/health/selectBbsNttList.do' { return [pscustomobject]@{ StatusCode = 200; Content = $yangjuList } }
+        '/health/selectBbsNttView.do' {
+            if ($Uri.Host -ne 'www.yangju.go.kr' -or $Uri.Query -notmatch '(?:[?&])nttNo=208699(?:&|$)' -or $MaximumRedirection -ne 0) { throw "Unexpected notice request: $Uri" }
+            return [pscustomobject]@{ StatusCode = 200; Content = $fixtureResponse.Notice }
+        }
+        '/health/downloadBbsFile.do' {
+            if ($Uri.Host -ne 'www.yangju.go.kr' -or $Uri.Query -notmatch '(?:[?&])atchmnflNo=204211(?:&|$)' -or $MaximumRedirection -ne 0) { throw "Unexpected attachment request: $Uri" }
+            return [pscustomobject]@{ StatusCode = 200; Content = $yjSampleBytes }
+        }
+        '/manual.xlsx' { return [pscustomobject]@{ StatusCode = 200; Content = [Text.Encoding]::UTF8.GetBytes('<html>error</html>') } }
+        default { throw "No weekly drift fixture for $Uri" }
+    }
+}
+
+$testRoot = Join-Path ([IO.Path]::GetTempPath()) ('milimap-weekly-drift-' + [guid]::NewGuid().ToString('N'))
+$weeklyScript = Join-Path $PSScriptRoot 'run-weekly-benefit-drift-check.ps1'
+try {
+    $successDir = Join-Path $testRoot 'success'
+    & $weeklyScript -OutputDirectory $successDir | Out-Null
+    $yangju = Get-Content -Raw -LiteralPath (Join-Path $successDir 'yangju-summary.json') | ConvertFrom-Json
+    Assert-WeeklyEqual $yangju.status 'DRIFT_DETECTED' 'The discovered workbook is compared with the recorded baseline'
+    Assert-WeeklyEqual ([uri]$yangju.noticeUrl).Host 'www.yangju.go.kr' 'Resolved notice provenance names the official host'
+    Assert-WeeklyEqual ([uri]$yangju.attachmentUrl).Query '?key=2716&bbsNo=81&atchmnflNo=204211' 'Report retains the newest verified attachment URL'
+
+    $fixtureResponse.Mma = 'MmaBenefitList({"success":true,"list":[]});'
+    $fixtureResponse.Notice = $badNotice
+    $fixtureResponse.Requests.Clear()
+    $failureDir = Join-Path $testRoot 'failure'
+    Assert-WeeklyThrows {
+        & $weeklyScript -OutputDirectory $failureDir -FailOnFetchError
+    } 'WEEKLY_DRIFT_FETCH_FAILED:*mma*yangju*' 'Strict mode fails when MMA and Yangju are unusable'
+    $failed = Get-Content -Raw -LiteralPath (Join-Path $failureDir 'weekly-drift-summary.json') | ConvertFrom-Json
+    foreach ($sourceId in @('mma', 'yangju')) {
+        Assert-WeeklyEqual ($failed.sources | Where-Object id -CEQ $sourceId).status 'FETCH_FAILED' "Failed $sourceId is recorded in the report before strict exit"
+    }
+    Assert-WeeklyEqual (Test-Path -LiteralPath (Join-Path $failureDir 'mma-missing-canonical.csv')) $false 'Failed MMA input produces no missing-canonical artifact'
+    Assert-WeeklyEqual @($fixtureResponse.Requests | Where-Object { $_ -like '*downloadBbsFile.do*' }).Count 0 'An off-origin attachment is never requested'
+
+    $fixtureResponse.Requests.Clear()
+    $overrideDir = Join-Path $testRoot 'override'
+    & $weeklyScript -OutputDirectory $overrideDir -YangjuAttachmentUrl 'https://fixtures.example.invalid/manual.xlsx' | Out-Null
+    $overridden = Get-Content -Raw -LiteralPath (Join-Path $overrideDir 'weekly-drift-summary.json') | ConvertFrom-Json
+    Assert-WeeklyEqual ($overridden.sources | Where-Object id -CEQ yangju).status 'FETCH_FAILED' 'Explicit overrides also reject HTML'
+    Assert-WeeklyEqual @($fixtureResponse.Requests | Where-Object { $_ -like '*/health/selectBbsNtt*' }).Count 0 'Explicit overrides bypass notice discovery'
+    Assert-WeeklyEqual @($fixtureResponse.Requests | Where-Object { $_ -ceq 'https://fixtures.example.invalid/manual.xlsx' }).Count 1 'The explicit attachment URL is requested'
+} finally {
+    if ([IO.Directory]::Exists($testRoot)) { [IO.Directory]::Delete($testRoot, $true) }
+}
 
 # 3. Markdown report generation
 $summaryFixture = [pscustomobject][ordered]@{

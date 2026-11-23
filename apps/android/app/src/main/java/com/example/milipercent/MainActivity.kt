@@ -108,6 +108,7 @@ class MainActivity : ComponentActivity() {
                         onAdminDelete = viewModel::deleteManualBenefit,
                         onClearSearch = viewModel::clearSearch,
                         onMapCameraIdle = viewModel::onMapCameraIdle,
+                        onCameraRequestApplied = viewModel::markCameraRequestApplied,
                         onSearchInMapBounds = viewModel::searchInCurrentMapBounds,
                         onMapBenefitSelected = viewModel::selectMapBenefit,
                     )

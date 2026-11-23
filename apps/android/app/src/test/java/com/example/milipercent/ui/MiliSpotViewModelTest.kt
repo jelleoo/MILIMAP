@@ -181,6 +181,32 @@ class MiliSpotViewModelTest {
         assertEquals(listOf("paju-1"), viewModel.uiState.value.mapBenefits.map { it.id })
     }
 
+    @Test
+    fun cameraIdleRecordsSnapshotAndProgrammaticMoveAdvancesRequestId() = runTest(dispatcher.scheduler) {
+        val ddcItem = benefit("ddc-1", name = "동두천 식당", address = "경기도 동두천시", lat = 37.90, lng = 127.05, category = "음식", district = "동두천시")
+        val viewModel = MiliSpotViewModel(
+            FakeBenefitRepository(listOf(ddcItem)),
+            FakeAccountRepository(),
+            FakeFavoriteRepository(),
+            FakeAdminRepository(),
+            FakeSeedInstaller(),
+            FakeSessionStorage(),
+            mmaConfigured = false,
+        )
+        advanceUntilIdle()
+
+        viewModel.markCameraRequestApplied(0L)
+        val bounds = GeoBounds(37.89, 127.04, 37.91, 127.06)
+        viewModel.onMapCameraIdle(GeoPoint(37.90, 127.05), bounds, byUserGesture = true, zoom = 15.0)
+
+        assertEquals(0L, viewModel.uiState.value.appliedCameraRequestId)
+        assertEquals(MapCameraSnapshot(GeoPoint(37.90, 127.05), 15.0), viewModel.uiState.value.lastCameraSnapshot)
+
+        viewModel.updateSearchText("동두천")
+        viewModel.submitSearch()
+        assertTrue(viewModel.uiState.value.cameraRequestId > viewModel.uiState.value.appliedCameraRequestId)
+    }
+
     private class FakeSessionStorage(initial: Long? = null) : SessionStorage {
         private var id = initial
         override fun userId(): Long? = id

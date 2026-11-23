@@ -47,6 +47,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -84,7 +85,8 @@ fun MilitaryBenefitApp(
     onAdminEnd: (String) -> Unit = {},
     onAdminDelete: (String) -> Unit = {},
     onClearSearch: () -> Unit = {},
-    onMapCameraIdle: (GeoPoint, GeoBounds, Boolean) -> Unit = { _, _, _ -> },
+    onMapCameraIdle: (GeoPoint, GeoBounds, Boolean, Double) -> Unit = { _, _, _, _ -> },
+    onCameraRequestApplied: (Long) -> Unit = {},
     onSearchInMapBounds: () -> Unit = {},
     onMapBenefitSelected: (String?) -> Unit = {},
 ) {
@@ -119,6 +121,7 @@ fun MilitaryBenefitApp(
                 onBenefitSelected = onBenefitSelected,
                 onMapBenefitSelected = onMapBenefitSelected,
                 onMapCameraIdle = onMapCameraIdle,
+                onCameraRequestApplied = onCameraRequestApplied,
                 onSearchInMapBounds = onSearchInMapBounds,
                 onFavorite = onFavorite,
                 onRefresh = onRefresh,
@@ -201,7 +204,8 @@ private fun DiscoverScreen(
     onDistrictSelected: (BenefitDistrict) -> Unit,
     onBenefitSelected: (String) -> Unit,
     onMapBenefitSelected: (String?) -> Unit,
-    onMapCameraIdle: (GeoPoint, GeoBounds, Boolean) -> Unit,
+    onMapCameraIdle: (GeoPoint, GeoBounds, Boolean, Double) -> Unit,
+    onCameraRequestApplied: (Long) -> Unit,
     onSearchInMapBounds: () -> Unit,
     onFavorite: (String) -> Unit,
     onRefresh: () -> Unit,
@@ -210,7 +214,44 @@ private fun DiscoverScreen(
 ) {
     var isSheetExpanded by remember { mutableStateOf(false) }
     var showFilters by remember { mutableStateOf(false) }
+    val focusManager = LocalFocusManager.current
     val categories = remember(state.benefits) { orderedCategories(state.benefits) }
+
+    val handleSearch = {
+        focusManager.clearFocus()
+        showFilters = false
+        onSearch()
+    }
+    val handleClearSearch = {
+        focusManager.clearFocus()
+        onClearSearch()
+    }
+    val handleCategorySelected: (String) -> Unit = { category ->
+        focusManager.clearFocus()
+        showFilters = false
+        onCategorySelected(category)
+    }
+    val handlePresetSelected: (String) -> Unit = { preset ->
+        focusManager.clearFocus()
+        showFilters = false
+        onPresetSelected(preset)
+    }
+    val handleDistrictSelected: (BenefitDistrict) -> Unit = { district ->
+        focusManager.clearFocus()
+        showFilters = false
+        onDistrictSelected(district)
+    }
+    val handleCurrentLocation = {
+        focusManager.clearFocus()
+        showFilters = false
+        isSheetExpanded = false
+        onCurrentLocation()
+    }
+    val handleSearchInMapBounds = {
+        focusManager.clearFocus()
+        showFilters = false
+        onSearchInMapBounds()
+    }
 
     Box(modifier.fillMaxSize()) {
         BenefitMap(
@@ -221,8 +262,14 @@ private fun DiscoverScreen(
             onSelect = { id -> onMapBenefitSelected(id) },
             modifier = Modifier.fillMaxSize().testTag("map_slot"),
             cameraTarget = state.cameraTarget,
+            appliedCameraRequestId = state.appliedCameraRequestId,
+            lastCameraSnapshot = state.lastCameraSnapshot,
             selectedBenefitId = state.selectedMapBenefitId,
-            onMapBlankClick = { onMapBenefitSelected(null) },
+            onMapBlankClick = {
+                focusManager.clearFocus()
+                onMapBenefitSelected(null)
+            },
+            onCameraRequestApplied = onCameraRequestApplied,
             onCameraIdle = onMapCameraIdle,
         )
 
@@ -238,22 +285,22 @@ private fun DiscoverScreen(
                 hasActiveQuery = state.searchText.isNotEmpty() || state.activeSearch.isNotEmpty(),
                 isAdmin = state.user?.isAdmin == true,
                 onSearchTextChanged = onSearchTextChanged,
-                onSearch = onSearch,
-                onClearSearch = onClearSearch,
+                onSearch = handleSearch,
+                onClearSearch = handleClearSearch,
                 onAdminClick = { onNavigate(AppDestination.ADMIN) },
             )
             FloatingCategoryChipRow(
                 categories = categories,
                 selectedCategory = state.selectedCategory,
                 showMapMarkers = state.showMapMarkers,
-                onCategorySelected = onCategorySelected,
+                onCategorySelected = handleCategorySelected,
             )
             if (state.isSearchInMapBoundsAvailable) {
                 Spacer(Modifier.height(8.dp))
                 Surface(
                     modifier = Modifier
                         .testTag("search_in_map_bounds")
-                        .clickable(onClick = onSearchInMapBounds),
+                        .clickable(onClick = handleSearchInMapBounds),
                     shape = RoundedCornerShape(50),
                     color = Color.White,
                     shadowElevation = 5.dp,
@@ -301,7 +348,7 @@ private fun DiscoverScreen(
                     modifier = Modifier
                         .size(46.dp)
                         .testTag("current_location")
-                        .clickable(onClick = onCurrentLocation),
+                        .clickable(onClick = handleCurrentLocation),
                     shape = CircleShape,
                     color = Color.White,
                     shadowElevation = 6.dp,
@@ -337,10 +384,16 @@ private fun DiscoverScreen(
                         state = state,
                         isSheetExpanded = isSheetExpanded,
                         showFilters = showFilters,
-                        onToggleExpanded = { isSheetExpanded = !isSheetExpanded },
-                        onToggleFilters = { showFilters = !showFilters },
-                        onPresetSelected = onPresetSelected,
-                        onDistrictSelected = onDistrictSelected,
+                        onToggleExpanded = {
+                            isSheetExpanded = !isSheetExpanded
+                            if (isSheetExpanded) showFilters = false
+                        },
+                        onToggleFilters = {
+                            showFilters = !showFilters
+                            if (showFilters) isSheetExpanded = false
+                        },
+                        onPresetSelected = handlePresetSelected,
+                        onDistrictSelected = handleDistrictSelected,
                         onBenefitSelected = onBenefitSelected,
                         onFavorite = onFavorite,
                         onRefresh = onRefresh,
@@ -574,12 +627,18 @@ private fun DiscoverBottomSheetContent(
 
         if (showFilters) {
             Column(Modifier.padding(top = 6.dp)) {
-                DistrictRow(state.selectedDistrict, onDistrictSelected)
+                Text(
+                    "경기 · 인천 주요 지역",
+                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 2.dp),
+                    color = Muted,
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.SemiBold,
+                )
                 LazyRow(
-                    contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp),
+                    contentPadding = PaddingValues(horizontal = 14.dp, vertical = 4.dp),
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
                 ) {
-                    items(listOf("홍대", "성수", "강남역", "동두천역", "파주", "송도", "수원역")) { preset ->
+                    items(listOf("파주", "동두천", "양주", "의정부", "수원", "성남", "고양", "용인", "부천", "안양", "인천", "송도", "부평")) { preset ->
                         FilterChip(
                             selected = state.locationLabel == preset,
                             onClick = { onPresetSelected(preset) },
@@ -587,6 +646,15 @@ private fun DiscoverBottomSheetContent(
                         )
                     }
                 }
+                Text(
+                    "서울 자치구",
+                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 2.dp),
+                    color = Muted,
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.SemiBold,
+                )
+                DistrictRow(state.selectedDistrict, onDistrictSelected)
+                Spacer(Modifier.height(6.dp))
                 LocationVerificationSummary(
                     benefits = state.visibleBenefits,
                     onBenefitSelected = onBenefitSelected,

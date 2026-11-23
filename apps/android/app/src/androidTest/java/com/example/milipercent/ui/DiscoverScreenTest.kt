@@ -47,6 +47,8 @@ class DiscoverScreenTest {
         composeRule.onNodeWithTag("benefit_card_test-benefit").assertIsDisplayed()
         composeRule.onNodeWithTag("toggle_filters").performClick()
         composeRule.onNodeWithTag("district_filter").assertIsDisplayed()
+        composeRule.onNodeWithTag("toggle_sheet").performClick()
+        composeRule.onNodeWithTag("district_filter").assertDoesNotExist()
     }
 
     private fun state(): MiliSpotUiState {

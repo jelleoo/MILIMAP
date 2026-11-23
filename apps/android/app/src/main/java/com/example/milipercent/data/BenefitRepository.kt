@@ -9,6 +9,7 @@ import com.example.milipercent.data.local.MMA_SOURCE_TYPE
 import com.example.milipercent.data.local.toDetail
 import com.example.milipercent.data.local.toDomain
 import com.example.milipercent.data.local.toUiModel
+import com.example.milipercent.data.local.uniquePublishedBenefitIdsByIdentity
 import com.example.milipercent.model.Benefit
 import com.example.milipercent.model.BenefitCollection
 import com.example.milipercent.model.BenefitDetail
@@ -62,16 +63,10 @@ class BenefitRepository(
         val scopedRemote = collection.benefits.filter { reconciler.isCurrentProductRegion(it.address) }
         require(scopedRemote.isNotEmpty()) { "수도권 나라사랑가게 API 응답이 없어 기존 캐시를 교체하지 않습니다." }
         val allStoredBenefits = localDataSource.getAllBenefits()
-        val publishedOfficialIdentities = allStoredBenefits
-            .asSequence()
-            .filter { entity ->
-                entity.status == "ACTIVE" && entity.sourceType in PUBLISHED_OFFICIAL_SOURCE_TYPES
-            }
-            .map { entity -> BenefitIdentity.normalizedKey(entity.name, entity.address) }
-            .toSet()
+        val publishedOfficialIdsByIdentity = allStoredBenefits.uniquePublishedBenefitIdsByIdentity()
         val remoteMmaCandidates = scopedRemote.filterNot { remote ->
             !remote.name.isBlank() && !remote.address.isNullOrBlank() &&
-                BenefitIdentity.normalizedKey(remote.name, remote.address) in publishedOfficialIdentities
+                BenefitIdentity.normalizedKey(remote.name, remote.address) in publishedOfficialIdsByIdentity
         }
         val reconciliation = try {
             if (remoteMmaCandidates.isEmpty()) {
@@ -197,10 +192,6 @@ class BenefitRepository(
         const val ADDITIONAL_RETRY_COUNT = 2
         private const val TOTAL_ATTEMPTS = ADDITIONAL_RETRY_COUNT + 1
         private const val RETRY_DELAY_MILLIS = 500L
-        private val PUBLISHED_OFFICIAL_SOURCE_TYPES = setOf(
-            "LOCAL_GOV",
-            "PUBLIC_EVIDENCE",
-        )
     }
 }
 

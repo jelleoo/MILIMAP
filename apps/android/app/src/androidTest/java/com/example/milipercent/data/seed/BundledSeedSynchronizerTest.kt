@@ -4,12 +4,19 @@ import android.content.Context
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import com.example.milipercent.data.BenefitRepository
 import com.example.milipercent.data.local.BenefitDatabase
 import com.example.milipercent.data.local.BenefitEntity
+import com.example.milipercent.data.local.BenefitIdentity
 import com.example.milipercent.data.local.BenefitSourceType
 import com.example.milipercent.data.local.FavoriteEntity
 import com.example.milipercent.data.local.SeedStateEntity
 import com.example.milipercent.data.local.UserEntity
+import com.example.milipercent.data.local.RoomBenefitLocalDataSource
+import com.example.milipercent.model.BenefitPage
+import com.example.milipercent.model.MmaBenefit
+import com.example.milipercent.network.BenefitPageSource
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -102,6 +109,74 @@ class BundledSeedSynchronizerTest {
         assertEquals(remoteMma, database.benefitDao().getByIdOnce(remoteMma.id))
         assertEquals(BUNDLED_SEED_VERSION, database.seedStateDao().version(BUNDLED_SEED_NAME))
     }
+
+    @Test
+    fun seedUpgradeAndApiRefreshPreserveFavoritesAcrossPromotion() = runBlocking {
+        val bundled = publishedMmaSeed()
+        val remote = remoteVersionOf(bundled)
+        val firstUser = database.accountDao().insert(user())
+        val secondUser = database.accountDao().insert(user().copy(email = "second@example.com"))
+        val favorites = database.favoriteDao()
+        database.benefitDao().upsertAll(listOf(remote))
+        favorites.insert(FavoriteEntity(firstUser, remote.id, 10L))
+        favorites.insert(FavoriteEntity(secondUser, remote.id, 20L))
+        database.seedStateDao().upsert(
+            SeedStateEntity(BUNDLED_SEED_NAME, BUNDLED_SEED_VERSION - 1, 1L),
+        )
+
+        assertTrue(installCurrentSeed().synchronizeIfNeeded().installed)
+        assertTrue(favorites.contains(firstUser, remote.id))
+        favorites.insert(FavoriteEntity(secondUser, bundled.id, 30L))
+        val repository = repositoryReturning(remote)
+
+        repeat(2) { repository.refreshBenefits() }
+
+        assertEquals(listOf(bundled.id), favorites.observeIds(firstUser).first())
+        assertEquals(listOf(bundled.id), favorites.observeIds(secondUser).first())
+        assertNull(database.benefitDao().getByIdOnce(remote.id))
+    }
+
+    @Test
+    fun apiRefreshKeepsFavoriteWhenBundledPromotionIsAmbiguous() = runBlocking {
+        val bundled = publishedMmaSeed()
+        val remote = remoteVersionOf(bundled)
+        val userId = database.accountDao().insert(user())
+        database.benefitDao().upsertAll(listOf(remote, bundled, bundled.copy(id = "other-seed")))
+        database.favoriteDao().insert(FavoriteEntity(userId, remote.id, 10L))
+
+        repositoryReturning(remote).refreshBenefits()
+
+        assertEquals(listOf(remote.id), database.favoriteDao().observeIds(userId).first())
+    }
+
+    private fun installCurrentSeed() = BundledSeedSynchronizer(
+        database = database,
+        manifestSource = AssetJsonSource(context, "benefits.seed.manifest.json"),
+        legacySeedSource = AssetJsonSource(context, "benefits.seed.json"),
+        manualSeedSource = AssetJsonSource(context, "manual_benefits_seed.json"),
+        currentTimeMillis = { 123L },
+    )
+
+    private fun publishedMmaSeed(): BenefitEntity =
+        LegacyBenefitSeedLoader(AssetJsonSource(context, "benefits.seed.json"), { 123L })
+            .loadAndValidate()
+            .first { it.sourceType == BenefitSourceType.PUBLIC_EVIDENCE.name }
+
+    private fun remoteVersionOf(bundled: BenefitEntity): BenefitEntity =
+        benefit(BenefitIdentity.mmaId(bundled.name, bundled.address), BenefitSourceType.MMA_API, 1)
+            .copy(name = bundled.name, address = bundled.address)
+
+    private fun repositoryReturning(remote: BenefitEntity) = BenefitRepository(
+        apiClient = object : BenefitPageSource {
+            override suspend fun getBenefitPage(pageNo: Int, numOfRows: Int) = BenefitPage(
+                benefits = listOf(MmaBenefit(1, remote.name, remote.address, null, null)),
+                pageNo = pageNo,
+                numOfRows = numOfRows,
+                totalCount = 1,
+            )
+        },
+        localDataSource = RoomBenefitLocalDataSource(database.benefitDao()),
+    )
 
     private fun user() = UserEntity(
         email = "soldier@example.com",

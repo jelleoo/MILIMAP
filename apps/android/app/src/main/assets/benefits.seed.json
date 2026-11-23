@@ -720,6 +720,26 @@
     "district": "고양시"
   },
   {
+    "id": "seed-3d9deab110d4",
+    "name": "순헤어",
+    "address": "경기도 과천시별양로28B동1069호(원문동, 슈르상가)",
+    "latitude": 37.4215406,
+    "longitude": 126.991835,
+    "category": "미용·뷰티",
+    "benefitType": "할인·우대",
+    "benefitDescription": "서비스 이용료의 5% 할인",
+    "phone": "010-9292-1825",
+    "eligibleTarget": "동원훈련이수자,모범예비군,복무중인현역병,사회복무요원,전문산업기능요원,병역명문가",
+    "usageCondition": "없음 | 혜택기간: 2024-08-05~",
+    "verificationMethod": "동원훈련이수증,모범예비군증,복무확인서 등",
+    "sourceType": "PUBLIC_EVIDENCE",
+    "sourceLabel": "병무청 나라사랑가게 · 최신 확인",
+    "sourceUrl": "https://www.mma.go.kr/about/udgg/list.do?mc=mma0003357",
+    "lastVerifiedAt": "2026-11-23",
+    "status": "ACTIVE",
+    "district": "과천시"
+  },
+  {
     "id": "seed-c31efd55a026",
     "name": "오신우헤어",
     "address": "경기도 과천시별양상가2로353동204호(별양동)",
@@ -917,7 +937,7 @@
     "sourceUrl": "https://www.paju.go.kr/www/www_02/health/health_03/health_03_09/health_03_09_01.jsp | https://www.paju.go.kr/user/soldier/BD_discountStoreList.do?q_ctgCd=1002",
     "lastVerifiedAt": "2026-11-22",
     "status": "ACTIVE",
-    "district": "광탄면"
+    "district": "파주시"
   },
   {
     "id": "seed-418a53260655",
@@ -937,7 +957,7 @@
     "sourceUrl": "https://www.paju.go.kr/www/www_02/health/health_03/health_03_09/health_03_09_01.jsp | https://www.paju.go.kr/user/soldier/BD_discountStoreList.do?q_ctgCd=1001",
     "lastVerifiedAt": "2026-11-22",
     "status": "ACTIVE",
-    "district": "광탄면"
+    "district": "파주시"
   },
   {
     "id": "seed-f5299b9d4dcc",
@@ -957,7 +977,7 @@
     "sourceUrl": "https://www.paju.go.kr/www/www_02/health/health_03/health_03_09/health_03_09_01.jsp | https://www.paju.go.kr/user/soldier/BD_discountStoreList.do?q_ctgCd=1001",
     "lastVerifiedAt": "2026-11-22",
     "status": "ACTIVE",
-    "district": "광탄면"
+    "district": "파주시"
   },
   {
     "id": "seed-0c82adbd31d4",
@@ -977,7 +997,7 @@
     "sourceUrl": "https://www.paju.go.kr/www/www_02/health/health_03/health_03_09/health_03_09_01.jsp | https://www.paju.go.kr/user/soldier/BD_discountStoreList.do?q_ctgCd=1001",
     "lastVerifiedAt": "2026-11-22",
     "status": "ACTIVE",
-    "district": "광탄면"
+    "district": "파주시"
   },
   {
     "id": "seed-655c39539ead",
@@ -997,7 +1017,7 @@
     "sourceUrl": "https://www.paju.go.kr/www/www_02/health/health_03/health_03_09/health_03_09_01.jsp | https://www.paju.go.kr/user/soldier/BD_discountStoreList.do?q_ctgCd=1001",
     "lastVerifiedAt": "2026-11-22",
     "status": "ACTIVE",
-    "district": "광탄면"
+    "district": "파주시"
   },
   {
     "id": "seed-3ed30c6c4682",
@@ -1017,7 +1037,7 @@
     "sourceUrl": "https://www.paju.go.kr/www/www_02/health/health_03/health_03_09/health_03_09_01.jsp | https://www.paju.go.kr/user/soldier/BD_discountStoreList.do?q_ctgCd=1001",
     "lastVerifiedAt": "2026-11-22",
     "status": "ACTIVE",
-    "district": "광탄면"
+    "district": "파주시"
   },
   {
     "id": "seed-7b4e4148441c",
@@ -1037,7 +1057,7 @@
     "sourceUrl": "https://www.paju.go.kr/www/www_02/health/health_03/health_03_09/health_03_09_01.jsp | https://www.paju.go.kr/user/soldier/BD_discountStoreList.do?q_ctgCd=1001",
     "lastVerifiedAt": "2026-11-22",
     "status": "ACTIVE",
-    "district": "광탄면"
+    "district": "파주시"
   },
   {
     "id": "seed-889b6bca028f",
@@ -1057,7 +1077,7 @@
     "sourceUrl": "https://www.paju.go.kr/www/www_02/health/health_03/health_03_09/health_03_09_01.jsp | https://www.paju.go.kr/user/soldier/BD_discountStoreList.do?q_ctgCd=1001",
     "lastVerifiedAt": "2026-11-22",
     "status": "ACTIVE",
-    "district": "광탄면"
+    "district": "파주시"
   },
   {
     "id": "seed-10f34d74394b",
@@ -1077,7 +1097,7 @@
     "sourceUrl": "https://www.paju.go.kr/www/www_02/health/health_03/health_03_09/health_03_09_01.jsp | https://www.paju.go.kr/user/soldier/BD_discountStoreList.do?q_ctgCd=1001",
     "lastVerifiedAt": "2026-11-22",
     "status": "ACTIVE",
-    "district": "광탄면"
+    "district": "파주시"
   },
   {
     "id": "seed-c4a58e70a9f6",
@@ -1097,7 +1117,7 @@
     "sourceUrl": "https://www.paju.go.kr/www/www_02/health/health_03/health_03_09/health_03_09_01.jsp | https://www.paju.go.kr/user/soldier/BD_discountStoreList.do?q_ctgCd=1001",
     "lastVerifiedAt": "2026-11-22",
     "status": "ACTIVE",
-    "district": "광탄면"
+    "district": "파주시"
   },
   {
     "id": "seed-d09a9cb3a3f8",
@@ -1117,7 +1137,7 @@
     "sourceUrl": "https://www.paju.go.kr/www/www_02/health/health_03/health_03_09/health_03_09_01.jsp | https://www.paju.go.kr/user/soldier/BD_discountStoreList.do?q_ctgCd=1001",
     "lastVerifiedAt": "2026-11-22",
     "status": "ACTIVE",
-    "district": "교하동"
+    "district": "파주시"
   },
   {
     "id": "seed-3d0755ddc477",
@@ -1137,7 +1157,7 @@
     "sourceUrl": "https://www.paju.go.kr/www/www_02/health/health_03/health_03_09/health_03_09_01.jsp | https://www.paju.go.kr/user/soldier/BD_discountStoreList.do?q_ctgCd=1001",
     "lastVerifiedAt": "2026-11-22",
     "status": "ACTIVE",
-    "district": "교하동"
+    "district": "파주시"
   },
   {
     "id": "seed-16c088b93a55",
@@ -1157,7 +1177,7 @@
     "sourceUrl": "https://www.paju.go.kr/www/www_02/health/health_03/health_03_09/health_03_09_01.jsp | https://www.paju.go.kr/user/soldier/BD_discountStoreList.do?q_ctgCd=1001",
     "lastVerifiedAt": "2026-11-22",
     "status": "ACTIVE",
-    "district": "교하동"
+    "district": "파주시"
   },
   {
     "id": "seed-db519dcd7a50",
@@ -1177,7 +1197,7 @@
     "sourceUrl": "https://www.paju.go.kr/www/www_02/health/health_03/health_03_09/health_03_09_01.jsp | https://www.paju.go.kr/user/soldier/BD_discountStoreList.do?q_ctgCd=1001",
     "lastVerifiedAt": "2026-11-22",
     "status": "ACTIVE",
-    "district": "교하동"
+    "district": "파주시"
   },
   {
     "id": "seed-f62bf58d4029",
@@ -1196,6 +1216,26 @@
     "sourceLabel": "병무청 나라사랑가게 · 최신 확인",
     "sourceUrl": "https://www.mma.go.kr/about/udgg/list.do?mc=mma0003357",
     "lastVerifiedAt": "2026-11-22",
+    "status": "ACTIVE",
+    "district": "군포시"
+  },
+  {
+    "id": "seed-4754405afc39",
+    "name": "궁안골",
+    "address": "경기도 군포시수리산로191- 0(산본동, 해아름빌리지)",
+    "latitude": 37.3650806,
+    "longitude": 126.9210361,
+    "category": "음식",
+    "benefitType": "할인·우대",
+    "benefitDescription": "별도 우대(음료수 제공 서비스)",
+    "phone": "031-398-4667",
+    "eligibleTarget": "동원훈련이수자,모범예비군,복무중인현역병,사회복무요원,전문산업기능요원,병역명문가",
+    "usageCondition": "없음 | 혜택기간: 2024-09-19~",
+    "verificationMethod": "동원훈련이수증,모범예비군증,복무확인서 등",
+    "sourceType": "PUBLIC_EVIDENCE",
+    "sourceLabel": "병무청 나라사랑가게 · 최신 확인",
+    "sourceUrl": "https://www.mma.go.kr/about/udgg/list.do?mc=mma0003357",
+    "lastVerifiedAt": "2026-11-23",
     "status": "ACTIVE",
     "district": "군포시"
   },
@@ -1237,7 +1277,7 @@
     "sourceUrl": "https://www.paju.go.kr/www/www_02/health/health_03/health_03_09/health_03_09_01.jsp | https://www.paju.go.kr/user/soldier/BD_discountStoreList.do?q_ctgCd=1004",
     "lastVerifiedAt": "2026-11-22",
     "status": "ACTIVE",
-    "district": "금촌1동"
+    "district": "파주시"
   },
   {
     "id": "seed-f33deeac2917",
@@ -1257,7 +1297,7 @@
     "sourceUrl": "https://www.paju.go.kr/www/www_02/health/health_03/health_03_09/health_03_09_01.jsp | https://www.paju.go.kr/user/soldier/BD_discountStoreList.do?q_ctgCd=1004",
     "lastVerifiedAt": "2026-11-22",
     "status": "ACTIVE",
-    "district": "금촌1동"
+    "district": "파주시"
   },
   {
     "id": "seed-d0451883f756",
@@ -1277,7 +1317,7 @@
     "sourceUrl": "https://www.paju.go.kr/www/www_02/health/health_03/health_03_09/health_03_09_01.jsp | https://www.paju.go.kr/user/soldier/BD_discountStoreList.do?q_ctgCd=1004",
     "lastVerifiedAt": "2026-11-22",
     "status": "ACTIVE",
-    "district": "금촌1동"
+    "district": "파주시"
   },
   {
     "id": "seed-3e39c0a9137f",
@@ -1297,7 +1337,7 @@
     "sourceUrl": "https://www.paju.go.kr/www/www_02/health/health_03/health_03_09/health_03_09_01.jsp | https://www.paju.go.kr/user/soldier/BD_discountStoreList.do?q_ctgCd=1004",
     "lastVerifiedAt": "2026-11-22",
     "status": "ACTIVE",
-    "district": "금촌1동"
+    "district": "파주시"
   },
   {
     "id": "seed-856f4e9b3bbc",
@@ -1317,7 +1357,7 @@
     "sourceUrl": "https://www.paju.go.kr/www/www_02/health/health_03/health_03_09/health_03_09_01.jsp | https://www.paju.go.kr/user/soldier/BD_discountStoreList.do?q_ctgCd=1002",
     "lastVerifiedAt": "2026-11-22",
     "status": "ACTIVE",
-    "district": "금촌1동"
+    "district": "파주시"
   },
   {
     "id": "seed-ebf6da10ac08",
@@ -1337,7 +1377,7 @@
     "sourceUrl": "https://www.paju.go.kr/www/www_02/health/health_03/health_03_09/health_03_09_01.jsp | https://www.paju.go.kr/user/soldier/BD_discountStoreList.do?q_ctgCd=1002",
     "lastVerifiedAt": "2026-11-22",
     "status": "ACTIVE",
-    "district": "금촌1동"
+    "district": "파주시"
   },
   {
     "id": "seed-01017022790f",
@@ -1357,7 +1397,7 @@
     "sourceUrl": "https://www.paju.go.kr/www/www_02/health/health_03/health_03_09/health_03_09_01.jsp | https://www.paju.go.kr/user/soldier/BD_discountStoreList.do?q_ctgCd=1001",
     "lastVerifiedAt": "2026-11-22",
     "status": "ACTIVE",
-    "district": "금촌1동"
+    "district": "파주시"
   },
   {
     "id": "seed-c8d39d12c03d",
@@ -1377,7 +1417,7 @@
     "sourceUrl": "https://www.paju.go.kr/www/www_02/health/health_03/health_03_09/health_03_09_01.jsp | https://www.paju.go.kr/user/soldier/BD_discountStoreList.do?q_ctgCd=1001",
     "lastVerifiedAt": "2026-11-22",
     "status": "ACTIVE",
-    "district": "금촌1동"
+    "district": "파주시"
   },
   {
     "id": "seed-4a6da9ebf968",
@@ -1397,7 +1437,7 @@
     "sourceUrl": "https://www.paju.go.kr/www/www_02/health/health_03/health_03_09/health_03_09_01.jsp | https://www.paju.go.kr/user/soldier/BD_discountStoreList.do?q_ctgCd=1001",
     "lastVerifiedAt": "2026-11-22",
     "status": "ACTIVE",
-    "district": "금촌1동"
+    "district": "파주시"
   },
   {
     "id": "seed-da717c34b400",
@@ -1417,7 +1457,7 @@
     "sourceUrl": "https://www.paju.go.kr/www/www_02/health/health_03/health_03_09/health_03_09_01.jsp | https://www.paju.go.kr/user/soldier/BD_discountStoreList.do?q_ctgCd=1001",
     "lastVerifiedAt": "2026-11-22",
     "status": "ACTIVE",
-    "district": "금촌1동"
+    "district": "파주시"
   },
   {
     "id": "seed-d8683d4ab7f7",
@@ -1437,7 +1477,7 @@
     "sourceUrl": "https://www.paju.go.kr/www/www_02/health/health_03/health_03_09/health_03_09_01.jsp | https://www.paju.go.kr/user/soldier/BD_discountStoreList.do?q_ctgCd=1001",
     "lastVerifiedAt": "2026-11-22",
     "status": "ACTIVE",
-    "district": "금촌1동"
+    "district": "파주시"
   },
   {
     "id": "seed-1c0b9f6443df",
@@ -1457,7 +1497,7 @@
     "sourceUrl": "https://www.paju.go.kr/www/www_02/health/health_03/health_03_09/health_03_09_01.jsp | https://www.paju.go.kr/user/soldier/BD_discountStoreList.do?q_ctgCd=1001",
     "lastVerifiedAt": "2026-11-22",
     "status": "ACTIVE",
-    "district": "금촌1동"
+    "district": "파주시"
   },
   {
     "id": "seed-3d6d230dd73d",
@@ -1477,7 +1517,7 @@
     "sourceUrl": "https://www.paju.go.kr/www/www_02/health/health_03/health_03_09/health_03_09_01.jsp | https://www.paju.go.kr/user/soldier/BD_discountStoreList.do?q_ctgCd=1001",
     "lastVerifiedAt": "2026-11-22",
     "status": "ACTIVE",
-    "district": "금촌1동"
+    "district": "파주시"
   },
   {
     "id": "seed-cc7e1a0cdc0b",
@@ -1497,7 +1537,7 @@
     "sourceUrl": "https://www.paju.go.kr/www/www_02/health/health_03/health_03_09/health_03_09_01.jsp | https://www.paju.go.kr/user/soldier/BD_discountStoreList.do?q_ctgCd=1001",
     "lastVerifiedAt": "2026-11-22",
     "status": "ACTIVE",
-    "district": "금촌1동"
+    "district": "파주시"
   },
   {
     "id": "seed-4c8dddd237a0",
@@ -1517,7 +1557,7 @@
     "sourceUrl": "https://www.paju.go.kr/www/www_02/health/health_03/health_03_09/health_03_09_01.jsp | https://www.paju.go.kr/user/soldier/BD_discountStoreList.do?q_ctgCd=1001",
     "lastVerifiedAt": "2026-11-22",
     "status": "ACTIVE",
-    "district": "금촌2동"
+    "district": "파주시"
   },
   {
     "id": "seed-6fde9d828cb0",
@@ -1537,7 +1577,7 @@
     "sourceUrl": "https://www.paju.go.kr/www/www_02/health/health_03/health_03_09/health_03_09_01.jsp | https://www.paju.go.kr/user/soldier/BD_discountStoreList.do?q_ctgCd=1001",
     "lastVerifiedAt": "2026-11-22",
     "status": "ACTIVE",
-    "district": "금촌2동"
+    "district": "파주시"
   },
   {
     "id": "seed-ecc9fb8bac75",
@@ -1557,7 +1597,7 @@
     "sourceUrl": "https://www.paju.go.kr/www/www_02/health/health_03/health_03_09/health_03_09_01.jsp | https://www.paju.go.kr/user/soldier/BD_discountStoreList.do?q_ctgCd=1001",
     "lastVerifiedAt": "2026-11-22",
     "status": "ACTIVE",
-    "district": "금촌2동"
+    "district": "파주시"
   },
   {
     "id": "seed-9d50d6a0d781",
@@ -1577,7 +1617,7 @@
     "sourceUrl": "https://www.paju.go.kr/www/www_02/health/health_03/health_03_09/health_03_09_01.jsp | https://www.paju.go.kr/user/soldier/BD_discountStoreList.do?q_ctgCd=1001",
     "lastVerifiedAt": "2026-11-22",
     "status": "ACTIVE",
-    "district": "금촌3동"
+    "district": "파주시"
   },
   {
     "id": "seed-8a1cf83bff8b",
@@ -1597,7 +1637,7 @@
     "sourceUrl": "https://www.paju.go.kr/www/www_02/health/health_03/health_03_09/health_03_09_01.jsp | https://www.paju.go.kr/user/soldier/BD_discountStoreList.do?q_ctgCd=1001",
     "lastVerifiedAt": "2026-11-22",
     "status": "ACTIVE",
-    "district": "금촌3동"
+    "district": "파주시"
   },
   {
     "id": "seed-f8663df7b3e1",
@@ -2817,7 +2857,7 @@
     "sourceUrl": "https://www.paju.go.kr/www/www_02/health/health_03/health_03_09/health_03_09_01.jsp | https://www.paju.go.kr/user/soldier/BD_discountStoreList.do?q_ctgCd=1004",
     "lastVerifiedAt": "2026-11-22",
     "status": "ACTIVE",
-    "district": "문산읍"
+    "district": "파주시"
   },
   {
     "id": "seed-32705e7891ac",
@@ -2837,7 +2877,7 @@
     "sourceUrl": "https://www.paju.go.kr/www/www_02/health/health_03/health_03_09/health_03_09_01.jsp | https://www.paju.go.kr/user/soldier/BD_discountStoreList.do?q_ctgCd=1004",
     "lastVerifiedAt": "2026-11-22",
     "status": "ACTIVE",
-    "district": "문산읍"
+    "district": "파주시"
   },
   {
     "id": "seed-45f920c5aafe",
@@ -2857,7 +2897,7 @@
     "sourceUrl": "https://www.paju.go.kr/www/www_02/health/health_03/health_03_09/health_03_09_01.jsp | https://www.paju.go.kr/user/soldier/BD_discountStoreList.do?q_ctgCd=1004",
     "lastVerifiedAt": "2026-11-22",
     "status": "ACTIVE",
-    "district": "문산읍"
+    "district": "파주시"
   },
   {
     "id": "seed-70f53183e2d2",
@@ -2877,7 +2917,7 @@
     "sourceUrl": "https://www.paju.go.kr/www/www_02/health/health_03/health_03_09/health_03_09_01.jsp | https://www.paju.go.kr/user/soldier/BD_discountStoreList.do?q_ctgCd=1004",
     "lastVerifiedAt": "2026-11-22",
     "status": "ACTIVE",
-    "district": "문산읍"
+    "district": "파주시"
   },
   {
     "id": "seed-554ee3804538",
@@ -2897,7 +2937,7 @@
     "sourceUrl": "https://www.paju.go.kr/www/www_02/health/health_03/health_03_09/health_03_09_01.jsp | https://www.paju.go.kr/user/soldier/BD_discountStoreList.do?q_ctgCd=1004",
     "lastVerifiedAt": "2026-11-22",
     "status": "ACTIVE",
-    "district": "문산읍"
+    "district": "파주시"
   },
   {
     "id": "seed-72dc98fa1b7b",
@@ -2917,7 +2957,7 @@
     "sourceUrl": "https://www.paju.go.kr/www/www_02/health/health_03/health_03_09/health_03_09_01.jsp | https://www.paju.go.kr/user/soldier/BD_discountStoreList.do?q_ctgCd=1004",
     "lastVerifiedAt": "2026-11-22",
     "status": "ACTIVE",
-    "district": "문산읍"
+    "district": "파주시"
   },
   {
     "id": "seed-1b35eb5622a0",
@@ -2937,14 +2977,14 @@
     "sourceUrl": "https://www.paju.go.kr/www/www_02/health/health_03/health_03_09/health_03_09_01.jsp | https://www.paju.go.kr/user/soldier/BD_discountStoreList.do?q_ctgCd=1004",
     "lastVerifiedAt": "2026-11-22",
     "status": "ACTIVE",
-    "district": "문산읍"
+    "district": "파주시"
   },
   {
     "id": "seed-c25165de9db5",
     "name": "M 모텔",
     "address": "파주시 문산읍 문향로 87-1",
-    "latitude": null,
-    "longitude": null,
+    "latitude": 37.8593849,
+    "longitude": 126.7865341,
     "category": "숙박",
     "benefitType": "할인·우대",
     "benefitDescription": "군 장병·사회복무요원 대상 10% 이상 할인 또는 상응 서비스",
@@ -2957,7 +2997,7 @@
     "sourceUrl": "https://www.paju.go.kr/www/www_02/health/health_03/health_03_09/health_03_09_01.jsp | https://www.paju.go.kr/user/soldier/BD_discountStoreList.do?q_ctgCd=1002",
     "lastVerifiedAt": "2026-11-22",
     "status": "ACTIVE",
-    "district": "문산읍"
+    "district": "파주시"
   },
   {
     "id": "seed-822daff94f13",
@@ -2977,7 +3017,7 @@
     "sourceUrl": "https://www.paju.go.kr/www/www_02/health/health_03/health_03_09/health_03_09_01.jsp | https://www.paju.go.kr/user/soldier/BD_discountStoreList.do?q_ctgCd=1002",
     "lastVerifiedAt": "2026-11-22",
     "status": "ACTIVE",
-    "district": "문산읍"
+    "district": "파주시"
   },
   {
     "id": "seed-8b702f4ecbd0",
@@ -2997,7 +3037,7 @@
     "sourceUrl": "https://www.paju.go.kr/www/www_02/health/health_03/health_03_09/health_03_09_01.jsp | https://www.paju.go.kr/user/soldier/BD_discountStoreList.do?q_ctgCd=1002",
     "lastVerifiedAt": "2026-11-22",
     "status": "ACTIVE",
-    "district": "문산읍"
+    "district": "파주시"
   },
   {
     "id": "seed-78db193bee86",
@@ -3017,7 +3057,7 @@
     "sourceUrl": "https://www.paju.go.kr/www/www_02/health/health_03/health_03_09/health_03_09_01.jsp | https://www.paju.go.kr/user/soldier/BD_discountStoreList.do?q_ctgCd=1001",
     "lastVerifiedAt": "2026-11-22",
     "status": "ACTIVE",
-    "district": "문산읍"
+    "district": "파주시"
   },
   {
     "id": "seed-ef55ca5a79b3",
@@ -3037,7 +3077,7 @@
     "sourceUrl": "https://www.paju.go.kr/www/www_02/health/health_03/health_03_09/health_03_09_01.jsp | https://www.paju.go.kr/user/soldier/BD_discountStoreList.do?q_ctgCd=1001",
     "lastVerifiedAt": "2026-11-22",
     "status": "ACTIVE",
-    "district": "문산읍"
+    "district": "파주시"
   },
   {
     "id": "seed-98eb00310e86",
@@ -3057,7 +3097,7 @@
     "sourceUrl": "https://www.paju.go.kr/www/www_02/health/health_03/health_03_09/health_03_09_01.jsp | https://www.paju.go.kr/user/soldier/BD_discountStoreList.do?q_ctgCd=1001",
     "lastVerifiedAt": "2026-11-22",
     "status": "ACTIVE",
-    "district": "문산읍"
+    "district": "파주시"
   },
   {
     "id": "seed-64df62adafe2",
@@ -3077,7 +3117,7 @@
     "sourceUrl": "https://www.paju.go.kr/www/www_02/health/health_03/health_03_09/health_03_09_01.jsp | https://www.paju.go.kr/user/soldier/BD_discountStoreList.do?q_ctgCd=1001",
     "lastVerifiedAt": "2026-11-22",
     "status": "ACTIVE",
-    "district": "문산읍"
+    "district": "파주시"
   },
   {
     "id": "seed-de939dbcd5ae",
@@ -3097,7 +3137,7 @@
     "sourceUrl": "https://www.paju.go.kr/www/www_02/health/health_03/health_03_09/health_03_09_01.jsp | https://www.paju.go.kr/user/soldier/BD_discountStoreList.do?q_ctgCd=1001",
     "lastVerifiedAt": "2026-11-22",
     "status": "ACTIVE",
-    "district": "문산읍"
+    "district": "파주시"
   },
   {
     "id": "seed-55ad4ebafb6f",
@@ -3117,7 +3157,7 @@
     "sourceUrl": "https://www.paju.go.kr/www/www_02/health/health_03/health_03_09/health_03_09_01.jsp | https://www.paju.go.kr/user/soldier/BD_discountStoreList.do?q_ctgCd=1001",
     "lastVerifiedAt": "2026-11-22",
     "status": "ACTIVE",
-    "district": "문산읍"
+    "district": "파주시"
   },
   {
     "id": "seed-b19509346c20",
@@ -3137,7 +3177,7 @@
     "sourceUrl": "https://www.paju.go.kr/www/www_02/health/health_03/health_03_09/health_03_09_01.jsp | https://www.paju.go.kr/user/soldier/BD_discountStoreList.do?q_ctgCd=1001",
     "lastVerifiedAt": "2026-11-22",
     "status": "ACTIVE",
-    "district": "문산읍"
+    "district": "파주시"
   },
   {
     "id": "seed-7b838d6d95a2",
@@ -3157,7 +3197,7 @@
     "sourceUrl": "https://www.paju.go.kr/www/www_02/health/health_03/health_03_09/health_03_09_01.jsp | https://www.paju.go.kr/user/soldier/BD_discountStoreList.do?q_ctgCd=1001",
     "lastVerifiedAt": "2026-11-22",
     "status": "ACTIVE",
-    "district": "문산읍"
+    "district": "파주시"
   },
   {
     "id": "seed-e25841d49a0d",
@@ -3177,7 +3217,7 @@
     "sourceUrl": "https://www.paju.go.kr/www/www_02/health/health_03/health_03_09/health_03_09_01.jsp | https://www.paju.go.kr/user/soldier/BD_discountStoreList.do?q_ctgCd=1001",
     "lastVerifiedAt": "2026-11-22",
     "status": "ACTIVE",
-    "district": "문산읍"
+    "district": "파주시"
   },
   {
     "id": "seed-22d8f4fc7948",
@@ -3197,7 +3237,7 @@
     "sourceUrl": "https://www.paju.go.kr/www/www_02/health/health_03/health_03_09/health_03_09_01.jsp | https://www.paju.go.kr/user/soldier/BD_discountStoreList.do?q_ctgCd=1001",
     "lastVerifiedAt": "2026-11-22",
     "status": "ACTIVE",
-    "district": "문산읍"
+    "district": "파주시"
   },
   {
     "id": "seed-f4587c7a6aef",
@@ -3217,7 +3257,7 @@
     "sourceUrl": "https://www.paju.go.kr/www/www_02/health/health_03/health_03_09/health_03_09_01.jsp | https://www.paju.go.kr/user/soldier/BD_discountStoreList.do?q_ctgCd=1001",
     "lastVerifiedAt": "2026-11-22",
     "status": "ACTIVE",
-    "district": "문산읍"
+    "district": "파주시"
   },
   {
     "id": "seed-03ca307f964e",
@@ -3237,7 +3277,7 @@
     "sourceUrl": "https://www.paju.go.kr/www/www_02/health/health_03/health_03_09/health_03_09_01.jsp | https://www.paju.go.kr/user/soldier/BD_discountStoreList.do?q_ctgCd=1001",
     "lastVerifiedAt": "2026-11-22",
     "status": "ACTIVE",
-    "district": "문산읍"
+    "district": "파주시"
   },
   {
     "id": "seed-81496481d40b",
@@ -3257,7 +3297,7 @@
     "sourceUrl": "https://www.paju.go.kr/www/www_02/health/health_03/health_03_09/health_03_09_01.jsp | https://www.paju.go.kr/user/soldier/BD_discountStoreList.do?q_ctgCd=1001",
     "lastVerifiedAt": "2026-11-22",
     "status": "ACTIVE",
-    "district": "문산읍"
+    "district": "파주시"
   },
   {
     "id": "seed-7bd1703db5d4",
@@ -3277,7 +3317,7 @@
     "sourceUrl": "https://www.paju.go.kr/www/www_02/health/health_03/health_03_09/health_03_09_01.jsp | https://www.paju.go.kr/user/soldier/BD_discountStoreList.do?q_ctgCd=1001",
     "lastVerifiedAt": "2026-11-22",
     "status": "ACTIVE",
-    "district": "문산읍"
+    "district": "파주시"
   },
   {
     "id": "seed-167bc01af07b",
@@ -3297,7 +3337,7 @@
     "sourceUrl": "https://www.paju.go.kr/www/www_02/health/health_03/health_03_09/health_03_09_01.jsp | https://www.paju.go.kr/user/soldier/BD_discountStoreList.do?q_ctgCd=1001",
     "lastVerifiedAt": "2026-11-22",
     "status": "ACTIVE",
-    "district": "문산읍"
+    "district": "파주시"
   },
   {
     "id": "seed-d0fec1d390b4",
@@ -3317,7 +3357,7 @@
     "sourceUrl": "https://www.paju.go.kr/www/www_02/health/health_03/health_03_09/health_03_09_01.jsp | https://www.paju.go.kr/user/soldier/BD_discountStoreList.do?q_ctgCd=1001",
     "lastVerifiedAt": "2026-11-22",
     "status": "ACTIVE",
-    "district": "문산읍"
+    "district": "파주시"
   },
   {
     "id": "seed-074bc68e929a",
@@ -3337,7 +3377,7 @@
     "sourceUrl": "https://www.paju.go.kr/www/www_02/health/health_03/health_03_09/health_03_09_01.jsp | https://www.paju.go.kr/user/soldier/BD_discountStoreList.do?q_ctgCd=1001",
     "lastVerifiedAt": "2026-11-22",
     "status": "ACTIVE",
-    "district": "문산읍"
+    "district": "파주시"
   },
   {
     "id": "seed-e19489a22d81",
@@ -3357,7 +3397,7 @@
     "sourceUrl": "https://www.paju.go.kr/www/www_02/health/health_03/health_03_09/health_03_09_01.jsp | https://www.paju.go.kr/user/soldier/BD_discountStoreList.do?q_ctgCd=1001",
     "lastVerifiedAt": "2026-11-22",
     "status": "ACTIVE",
-    "district": "문산읍"
+    "district": "파주시"
   },
   {
     "id": "seed-0d6a2bd2579c",
@@ -3377,7 +3417,7 @@
     "sourceUrl": "https://www.paju.go.kr/www/www_02/health/health_03/health_03_09/health_03_09_01.jsp | https://www.paju.go.kr/user/soldier/BD_discountStoreList.do?q_ctgCd=1001",
     "lastVerifiedAt": "2026-11-22",
     "status": "ACTIVE",
-    "district": "문산읍"
+    "district": "파주시"
   },
   {
     "id": "seed-769f2e663908",
@@ -3397,7 +3437,7 @@
     "sourceUrl": "https://www.paju.go.kr/www/www_02/health/health_03/health_03_09/health_03_09_01.jsp | https://www.paju.go.kr/user/soldier/BD_discountStoreList.do?q_ctgCd=1001",
     "lastVerifiedAt": "2026-11-22",
     "status": "ACTIVE",
-    "district": "문산읍"
+    "district": "파주시"
   },
   {
     "id": "seed-d285f04793d2",
@@ -3417,7 +3457,7 @@
     "sourceUrl": "https://www.paju.go.kr/www/www_02/health/health_03/health_03_09/health_03_09_01.jsp | https://www.paju.go.kr/user/soldier/BD_discountStoreList.do?q_ctgCd=1001",
     "lastVerifiedAt": "2026-11-22",
     "status": "ACTIVE",
-    "district": "문산읍"
+    "district": "파주시"
   },
   {
     "id": "seed-c92c88adedd6",
@@ -3437,7 +3477,7 @@
     "sourceUrl": "https://www.paju.go.kr/www/www_02/health/health_03/health_03_09/health_03_09_01.jsp | https://www.paju.go.kr/user/soldier/BD_discountStoreList.do?q_ctgCd=1001",
     "lastVerifiedAt": "2026-11-22",
     "status": "ACTIVE",
-    "district": "문산읍"
+    "district": "파주시"
   },
   {
     "id": "seed-cb71a6a03c79",
@@ -3457,7 +3497,7 @@
     "sourceUrl": "https://www.paju.go.kr/www/www_02/health/health_03/health_03_09/health_03_09_01.jsp | https://www.paju.go.kr/user/soldier/BD_discountStoreList.do?q_ctgCd=1001",
     "lastVerifiedAt": "2026-11-22",
     "status": "ACTIVE",
-    "district": "문산읍"
+    "district": "파주시"
   },
   {
     "id": "seed-f9bc3e7b7745",
@@ -3477,7 +3517,7 @@
     "sourceUrl": "https://www.paju.go.kr/www/www_02/health/health_03/health_03_09/health_03_09_01.jsp | https://www.paju.go.kr/user/soldier/BD_discountStoreList.do?q_ctgCd=1001",
     "lastVerifiedAt": "2026-11-22",
     "status": "ACTIVE",
-    "district": "문산읍"
+    "district": "파주시"
   },
   {
     "id": "seed-9aa311899f20",
@@ -3497,7 +3537,7 @@
     "sourceUrl": "https://www.paju.go.kr/www/www_02/health/health_03/health_03_09/health_03_09_01.jsp | https://www.paju.go.kr/user/soldier/BD_discountStoreList.do?q_ctgCd=1001",
     "lastVerifiedAt": "2026-11-22",
     "status": "ACTIVE",
-    "district": "문산읍"
+    "district": "파주시"
   },
   {
     "id": "seed-005f4bd77f8b",
@@ -3517,7 +3557,7 @@
     "sourceUrl": "https://www.paju.go.kr/www/www_02/health/health_03/health_03_09/health_03_09_01.jsp | https://www.paju.go.kr/user/soldier/BD_discountStoreList.do?q_ctgCd=1004",
     "lastVerifiedAt": "2026-11-22",
     "status": "ACTIVE",
-    "district": "법원읍"
+    "district": "파주시"
   },
   {
     "id": "seed-d67e8bd2c3e6",
@@ -3537,7 +3577,7 @@
     "sourceUrl": "https://www.paju.go.kr/www/www_02/health/health_03/health_03_09/health_03_09_01.jsp | https://www.paju.go.kr/user/soldier/BD_discountStoreList.do?q_ctgCd=1004",
     "lastVerifiedAt": "2026-11-22",
     "status": "ACTIVE",
-    "district": "법원읍"
+    "district": "파주시"
   },
   {
     "id": "seed-f2bc6a9a5692",
@@ -3557,7 +3597,7 @@
     "sourceUrl": "https://www.paju.go.kr/www/www_02/health/health_03/health_03_09/health_03_09_01.jsp | https://www.paju.go.kr/user/soldier/BD_discountStoreList.do?q_ctgCd=1004",
     "lastVerifiedAt": "2026-11-22",
     "status": "ACTIVE",
-    "district": "법원읍"
+    "district": "파주시"
   },
   {
     "id": "seed-3245236d8d9f",
@@ -3577,7 +3617,7 @@
     "sourceUrl": "https://www.paju.go.kr/www/www_02/health/health_03/health_03_09/health_03_09_01.jsp | https://www.paju.go.kr/user/soldier/BD_discountStoreList.do?q_ctgCd=1004",
     "lastVerifiedAt": "2026-11-22",
     "status": "ACTIVE",
-    "district": "법원읍"
+    "district": "파주시"
   },
   {
     "id": "seed-f76b8aa81cc7",
@@ -3597,7 +3637,7 @@
     "sourceUrl": "https://www.paju.go.kr/www/www_02/health/health_03/health_03_09/health_03_09_01.jsp | https://www.paju.go.kr/user/soldier/BD_discountStoreList.do?q_ctgCd=1004",
     "lastVerifiedAt": "2026-11-22",
     "status": "ACTIVE",
-    "district": "법원읍"
+    "district": "파주시"
   },
   {
     "id": "seed-c48e4687a640",
@@ -3617,7 +3657,7 @@
     "sourceUrl": "https://www.paju.go.kr/www/www_02/health/health_03/health_03_09/health_03_09_01.jsp | https://www.paju.go.kr/user/soldier/BD_discountStoreList.do?q_ctgCd=1004",
     "lastVerifiedAt": "2026-11-22",
     "status": "ACTIVE",
-    "district": "법원읍"
+    "district": "파주시"
   },
   {
     "id": "seed-ed7801890f75",
@@ -3637,7 +3677,7 @@
     "sourceUrl": "https://www.paju.go.kr/www/www_02/health/health_03/health_03_09/health_03_09_01.jsp | https://www.paju.go.kr/user/soldier/BD_discountStoreList.do?q_ctgCd=1004",
     "lastVerifiedAt": "2026-11-22",
     "status": "ACTIVE",
-    "district": "법원읍"
+    "district": "파주시"
   },
   {
     "id": "seed-048735cf81ca",
@@ -3657,7 +3697,7 @@
     "sourceUrl": "https://www.paju.go.kr/www/www_02/health/health_03/health_03_09/health_03_09_01.jsp | https://www.paju.go.kr/user/soldier/BD_discountStoreList.do?q_ctgCd=1004",
     "lastVerifiedAt": "2026-11-22",
     "status": "ACTIVE",
-    "district": "법원읍"
+    "district": "파주시"
   },
   {
     "id": "seed-681a0ef6a05f",
@@ -3677,7 +3717,7 @@
     "sourceUrl": "https://www.paju.go.kr/www/www_02/health/health_03/health_03_09/health_03_09_01.jsp | https://www.paju.go.kr/user/soldier/BD_discountStoreList.do?q_ctgCd=1001",
     "lastVerifiedAt": "2026-11-22",
     "status": "ACTIVE",
-    "district": "법원읍"
+    "district": "파주시"
   },
   {
     "id": "seed-9a72aac157e6",
@@ -3697,7 +3737,7 @@
     "sourceUrl": "https://www.paju.go.kr/www/www_02/health/health_03/health_03_09/health_03_09_01.jsp | https://www.paju.go.kr/user/soldier/BD_discountStoreList.do?q_ctgCd=1001",
     "lastVerifiedAt": "2026-11-22",
     "status": "ACTIVE",
-    "district": "법원읍"
+    "district": "파주시"
   },
   {
     "id": "seed-e8950a969355",
@@ -3717,7 +3757,7 @@
     "sourceUrl": "https://www.paju.go.kr/www/www_02/health/health_03/health_03_09/health_03_09_01.jsp | https://www.paju.go.kr/user/soldier/BD_discountStoreList.do?q_ctgCd=1001",
     "lastVerifiedAt": "2026-11-22",
     "status": "ACTIVE",
-    "district": "법원읍"
+    "district": "파주시"
   },
   {
     "id": "seed-42a647775bb6",
@@ -3737,7 +3777,7 @@
     "sourceUrl": "https://www.paju.go.kr/www/www_02/health/health_03/health_03_09/health_03_09_01.jsp | https://www.paju.go.kr/user/soldier/BD_discountStoreList.do?q_ctgCd=1001",
     "lastVerifiedAt": "2026-11-22",
     "status": "ACTIVE",
-    "district": "법원읍"
+    "district": "파주시"
   },
   {
     "id": "seed-76bd051760a3",
@@ -3757,7 +3797,7 @@
     "sourceUrl": "https://www.paju.go.kr/www/www_02/health/health_03/health_03_09/health_03_09_01.jsp | https://www.paju.go.kr/user/soldier/BD_discountStoreList.do?q_ctgCd=1001",
     "lastVerifiedAt": "2026-11-22",
     "status": "ACTIVE",
-    "district": "법원읍"
+    "district": "파주시"
   },
   {
     "id": "seed-8346ec97ddc4",
@@ -3777,7 +3817,7 @@
     "sourceUrl": "https://www.paju.go.kr/www/www_02/health/health_03/health_03_09/health_03_09_01.jsp | https://www.paju.go.kr/user/soldier/BD_discountStoreList.do?q_ctgCd=1001",
     "lastVerifiedAt": "2026-11-22",
     "status": "ACTIVE",
-    "district": "법원읍"
+    "district": "파주시"
   },
   {
     "id": "seed-08771e905409",
@@ -3797,7 +3837,7 @@
     "sourceUrl": "https://www.paju.go.kr/www/www_02/health/health_03/health_03_09/health_03_09_01.jsp | https://www.paju.go.kr/user/soldier/BD_discountStoreList.do?q_ctgCd=1001",
     "lastVerifiedAt": "2026-11-22",
     "status": "ACTIVE",
-    "district": "법원읍"
+    "district": "파주시"
   },
   {
     "id": "seed-1645d81c2283",
@@ -3817,7 +3857,7 @@
     "sourceUrl": "https://www.paju.go.kr/www/www_02/health/health_03/health_03_09/health_03_09_01.jsp | https://www.paju.go.kr/user/soldier/BD_discountStoreList.do?q_ctgCd=1001",
     "lastVerifiedAt": "2026-11-22",
     "status": "ACTIVE",
-    "district": "법원읍"
+    "district": "파주시"
   },
   {
     "id": "seed-a842a371a2cf",
@@ -3837,7 +3877,7 @@
     "sourceUrl": "https://www.paju.go.kr/www/www_02/health/health_03/health_03_09/health_03_09_01.jsp | https://www.paju.go.kr/user/soldier/BD_discountStoreList.do?q_ctgCd=1001",
     "lastVerifiedAt": "2026-11-22",
     "status": "ACTIVE",
-    "district": "법원읍"
+    "district": "파주시"
   },
   {
     "id": "seed-b95c36dbd886",
@@ -3857,7 +3897,7 @@
     "sourceUrl": "https://www.paju.go.kr/www/www_02/health/health_03/health_03_09/health_03_09_01.jsp | https://www.paju.go.kr/user/soldier/BD_discountStoreList.do?q_ctgCd=1001",
     "lastVerifiedAt": "2026-11-22",
     "status": "ACTIVE",
-    "district": "법원읍"
+    "district": "파주시"
   },
   {
     "id": "seed-1a8a2b0ca8d8",
@@ -3877,7 +3917,7 @@
     "sourceUrl": "https://www.paju.go.kr/www/www_02/health/health_03/health_03_09/health_03_09_01.jsp | https://www.paju.go.kr/user/soldier/BD_discountStoreList.do?q_ctgCd=1001",
     "lastVerifiedAt": "2026-11-22",
     "status": "ACTIVE",
-    "district": "법원읍"
+    "district": "파주시"
   },
   {
     "id": "seed-0de6689f515a",
@@ -3897,7 +3937,7 @@
     "sourceUrl": "https://www.paju.go.kr/www/www_02/health/health_03/health_03_09/health_03_09_01.jsp | https://www.paju.go.kr/user/soldier/BD_discountStoreList.do?q_ctgCd=1001",
     "lastVerifiedAt": "2026-11-22",
     "status": "ACTIVE",
-    "district": "법원읍"
+    "district": "파주시"
   },
   {
     "id": "seed-b8f98721fdba",
@@ -3917,7 +3957,7 @@
     "sourceUrl": "https://www.paju.go.kr/www/www_02/health/health_03/health_03_09/health_03_09_01.jsp | https://www.paju.go.kr/user/soldier/BD_discountStoreList.do?q_ctgCd=1001",
     "lastVerifiedAt": "2026-11-22",
     "status": "ACTIVE",
-    "district": "법원읍"
+    "district": "파주시"
   },
   {
     "id": "seed-4eca36d45745",
@@ -3937,7 +3977,7 @@
     "sourceUrl": "https://www.paju.go.kr/www/www_02/health/health_03/health_03_09/health_03_09_01.jsp | https://www.paju.go.kr/user/soldier/BD_discountStoreList.do?q_ctgCd=1001",
     "lastVerifiedAt": "2026-11-22",
     "status": "ACTIVE",
-    "district": "법원읍"
+    "district": "파주시"
   },
   {
     "id": "seed-39e1abba68eb",
@@ -3957,7 +3997,7 @@
     "sourceUrl": "https://www.paju.go.kr/www/www_02/health/health_03/health_03_09/health_03_09_01.jsp | https://www.paju.go.kr/user/soldier/BD_discountStoreList.do?q_ctgCd=1001",
     "lastVerifiedAt": "2026-11-22",
     "status": "ACTIVE",
-    "district": "법원읍"
+    "district": "파주시"
   },
   {
     "id": "seed-d320e19368c5",
@@ -3977,7 +4017,7 @@
     "sourceUrl": "https://www.paju.go.kr/www/www_02/health/health_03/health_03_09/health_03_09_01.jsp | https://www.paju.go.kr/user/soldier/BD_discountStoreList.do?q_ctgCd=1001",
     "lastVerifiedAt": "2026-11-22",
     "status": "ACTIVE",
-    "district": "법원읍"
+    "district": "파주시"
   },
   {
     "id": "seed-889f8d48651c",
@@ -3997,7 +4037,7 @@
     "sourceUrl": "https://www.paju.go.kr/www/www_02/health/health_03/health_03_09/health_03_09_01.jsp | https://www.paju.go.kr/user/soldier/BD_discountStoreList.do?q_ctgCd=1001",
     "lastVerifiedAt": "2026-11-22",
     "status": "ACTIVE",
-    "district": "법원읍"
+    "district": "파주시"
   },
   {
     "id": "seed-f5b0100f2981",
@@ -4017,7 +4057,7 @@
     "sourceUrl": "https://www.paju.go.kr/www/www_02/health/health_03/health_03_09/health_03_09_01.jsp | https://www.paju.go.kr/user/soldier/BD_discountStoreList.do?q_ctgCd=1001",
     "lastVerifiedAt": "2026-11-22",
     "status": "ACTIVE",
-    "district": "법원읍"
+    "district": "파주시"
   },
   {
     "id": "seed-3a89b0c229a8",
@@ -4037,7 +4077,7 @@
     "sourceUrl": "https://www.paju.go.kr/www/www_02/health/health_03/health_03_09/health_03_09_01.jsp | https://www.paju.go.kr/user/soldier/BD_discountStoreList.do?q_ctgCd=1001",
     "lastVerifiedAt": "2026-11-22",
     "status": "ACTIVE",
-    "district": "법원읍"
+    "district": "파주시"
   },
   {
     "id": "seed-464f4b612552",
@@ -4057,7 +4097,7 @@
     "sourceUrl": "https://www.paju.go.kr/www/www_02/health/health_03/health_03_09/health_03_09_01.jsp | https://www.paju.go.kr/user/soldier/BD_discountStoreList.do?q_ctgCd=1001",
     "lastVerifiedAt": "2026-11-22",
     "status": "ACTIVE",
-    "district": "법원읍"
+    "district": "파주시"
   },
   {
     "id": "seed-b78edd3d8c7d",
@@ -4077,7 +4117,7 @@
     "sourceUrl": "https://www.paju.go.kr/www/www_02/health/health_03/health_03_09/health_03_09_01.jsp | https://www.paju.go.kr/user/soldier/BD_discountStoreList.do?q_ctgCd=1001",
     "lastVerifiedAt": "2026-11-22",
     "status": "ACTIVE",
-    "district": "법원읍"
+    "district": "파주시"
   },
   {
     "id": "seed-f4a14b7e9c5c",
@@ -4097,7 +4137,7 @@
     "sourceUrl": "https://www.paju.go.kr/www/www_02/health/health_03/health_03_09/health_03_09_01.jsp | https://www.paju.go.kr/user/soldier/BD_discountStoreList.do?q_ctgCd=1001",
     "lastVerifiedAt": "2026-11-22",
     "status": "ACTIVE",
-    "district": "법원읍"
+    "district": "파주시"
   },
   {
     "id": "seed-cadce4f9e642",
@@ -4117,7 +4157,7 @@
     "sourceUrl": "https://www.paju.go.kr/www/www_02/health/health_03/health_03_09/health_03_09_01.jsp | https://www.paju.go.kr/user/soldier/BD_discountStoreList.do?q_ctgCd=1001",
     "lastVerifiedAt": "2026-11-22",
     "status": "ACTIVE",
-    "district": "법원읍"
+    "district": "파주시"
   },
   {
     "id": "seed-f1c971a40733",
@@ -4137,7 +4177,7 @@
     "sourceUrl": "https://www.paju.go.kr/www/www_02/health/health_03/health_03_09/health_03_09_01.jsp | https://www.paju.go.kr/user/soldier/BD_discountStoreList.do?q_ctgCd=1001",
     "lastVerifiedAt": "2026-11-22",
     "status": "ACTIVE",
-    "district": "법원읍"
+    "district": "파주시"
   },
   {
     "id": "seed-be8b4e8e86d8",
@@ -4360,6 +4400,26 @@
     "district": "수원시"
   },
   {
+    "id": "seed-abcadbdf0025",
+    "name": "아름다운사람들 헤어",
+    "address": "경기도 수원시 장안구송정로83134호(송죽동, 로얄팰리스상가)",
+    "latitude": 37.2958912,
+    "longitude": 127.0064947,
+    "category": "미용·뷰티",
+    "benefitType": "할인·우대",
+    "benefitDescription": "- 서비스 이용료의 15% 할인 - 현역병 면제",
+    "phone": "031-257-9555",
+    "eligibleTarget": "동원훈련이수자,모범예비군,복무중인현역병,사회복무요원,전문산업기능요원,병역명문가",
+    "usageCondition": "없음 | 혜택기간: 2026-08-14~",
+    "verificationMethod": "동원훈련이수증,모범예비군증,복무확인서 등",
+    "sourceType": "PUBLIC_EVIDENCE",
+    "sourceLabel": "병무청 나라사랑가게 · 최신 확인",
+    "sourceUrl": "https://www.mma.go.kr/about/udgg/list.do?mc=mma0003357",
+    "lastVerifiedAt": "2026-11-23",
+    "status": "ACTIVE",
+    "district": "수원시"
+  },
+  {
     "id": "seed-d9f5e1145a06",
     "name": "버거스테이지",
     "address": "경기도 수원시 팔달구신풍로23번길63- 21층 (신풍동)",
@@ -4476,6 +4536,26 @@
     "sourceLabel": "병무청 나라사랑가게 · 최신 확인",
     "sourceUrl": "https://www.mma.go.kr/about/udgg/list.do?mc=mma0003357",
     "lastVerifiedAt": "2026-11-22",
+    "status": "ACTIVE",
+    "district": "시흥시"
+  },
+  {
+    "id": "seed-879938ac5143",
+    "name": "한제소곱창전골 목감점",
+    "address": "경기도 시흥시산현마을길33- 21층 (산현동)",
+    "latitude": 37.3756606,
+    "longitude": 126.8457574,
+    "category": "음식",
+    "benefitType": "할인·우대",
+    "benefitDescription": "서비스이용료의 5%할인(주류제외)",
+    "phone": "031-439-0472",
+    "eligibleTarget": "동원훈련이수자, 모범예비군, 복무중인 현역병, 사회복무요원, 전문산업기능요원, 병역명문가",
+    "usageCondition": "없음 | 혜택기간: 2024-02-13~",
+    "verificationMethod": "동원훈련이수증, 모범예비군증, 복무확인서 등",
+    "sourceType": "PUBLIC_EVIDENCE",
+    "sourceLabel": "병무청 나라사랑가게 · 최신 확인",
+    "sourceUrl": "https://www.mma.go.kr/about/udgg/list.do?mc=mma0003357",
+    "lastVerifiedAt": "2026-11-23",
     "status": "ACTIVE",
     "district": "시흥시"
   },
@@ -4756,6 +4836,26 @@
     "sourceLabel": "병무청 나라사랑가게 · 최신 확인",
     "sourceUrl": "https://www.mma.go.kr/about/udgg/list.do?mc=mma0003357",
     "lastVerifiedAt": "2026-11-22",
+    "status": "ACTIVE",
+    "district": "안양시"
+  },
+  {
+    "id": "seed-390be7ccf044",
+    "name": "켄커피",
+    "address": "경기도 안양시 만안구안양로110105호1층 (안양동)",
+    "latitude": 37.3847086,
+    "longitude": 126.9334686,
+    "category": "카페",
+    "benefitType": "할인·우대",
+    "benefitDescription": "서비스 이용료의 5% 할인",
+    "phone": "010-4447-4114",
+    "eligibleTarget": "동원훈련이수자,모범예비군,복무중인현역병,사회복무요원,전문산업기능요원,병역명문가",
+    "usageCondition": "없음 | 혜택기간: 2024-06-05~",
+    "verificationMethod": "동원훈련이수증,모범예비군증,복무확인서 등",
+    "sourceType": "PUBLIC_EVIDENCE",
+    "sourceLabel": "병무청 나라사랑가게 · 최신 확인",
+    "sourceUrl": "https://www.mma.go.kr/about/udgg/list.do?mc=mma0003357",
+    "lastVerifiedAt": "2026-11-23",
     "status": "ACTIVE",
     "district": "안양시"
   },
@@ -5437,7 +5537,7 @@
     "sourceUrl": "https://www.paju.go.kr/www/www_02/health/health_03/health_03_09/health_03_09_01.jsp | https://www.paju.go.kr/user/soldier/BD_discountStoreList.do?q_ctgCd=1001",
     "lastVerifiedAt": "2026-11-22",
     "status": "ACTIVE",
-    "district": "운정1동"
+    "district": "파주시"
   },
   {
     "id": "seed-44f14e887caa",
@@ -5457,7 +5557,7 @@
     "sourceUrl": "https://www.paju.go.kr/www/www_02/health/health_03/health_03_09/health_03_09_01.jsp | https://www.paju.go.kr/user/soldier/BD_discountStoreList.do?q_ctgCd=1001",
     "lastVerifiedAt": "2026-11-22",
     "status": "ACTIVE",
-    "district": "운정1동"
+    "district": "파주시"
   },
   {
     "id": "seed-f4dc71ec32fc",
@@ -5477,7 +5577,7 @@
     "sourceUrl": "https://www.paju.go.kr/www/www_02/health/health_03/health_03_09/health_03_09_01.jsp | https://www.paju.go.kr/user/soldier/BD_discountStoreList.do?q_ctgCd=1001",
     "lastVerifiedAt": "2026-11-22",
     "status": "ACTIVE",
-    "district": "운정1동"
+    "district": "파주시"
   },
   {
     "id": "seed-0be66d774865",
@@ -5497,7 +5597,7 @@
     "sourceUrl": "https://www.paju.go.kr/www/www_02/health/health_03/health_03_09/health_03_09_01.jsp | https://www.paju.go.kr/user/soldier/BD_discountStoreList.do?q_ctgCd=1001",
     "lastVerifiedAt": "2026-11-22",
     "status": "ACTIVE",
-    "district": "운정2동"
+    "district": "파주시"
   },
   {
     "id": "seed-f329651de4f5",
@@ -5517,7 +5617,7 @@
     "sourceUrl": "https://www.paju.go.kr/www/www_02/health/health_03/health_03_09/health_03_09_01.jsp | https://www.paju.go.kr/user/soldier/BD_discountStoreList.do?q_ctgCd=1001",
     "lastVerifiedAt": "2026-11-22",
     "status": "ACTIVE",
-    "district": "운정2동"
+    "district": "파주시"
   },
   {
     "id": "seed-36c59aa9d228",
@@ -5537,7 +5637,7 @@
     "sourceUrl": "https://www.paju.go.kr/www/www_02/health/health_03/health_03_09/health_03_09_01.jsp | https://www.paju.go.kr/user/soldier/BD_discountStoreList.do?q_ctgCd=1001",
     "lastVerifiedAt": "2026-11-22",
     "status": "ACTIVE",
-    "district": "운정3동"
+    "district": "파주시"
   },
   {
     "id": "seed-2f30490e8b5e",
@@ -5557,7 +5657,7 @@
     "sourceUrl": "https://www.paju.go.kr/www/www_02/health/health_03/health_03_09/health_03_09_01.jsp | https://www.paju.go.kr/user/soldier/BD_discountStoreList.do?q_ctgCd=1001",
     "lastVerifiedAt": "2026-11-22",
     "status": "ACTIVE",
-    "district": "운정3동"
+    "district": "파주시"
   },
   {
     "id": "seed-1efcee420d65",
@@ -5577,7 +5677,7 @@
     "sourceUrl": "https://www.paju.go.kr/www/www_02/health/health_03/health_03_09/health_03_09_01.jsp | https://www.paju.go.kr/user/soldier/BD_discountStoreList.do?q_ctgCd=1001",
     "lastVerifiedAt": "2026-11-22",
     "status": "ACTIVE",
-    "district": "운정3동"
+    "district": "파주시"
   },
   {
     "id": "seed-eb252d7d8b91",
@@ -5597,7 +5697,7 @@
     "sourceUrl": "https://www.paju.go.kr/www/www_02/health/health_03/health_03_09/health_03_09_01.jsp | https://www.paju.go.kr/user/soldier/BD_discountStoreList.do?q_ctgCd=1001",
     "lastVerifiedAt": "2026-11-22",
     "status": "ACTIVE",
-    "district": "운정3동"
+    "district": "파주시"
   },
   {
     "id": "seed-bf37cd304142",
@@ -5617,7 +5717,7 @@
     "sourceUrl": "https://www.paju.go.kr/www/www_02/health/health_03/health_03_09/health_03_09_01.jsp | https://www.paju.go.kr/user/soldier/BD_discountStoreList.do?q_ctgCd=1001",
     "lastVerifiedAt": "2026-11-22",
     "status": "ACTIVE",
-    "district": "운정3동"
+    "district": "파주시"
   },
   {
     "id": "seed-261698983997",
@@ -5637,7 +5737,7 @@
     "sourceUrl": "https://www.paju.go.kr/www/www_02/health/health_03/health_03_09/health_03_09_01.jsp | https://www.paju.go.kr/user/soldier/BD_discountStoreList.do?q_ctgCd=1001",
     "lastVerifiedAt": "2026-11-22",
     "status": "ACTIVE",
-    "district": "월롱면"
+    "district": "파주시"
   },
   {
     "id": "seed-b24207c7a3a6",
@@ -5697,7 +5797,7 @@
     "sourceUrl": "https://www.paju.go.kr/www/www_02/health/health_03/health_03_09/health_03_09_01.jsp | https://www.paju.go.kr/user/soldier/BD_discountStoreList.do?q_ctgCd=1004",
     "lastVerifiedAt": "2026-11-22",
     "status": "ACTIVE",
-    "district": "적성면"
+    "district": "파주시"
   },
   {
     "id": "seed-cdea1d83e2c1",
@@ -5717,7 +5817,7 @@
     "sourceUrl": "https://www.paju.go.kr/www/www_02/health/health_03/health_03_09/health_03_09_01.jsp | https://www.paju.go.kr/user/soldier/BD_discountStoreList.do?q_ctgCd=1002",
     "lastVerifiedAt": "2026-11-22",
     "status": "ACTIVE",
-    "district": "적성면"
+    "district": "파주시"
   },
   {
     "id": "seed-98f89c5ad975",
@@ -5737,7 +5837,7 @@
     "sourceUrl": "https://www.paju.go.kr/www/www_02/health/health_03/health_03_09/health_03_09_01.jsp | https://www.paju.go.kr/user/soldier/BD_discountStoreList.do?q_ctgCd=1001",
     "lastVerifiedAt": "2026-11-22",
     "status": "ACTIVE",
-    "district": "적성면"
+    "district": "파주시"
   },
   {
     "id": "seed-47507722c251",
@@ -5757,7 +5857,7 @@
     "sourceUrl": "https://www.paju.go.kr/www/www_02/health/health_03/health_03_09/health_03_09_01.jsp | https://www.paju.go.kr/user/soldier/BD_discountStoreList.do?q_ctgCd=1001",
     "lastVerifiedAt": "2026-11-22",
     "status": "ACTIVE",
-    "district": "적성면"
+    "district": "파주시"
   },
   {
     "id": "seed-8d427d02ef44",
@@ -5777,7 +5877,7 @@
     "sourceUrl": "https://www.paju.go.kr/www/www_02/health/health_03/health_03_09/health_03_09_01.jsp | https://www.paju.go.kr/user/soldier/BD_discountStoreList.do?q_ctgCd=1001",
     "lastVerifiedAt": "2026-11-22",
     "status": "ACTIVE",
-    "district": "적성면"
+    "district": "파주시"
   },
   {
     "id": "seed-c9a0f5ccfbfb",
@@ -5797,7 +5897,7 @@
     "sourceUrl": "https://www.paju.go.kr/www/www_02/health/health_03/health_03_09/health_03_09_01.jsp | https://www.paju.go.kr/user/soldier/BD_discountStoreList.do?q_ctgCd=1001",
     "lastVerifiedAt": "2026-11-22",
     "status": "ACTIVE",
-    "district": "적성면"
+    "district": "파주시"
   },
   {
     "id": "seed-a356d107f956",
@@ -5817,7 +5917,7 @@
     "sourceUrl": "https://www.paju.go.kr/www/www_02/health/health_03/health_03_09/health_03_09_01.jsp | https://www.paju.go.kr/user/soldier/BD_discountStoreList.do?q_ctgCd=1001",
     "lastVerifiedAt": "2026-11-22",
     "status": "ACTIVE",
-    "district": "적성면"
+    "district": "파주시"
   },
   {
     "id": "seed-18719c4eed07",
@@ -5837,7 +5937,7 @@
     "sourceUrl": "https://www.paju.go.kr/www/www_02/health/health_03/health_03_09/health_03_09_01.jsp | https://www.paju.go.kr/user/soldier/BD_discountStoreList.do?q_ctgCd=1001",
     "lastVerifiedAt": "2026-11-22",
     "status": "ACTIVE",
-    "district": "적성면"
+    "district": "파주시"
   },
   {
     "id": "seed-dab61692b7a1",
@@ -5857,7 +5957,7 @@
     "sourceUrl": "https://www.paju.go.kr/www/www_02/health/health_03/health_03_09/health_03_09_01.jsp | https://www.paju.go.kr/user/soldier/BD_discountStoreList.do?q_ctgCd=1001",
     "lastVerifiedAt": "2026-11-22",
     "status": "ACTIVE",
-    "district": "적성면"
+    "district": "파주시"
   },
   {
     "id": "seed-bca21daaceea",
@@ -5877,7 +5977,7 @@
     "sourceUrl": "https://www.paju.go.kr/www/www_02/health/health_03/health_03_09/health_03_09_01.jsp | https://www.paju.go.kr/user/soldier/BD_discountStoreList.do?q_ctgCd=1001",
     "lastVerifiedAt": "2026-11-22",
     "status": "ACTIVE",
-    "district": "적성면"
+    "district": "파주시"
   },
   {
     "id": "seed-1d502d383812",
@@ -5897,7 +5997,7 @@
     "sourceUrl": "https://www.paju.go.kr/www/www_02/health/health_03/health_03_09/health_03_09_01.jsp | https://www.paju.go.kr/user/soldier/BD_discountStoreList.do?q_ctgCd=1001",
     "lastVerifiedAt": "2026-11-22",
     "status": "ACTIVE",
-    "district": "적성면"
+    "district": "파주시"
   },
   {
     "id": "seed-3e5fce2c3e8c",
@@ -5917,7 +6017,7 @@
     "sourceUrl": "https://www.paju.go.kr/www/www_02/health/health_03/health_03_09/health_03_09_01.jsp | https://www.paju.go.kr/user/soldier/BD_discountStoreList.do?q_ctgCd=1001",
     "lastVerifiedAt": "2026-11-22",
     "status": "ACTIVE",
-    "district": "적성면"
+    "district": "파주시"
   },
   {
     "id": "seed-668dfc82e8da",
@@ -5937,7 +6037,7 @@
     "sourceUrl": "https://www.paju.go.kr/www/www_02/health/health_03/health_03_09/health_03_09_01.jsp | https://www.paju.go.kr/user/soldier/BD_discountStoreList.do?q_ctgCd=1001",
     "lastVerifiedAt": "2026-11-22",
     "status": "ACTIVE",
-    "district": "적성면"
+    "district": "파주시"
   },
   {
     "id": "seed-a0c627221c60",
@@ -5957,7 +6057,7 @@
     "sourceUrl": "https://www.paju.go.kr/www/www_02/health/health_03/health_03_09/health_03_09_01.jsp | https://www.paju.go.kr/user/soldier/BD_discountStoreList.do?q_ctgCd=1001",
     "lastVerifiedAt": "2026-11-22",
     "status": "ACTIVE",
-    "district": "적성면"
+    "district": "파주시"
   },
   {
     "id": "seed-fa22032e7700",
@@ -5977,7 +6077,7 @@
     "sourceUrl": "https://www.paju.go.kr/www/www_02/health/health_03/health_03_09/health_03_09_01.jsp | https://www.paju.go.kr/user/soldier/BD_discountStoreList.do?q_ctgCd=1001",
     "lastVerifiedAt": "2026-11-22",
     "status": "ACTIVE",
-    "district": "적성면"
+    "district": "파주시"
   },
   {
     "id": "seed-dfad9177b30b",
@@ -5997,7 +6097,7 @@
     "sourceUrl": "https://www.paju.go.kr/www/www_02/health/health_03/health_03_09/health_03_09_01.jsp | https://www.paju.go.kr/user/soldier/BD_discountStoreList.do?q_ctgCd=1001",
     "lastVerifiedAt": "2026-11-22",
     "status": "ACTIVE",
-    "district": "적성면"
+    "district": "파주시"
   },
   {
     "id": "seed-b6a853158b8a",
@@ -6017,7 +6117,7 @@
     "sourceUrl": "https://www.paju.go.kr/www/www_02/health/health_03/health_03_09/health_03_09_01.jsp | https://www.paju.go.kr/user/soldier/BD_discountStoreList.do?q_ctgCd=1001",
     "lastVerifiedAt": "2026-11-22",
     "status": "ACTIVE",
-    "district": "적성면"
+    "district": "파주시"
   },
   {
     "id": "seed-9606d59f9fba",
@@ -6037,7 +6137,7 @@
     "sourceUrl": "https://www.paju.go.kr/www/www_02/health/health_03/health_03_09/health_03_09_01.jsp | https://www.paju.go.kr/user/soldier/BD_discountStoreList.do?q_ctgCd=1001",
     "lastVerifiedAt": "2026-11-22",
     "status": "ACTIVE",
-    "district": "적성면"
+    "district": "파주시"
   },
   {
     "id": "seed-7f9aa51ce614",
@@ -6057,7 +6157,7 @@
     "sourceUrl": "https://www.paju.go.kr/www/www_02/health/health_03/health_03_09/health_03_09_01.jsp | https://www.paju.go.kr/user/soldier/BD_discountStoreList.do?q_ctgCd=1001",
     "lastVerifiedAt": "2026-11-22",
     "status": "ACTIVE",
-    "district": "적성면"
+    "district": "파주시"
   },
   {
     "id": "seed-fdefb1c879dd",
@@ -6077,7 +6177,7 @@
     "sourceUrl": "https://www.paju.go.kr/www/www_02/health/health_03/health_03_09/health_03_09_01.jsp | https://www.paju.go.kr/user/soldier/BD_discountStoreList.do?q_ctgCd=1001",
     "lastVerifiedAt": "2026-11-22",
     "status": "ACTIVE",
-    "district": "적성면"
+    "district": "파주시"
   },
   {
     "id": "seed-9ba9b8fb731f",
@@ -6097,7 +6197,7 @@
     "sourceUrl": "https://www.paju.go.kr/www/www_02/health/health_03/health_03_09/health_03_09_01.jsp | https://www.paju.go.kr/user/soldier/BD_discountStoreList.do?q_ctgCd=1001",
     "lastVerifiedAt": "2026-11-22",
     "status": "ACTIVE",
-    "district": "적성면"
+    "district": "파주시"
   },
   {
     "id": "seed-fdae99149a5b",
@@ -6117,7 +6217,7 @@
     "sourceUrl": "https://www.paju.go.kr/www/www_02/health/health_03/health_03_09/health_03_09_01.jsp | https://www.paju.go.kr/user/soldier/BD_discountStoreList.do?q_ctgCd=1001",
     "lastVerifiedAt": "2026-11-22",
     "status": "ACTIVE",
-    "district": "조리읍"
+    "district": "파주시"
   },
   {
     "id": "seed-d23aa767fd88",
@@ -6137,7 +6237,7 @@
     "sourceUrl": "https://www.paju.go.kr/www/www_02/health/health_03/health_03_09/health_03_09_01.jsp | https://www.paju.go.kr/user/soldier/BD_discountStoreList.do?q_ctgCd=1001",
     "lastVerifiedAt": "2026-11-22",
     "status": "ACTIVE",
-    "district": "조리읍"
+    "district": "파주시"
   },
   {
     "id": "seed-4ac8a6f9eb12",
@@ -6157,7 +6257,7 @@
     "sourceUrl": "https://www.paju.go.kr/www/www_02/health/health_03/health_03_09/health_03_09_01.jsp | https://www.paju.go.kr/user/soldier/BD_discountStoreList.do?q_ctgCd=1002",
     "lastVerifiedAt": "2026-11-22",
     "status": "ACTIVE",
-    "district": "탄현면"
+    "district": "파주시"
   },
   {
     "id": "seed-f299849e3f4c",
@@ -6177,7 +6277,7 @@
     "sourceUrl": "https://www.paju.go.kr/www/www_02/health/health_03/health_03_09/health_03_09_01.jsp | https://www.paju.go.kr/user/soldier/BD_discountStoreList.do?q_ctgCd=1002",
     "lastVerifiedAt": "2026-11-22",
     "status": "ACTIVE",
-    "district": "탄현면"
+    "district": "파주시"
   },
   {
     "id": "seed-151cf21eb995",
@@ -6197,7 +6297,7 @@
     "sourceUrl": "https://www.paju.go.kr/www/www_02/health/health_03/health_03_09/health_03_09_01.jsp | https://www.paju.go.kr/user/soldier/BD_discountStoreList.do?q_ctgCd=1002",
     "lastVerifiedAt": "2026-11-22",
     "status": "ACTIVE",
-    "district": "탄현면"
+    "district": "파주시"
   },
   {
     "id": "seed-c14c410a5178",
@@ -6217,7 +6317,7 @@
     "sourceUrl": "https://www.paju.go.kr/www/www_02/health/health_03/health_03_09/health_03_09_01.jsp | https://www.paju.go.kr/user/soldier/BD_discountStoreList.do?q_ctgCd=1002",
     "lastVerifiedAt": "2026-11-22",
     "status": "ACTIVE",
-    "district": "탄현면"
+    "district": "파주시"
   },
   {
     "id": "seed-5138345a24e0",
@@ -6237,7 +6337,7 @@
     "sourceUrl": "https://www.paju.go.kr/www/www_02/health/health_03/health_03_09/health_03_09_01.jsp | https://www.paju.go.kr/user/soldier/BD_discountStoreList.do?q_ctgCd=1002",
     "lastVerifiedAt": "2026-11-22",
     "status": "ACTIVE",
-    "district": "탄현면"
+    "district": "파주시"
   },
   {
     "id": "seed-2a9e6474fb1d",
@@ -6257,7 +6357,7 @@
     "sourceUrl": "https://www.paju.go.kr/www/www_02/health/health_03/health_03_09/health_03_09_01.jsp | https://www.paju.go.kr/user/soldier/BD_discountStoreList.do?q_ctgCd=1001",
     "lastVerifiedAt": "2026-11-22",
     "status": "ACTIVE",
-    "district": "탄현면"
+    "district": "파주시"
   },
   {
     "id": "seed-71f033fcf717",
@@ -6277,7 +6377,7 @@
     "sourceUrl": "https://www.paju.go.kr/www/www_02/health/health_03/health_03_09/health_03_09_01.jsp | https://www.paju.go.kr/user/soldier/BD_discountStoreList.do?q_ctgCd=1001",
     "lastVerifiedAt": "2026-11-22",
     "status": "ACTIVE",
-    "district": "탄현면"
+    "district": "파주시"
   },
   {
     "id": "seed-5c22283fb759",
@@ -6297,7 +6397,7 @@
     "sourceUrl": "https://www.paju.go.kr/www/www_02/health/health_03/health_03_09/health_03_09_01.jsp | https://www.paju.go.kr/user/soldier/BD_discountStoreList.do?q_ctgCd=1001",
     "lastVerifiedAt": "2026-11-22",
     "status": "ACTIVE",
-    "district": "탄현면"
+    "district": "파주시"
   },
   {
     "id": "seed-0027143eed8d",
@@ -6317,7 +6417,7 @@
     "sourceUrl": "https://www.paju.go.kr/www/www_02/health/health_03/health_03_09/health_03_09_01.jsp | https://www.paju.go.kr/user/soldier/BD_discountStoreList.do?q_ctgCd=1001",
     "lastVerifiedAt": "2026-11-22",
     "status": "ACTIVE",
-    "district": "탄현면"
+    "district": "파주시"
   },
   {
     "id": "seed-7a193db5e75b",
@@ -6337,7 +6437,7 @@
     "sourceUrl": "https://www.paju.go.kr/www/www_02/health/health_03/health_03_09/health_03_09_01.jsp | https://www.paju.go.kr/user/soldier/BD_discountStoreList.do?q_ctgCd=1001",
     "lastVerifiedAt": "2026-11-22",
     "status": "ACTIVE",
-    "district": "탄현면"
+    "district": "파주시"
   },
   {
     "id": "seed-95cb448d98e5",
@@ -6357,7 +6457,7 @@
     "sourceUrl": "https://www.paju.go.kr/www/www_02/health/health_03/health_03_09/health_03_09_01.jsp | https://www.paju.go.kr/user/soldier/BD_discountStoreList.do?q_ctgCd=1001",
     "lastVerifiedAt": "2026-11-22",
     "status": "ACTIVE",
-    "district": "탄현면"
+    "district": "파주시"
   },
   {
     "id": "seed-af8d6daa4cf0",
@@ -6377,7 +6477,7 @@
     "sourceUrl": "https://www.paju.go.kr/www/www_02/health/health_03/health_03_09/health_03_09_01.jsp | https://www.paju.go.kr/user/soldier/BD_discountStoreList.do?q_ctgCd=1001",
     "lastVerifiedAt": "2026-11-22",
     "status": "ACTIVE",
-    "district": "탄현면"
+    "district": "파주시"
   },
   {
     "id": "seed-b8f12238c4f3",
@@ -6397,7 +6497,7 @@
     "sourceUrl": "https://www.paju.go.kr/www/www_02/health/health_03/health_03_09/health_03_09_01.jsp | https://www.paju.go.kr/user/soldier/BD_discountStoreList.do?q_ctgCd=1001",
     "lastVerifiedAt": "2026-11-22",
     "status": "ACTIVE",
-    "district": "탄현면"
+    "district": "파주시"
   },
   {
     "id": "seed-1cd61c2cb3e5",
@@ -6417,7 +6517,7 @@
     "sourceUrl": "https://www.paju.go.kr/www/www_02/health/health_03/health_03_09/health_03_09_01.jsp | https://www.paju.go.kr/user/soldier/BD_discountStoreList.do?q_ctgCd=1001",
     "lastVerifiedAt": "2026-11-22",
     "status": "ACTIVE",
-    "district": "탄현면"
+    "district": "파주시"
   },
   {
     "id": "seed-8d65b14afdd9",
@@ -6437,7 +6537,7 @@
     "sourceUrl": "https://www.paju.go.kr/www/www_02/health/health_03/health_03_09/health_03_09_01.jsp | https://www.paju.go.kr/user/soldier/BD_discountStoreList.do?q_ctgCd=1001",
     "lastVerifiedAt": "2026-11-22",
     "status": "ACTIVE",
-    "district": "탄현면"
+    "district": "파주시"
   },
   {
     "id": "seed-f6a41c02b60c",
@@ -6457,14 +6557,14 @@
     "sourceUrl": "https://www.paju.go.kr/www/www_02/health/health_03/health_03_09/health_03_09_01.jsp | https://www.paju.go.kr/user/soldier/BD_discountStoreList.do?q_ctgCd=1001",
     "lastVerifiedAt": "2026-11-22",
     "status": "ACTIVE",
-    "district": "탄현면"
+    "district": "파주시"
   },
   {
     "id": "seed-2cc7bef0adb7",
     "name": "짹짹곳간",
     "address": "파주시 탄현면 새오리로339번길 79-48 2층",
-    "latitude": null,
-    "longitude": null,
+    "latitude": 37.8176596,
+    "longitude": 126.6907005,
     "category": "음식",
     "benefitType": "할인·우대",
     "benefitDescription": "군 장병·사회복무요원 대상 10% 이상 할인 또는 상응 서비스",
@@ -6477,7 +6577,7 @@
     "sourceUrl": "https://www.paju.go.kr/www/www_02/health/health_03/health_03_09/health_03_09_01.jsp | https://www.paju.go.kr/user/soldier/BD_discountStoreList.do?q_ctgCd=1001",
     "lastVerifiedAt": "2026-11-22",
     "status": "ACTIVE",
-    "district": "탄현면"
+    "district": "파주시"
   },
   {
     "id": "seed-2a8f379a89d2",
@@ -6497,7 +6597,7 @@
     "sourceUrl": "https://www.paju.go.kr/www/www_02/health/health_03/health_03_09/health_03_09_01.jsp | https://www.paju.go.kr/user/soldier/BD_discountStoreList.do?q_ctgCd=1001",
     "lastVerifiedAt": "2026-11-22",
     "status": "ACTIVE",
-    "district": "탄현면"
+    "district": "파주시"
   },
   {
     "id": "seed-e0aa0a7b119e",
@@ -6517,7 +6617,7 @@
     "sourceUrl": "https://www.paju.go.kr/www/www_02/health/health_03/health_03_09/health_03_09_01.jsp | https://www.paju.go.kr/user/soldier/BD_discountStoreList.do?q_ctgCd=1001",
     "lastVerifiedAt": "2026-11-22",
     "status": "ACTIVE",
-    "district": "탄현면"
+    "district": "파주시"
   },
   {
     "id": "seed-f9c6258fe845",
@@ -6537,7 +6637,7 @@
     "sourceUrl": "https://www.paju.go.kr/www/www_02/health/health_03/health_03_09/health_03_09_01.jsp | https://www.paju.go.kr/user/soldier/BD_discountStoreList.do?q_ctgCd=1001",
     "lastVerifiedAt": "2026-11-22",
     "status": "ACTIVE",
-    "district": "탄현면"
+    "district": "파주시"
   },
   {
     "id": "seed-65ea6431f3e5",
@@ -6557,7 +6657,7 @@
     "sourceUrl": "https://www.paju.go.kr/www/www_02/health/health_03/health_03_09/health_03_09_01.jsp | https://www.paju.go.kr/user/soldier/BD_discountStoreList.do?q_ctgCd=1001",
     "lastVerifiedAt": "2026-11-22",
     "status": "ACTIVE",
-    "district": "탄현면"
+    "district": "파주시"
   },
   {
     "id": "seed-ac2064e132fd",
@@ -6577,7 +6677,7 @@
     "sourceUrl": "https://www.paju.go.kr/www/www_02/health/health_03/health_03_09/health_03_09_01.jsp | https://www.paju.go.kr/user/soldier/BD_discountStoreList.do?q_ctgCd=1001",
     "lastVerifiedAt": "2026-11-22",
     "status": "ACTIVE",
-    "district": "탄현면"
+    "district": "파주시"
   },
   {
     "id": "seed-db2681fa3413",
@@ -6597,7 +6697,7 @@
     "sourceUrl": "https://www.paju.go.kr/www/www_02/health/health_03/health_03_09/health_03_09_01.jsp | https://www.paju.go.kr/user/soldier/BD_discountStoreList.do?q_ctgCd=1001",
     "lastVerifiedAt": "2026-11-22",
     "status": "ACTIVE",
-    "district": "탄현면"
+    "district": "파주시"
   },
   {
     "id": "seed-3ef588a8315e",
@@ -6617,7 +6717,7 @@
     "sourceUrl": "https://www.paju.go.kr/www/www_02/health/health_03/health_03_09/health_03_09_01.jsp | https://www.paju.go.kr/user/soldier/BD_discountStoreList.do?q_ctgCd=1001",
     "lastVerifiedAt": "2026-11-22",
     "status": "ACTIVE",
-    "district": "탄현면"
+    "district": "파주시"
   },
   {
     "id": "seed-2bbefa87d4f7",
@@ -6657,7 +6757,7 @@
     "sourceUrl": "https://www.paju.go.kr/www/www_02/health/health_03/health_03_09/health_03_09_01.jsp | https://www.paju.go.kr/user/soldier/BD_discountStoreList.do?q_ctgCd=1004",
     "lastVerifiedAt": "2026-11-22",
     "status": "ACTIVE",
-    "district": "파주읍"
+    "district": "파주시"
   },
   {
     "id": "seed-dd9b516a4c93",
@@ -6677,7 +6777,7 @@
     "sourceUrl": "https://www.paju.go.kr/www/www_02/health/health_03/health_03_09/health_03_09_01.jsp | https://www.paju.go.kr/user/soldier/BD_discountStoreList.do?q_ctgCd=1004",
     "lastVerifiedAt": "2026-11-22",
     "status": "ACTIVE",
-    "district": "파주읍"
+    "district": "파주시"
   },
   {
     "id": "seed-64ce99660a3f",
@@ -6697,7 +6797,7 @@
     "sourceUrl": "https://www.paju.go.kr/www/www_02/health/health_03/health_03_09/health_03_09_01.jsp | https://www.paju.go.kr/user/soldier/BD_discountStoreList.do?q_ctgCd=1001",
     "lastVerifiedAt": "2026-11-22",
     "status": "ACTIVE",
-    "district": "파주읍"
+    "district": "파주시"
   },
   {
     "id": "seed-9e43a6f1a6fc",
@@ -6717,7 +6817,7 @@
     "sourceUrl": "https://www.paju.go.kr/www/www_02/health/health_03/health_03_09/health_03_09_01.jsp | https://www.paju.go.kr/user/soldier/BD_discountStoreList.do?q_ctgCd=1001",
     "lastVerifiedAt": "2026-11-22",
     "status": "ACTIVE",
-    "district": "파주읍"
+    "district": "파주시"
   },
   {
     "id": "seed-32ed385056b8",
@@ -6737,7 +6837,7 @@
     "sourceUrl": "https://www.paju.go.kr/www/www_02/health/health_03/health_03_09/health_03_09_01.jsp | https://www.paju.go.kr/user/soldier/BD_discountStoreList.do?q_ctgCd=1001",
     "lastVerifiedAt": "2026-11-22",
     "status": "ACTIVE",
-    "district": "파주읍"
+    "district": "파주시"
   },
   {
     "id": "seed-0e66917c24f7",
@@ -6757,7 +6857,7 @@
     "sourceUrl": "https://www.paju.go.kr/www/www_02/health/health_03/health_03_09/health_03_09_01.jsp | https://www.paju.go.kr/user/soldier/BD_discountStoreList.do?q_ctgCd=1001",
     "lastVerifiedAt": "2026-11-22",
     "status": "ACTIVE",
-    "district": "파주읍"
+    "district": "파주시"
   },
   {
     "id": "seed-1cfed70d5d94",
@@ -6777,7 +6877,7 @@
     "sourceUrl": "https://www.paju.go.kr/www/www_02/health/health_03/health_03_09/health_03_09_01.jsp | https://www.paju.go.kr/user/soldier/BD_discountStoreList.do?q_ctgCd=1001",
     "lastVerifiedAt": "2026-11-22",
     "status": "ACTIVE",
-    "district": "파주읍"
+    "district": "파주시"
   },
   {
     "id": "seed-f3c45d3b0a04",
@@ -6797,14 +6897,14 @@
     "sourceUrl": "https://www.paju.go.kr/www/www_02/health/health_03/health_03_09/health_03_09_01.jsp | https://www.paju.go.kr/user/soldier/BD_discountStoreList.do?q_ctgCd=1001",
     "lastVerifiedAt": "2026-11-22",
     "status": "ACTIVE",
-    "district": "파주읍"
+    "district": "파주시"
   },
   {
     "id": "seed-ac5d379aaf03",
     "name": "짜장마을",
     "address": "파주시 파주읍 술이홀로 463",
-    "latitude": null,
-    "longitude": null,
+    "latitude": 37.8291464,
+    "longitude": 126.83838,
     "category": "음식",
     "benefitType": "할인·우대",
     "benefitDescription": "군 장병·사회복무요원 대상 10% 이상 할인 또는 상응 서비스",
@@ -6817,7 +6917,7 @@
     "sourceUrl": "https://www.paju.go.kr/www/www_02/health/health_03/health_03_09/health_03_09_01.jsp | https://www.paju.go.kr/user/soldier/BD_discountStoreList.do?q_ctgCd=1001",
     "lastVerifiedAt": "2026-11-22",
     "status": "ACTIVE",
-    "district": "파주읍"
+    "district": "파주시"
   },
   {
     "id": "seed-50fcca7f27d1",
@@ -6837,7 +6937,7 @@
     "sourceUrl": "https://www.paju.go.kr/www/www_02/health/health_03/health_03_09/health_03_09_01.jsp | https://www.paju.go.kr/user/soldier/BD_discountStoreList.do?q_ctgCd=1001",
     "lastVerifiedAt": "2026-11-22",
     "status": "ACTIVE",
-    "district": "파주읍"
+    "district": "파주시"
   },
   {
     "id": "seed-75961b51d621",
@@ -6857,7 +6957,7 @@
     "sourceUrl": "https://www.paju.go.kr/www/www_02/health/health_03/health_03_09/health_03_09_01.jsp | https://www.paju.go.kr/user/soldier/BD_discountStoreList.do?q_ctgCd=1002",
     "lastVerifiedAt": "2026-11-22",
     "status": "ACTIVE",
-    "district": "파평면"
+    "district": "파주시"
   },
   {
     "id": "seed-da82da7e2193",
@@ -6877,7 +6977,7 @@
     "sourceUrl": "https://www.paju.go.kr/www/www_02/health/health_03/health_03_09/health_03_09_01.jsp | https://www.paju.go.kr/user/soldier/BD_discountStoreList.do?q_ctgCd=1002",
     "lastVerifiedAt": "2026-11-22",
     "status": "ACTIVE",
-    "district": "파평면"
+    "district": "파주시"
   },
   {
     "id": "seed-32a2e8fa2f53",
@@ -6897,7 +6997,7 @@
     "sourceUrl": "https://www.paju.go.kr/www/www_02/health/health_03/health_03_09/health_03_09_01.jsp | https://www.paju.go.kr/user/soldier/BD_discountStoreList.do?q_ctgCd=1001",
     "lastVerifiedAt": "2026-11-22",
     "status": "ACTIVE",
-    "district": "파평면"
+    "district": "파주시"
   },
   {
     "id": "seed-4a1bfb894543",
@@ -6917,7 +7017,7 @@
     "sourceUrl": "https://www.paju.go.kr/www/www_02/health/health_03/health_03_09/health_03_09_01.jsp | https://www.paju.go.kr/user/soldier/BD_discountStoreList.do?q_ctgCd=1001",
     "lastVerifiedAt": "2026-11-22",
     "status": "ACTIVE",
-    "district": "파평면"
+    "district": "파주시"
   },
   {
     "id": "seed-106b0fbfdf75",
@@ -6937,7 +7037,7 @@
     "sourceUrl": "https://www.paju.go.kr/www/www_02/health/health_03/health_03_09/health_03_09_01.jsp | https://www.paju.go.kr/user/soldier/BD_discountStoreList.do?q_ctgCd=1001",
     "lastVerifiedAt": "2026-11-22",
     "status": "ACTIVE",
-    "district": "파평면"
+    "district": "파주시"
   },
   {
     "id": "seed-11c9c11fde1a",
@@ -6957,7 +7057,7 @@
     "sourceUrl": "https://www.paju.go.kr/www/www_02/health/health_03/health_03_09/health_03_09_01.jsp | https://www.paju.go.kr/user/soldier/BD_discountStoreList.do?q_ctgCd=1001",
     "lastVerifiedAt": "2026-11-22",
     "status": "ACTIVE",
-    "district": "파평면"
+    "district": "파주시"
   },
   {
     "id": "seed-6a3fae91f170",
@@ -6977,7 +7077,7 @@
     "sourceUrl": "https://www.paju.go.kr/www/www_02/health/health_03/health_03_09/health_03_09_01.jsp | https://www.paju.go.kr/user/soldier/BD_discountStoreList.do?q_ctgCd=1001",
     "lastVerifiedAt": "2026-11-22",
     "status": "ACTIVE",
-    "district": "파평면"
+    "district": "파주시"
   },
   {
     "id": "seed-3833bb3a400b",
@@ -16778,5 +16878,3485 @@
     "lastVerifiedAt": "2026-11-23",
     "status": "ACTIVE",
     "district": "안산시"
+  },
+  {
+    "id": "seed-9d12325833b3",
+    "name": "알파안경",
+    "address": "인천광역시남동구논고개로123번길35(논현동, 2층)",
+    "latitude": 37.4016976,
+    "longitude": 126.7219351,
+    "category": "병원",
+    "benefitType": "할인·우대",
+    "benefitDescription": "서비스 이용료의 5%할인(콘텍트렌즈 제외)",
+    "phone": "0507-1453-1654",
+    "eligibleTarget": "동원훈련이수자, 현역(사회복무,전문산업기능요원), 병역명문가",
+    "usageCondition": "없음",
+    "verificationMethod": "훈련이수증(모범,당해연도),명문가증,복무확인서등",
+    "sourceType": "PUBLIC_EVIDENCE",
+    "sourceLabel": "병무청 나라사랑가게 · 최신 확인",
+    "sourceUrl": "https://www.mma.go.kr/about/udgg/list.do?mc=mma0003357",
+    "lastVerifiedAt": "2026-11-23",
+    "status": "ACTIVE",
+    "district": "남동구"
+  },
+  {
+    "id": "seed-6ec947a98188",
+    "name": "조은미래의원",
+    "address": "경기도김포시김포한강8로396(구래동, 3층)",
+    "latitude": 37.6431326,
+    "longitude": 126.6251461,
+    "category": "병원",
+    "benefitType": "할인·우대",
+    "benefitDescription": "비급여항목의 10%할인 - 기타 혜택에 대한 내용은 문의(법령에 위반되지 않는 범위에서 적용)",
+    "phone": "031-992-6677",
+    "eligibleTarget": "예비군(당해년도,모범), 복무중인 사람(현역+사복+산업), 병역병문가",
+    "usageCondition": "없음",
+    "verificationMethod": "훈련이수증(당해연도,모범), 복무확인서,명문가증",
+    "sourceType": "PUBLIC_EVIDENCE",
+    "sourceLabel": "병무청 나라사랑가게 · 최신 확인",
+    "sourceUrl": "https://www.mma.go.kr/about/udgg/list.do?mc=mma0003357",
+    "lastVerifiedAt": "2026-11-23",
+    "status": "ACTIVE",
+    "district": "김포시"
+  },
+  {
+    "id": "seed-6a05819c104f",
+    "name": "안경상회(송도점))",
+    "address": "인천광역시연수구첨단대로40(송도동, B동 206호)",
+    "latitude": 37.3700657,
+    "longitude": 126.6505736,
+    "category": "병원",
+    "benefitType": "할인·우대",
+    "benefitDescription": "서비스이용료의 10%할인(콘텍트렌즈 제외)",
+    "phone": "032-822-1999",
+    "eligibleTarget": "예비군(당해년도,모범), 복무중인 사람(현역+사회복무+산업기능요원)",
+    "usageCondition": "없음",
+    "verificationMethod": "훈련이수증(당해연도,모범), 복무확인서",
+    "sourceType": "PUBLIC_EVIDENCE",
+    "sourceLabel": "병무청 나라사랑가게 · 최신 확인",
+    "sourceUrl": "https://www.mma.go.kr/about/udgg/list.do?mc=mma0003357",
+    "lastVerifiedAt": "2026-11-23",
+    "status": "ACTIVE",
+    "district": "연수구"
+  },
+  {
+    "id": "seed-3fac42c76cc6",
+    "name": "안경정원",
+    "address": "인천광역시연수구센트럴로415(송도동, 판매시설동 155호)",
+    "latitude": 37.4107167,
+    "longitude": 126.6279729,
+    "category": "병원",
+    "benefitType": "할인·우대",
+    "benefitDescription": "서비스이용료의 10%할인 -현역병 추가 10%할인(단, 군복착용시)",
+    "phone": "",
+    "eligibleTarget": "예비군(당해년도,모범), 복무중인 사람(현역+사회복무+산업기능요원), 병역명문가",
+    "usageCondition": "없음",
+    "verificationMethod": "훈련이수증(당해연도,모범), 복무확인서,명문가증",
+    "sourceType": "PUBLIC_EVIDENCE",
+    "sourceLabel": "병무청 나라사랑가게 · 최신 확인",
+    "sourceUrl": "https://www.mma.go.kr/about/udgg/list.do?mc=mma0003357",
+    "lastVerifiedAt": "2026-11-23",
+    "status": "ACTIVE",
+    "district": "연수구"
+  },
+  {
+    "id": "seed-61e45cf574fa",
+    "name": "바른안경(부개점)",
+    "address": "인천광역시부평구부흥로416(부개동, 1층 102호, 103호)",
+    "latitude": 37.4974219,
+    "longitude": 126.738267,
+    "category": "병원",
+    "benefitType": "할인·우대",
+    "benefitDescription": "서비스이용료의 10%할인(콘텍트렌즈 제외)",
+    "phone": "032-502-5552",
+    "eligibleTarget": "예비군(당해년도,모범), 복무중인 사람(현역+사복+산업), 병역명문가",
+    "usageCondition": "없음",
+    "verificationMethod": "훈련이수증(당해연도,모범), 복무확인서,명문가증",
+    "sourceType": "PUBLIC_EVIDENCE",
+    "sourceLabel": "병무청 나라사랑가게 · 최신 확인",
+    "sourceUrl": "https://www.mma.go.kr/about/udgg/list.do?mc=mma0003357",
+    "lastVerifiedAt": "2026-11-23",
+    "status": "ACTIVE",
+    "district": "부평구"
+  },
+  {
+    "id": "seed-4405d6b07929",
+    "name": "카페민스",
+    "address": "경기도의정부시안말로8번길481층 (호원동)",
+    "latitude": 37.7131597,
+    "longitude": 127.0427007,
+    "category": "카페",
+    "benefitType": "할인·우대",
+    "benefitDescription": "(카페)음료 5% 할인",
+    "phone": "031-837-1360",
+    "eligibleTarget": "동원훈련 이수자, 현역병·사회복무요원 등 복무자, 병역명문가, 병무청 직원 및 가족",
+    "usageCondition": "제한없음",
+    "verificationMethod": "당해년도 훈련이수증, 복무확인서, 병역명문가증",
+    "sourceType": "PUBLIC_EVIDENCE",
+    "sourceLabel": "병무청 나라사랑가게 · 최신 확인",
+    "sourceUrl": "https://www.mma.go.kr/about/udgg/list.do?mc=mma0003357",
+    "lastVerifiedAt": "2026-11-23",
+    "status": "ACTIVE",
+    "district": "의정부시"
+  },
+  {
+    "id": "seed-393e5e8e6554",
+    "name": "포스웨이브 드론교육원",
+    "address": "경기도포천시호국로1007309호(선단동, 대진대학교 산학협력단)",
+    "latitude": 37.866444,
+    "longitude": 127.1571303,
+    "category": "기타",
+    "benefitType": "할인·우대",
+    "benefitDescription": "서비스 이용료의 10% 할인",
+    "phone": "0507-1397-7000",
+    "eligibleTarget": "동원훈련 이수자, 현역병·사회복무요원 등 복무자, 병역명문가, 병무청 직원 및 가족",
+    "usageCondition": "제한없음",
+    "verificationMethod": "당해년도 동원훈련이수증, 복무확인서, 병역명문가",
+    "sourceType": "PUBLIC_EVIDENCE",
+    "sourceLabel": "병무청 나라사랑가게 · 최신 확인",
+    "sourceUrl": "https://www.mma.go.kr/about/udgg/list.do?mc=mma0003357",
+    "lastVerifiedAt": "2026-11-23",
+    "status": "ACTIVE",
+    "district": "포천시"
+  },
+  {
+    "id": "seed-4ed4586bc141",
+    "name": "롯데시티호텔 구로 씨카페",
+    "address": "서울특별시구로구디지털로300(구로동)",
+    "latitude": 37.4851501,
+    "longitude": 126.8965277,
+    "category": "음식",
+    "benefitType": "할인·우대",
+    "benefitDescription": "□ 공통사항 : 할인 횟수 제한 없음, 중복할인 불가 ❍ 동원훈련 이수 예비군 - 할인율 5% / ’24~’25년도 동원훈련 소집필증(예비군 홈페이지 출력 또는 병무지갑 앱) 제시 ❍ 모범예비군 - 할인율 5% / 모범예비군증(병무지갑 앱) 또는 병무청 홈페이지 선발결과 제시 ❍ 현역병(상근예비역) - 할인율 5% / 복무 중인 부대에서 발급한 복무확인서 ❍ 승선근무예비역 - 할인율 5% / 복무 중인 업체 또는 지방병무청에서 발급한 복무확인서 ❍ 사회복무요원 - 할인율 5% / 사회복무요원증(병무지갑 앱) 또는 복무확인서(병무지갑 앱 또는 복무기관, 지방병무청에서 발급) ❍ 산업기능·전문연구요원 - 할인율 5% / 복무확인서(병무지갑 앱 또는 복무기관, 지방병무청에서 발급) ❍ 예술체육요원 - 할인율 5% / 복무확인서(복무기관, 지방병무청에서 발급) ❍ 공중보건의사·병역판정검사전담의사·공익법무관·공중방역수의사 - 할인율 5% / 재직증명서(복무기관에서 발급) ❍ 병역명문가 - 할인율 10% / 본인 명의 병역명문가증(병무지갑 앱)",
+    "phone": "02-6210-1090",
+    "eligibleTarget": "동원훈련 이수예비군(당해연도), 모범예비군, 현역병(상근예비역), 사회복무요원 복무자, 병역명문가 등",
+    "usageCondition": "없음",
+    "verificationMethod": "병역이행 증빙서류",
+    "sourceType": "PUBLIC_EVIDENCE",
+    "sourceLabel": "병무청 나라사랑가게 · 최신 확인",
+    "sourceUrl": "https://www.mma.go.kr/about/udgg/list.do?mc=mma0003357",
+    "lastVerifiedAt": "2026-11-23",
+    "status": "ACTIVE",
+    "district": "구로구"
+  },
+  {
+    "id": "seed-aa637065c2d5",
+    "name": "더카라 뷔페(서머셋호텔분당)",
+    "address": "경기도성남시 분당구황새울로311번길36(서현동)",
+    "latitude": 37.386624,
+    "longitude": 127.1210987,
+    "category": "음식",
+    "benefitType": "할인·우대",
+    "benefitDescription": "□ 공통사항 : 할인 횟수 제한 없음, 중복할인 불가 ❍ 동원훈련 이수 예비군 - 할인율 5% / ’24~’25년도 동원훈련 소집필증(예비군 홈페이지 출력 또는 병무지갑 앱) 제시 ❍ 모범예비군 - 할인율 5% / 모범예비군증(병무지갑 앱) 또는 병무청 홈페이지 선발결과 제시 ❍ 현역병(상근예비역) - 할인율 5% / 복무 중인 부대에서 발급한 복무확인서 ❍ 승선근무예비역 - 할인율 5% / 복무 중인 업체 또는 지방병무청에서 발급한 복무확인서 ❍ 사회복무요원 - 할인율 5% / 사회복무요원증(병무지갑 앱) 또는 복무확인서(병무지갑 앱 또는 복무기관, 지방병무청에서 발급) ❍ 산업기능·전문연구요원 - 할인율 5% / 복무확인서(병무지갑 앱 또는 복무기관, 지방병무청에서 발급) ❍ 예술체육요원 - 할인율 5% / 복무확인서(복무기관, 지방병무청에서 발급) ❍ 공중보건의사·병역판정검사전담의사·공익법무관·공중방역수의사 - 할인율 5% / 재직증명서(복무기관에서 발급) ❍ 병역명문가 - 할인율 10% / 본인 명의 병역명문가증(병무지갑 앱)",
+    "phone": "031-724-0822",
+    "eligibleTarget": "동원훈련 이수예비군(당해연도), 모범예비군, 현역병(상근예비역), 사회복무요원 복무자, 병역명문가 등",
+    "usageCondition": "없음",
+    "verificationMethod": "병역이행 증빙서류",
+    "sourceType": "PUBLIC_EVIDENCE",
+    "sourceLabel": "병무청 나라사랑가게 · 최신 확인",
+    "sourceUrl": "https://www.mma.go.kr/about/udgg/list.do?mc=mma0003357",
+    "lastVerifiedAt": "2026-11-23",
+    "status": "ACTIVE",
+    "district": "성남시"
+  },
+  {
+    "id": "seed-ae09dcacd41d",
+    "name": "안경박사 상동점",
+    "address": "경기도부천시 원미구상일로86103호1층 (상동, 투원프라자)",
+    "latitude": 37.4914443,
+    "longitude": 126.7519571,
+    "category": "병원",
+    "benefitType": "할인·우대",
+    "benefitDescription": "- 서비스 이용료의 5% 할인(일회용 렌즈는 일부제외, 5만원이상 구입시 10% 할인)",
+    "phone": "032-323-7270",
+    "eligibleTarget": "동원훈련이수자,모범예비군,복무중인현역병,사회복무요원,전문산업기능요원,병역명문가",
+    "usageCondition": "없음",
+    "verificationMethod": "동원훈련이수증,모범예비군증,복무확인서 등",
+    "sourceType": "PUBLIC_EVIDENCE",
+    "sourceLabel": "병무청 나라사랑가게 · 최신 확인",
+    "sourceUrl": "https://www.mma.go.kr/about/udgg/list.do?mc=mma0003357",
+    "lastVerifiedAt": "2026-11-23",
+    "status": "ACTIVE",
+    "district": "부천시"
+  },
+  {
+    "id": "seed-f254e6cd4652",
+    "name": "성신여대사진관",
+    "address": "서울특별시성북구동소문로20나길47(동선동1가, 코아루센타시아 2층 208호)",
+    "latitude": 37.5928441,
+    "longitude": 127.0190955,
+    "category": "기타",
+    "benefitType": "할인·우대",
+    "benefitDescription": "서비스 이용료의 50% 할인 (6.25 참전용사 / 베트남 참전용사 초상화 사진 무료) * 50% 할인 대상자는 메뉴 이용 후 네이버 플레이스 리뷰를 현장에서 작성 * 사진관 방문 전 일주일전 예약 필수 (증명사진 외 파일제공)",
+    "phone": "02-927-7785",
+    "eligibleTarget": "당해연도 동원훈련 이수자, 모범 예비군, 복무중인 사람, 병역명문가",
+    "usageCondition": "없음",
+    "verificationMethod": "동원훈련이수,모범예비군,병역명문가증,복무확인서",
+    "sourceType": "PUBLIC_EVIDENCE",
+    "sourceLabel": "병무청 나라사랑가게 · 최신 확인",
+    "sourceUrl": "https://www.mma.go.kr/about/udgg/list.do?mc=mma0003357",
+    "lastVerifiedAt": "2026-11-23",
+    "status": "ACTIVE",
+    "district": "성북구"
+  },
+  {
+    "id": "seed-d27f4c9a4e31",
+    "name": "드론마스터무인항공전문교육원",
+    "address": "경기도포천시이동면새낭로465- 275(이동면노곡리, 드론마스터무인항공전문교육원)",
+    "latitude": 38.0188359,
+    "longitude": 127.3166411,
+    "category": "기타",
+    "benefitType": "할인·우대",
+    "benefitDescription": "서비스 이용료의 10% 할인 지도교과과정 20% 할인",
+    "phone": "1899-5274",
+    "eligibleTarget": "동원훈련 이수자, 현역병·사회복무요원 등 복무자, 병역명문가, 병무청 직원 및 가족",
+    "usageCondition": "제한없음",
+    "verificationMethod": "당해년도 동원훈련이수증, 복무확인서, 병역명문가",
+    "sourceType": "PUBLIC_EVIDENCE",
+    "sourceLabel": "병무청 나라사랑가게 · 최신 확인",
+    "sourceUrl": "https://www.mma.go.kr/about/udgg/list.do?mc=mma0003357",
+    "lastVerifiedAt": "2026-11-23",
+    "status": "ACTIVE",
+    "district": "포천시"
+  },
+  {
+    "id": "seed-7b0dda29529f",
+    "name": "마음샘심리상담센터(호원점)",
+    "address": "경기도의정부시외미로95209호(호원동, 하나프라자)",
+    "latitude": 37.724541,
+    "longitude": 127.0461547,
+    "category": "기타",
+    "benefitType": "할인·우대",
+    "benefitDescription": "서비스 이용료의 10%할인",
+    "phone": "031-928-7372",
+    "eligibleTarget": "동원훈련 이수자, 현역병·사회복무요원 등 복무자, 병역명문가, 병무청 직원 및 가족",
+    "usageCondition": "제한없음",
+    "verificationMethod": "당해년도 동원훈련이수증, 복무확인서, 병역명문가",
+    "sourceType": "PUBLIC_EVIDENCE",
+    "sourceLabel": "병무청 나라사랑가게 · 최신 확인",
+    "sourceUrl": "https://www.mma.go.kr/about/udgg/list.do?mc=mma0003357",
+    "lastVerifiedAt": "2026-11-23",
+    "status": "ACTIVE",
+    "district": "의정부시"
+  },
+  {
+    "id": "seed-e7077c7ef751",
+    "name": "반석안경",
+    "address": "서울특별시중구남대문시장4길28- 12(남창동, (남대문수입상가 1층 56~58호))",
+    "latitude": 37.5589793,
+    "longitude": 126.976629,
+    "category": "병원",
+    "benefitType": "할인·우대",
+    "benefitDescription": "서비스 이용료의 10% 할인",
+    "phone": "02-752-0124",
+    "eligibleTarget": "당해연도 동원훈련 이수자, 모범예비군, 복무중인 사람, 병역명문가",
+    "usageCondition": "없음",
+    "verificationMethod": "동원훈련이수,모범예비군,명문가증,복무확인서",
+    "sourceType": "PUBLIC_EVIDENCE",
+    "sourceLabel": "병무청 나라사랑가게 · 최신 확인",
+    "sourceUrl": "https://www.mma.go.kr/about/udgg/list.do?mc=mma0003357",
+    "lastVerifiedAt": "2026-11-23",
+    "status": "ACTIVE",
+    "district": "중구"
+  },
+  {
+    "id": "seed-13099dc54dff",
+    "name": "원더플란트치과의원 노원점",
+    "address": "서울특별시노원구한글비석로384(중계동, (대호프라자 201호))",
+    "latitude": 37.659632,
+    "longitude": 127.0730968,
+    "category": "병원",
+    "benefitType": "할인·우대",
+    "benefitDescription": "서비스 이용료의 10% 할인",
+    "phone": "02-938-2275",
+    "eligibleTarget": "당해연도 동원훈련 이수, 모범예비군, 복무중인 사람, 병역명문가",
+    "usageCondition": "없음",
+    "verificationMethod": "동원훈련이수,모범예비군,명문가증,복무확인서",
+    "sourceType": "PUBLIC_EVIDENCE",
+    "sourceLabel": "병무청 나라사랑가게 · 최신 확인",
+    "sourceUrl": "https://www.mma.go.kr/about/udgg/list.do?mc=mma0003357",
+    "lastVerifiedAt": "2026-11-23",
+    "status": "ACTIVE",
+    "district": "노원구"
+  },
+  {
+    "id": "seed-fe80789d2e1f",
+    "name": "성모 안경 콘택트 쌍문역점",
+    "address": "서울특별시도봉구도봉로483(쌍문동)",
+    "latitude": 37.648928,
+    "longitude": 127.0345582,
+    "category": "병원",
+    "benefitType": "할인·우대",
+    "benefitDescription": "서비스 이용료의 5% 할인",
+    "phone": "02-990-0858",
+    "eligibleTarget": "복무중인 사람",
+    "usageCondition": "없음",
+    "verificationMethod": "복무확인서",
+    "sourceType": "PUBLIC_EVIDENCE",
+    "sourceLabel": "병무청 나라사랑가게 · 최신 확인",
+    "sourceUrl": "https://www.mma.go.kr/about/udgg/list.do?mc=mma0003357",
+    "lastVerifiedAt": "2026-11-23",
+    "status": "ACTIVE",
+    "district": "도봉구"
+  },
+  {
+    "id": "seed-a70d9818ef85",
+    "name": "안경박사 장안점",
+    "address": "서울특별시동대문구사가정로214(장안동)",
+    "latitude": 37.5785459,
+    "longitude": 127.0686715,
+    "category": "병원",
+    "benefitType": "할인·우대",
+    "benefitDescription": "서비스 이용료의 30% 할인 (안경 : 30% 할인, 30% 이상 할인행사 중에는 추가 5% 할인)",
+    "phone": "02-2214-2284",
+    "eligibleTarget": "당해연도 동원훈련 이수자, 모범 예비군, 복무중인 사람, 병역명문가",
+    "usageCondition": "없음",
+    "verificationMethod": "동원훈련이수,모범예비군,명문가증,복무확인서",
+    "sourceType": "PUBLIC_EVIDENCE",
+    "sourceLabel": "병무청 나라사랑가게 · 최신 확인",
+    "sourceUrl": "https://www.mma.go.kr/about/udgg/list.do?mc=mma0003357",
+    "lastVerifiedAt": "2026-11-23",
+    "status": "ACTIVE",
+    "district": "동대문구"
+  },
+  {
+    "id": "seed-4cdbf402f40b",
+    "name": "그랑프리안경원 중계점",
+    "address": "서울특별시노원구한글비석로242(중계동, (삼부프라자 120호))",
+    "latitude": 37.6492103,
+    "longitude": 127.076893,
+    "category": "병원",
+    "benefitType": "할인·우대",
+    "benefitDescription": "서비스 이용료의 10% 할인",
+    "phone": "02-933-1501",
+    "eligibleTarget": "당해연도 동원훈련 이수자, 모범 예비군, 복무중인 사람, 병역명문가",
+    "usageCondition": "없음",
+    "verificationMethod": "동원훈련이수,모범예비군,명문가증,복무확인서",
+    "sourceType": "PUBLIC_EVIDENCE",
+    "sourceLabel": "병무청 나라사랑가게 · 최신 확인",
+    "sourceUrl": "https://www.mma.go.kr/about/udgg/list.do?mc=mma0003357",
+    "lastVerifiedAt": "2026-11-23",
+    "status": "ACTIVE",
+    "district": "노원구"
+  },
+  {
+    "id": "seed-1ecff70165d6",
+    "name": "글라스미 렌즈미 종암점",
+    "address": "서울특별시성북구종암로107(종암동, (1층))",
+    "latitude": 37.5997234,
+    "longitude": 127.0339021,
+    "category": "병원",
+    "benefitType": "할인·우대",
+    "benefitDescription": "서비스 이용료의 10% 할인",
+    "phone": "02-915-3663",
+    "eligibleTarget": "당해연도 동원훈련 이수자, 모범 예비군, 복무중인 사람, 병역명문가",
+    "usageCondition": "없음",
+    "verificationMethod": "동원훈련이수,모범예비군,명문가증,복무확인서",
+    "sourceType": "PUBLIC_EVIDENCE",
+    "sourceLabel": "병무청 나라사랑가게 · 최신 확인",
+    "sourceUrl": "https://www.mma.go.kr/about/udgg/list.do?mc=mma0003357",
+    "lastVerifiedAt": "2026-11-23",
+    "status": "ACTIVE",
+    "district": "성북구"
+  },
+  {
+    "id": "seed-873bfbf7e80e",
+    "name": "글라스뷰 안경&콘택트렌즈",
+    "address": "서울특별시성북구안암로77(안암동5가, (1층))",
+    "latitude": 37.5831356,
+    "longitude": 127.0297574,
+    "category": "병원",
+    "benefitType": "할인·우대",
+    "benefitDescription": "서비스 이용료의 10% 할인 **기타 우대사항 : 고려대학교 재학생 및 교직원 (교수님 포함)",
+    "phone": "02-927-1230",
+    "eligibleTarget": "당해연도 동원훈련 이수자, 모범 예비군, 복무중인 사람, 병역명문가",
+    "usageCondition": "없음",
+    "verificationMethod": "동원훈련이수,모범예비군,명문가증,복무확인서",
+    "sourceType": "PUBLIC_EVIDENCE",
+    "sourceLabel": "병무청 나라사랑가게 · 최신 확인",
+    "sourceUrl": "https://www.mma.go.kr/about/udgg/list.do?mc=mma0003357",
+    "lastVerifiedAt": "2026-11-23",
+    "status": "ACTIVE",
+    "district": "성북구"
+  },
+  {
+    "id": "seed-5ee86655e7f8",
+    "name": "보고싶다",
+    "address": "서울특별시성북구고려대로94(안암동5가, (1층))",
+    "latitude": 37.5861874,
+    "longitude": 127.0298378,
+    "category": "병원",
+    "benefitType": "할인·우대",
+    "benefitDescription": "서비스 이용료의 30% 할인 **복무중인 현역병이 구매시 안경수리키트 증정",
+    "phone": "02-928-1008",
+    "eligibleTarget": "당해연도 동원훈련 이수자, 모범 예비군, 복무중인 사람, 병역명문가",
+    "usageCondition": "없음",
+    "verificationMethod": "동원훈련이수,모범예비군,명문가증,복무확인서",
+    "sourceType": "PUBLIC_EVIDENCE",
+    "sourceLabel": "병무청 나라사랑가게 · 최신 확인",
+    "sourceUrl": "https://www.mma.go.kr/about/udgg/list.do?mc=mma0003357",
+    "lastVerifiedAt": "2026-11-23",
+    "status": "ACTIVE",
+    "district": "성북구"
+  },
+  {
+    "id": "seed-31bc16eafc31",
+    "name": "안경박사 미아점",
+    "address": "서울특별시강북구도봉로245(미아동, (수메디칼빌딩))",
+    "latitude": 37.630359,
+    "longitude": 127.0243072,
+    "category": "병원",
+    "benefitType": "할인·우대",
+    "benefitDescription": "서비스 이용료의 10% 할인 (기존할인에 1회용품제외)",
+    "phone": "02-982-0084",
+    "eligibleTarget": "당해연도 동원훈련 이수자, 모범 예비군, 복무중인 사람, 병역명문가",
+    "usageCondition": "없음",
+    "verificationMethod": "동원훈련이수,모범예비군,명문가증,복무확인서",
+    "sourceType": "PUBLIC_EVIDENCE",
+    "sourceLabel": "병무청 나라사랑가게 · 최신 확인",
+    "sourceUrl": "https://www.mma.go.kr/about/udgg/list.do?mc=mma0003357",
+    "lastVerifiedAt": "2026-11-23",
+    "status": "ACTIVE",
+    "district": "강북구"
+  },
+  {
+    "id": "seed-ea5928b53f45",
+    "name": "아이비스 안경 아차산점",
+    "address": "서울특별시광진구영화사로54(중곡동, (1층))",
+    "latitude": 37.5554885,
+    "longitude": 127.0923194,
+    "category": "병원",
+    "benefitType": "할인·우대",
+    "benefitDescription": "서비스 이용료의 10% 할인",
+    "phone": "02-3436-1001",
+    "eligibleTarget": "당해연도 동원훈련 이수자, 모범 예비군, 복무중인 사람, 병역명문가",
+    "usageCondition": "없음",
+    "verificationMethod": "동원훈련이수,모범예비군,명문가증,복무확인서",
+    "sourceType": "PUBLIC_EVIDENCE",
+    "sourceLabel": "병무청 나라사랑가게 · 최신 확인",
+    "sourceUrl": "https://www.mma.go.kr/about/udgg/list.do?mc=mma0003357",
+    "lastVerifiedAt": "2026-11-23",
+    "status": "ACTIVE",
+    "district": "광진구"
+  },
+  {
+    "id": "seed-75236968770c",
+    "name": "심안경",
+    "address": "서울특별시강동구풍성로130(성내동, (해바라기상가 106호))",
+    "latitude": 37.5315145,
+    "longitude": 127.1265275,
+    "category": "병원",
+    "benefitType": "할인·우대",
+    "benefitDescription": "서비스 이용료의 20% 할인 (안경테, 선글라스, 시력교정용 안경렌즈, 누진다초점렌즈, 6개월교정 콘택트렌즈) ** 일회용 콘택트렌즈는 할인에서 제외",
+    "phone": "02-486-9009",
+    "eligibleTarget": "당해연도 동원훈련 이수자, 모범 예비군, 복무중인 사람, 병역명문가",
+    "usageCondition": "없음",
+    "verificationMethod": "동원훈련이수,모범예비군,명문가증,복무확인서",
+    "sourceType": "PUBLIC_EVIDENCE",
+    "sourceLabel": "병무청 나라사랑가게 · 최신 확인",
+    "sourceUrl": "https://www.mma.go.kr/about/udgg/list.do?mc=mma0003357",
+    "lastVerifiedAt": "2026-11-23",
+    "status": "ACTIVE",
+    "district": "강동구"
+  },
+  {
+    "id": "seed-c59afa8b949c",
+    "name": "세종안경",
+    "address": "서울특별시광진구능동로209(군자동, (군자관 1층))",
+    "latitude": 37.5491063,
+    "longitude": 127.0750473,
+    "category": "병원",
+    "benefitType": "할인·우대",
+    "benefitDescription": "서비스 이용료의 10~30% 할인",
+    "phone": "02-468-9442",
+    "eligibleTarget": "당해연도 동원훈련 이수자, 모범 예비군, 복무중인 사람, 병역명문가",
+    "usageCondition": "없음",
+    "verificationMethod": "동원훈련이수,모범예비군,명문가증,복무확인서",
+    "sourceType": "PUBLIC_EVIDENCE",
+    "sourceLabel": "병무청 나라사랑가게 · 최신 확인",
+    "sourceUrl": "https://www.mma.go.kr/about/udgg/list.do?mc=mma0003357",
+    "lastVerifiedAt": "2026-11-23",
+    "status": "ACTIVE",
+    "district": "광진구"
+  },
+  {
+    "id": "seed-d0b616852ea8",
+    "name": "다비치안경 보청기 천호역점",
+    "address": "서울특별시강동구올림픽로659(천호동, (1층))",
+    "latitude": 37.5403681,
+    "longitude": 127.1237044,
+    "category": "병원",
+    "benefitType": "할인·우대",
+    "benefitDescription": "서비스 이용료의 10% 할인 (김서림방지용 안경닦이, 안경세정제, 안경줄, 귀고무 모두증정)",
+    "phone": "02-484-2003",
+    "eligibleTarget": "당해연도 동원훈련 이수자, 모범 예비군, 복무중인 사람, 병역명문가",
+    "usageCondition": "없음",
+    "verificationMethod": "동원훈련이수,모범예비군,명문가증,복무확인서",
+    "sourceType": "PUBLIC_EVIDENCE",
+    "sourceLabel": "병무청 나라사랑가게 · 최신 확인",
+    "sourceUrl": "https://www.mma.go.kr/about/udgg/list.do?mc=mma0003357",
+    "lastVerifiedAt": "2026-11-23",
+    "status": "ACTIVE",
+    "district": "강동구"
+  },
+  {
+    "id": "seed-6a0ee4c076fe",
+    "name": "윤안경",
+    "address": "서울특별시중랑구동일로143길19(중화동)",
+    "latitude": 37.6051014,
+    "longitude": 127.0775669,
+    "category": "병원",
+    "benefitType": "할인·우대",
+    "benefitDescription": "서비스 이용료의 10% 할인",
+    "phone": "02-2207-7813",
+    "eligibleTarget": "당해연도 동원훈련 이수자, 모범 예비군, 복무중인 사람, 병역명문가",
+    "usageCondition": "없음",
+    "verificationMethod": "동원훈련이수,모범예비군,명문가증,복무확인서",
+    "sourceType": "PUBLIC_EVIDENCE",
+    "sourceLabel": "병무청 나라사랑가게 · 최신 확인",
+    "sourceUrl": "https://www.mma.go.kr/about/udgg/list.do?mc=mma0003357",
+    "lastVerifiedAt": "2026-11-23",
+    "status": "ACTIVE",
+    "district": "중랑구"
+  },
+  {
+    "id": "seed-9627cce2fd1c",
+    "name": "킨안경 우장산역점",
+    "address": "서울특별시강서구강서로242(화곡동, (강서힐스테이트 상가동 111,112호))",
+    "latitude": 37.5472933,
+    "longitude": 126.8367004,
+    "category": "병원",
+    "benefitType": "할인·우대",
+    "benefitDescription": "서비스 이용료의 20% 할인 **가족분들 추가 할인혜택제공",
+    "phone": "02-2603-8002",
+    "eligibleTarget": "당해연도 동원훈련 이수자, 모범 예비군, 복무중인 사람, 병역명문가",
+    "usageCondition": "없음",
+    "verificationMethod": "동원훈련이수,모범예비군,명문가증,복무확인서",
+    "sourceType": "PUBLIC_EVIDENCE",
+    "sourceLabel": "병무청 나라사랑가게 · 최신 확인",
+    "sourceUrl": "https://www.mma.go.kr/about/udgg/list.do?mc=mma0003357",
+    "lastVerifiedAt": "2026-11-23",
+    "status": "ACTIVE",
+    "district": "강서구"
+  },
+  {
+    "id": "seed-36f9d672bf99",
+    "name": "밝은안경",
+    "address": "서울특별시관악구남부순환로2062(남현동)",
+    "latitude": 37.476444,
+    "longitude": 126.977782,
+    "category": "병원",
+    "benefitType": "할인·우대",
+    "benefitDescription": "서비스 이용료의 50% 할인 (군인 안경 50% 할인)",
+    "phone": "02-523-2123",
+    "eligibleTarget": "당해연도 동원훈련 이수자, 모범 예비군, 복무중인 사람, 병역명문가",
+    "usageCondition": "없음",
+    "verificationMethod": "동원훈련이수,모범예비군,명문가증,복무확인서",
+    "sourceType": "PUBLIC_EVIDENCE",
+    "sourceLabel": "병무청 나라사랑가게 · 최신 확인",
+    "sourceUrl": "https://www.mma.go.kr/about/udgg/list.do?mc=mma0003357",
+    "lastVerifiedAt": "2026-11-23",
+    "status": "ACTIVE",
+    "district": "관악구"
+  },
+  {
+    "id": "seed-1262e6565c84",
+    "name": "라운즈 교보문고 강남",
+    "address": "서울특별시서초구강남대로465(서초동, (지하 1층))",
+    "latitude": 37.5038014,
+    "longitude": 127.0243908,
+    "category": "병원",
+    "benefitType": "할인·우대",
+    "benefitDescription": "서비스 이용료의 10% 할인",
+    "phone": "02-3478-0142",
+    "eligibleTarget": "당해연도 동원훈련 이수자, 모범 예비군, 복무중인 사람, 병역명문가",
+    "usageCondition": "없음",
+    "verificationMethod": "동원훈련이수,모범예비군,명문가증,복무확인서",
+    "sourceType": "PUBLIC_EVIDENCE",
+    "sourceLabel": "병무청 나라사랑가게 · 최신 확인",
+    "sourceUrl": "https://www.mma.go.kr/about/udgg/list.do?mc=mma0003357",
+    "lastVerifiedAt": "2026-11-23",
+    "status": "ACTIVE",
+    "district": "서초구"
+  },
+  {
+    "id": "seed-876ab938d787",
+    "name": "안경상회 서일대점",
+    "address": "서울특별시중랑구용마산로427- 91(면목동, (1층))",
+    "latitude": 37.5895956,
+    "longitude": 127.0967669,
+    "category": "병원",
+    "benefitType": "할인·우대",
+    "benefitDescription": "서비스 이용료의 30% 할인",
+    "phone": "02-493-1749",
+    "eligibleTarget": "당해연도 동원훈련 이수자, 모범 예비군, 복무중인 사람, 병역명문가",
+    "usageCondition": "없음",
+    "verificationMethod": "동원훈련이수,모범예비군,명문가증,복무확인서",
+    "sourceType": "PUBLIC_EVIDENCE",
+    "sourceLabel": "병무청 나라사랑가게 · 최신 확인",
+    "sourceUrl": "https://www.mma.go.kr/about/udgg/list.do?mc=mma0003357",
+    "lastVerifiedAt": "2026-11-23",
+    "status": "ACTIVE",
+    "district": "중랑구"
+  },
+  {
+    "id": "seed-2a5e1da1fdce",
+    "name": "그랑프리안경 목동점",
+    "address": "서울특별시양천구목동중앙본로7길45(목동, (보미리즌빌 1층))",
+    "latitude": 37.5392846,
+    "longitude": 126.8662059,
+    "category": "병원",
+    "benefitType": "할인·우대",
+    "benefitDescription": "서비스 이용료의 20% 할인",
+    "phone": "0507-1328-2925",
+    "eligibleTarget": "당해연도 동원훈련 이수자, 모범 예비군, 복무중인 사람, 병역명문가",
+    "usageCondition": "없음",
+    "verificationMethod": "동원훈련이수,모범예비군,명문가증,복무확인서",
+    "sourceType": "PUBLIC_EVIDENCE",
+    "sourceLabel": "병무청 나라사랑가게 · 최신 확인",
+    "sourceUrl": "https://www.mma.go.kr/about/udgg/list.do?mc=mma0003357",
+    "lastVerifiedAt": "2026-11-23",
+    "status": "ACTIVE",
+    "district": "양천구"
+  },
+  {
+    "id": "seed-f218c568d5e7",
+    "name": "글라스스토리 강동구청역점",
+    "address": "서울특별시송파구토성로65(풍납동, (태양상가 103호))",
+    "latitude": 37.5288899,
+    "longitude": 127.1172767,
+    "category": "병원",
+    "benefitType": "할인·우대",
+    "benefitDescription": "서비스 이용료의 30~50% 할인",
+    "phone": "02-485-8008",
+    "eligibleTarget": "당해연도 동원훈련 이수자, 모범 예비군, 복무중인 사람, 병역명문가",
+    "usageCondition": "없음",
+    "verificationMethod": "동원훈련이수,모범예비군,명문가증,복무확인서",
+    "sourceType": "PUBLIC_EVIDENCE",
+    "sourceLabel": "병무청 나라사랑가게 · 최신 확인",
+    "sourceUrl": "https://www.mma.go.kr/about/udgg/list.do?mc=mma0003357",
+    "lastVerifiedAt": "2026-11-23",
+    "status": "ACTIVE",
+    "district": "송파구"
+  },
+  {
+    "id": "seed-cefc2aff8afd",
+    "name": "아이온안경원",
+    "address": "서울특별시성동구마조로30(행당동, (미진빌딩 1층 101호))",
+    "latitude": 37.5603179,
+    "longitude": 127.0414136,
+    "category": "병원",
+    "benefitType": "할인·우대",
+    "benefitDescription": "서비스 이용료의 10% 할인",
+    "phone": "02-2299-5848",
+    "eligibleTarget": "당해연도 동원훈련 이수자, 모범 예비군, 복무중인 사람, 병역명문가",
+    "usageCondition": "없음",
+    "verificationMethod": "동원훈련이수,모범예비군,명문가증,복무확인서",
+    "sourceType": "PUBLIC_EVIDENCE",
+    "sourceLabel": "병무청 나라사랑가게 · 최신 확인",
+    "sourceUrl": "https://www.mma.go.kr/about/udgg/list.do?mc=mma0003357",
+    "lastVerifiedAt": "2026-11-23",
+    "status": "ACTIVE",
+    "district": "성동구"
+  },
+  {
+    "id": "seed-886d513c60f8",
+    "name": "으뜸플러스안경 서울신방화점",
+    "address": "서울특별시강서구마곡서1로115- 1(마곡동, (116호))",
+    "latitude": 37.5668304,
+    "longitude": 126.818599,
+    "category": "병원",
+    "benefitType": "할인·우대",
+    "benefitDescription": "서비스 이용료의 10% 할인 **콘택트렌즈 할인대상 제외",
+    "phone": "02-2666-0610",
+    "eligibleTarget": "당해연도 동원훈련 이수자, 모범 예비군, 복무중인 사람, 병역명문가",
+    "usageCondition": "없음",
+    "verificationMethod": "동원훈련이수,모범예비군,명문가증,복무확인서",
+    "sourceType": "PUBLIC_EVIDENCE",
+    "sourceLabel": "병무청 나라사랑가게 · 최신 확인",
+    "sourceUrl": "https://www.mma.go.kr/about/udgg/list.do?mc=mma0003357",
+    "lastVerifiedAt": "2026-11-23",
+    "status": "ACTIVE",
+    "district": "강서구"
+  },
+  {
+    "id": "seed-288b14a4a604",
+    "name": "다비치안경 신사역점",
+    "address": "서울특별시강남구도산대로109(신사동, (동원빌딩 1층))",
+    "latitude": 37.5168358,
+    "longitude": 127.0203921,
+    "category": "병원",
+    "benefitType": "할인·우대",
+    "benefitDescription": "서비스 이용료의 10% 할인",
+    "phone": "02-517-5659",
+    "eligibleTarget": "당해연도 동원훈련 이수자, 모범 예비군, 복무중인 사람, 병역명문가",
+    "usageCondition": "없음",
+    "verificationMethod": "동원훈련이수,모범예비군,명문가증,복무확인서",
+    "sourceType": "PUBLIC_EVIDENCE",
+    "sourceLabel": "병무청 나라사랑가게 · 최신 확인",
+    "sourceUrl": "https://www.mma.go.kr/about/udgg/list.do?mc=mma0003357",
+    "lastVerifiedAt": "2026-11-23",
+    "status": "ACTIVE",
+    "district": "강남구"
+  },
+  {
+    "id": "seed-797c0f56479b",
+    "name": "모던안경콘텍트타운",
+    "address": "서울특별시성동구성덕정길89(성수동2가)",
+    "latitude": 37.5377924,
+    "longitude": 127.0534324,
+    "category": "병원",
+    "benefitType": "할인·우대",
+    "benefitDescription": "서비스 이용료의 10% 할인",
+    "phone": "02-463-2558",
+    "eligibleTarget": "당해연도 동원훈련 이수자, 모범 예비군, 복무중인 사람, 병역명문가",
+    "usageCondition": "없음",
+    "verificationMethod": "동원훈련이수,모범예비군,명문가증,복무확인서",
+    "sourceType": "PUBLIC_EVIDENCE",
+    "sourceLabel": "병무청 나라사랑가게 · 최신 확인",
+    "sourceUrl": "https://www.mma.go.kr/about/udgg/list.do?mc=mma0003357",
+    "lastVerifiedAt": "2026-11-23",
+    "status": "ACTIVE",
+    "district": "성동구"
+  },
+  {
+    "id": "seed-8211ad7f70da",
+    "name": "타임안경마트",
+    "address": "서울특별시양천구목동서로377(신정동, (A동 104호))",
+    "latitude": 37.516102,
+    "longitude": 126.8623257,
+    "category": "병원",
+    "benefitType": "할인·우대",
+    "benefitDescription": "서비스 이용료의 10% 할인 **코받침 교환, 피팅 무료",
+    "phone": "02-2642-4350",
+    "eligibleTarget": "복무중인 사람",
+    "usageCondition": "없음",
+    "verificationMethod": "복무확인서",
+    "sourceType": "PUBLIC_EVIDENCE",
+    "sourceLabel": "병무청 나라사랑가게 · 최신 확인",
+    "sourceUrl": "https://www.mma.go.kr/about/udgg/list.do?mc=mma0003357",
+    "lastVerifiedAt": "2026-11-23",
+    "status": "ACTIVE",
+    "district": "양천구"
+  },
+  {
+    "id": "seed-964ba44d984e",
+    "name": "홍콩안경",
+    "address": "서울특별시도봉구방학로187(방학동, (한화A상가 104호))",
+    "latitude": 37.6619709,
+    "longitude": 127.0313595,
+    "category": "병원",
+    "benefitType": "할인·우대",
+    "benefitDescription": "서비스 이용료의 20% 할인",
+    "phone": "02-956-3786",
+    "eligibleTarget": "당해연도 동원훈련 이수자, 모범 예비군",
+    "usageCondition": "없음",
+    "verificationMethod": "동원훈련이수,모범예비군,명문가증,복무확인서",
+    "sourceType": "PUBLIC_EVIDENCE",
+    "sourceLabel": "병무청 나라사랑가게 · 최신 확인",
+    "sourceUrl": "https://www.mma.go.kr/about/udgg/list.do?mc=mma0003357",
+    "lastVerifiedAt": "2026-11-23",
+    "status": "ACTIVE",
+    "district": "도봉구"
+  },
+  {
+    "id": "seed-2c6ee49a5841",
+    "name": "K.S 안경 콘택트",
+    "address": "서울특별시광진구천호대로561(중곡동, (1층))",
+    "latitude": 37.5570545,
+    "longitude": 127.0806235,
+    "category": "병원",
+    "benefitType": "할인·우대",
+    "benefitDescription": "서비스 이용료의 30% 할인 **균일가 할인 상품은 10% 추가 할인",
+    "phone": "02-453-5002",
+    "eligibleTarget": "당해연도 동원훈련 이수자, 모범 예비군, 복무중인 사람, 병역명문가",
+    "usageCondition": "없음",
+    "verificationMethod": "동원훈련이수,모범예비군,명문가증,복무확인서",
+    "sourceType": "PUBLIC_EVIDENCE",
+    "sourceLabel": "병무청 나라사랑가게 · 최신 확인",
+    "sourceUrl": "https://www.mma.go.kr/about/udgg/list.do?mc=mma0003357",
+    "lastVerifiedAt": "2026-11-23",
+    "status": "ACTIVE",
+    "district": "광진구"
+  },
+  {
+    "id": "seed-2a3bd98aa103",
+    "name": "안경공간",
+    "address": "서울특별시구로구디지털로31길53(구로동, (103호))",
+    "latitude": 37.4856862,
+    "longitude": 126.8926162,
+    "category": "병원",
+    "benefitType": "할인·우대",
+    "benefitDescription": "서비스 이용료의 10% 할인 **안경수건 및 필요용품 무상지원, 안경수리 최대한 무상지원(필요시 원가만 청구), 1회용렌즈 샘플 무상지원",
+    "phone": "02-864-1226",
+    "eligibleTarget": "당해연도 동원훈련 이수자, 모범 예비군, 복무중인 사람, 병역명문가",
+    "usageCondition": "없음",
+    "verificationMethod": "동원훈련이수,모범예비군,명문가증,복무확인서",
+    "sourceType": "PUBLIC_EVIDENCE",
+    "sourceLabel": "병무청 나라사랑가게 · 최신 확인",
+    "sourceUrl": "https://www.mma.go.kr/about/udgg/list.do?mc=mma0003357",
+    "lastVerifiedAt": "2026-11-23",
+    "status": "ACTIVE",
+    "district": "구로구"
+  },
+  {
+    "id": "seed-2a16dbcd3a5b",
+    "name": "그랑프리안경 성내점",
+    "address": "서울특별시강동구풍성로112(성내동)",
+    "latitude": 37.5320744,
+    "longitude": 127.124556,
+    "category": "병원",
+    "benefitType": "할인·우대",
+    "benefitDescription": "서비스 이용료의 10% 할인",
+    "phone": "02-486-8845",
+    "eligibleTarget": "당해연도 동원훈련 이수자, 모범 예비군, 복무중인 사람, 병역명문가",
+    "usageCondition": "없음",
+    "verificationMethod": "동원훈련이수,모범예비군,명문가증,복무확인서",
+    "sourceType": "PUBLIC_EVIDENCE",
+    "sourceLabel": "병무청 나라사랑가게 · 최신 확인",
+    "sourceUrl": "https://www.mma.go.kr/about/udgg/list.do?mc=mma0003357",
+    "lastVerifiedAt": "2026-11-23",
+    "status": "ACTIVE",
+    "district": "강동구"
+  },
+  {
+    "id": "seed-5a3822e4143d",
+    "name": "데코커튼과천안양점",
+    "address": "경기도안양시 동안구관악대로373104호1층 (관양동)",
+    "latitude": 37.4046488,
+    "longitude": 126.9641499,
+    "category": "기타",
+    "benefitType": "할인·우대",
+    "benefitDescription": "* 서비스이용료의 5% 할인 - 자석타이벡 서비스, - 50만원이상시 작은창 2개 기본블라인드 서비스(EX:주방창, 세탁실 등)",
+    "phone": "0507-1318-6648",
+    "eligibleTarget": "동원훈련이수자,모범예비군,복무중인현역병,사회복무요원,전문산업기능요원,병역명문가",
+    "usageCondition": "없음",
+    "verificationMethod": "동원훈련이수증,모범예비군증,복무확인서 등",
+    "sourceType": "PUBLIC_EVIDENCE",
+    "sourceLabel": "병무청 나라사랑가게 · 최신 확인",
+    "sourceUrl": "https://www.mma.go.kr/about/udgg/list.do?mc=mma0003357",
+    "lastVerifiedAt": "2026-11-23",
+    "status": "ACTIVE",
+    "district": "안양시"
+  },
+  {
+    "id": "seed-aba058d5f7a3",
+    "name": "나피어",
+    "address": "경기도의왕시오리나무로171층 (내손동)",
+    "latitude": 37.3748413,
+    "longitude": 126.9689923,
+    "category": "기타",
+    "benefitType": "할인·우대",
+    "benefitDescription": "서비스 이용료의 10% 할인",
+    "phone": "0507-1317-9867",
+    "eligibleTarget": "동원훈련이수자,모범예비군,복무중인현역병,사회복무요원,전문산업기능요원,병역명문가",
+    "usageCondition": "없음",
+    "verificationMethod": "동원훈련이수증,모범예비군증,복무확인서 등",
+    "sourceType": "PUBLIC_EVIDENCE",
+    "sourceLabel": "병무청 나라사랑가게 · 최신 확인",
+    "sourceUrl": "https://www.mma.go.kr/about/udgg/list.do?mc=mma0003357",
+    "lastVerifiedAt": "2026-11-23",
+    "status": "ACTIVE",
+    "district": "의왕시"
+  },
+  {
+    "id": "seed-6dcda2f8119f",
+    "name": "창대철물",
+    "address": "경기도안양시 동안구관악대로388번길19- 10(관양동)",
+    "latitude": 37.4034343,
+    "longitude": 126.9667813,
+    "category": "기타",
+    "benefitType": "할인·우대",
+    "benefitDescription": "서비스 이용료의 5% 할인",
+    "phone": "031-424-9404",
+    "eligibleTarget": "동원훈련이수자,모범예비군,복무중인현역병,사회복무요원,전문산업기능요원,병역명문가",
+    "usageCondition": "없음",
+    "verificationMethod": "동원훈련이수증,모범예비군증,복무확인서 등",
+    "sourceType": "PUBLIC_EVIDENCE",
+    "sourceLabel": "병무청 나라사랑가게 · 최신 확인",
+    "sourceUrl": "https://www.mma.go.kr/about/udgg/list.do?mc=mma0003357",
+    "lastVerifiedAt": "2026-11-23",
+    "status": "ACTIVE",
+    "district": "안양시"
+  },
+  {
+    "id": "seed-2813b466ae37",
+    "name": "다비치안경 안양비산점",
+    "address": "경기도안양시 동안구관악대로183107호(비산동, 동양월드타워)",
+    "latitude": 37.3991257,
+    "longitude": 126.9443472,
+    "category": "병원",
+    "benefitType": "할인·우대",
+    "benefitDescription": "-서비스 이용료의 10% 할인 * 다른 제휴사항 및 기타할인가 중복불가 콘텍트렌즈, 콘텍트렌즈 약품 및 소모품 할인 제외",
+    "phone": "0507-1398-5060",
+    "eligibleTarget": "동원훈련이수자,모범예비군,복무중인현역병,사회복무요원,전문산업기능요원,병역명문가",
+    "usageCondition": "없음",
+    "verificationMethod": "동원훈련이수증,모범예비군증,복무확인서 등",
+    "sourceType": "PUBLIC_EVIDENCE",
+    "sourceLabel": "병무청 나라사랑가게 · 최신 확인",
+    "sourceUrl": "https://www.mma.go.kr/about/udgg/list.do?mc=mma0003357",
+    "lastVerifiedAt": "2026-11-23",
+    "status": "ACTIVE",
+    "district": "안양시"
+  },
+  {
+    "id": "seed-08628103b471",
+    "name": "안경하우스 중곡점",
+    "address": "서울특별시광진구용마산로53(중곡동)",
+    "latitude": 37.5584085,
+    "longitude": 127.0876502,
+    "category": "병원",
+    "benefitType": "할인·우대",
+    "benefitDescription": "서비스 이용료의 30% 할인",
+    "phone": "02-444-1744",
+    "eligibleTarget": "동원훈련 이수자, 모범예비군, 복무중인사람, 병역명문가",
+    "usageCondition": "없음",
+    "verificationMethod": "동원훈련이수,모범예비군,명문가증,복무확인서",
+    "sourceType": "PUBLIC_EVIDENCE",
+    "sourceLabel": "병무청 나라사랑가게 · 최신 확인",
+    "sourceUrl": "https://www.mma.go.kr/about/udgg/list.do?mc=mma0003357",
+    "lastVerifiedAt": "2026-11-23",
+    "status": "ACTIVE",
+    "district": "광진구"
+  },
+  {
+    "id": "seed-49269b6839d2",
+    "name": "서울미의원 서울대입구 본점",
+    "address": "서울특별시관악구관악로165(봉천동, (6층))",
+    "latitude": 37.4800661,
+    "longitude": 126.9522111,
+    "category": "병원",
+    "benefitType": "할인·우대",
+    "benefitDescription": "서비스 이용료의 10% 할인",
+    "phone": "02-871-1158",
+    "eligibleTarget": "동원훈련 이수자, 모범예비군, 복무중인사람, 병역명문가",
+    "usageCondition": "없음",
+    "verificationMethod": "동원훈련이수,모범예비군,명문가증,복무확인서",
+    "sourceType": "PUBLIC_EVIDENCE",
+    "sourceLabel": "병무청 나라사랑가게 · 최신 확인",
+    "sourceUrl": "https://www.mma.go.kr/about/udgg/list.do?mc=mma0003357",
+    "lastVerifiedAt": "2026-11-23",
+    "status": "ACTIVE",
+    "district": "관악구"
+  },
+  {
+    "id": "seed-aeb487fd4ab9",
+    "name": "라포레",
+    "address": "서울특별시강남구학동로12길15(논현동, (1층))",
+    "latitude": 37.5112678,
+    "longitude": 127.0258088,
+    "category": "기타",
+    "benefitType": "할인·우대",
+    "benefitDescription": "서비스 이용료의 10% 할인",
+    "phone": "02-3447-0111",
+    "eligibleTarget": "동원훈련 이수자, 모범예비군, 복무중인사람, 병역명문가",
+    "usageCondition": "없음",
+    "verificationMethod": "동원훈련이수,모범예비군,명문가증,복무확인서",
+    "sourceType": "PUBLIC_EVIDENCE",
+    "sourceLabel": "병무청 나라사랑가게 · 최신 확인",
+    "sourceUrl": "https://www.mma.go.kr/about/udgg/list.do?mc=mma0003357",
+    "lastVerifiedAt": "2026-11-23",
+    "status": "ACTIVE",
+    "district": "강남구"
+  },
+  {
+    "id": "seed-e6260e3f6619",
+    "name": "캐논스토어 강변점",
+    "address": "서울특별시광진구광나루로56길85(구의동, (판매동 2층 A-18호))",
+    "latitude": 37.536141,
+    "longitude": 127.0952935,
+    "category": "기타",
+    "benefitType": "할인·우대",
+    "benefitDescription": "서비스 이용료의 10% 할인 **현역군인 휴가때 휴가증제시시 군인가족도 할인, 병무청 직원가족도 할인",
+    "phone": "02-3424-2225",
+    "eligibleTarget": "동원훈련 이수자, 모범예비군, 복무중인사람, 병무청 직원 및 가족",
+    "usageCondition": "없음",
+    "verificationMethod": "동원훈련이수증,모범예비군증,복무확인서",
+    "sourceType": "PUBLIC_EVIDENCE",
+    "sourceLabel": "병무청 나라사랑가게 · 최신 확인",
+    "sourceUrl": "https://www.mma.go.kr/about/udgg/list.do?mc=mma0003357",
+    "lastVerifiedAt": "2026-11-23",
+    "status": "ACTIVE",
+    "district": "광진구"
+  },
+  {
+    "id": "seed-2d27ea5bbffe",
+    "name": "진이찬방 구로디지털역점",
+    "address": "서울특별시동작구신대방1가길38(신대방동, (동작상떼빌오피스텔상가 105동 105호))",
+    "latitude": 37.4872783,
+    "longitude": 126.9079084,
+    "category": "기타",
+    "benefitType": "할인·우대",
+    "benefitDescription": "서비스 이용료의 5% 할인 **대상 확인가능한 서류 지참시 할인 가능, 쿠폰 및 카드 중복할인 제외",
+    "phone": "0507-1436-0107",
+    "eligibleTarget": "복무중인사람, 병역명문가",
+    "usageCondition": "없음",
+    "verificationMethod": "복무확인서,병역명문가증",
+    "sourceType": "PUBLIC_EVIDENCE",
+    "sourceLabel": "병무청 나라사랑가게 · 최신 확인",
+    "sourceUrl": "https://www.mma.go.kr/about/udgg/list.do?mc=mma0003357",
+    "lastVerifiedAt": "2026-11-23",
+    "status": "ACTIVE",
+    "district": "동작구"
+  },
+  {
+    "id": "seed-8e2d26f3ae85",
+    "name": "아이스쿨안경콘텍트",
+    "address": "서울특별시영등포구도림로300(신길동)",
+    "latitude": 37.5045395,
+    "longitude": 126.9031088,
+    "category": "병원",
+    "benefitType": "할인·우대",
+    "benefitDescription": "테 70%, 안경렌즈 50% 할인",
+    "phone": "02-844-0041",
+    "eligibleTarget": "동원훈련 이수자, 모범예비군, 복무중인사람, 병역명문가",
+    "usageCondition": "없음",
+    "verificationMethod": "동원훈련이수,모범예비군,명문가증,복무확인서",
+    "sourceType": "PUBLIC_EVIDENCE",
+    "sourceLabel": "병무청 나라사랑가게 · 최신 확인",
+    "sourceUrl": "https://www.mma.go.kr/about/udgg/list.do?mc=mma0003357",
+    "lastVerifiedAt": "2026-11-23",
+    "status": "ACTIVE",
+    "district": "영등포구"
+  },
+  {
+    "id": "seed-84f32ca49148",
+    "name": "루트원스튜디오",
+    "address": "경기도과천시별양로28B동B23-1호(원문동)",
+    "latitude": 37.4215406,
+    "longitude": 126.991835,
+    "category": "기타",
+    "benefitType": "할인·우대",
+    "benefitDescription": "서비스 이용료의 5% 할인",
+    "phone": "0507-1366-7427",
+    "eligibleTarget": "동원훈련이수자,모범예비군,복무중인현역병,사회복무요원,전문산업기능요원,병역명문가",
+    "usageCondition": "없음",
+    "verificationMethod": "동원훈련이수증,모범예비군증,복무확인서 등",
+    "sourceType": "PUBLIC_EVIDENCE",
+    "sourceLabel": "병무청 나라사랑가게 · 최신 확인",
+    "sourceUrl": "https://www.mma.go.kr/about/udgg/list.do?mc=mma0003357",
+    "lastVerifiedAt": "2026-11-23",
+    "status": "ACTIVE",
+    "district": "과천시"
+  },
+  {
+    "id": "seed-a10295e3921a",
+    "name": "성베드로병원",
+    "address": "경기도의정부시평화로622(의정부동)",
+    "latitude": 37.747434,
+    "longitude": 127.0456884,
+    "category": "병원",
+    "benefitType": "할인·우대",
+    "benefitDescription": "비급여 10% 할인",
+    "phone": "1544-1131",
+    "eligibleTarget": "동원훈련 이수자, 현역병·사회복무요원 등 복무자, 병역명문가, 병무청 직원 및 가족",
+    "usageCondition": "제한없음",
+    "verificationMethod": "당해연도 동원훈련이수증,모범예비군증,복무확인서",
+    "sourceType": "PUBLIC_EVIDENCE",
+    "sourceLabel": "병무청 나라사랑가게 · 최신 확인",
+    "sourceUrl": "https://www.mma.go.kr/about/udgg/list.do?mc=mma0003357",
+    "lastVerifiedAt": "2026-11-23",
+    "status": "ACTIVE",
+    "district": "의정부시"
+  },
+  {
+    "id": "seed-34963d53cc2c",
+    "name": "의정부장례식장",
+    "address": "경기도의정부시체육로113- 18(녹양동)",
+    "latitude": 37.7574305,
+    "longitude": 127.0223133,
+    "category": "기타",
+    "benefitType": "할인·우대",
+    "benefitDescription": "빈소 사용료 30% 할인",
+    "phone": "031-871-4444",
+    "eligibleTarget": "동원훈련 이수자, 현역병·사회복무요원 등 복무자, 병역명문가, 병무청 직원 및 가족",
+    "usageCondition": "없음",
+    "verificationMethod": "당해연도 동원훈련이수증,모범예비군증,복무확인서",
+    "sourceType": "PUBLIC_EVIDENCE",
+    "sourceLabel": "병무청 나라사랑가게 · 최신 확인",
+    "sourceUrl": "https://www.mma.go.kr/about/udgg/list.do?mc=mma0003357",
+    "lastVerifiedAt": "2026-11-23",
+    "status": "ACTIVE",
+    "district": "의정부시"
+  },
+  {
+    "id": "seed-169594b86a87",
+    "name": "다비치안경보청기 미아사거리점",
+    "address": "서울특별시강북구월계로3(미아동, (덕신빌딩 1층))",
+    "latitude": 37.6095065,
+    "longitude": 127.0307534,
+    "category": "병원",
+    "benefitType": "할인·우대",
+    "benefitDescription": "서비스 이용료의 10% 할인",
+    "phone": "02-434-4470",
+    "eligibleTarget": "동원훈련 이수자, 모범예비군, 복무중인사람, 병역명문가",
+    "usageCondition": "없음",
+    "verificationMethod": "동원훈련이수,모범예비군,명문가증,복무확인서",
+    "sourceType": "PUBLIC_EVIDENCE",
+    "sourceLabel": "병무청 나라사랑가게 · 최신 확인",
+    "sourceUrl": "https://www.mma.go.kr/about/udgg/list.do?mc=mma0003357",
+    "lastVerifiedAt": "2026-11-23",
+    "status": "ACTIVE",
+    "district": "강북구"
+  },
+  {
+    "id": "seed-e5cf564c2891",
+    "name": "몸숨쉼정원",
+    "address": "경기도수원시 영통구광교중앙로248번길7- 2C동214호(하동, 원희캐슬광교)",
+    "latitude": 37.2918471,
+    "longitude": 127.0671309,
+    "category": "문화·여가",
+    "benefitType": "할인·우대",
+    "benefitDescription": "군인 힐링프로그램 전체 50% 할인 -동반인 1인에 한해 동반인도 50% 우대",
+    "phone": "0507-1346-8422",
+    "eligibleTarget": "동원훈련이수자,모범예비군,복무중인현역병,사회복무요원,전문산업기능요원,병역명문가",
+    "usageCondition": "없음",
+    "verificationMethod": "동원훈련이수증,모범예비군증,복무확인서 등",
+    "sourceType": "PUBLIC_EVIDENCE",
+    "sourceLabel": "병무청 나라사랑가게 · 최신 확인",
+    "sourceUrl": "https://www.mma.go.kr/about/udgg/list.do?mc=mma0003357",
+    "lastVerifiedAt": "2026-11-23",
+    "status": "ACTIVE",
+    "district": "수원시"
+  },
+  {
+    "id": "seed-234107610280",
+    "name": "비주얼웍스",
+    "address": "경기도평택시고덕면도시지원1길116848호(고덕면해창리, 고덕G1지식산업센터)",
+    "latitude": 37.0283777,
+    "longitude": 127.015552,
+    "category": "기타",
+    "benefitType": "할인·우대",
+    "benefitDescription": "서비스 이용료의 10% 할인, 간단한 도안(디자인)무료",
+    "phone": "0507-1447-3332",
+    "eligibleTarget": "동원훈련이수자,모범예비군,복무중인현역병,사회복무요원,전문산업기능요원,병역명문가",
+    "usageCondition": "없음",
+    "verificationMethod": "동원훈련이수증,모범예비군증,복무확인서 등",
+    "sourceType": "PUBLIC_EVIDENCE",
+    "sourceLabel": "병무청 나라사랑가게 · 최신 확인",
+    "sourceUrl": "https://www.mma.go.kr/about/udgg/list.do?mc=mma0003357",
+    "lastVerifiedAt": "2026-11-23",
+    "status": "ACTIVE",
+    "district": "평택시"
+  },
+  {
+    "id": "seed-6619c8f34efe",
+    "name": "블리비의원 발산점",
+    "address": "서울특별시강서구강서로395(마곡동, (플레이스에이치 3층))",
+    "latitude": 37.5610324,
+    "longitude": 126.8386787,
+    "category": "병원",
+    "benefitType": "할인·우대",
+    "benefitDescription": "서비스 이용료의 5% 할인",
+    "phone": "02-1833-9986",
+    "eligibleTarget": "동원훈련 이수자, 모범예비군, 복무중인사람, 병역명문가",
+    "usageCondition": "없음",
+    "verificationMethod": "동원훈련이수,모범예비군,명문가증,복무확인서",
+    "sourceType": "PUBLIC_EVIDENCE",
+    "sourceLabel": "병무청 나라사랑가게 · 최신 확인",
+    "sourceUrl": "https://www.mma.go.kr/about/udgg/list.do?mc=mma0003357",
+    "lastVerifiedAt": "2026-11-23",
+    "status": "ACTIVE",
+    "district": "강서구"
+  },
+  {
+    "id": "seed-f812fc0811d4",
+    "name": "필라테스 린(구월점)",
+    "address": "인천광역시남동구구월로268,6층 (구월동, 대성빌딩)",
+    "latitude": 37.4556515,
+    "longitude": 126.7203728,
+    "category": "문화·여가",
+    "benefitType": "할인·우대",
+    "benefitDescription": "이용료의 5%할인",
+    "phone": "032-472-3418",
+    "eligibleTarget": "예비군(당해년도,모범), 복무중인 사람, 병역명문가",
+    "usageCondition": "없음",
+    "verificationMethod": "e병무지갑(훈련확인서,복무확인서,명문가증등)",
+    "sourceType": "PUBLIC_EVIDENCE",
+    "sourceLabel": "병무청 나라사랑가게 · 최신 확인",
+    "sourceUrl": "https://www.mma.go.kr/about/udgg/list.do?mc=mma0003357",
+    "lastVerifiedAt": "2026-11-23",
+    "status": "ACTIVE",
+    "district": "남동구"
+  },
+  {
+    "id": "seed-fc2cd77a7f27",
+    "name": "다비치안경 마석신한은행옆점",
+    "address": "경기도남양주시화도읍마석중앙로541층 (화도읍창현리)",
+    "latitude": 37.6524593,
+    "longitude": 127.3056745,
+    "category": "병원",
+    "benefitType": "할인·우대",
+    "benefitDescription": "서비스 이용료의 10% 할인 기타사항 : 콘택트렌즈,약품구매시 할인불가,중복할인 불가(매장자체 생일쿠폰 등),안경구매시에만 할인가능",
+    "phone": "031-593-9485",
+    "eligibleTarget": "동원훈련 이수자, 현역병·사회복무요원 등 복무자, 병역명문가",
+    "usageCondition": "없음",
+    "verificationMethod": "당해연도 동원훈련이수증,모범예비군증,복무확인서",
+    "sourceType": "PUBLIC_EVIDENCE",
+    "sourceLabel": "병무청 나라사랑가게 · 최신 확인",
+    "sourceUrl": "https://www.mma.go.kr/about/udgg/list.do?mc=mma0003357",
+    "lastVerifiedAt": "2026-11-23",
+    "status": "ACTIVE",
+    "district": "남양주시"
+  },
+  {
+    "id": "seed-43acf76ce7f0",
+    "name": "하제네일",
+    "address": "서울특별시은평구연서로13길3(구산동, (1층 우측점포))",
+    "latitude": 37.6092659,
+    "longitude": 126.915453,
+    "category": "기타",
+    "benefitType": "할인·우대",
+    "benefitDescription": "손 기본케어(손톱 길이 정리 + 굳은살 케어)에 한함 - 예비군/병역명문가 25%할인 - 현역 복무중인 사람 75% 할인 -현업&퇴역 소방관/경찰관 100% 무료제공 *예약제 운영, 당일 방문 문의시 선예약 없으면 바로 진행 (휴무일/출장/외근시에는 작업불가)",
+    "phone": "0507-1394-9675",
+    "eligibleTarget": "동원훈련 이수자, 모범예비군, 복무중인사람, 병역명문가",
+    "usageCondition": "없음",
+    "verificationMethod": "동원훈련이수,모범예비군,명문가증,복무확인서",
+    "sourceType": "PUBLIC_EVIDENCE",
+    "sourceLabel": "병무청 나라사랑가게 · 최신 확인",
+    "sourceUrl": "https://www.mma.go.kr/about/udgg/list.do?mc=mma0003357",
+    "lastVerifiedAt": "2026-11-23",
+    "status": "ACTIVE",
+    "district": "은평구"
+  },
+  {
+    "id": "seed-563e115b5786",
+    "name": "시엔느스킨",
+    "address": "인천광역시미추홀구용정공원로83번길43(용현동)",
+    "latitude": 37.4470653,
+    "longitude": 126.6478915,
+    "category": "문화·여가",
+    "benefitType": "할인·우대",
+    "benefitDescription": "서비스 이용료의 10%",
+    "phone": "",
+    "eligibleTarget": "예비군(당해년도,모범)복무중인사람,병역명문가",
+    "usageCondition": "없음",
+    "verificationMethod": "e병무지갑(훈련확인서,복무확인서,명문가증등)",
+    "sourceType": "PUBLIC_EVIDENCE",
+    "sourceLabel": "병무청 나라사랑가게 · 최신 확인",
+    "sourceUrl": "https://www.mma.go.kr/about/udgg/list.do?mc=mma0003357",
+    "lastVerifiedAt": "2026-11-23",
+    "status": "ACTIVE",
+    "district": "미추홀구"
+  },
+  {
+    "id": "seed-b24236a07e3d",
+    "name": "뉴대성병원",
+    "address": "경기도부천시 원미구부천로91(심곡동)",
+    "latitude": 37.4925558,
+    "longitude": 126.7844001,
+    "category": "병원",
+    "benefitType": "할인·우대",
+    "benefitDescription": "비급여 항목에 한해 20% 감면 - 기타 혜택에 대한 내용은 문의(법령에 위반되지 않는 범위에서 적용)",
+    "phone": "1551-3380",
+    "eligibleTarget": "동원훈련이수자,병역명문가,복무중인자,모범예비군,병역판정검사자,병무청직원",
+    "usageCondition": "없음",
+    "verificationMethod": "병역명문가증,모범예비군증",
+    "sourceType": "PUBLIC_EVIDENCE",
+    "sourceLabel": "병무청 나라사랑가게 · 최신 확인",
+    "sourceUrl": "https://www.mma.go.kr/about/udgg/list.do?mc=mma0003357",
+    "lastVerifiedAt": "2026-11-23",
+    "status": "ACTIVE",
+    "district": "부천시"
+  },
+  {
+    "id": "seed-29a57c35cc11",
+    "name": "안경진정성 도화점",
+    "address": "인천광역시미추홀구숙골로100(도화동)",
+    "latitude": 37.4710553,
+    "longitude": 126.6628471,
+    "category": "병원",
+    "benefitType": "할인·우대",
+    "benefitDescription": "서비스이용료의 10%할인",
+    "phone": "032-872-2001",
+    "eligibleTarget": "동원훈련이수자,병역명문가,복무중인자,모범예비군",
+    "usageCondition": "없음",
+    "verificationMethod": "복무확인서,명문가증,동원훈련이수증,모범예비군증",
+    "sourceType": "PUBLIC_EVIDENCE",
+    "sourceLabel": "병무청 나라사랑가게 · 최신 확인",
+    "sourceUrl": "https://www.mma.go.kr/about/udgg/list.do?mc=mma0003357",
+    "lastVerifiedAt": "2026-11-23",
+    "status": "ACTIVE",
+    "district": "미추홀구"
+  },
+  {
+    "id": "seed-fb297fa00664",
+    "name": "글라스월드 계양점",
+    "address": "인천광역시계양구계양문화로96(용종동, 강북프라자 103호)",
+    "latitude": 37.5392386,
+    "longitude": 126.7370903,
+    "category": "병원",
+    "benefitType": "할인·우대",
+    "benefitDescription": "서비스 이용료의 10%할인 - 일회용,팩렌즈 제외",
+    "phone": "0507-1322-9462",
+    "eligibleTarget": "동원훈련이수자,병역명문가,복무중인자,모범예비군",
+    "usageCondition": "없음",
+    "verificationMethod": "명문가증,복무확인서,훈련이수증,모범예비군증",
+    "sourceType": "PUBLIC_EVIDENCE",
+    "sourceLabel": "병무청 나라사랑가게 · 최신 확인",
+    "sourceUrl": "https://www.mma.go.kr/about/udgg/list.do?mc=mma0003357",
+    "lastVerifiedAt": "2026-11-23",
+    "status": "ACTIVE",
+    "district": "계양구"
+  },
+  {
+    "id": "seed-cd1b38fb9ee2",
+    "name": "호안안경 인하대역",
+    "address": "인천광역시미추홀구독배로311(용현동, 1층 111호 호안안경)",
+    "latitude": 37.4481168,
+    "longitude": 126.6492568,
+    "category": "병원",
+    "benefitType": "할인·우대",
+    "benefitDescription": "서비스 이용료의 30% 할인",
+    "phone": "032-882-8885",
+    "eligibleTarget": "동원훈련이수자,병역명문가,복무중인자,모범예비군",
+    "usageCondition": "없음",
+    "verificationMethod": "명문가증,복무확인서,훈련이수증,모범예비군증",
+    "sourceType": "PUBLIC_EVIDENCE",
+    "sourceLabel": "병무청 나라사랑가게 · 최신 확인",
+    "sourceUrl": "https://www.mma.go.kr/about/udgg/list.do?mc=mma0003357",
+    "lastVerifiedAt": "2026-11-23",
+    "status": "ACTIVE",
+    "district": "미추홀구"
+  },
+  {
+    "id": "seed-eccce830c295",
+    "name": "눈사랑안경콘택트",
+    "address": "인천광역시남동구장수로18(장수동, 장수주공아파트 앞 눈사랑안경콘택트)",
+    "latitude": 37.4509628,
+    "longitude": 126.7497941,
+    "category": "병원",
+    "benefitType": "할인·우대",
+    "benefitDescription": "서비스 이용료의 20% 할인",
+    "phone": "032-467-0523",
+    "eligibleTarget": "동원훈련이수자,병역명문가,복무중인자,모범예비군",
+    "usageCondition": "없음",
+    "verificationMethod": "명문가증,복무확인서,모범예비군증,훈련이수증",
+    "sourceType": "PUBLIC_EVIDENCE",
+    "sourceLabel": "병무청 나라사랑가게 · 최신 확인",
+    "sourceUrl": "https://www.mma.go.kr/about/udgg/list.do?mc=mma0003357",
+    "lastVerifiedAt": "2026-11-23",
+    "status": "ACTIVE",
+    "district": "남동구"
+  },
+  {
+    "id": "seed-05068ca6d7dd",
+    "name": "지니스안경 인천동양점",
+    "address": "인천광역시계양구순평길34(동양동, 1층 101,102,103호37.5606334)",
+    "latitude": 37.5606898,
+    "longitude": 126.7557511,
+    "category": "병원",
+    "benefitType": "할인·우대",
+    "benefitDescription": "서비스 이용료의 10% 할인 - 군복무중인자, 추가 10% 할인",
+    "phone": "0507-1319-5503",
+    "eligibleTarget": "동원훈련이수자,병역명문가,복무중인자,모범예비군",
+    "usageCondition": "없음",
+    "verificationMethod": "복무확인서,모범예비군증,훈련이수증,명문가증",
+    "sourceType": "PUBLIC_EVIDENCE",
+    "sourceLabel": "병무청 나라사랑가게 · 최신 확인",
+    "sourceUrl": "https://www.mma.go.kr/about/udgg/list.do?mc=mma0003357",
+    "lastVerifiedAt": "2026-11-23",
+    "status": "ACTIVE",
+    "district": "계양구"
+  },
+  {
+    "id": "seed-8ea4bb66542a",
+    "name": "정안경",
+    "address": "인천광역시제물포구송림로100(송림동, 유림빌딩 1층)",
+    "latitude": 37.4760061,
+    "longitude": 126.6458665,
+    "category": "병원",
+    "benefitType": "할인·우대",
+    "benefitDescription": "서비스 이용료의 10% 할인 - 콘택트렌즈 및 일부품목 제외",
+    "phone": "032-764-8383",
+    "eligibleTarget": "동원훈련이수자,병역명문가,복무중인자,모범예비군",
+    "usageCondition": "없음",
+    "verificationMethod": "명문가증,복무확인서,모범예비군증,훈련이수증",
+    "sourceType": "PUBLIC_EVIDENCE",
+    "sourceLabel": "병무청 나라사랑가게 · 최신 확인",
+    "sourceUrl": "https://www.mma.go.kr/about/udgg/list.do?mc=mma0003357",
+    "lastVerifiedAt": "2026-11-23",
+    "status": "ACTIVE",
+    "district": "제물포구"
+  },
+  {
+    "id": "seed-aeb8df910c70",
+    "name": "태광당안경",
+    "address": "인천광역시미추홀구독배로417- 1(용현동, 태광당안경)",
+    "latitude": 37.4567795,
+    "longitude": 126.6495293,
+    "category": "병원",
+    "benefitType": "할인·우대",
+    "benefitDescription": "서비스 이용료의 50% 할인",
+    "phone": "032-883-5229",
+    "eligibleTarget": "동원훈련이수자,병역명문가,복무중인자,모범예비군",
+    "usageCondition": "없음",
+    "verificationMethod": "명문가증,복무확인서,훈련이수증,모범예비군증",
+    "sourceType": "PUBLIC_EVIDENCE",
+    "sourceLabel": "병무청 나라사랑가게 · 최신 확인",
+    "sourceUrl": "https://www.mma.go.kr/about/udgg/list.do?mc=mma0003357",
+    "lastVerifiedAt": "2026-11-23",
+    "status": "ACTIVE",
+    "district": "미추홀구"
+  },
+  {
+    "id": "seed-01a01d4af989",
+    "name": "밝은눈안경 도화점",
+    "address": "인천광역시미추홀구제일로31(도화동, 1층 108호 밝은눈안경)",
+    "latitude": 37.4590905,
+    "longitude": 126.6739029,
+    "category": "병원",
+    "benefitType": "할인·우대",
+    "benefitDescription": "서비스 이용료의 30%~40% 할인 - 안경태 : 30%~40% 할인(검안예약제 및 부품무료교환) - 기능성렌즈, 변색선글라스, 다초점렌즈 : 20% ~ 40% 할인",
+    "phone": "032-876-2122",
+    "eligibleTarget": "동원훈련이수자,병역명문가,복무중인자,모범예비군",
+    "usageCondition": "없음",
+    "verificationMethod": "명문가증,복무확인서,모범예비군증,훈련이수증",
+    "sourceType": "PUBLIC_EVIDENCE",
+    "sourceLabel": "병무청 나라사랑가게 · 최신 확인",
+    "sourceUrl": "https://www.mma.go.kr/about/udgg/list.do?mc=mma0003357",
+    "lastVerifiedAt": "2026-11-23",
+    "status": "ACTIVE",
+    "district": "미추홀구"
+  },
+  {
+    "id": "seed-9790fc7b4d47",
+    "name": "1001안경콘택트 위드렌즈 삼산점",
+    "address": "인천광역시부평구부평북로448(삼산동, 로얄프라자 105호 1001안경콘택트 위드렌즈 삼산점)",
+    "latitude": 37.5217978,
+    "longitude": 126.7433392,
+    "category": "병원",
+    "benefitType": "할인·우대",
+    "benefitDescription": "서비스 이용료의 10% 할인 - 기본사은품 제공",
+    "phone": "032-527-5339",
+    "eligibleTarget": "동원훈련이수자,병역명문가,복무중인자,모범예비군",
+    "usageCondition": "없음",
+    "verificationMethod": "명문가증,복무확인서,훈련이수증,모범예비군증",
+    "sourceType": "PUBLIC_EVIDENCE",
+    "sourceLabel": "병무청 나라사랑가게 · 최신 확인",
+    "sourceUrl": "https://www.mma.go.kr/about/udgg/list.do?mc=mma0003357",
+    "lastVerifiedAt": "2026-11-23",
+    "status": "ACTIVE",
+    "district": "부평구"
+  },
+  {
+    "id": "seed-34f4e39df919",
+    "name": "밀리브로",
+    "address": "인천광역시서해구길주로8(석남동, 밀리브로)",
+    "latitude": 37.5066183,
+    "longitude": 126.6625912,
+    "category": "기타",
+    "benefitType": "할인·우대",
+    "benefitDescription": "쇼핑몰 전 제품 판매가의 15% 할인",
+    "phone": "070-4140-4594",
+    "eligibleTarget": "동원훈련이수자(당해년도),병역명문가,복무중인자,모범예비군,병역판정검사자(당해년도),병무청직원",
+    "usageCondition": "없음",
+    "verificationMethod": "복무확인서,훈련이수증,모범예비군증,명문가증",
+    "sourceType": "PUBLIC_EVIDENCE",
+    "sourceLabel": "병무청 나라사랑가게 · 최신 확인",
+    "sourceUrl": "https://www.mma.go.kr/about/udgg/list.do?mc=mma0003357",
+    "lastVerifiedAt": "2026-11-23",
+    "status": "ACTIVE",
+    "district": "서해구"
+  },
+  {
+    "id": "seed-453f0351f1fa",
+    "name": "오클리 아이하우스안경",
+    "address": "인천광역시검단구서곶로866(마전동)",
+    "latitude": 37.5942863,
+    "longitude": 126.6745346,
+    "category": "병원",
+    "benefitType": "할인·우대",
+    "benefitDescription": "서비스 이용료의 10% 할인 - 10% VIP 적립",
+    "phone": "0507-1394-1677",
+    "eligibleTarget": "병역명문가,복무중인사람,모범예비군,동원훈련이수자",
+    "usageCondition": "없음",
+    "verificationMethod": "명문가증,복무확인서,모범예비군증,훈련이수증",
+    "sourceType": "PUBLIC_EVIDENCE",
+    "sourceLabel": "병무청 나라사랑가게 · 최신 확인",
+    "sourceUrl": "https://www.mma.go.kr/about/udgg/list.do?mc=mma0003357",
+    "lastVerifiedAt": "2026-11-23",
+    "status": "ACTIVE",
+    "district": "검단구"
+  },
+  {
+    "id": "seed-abecf3593895",
+    "name": "트렌디카안경 인천연수점",
+    "address": "인천광역시연수구청능대로75(청학동, IMC9 101호)",
+    "latitude": 37.4155605,
+    "longitude": 126.6744833,
+    "category": "병원",
+    "benefitType": "할인·우대",
+    "benefitDescription": "서비스 이용료의 10% 할인 - 최종할인금액의 10% 추가 할인",
+    "phone": "032-815-6002",
+    "eligibleTarget": "복무중인자,모범예비군,동원훈련이수자,명문가",
+    "usageCondition": "없음",
+    "verificationMethod": "복무확인서,모범예비군증,명문가증,훈련이수증",
+    "sourceType": "PUBLIC_EVIDENCE",
+    "sourceLabel": "병무청 나라사랑가게 · 최신 확인",
+    "sourceUrl": "https://www.mma.go.kr/about/udgg/list.do?mc=mma0003357",
+    "lastVerifiedAt": "2026-11-23",
+    "status": "ACTIVE",
+    "district": "연수구"
+  },
+  {
+    "id": "seed-e1c1e21c885a",
+    "name": "미인안경",
+    "address": "인천광역시검단구검단로470(왕길동, 1층 미인안경원)",
+    "latitude": 37.6015386,
+    "longitude": 126.656748,
+    "category": "병원",
+    "benefitType": "할인·우대",
+    "benefitDescription": "서비스 이용료의 10% 할인 - 기존할인에 추가할인",
+    "phone": "032-561-4727",
+    "eligibleTarget": "복무중인자,모범예비군,동원훈련이수자,명문가",
+    "usageCondition": "없음",
+    "verificationMethod": "명문가증,복무확인서,모범예비군증,훈련이수증",
+    "sourceType": "PUBLIC_EVIDENCE",
+    "sourceLabel": "병무청 나라사랑가게 · 최신 확인",
+    "sourceUrl": "https://www.mma.go.kr/about/udgg/list.do?mc=mma0003357",
+    "lastVerifiedAt": "2026-11-23",
+    "status": "ACTIVE",
+    "district": "검단구"
+  },
+  {
+    "id": "seed-7ca122273718",
+    "name": "글라스코드 안경원",
+    "address": "경기도파주시한울로123(동패동, 2층)",
+    "latitude": 37.7102132,
+    "longitude": 126.7456618,
+    "category": "병원",
+    "benefitType": "할인·우대",
+    "benefitDescription": "서비스 이용료의 10% 할인",
+    "phone": "031-947-4138",
+    "eligibleTarget": "동원훈련 이수자, 현역병·사회복무요원 등 복무자, 병역명문가",
+    "usageCondition": "없음",
+    "verificationMethod": "당해연도 동원훈련이수증,모범예비군증,복무확인서",
+    "sourceType": "PUBLIC_EVIDENCE",
+    "sourceLabel": "병무청 나라사랑가게 · 최신 확인",
+    "sourceUrl": "https://www.mma.go.kr/about/udgg/list.do?mc=mma0003357",
+    "lastVerifiedAt": "2026-11-23",
+    "status": "ACTIVE",
+    "district": "파주시"
+  },
+  {
+    "id": "seed-8763718c7885",
+    "name": "신세계안경콘택트",
+    "address": "인천광역시서해구승학로310(연희동)",
+    "latitude": 37.5495679,
+    "longitude": 126.6748212,
+    "category": "병원",
+    "benefitType": "할인·우대",
+    "benefitDescription": "서비스 이용료의 25% 할인",
+    "phone": "032-567-6605",
+    "eligibleTarget": "복무중인자,모범예비군,동원훈련이수자,명문가",
+    "usageCondition": "없음",
+    "verificationMethod": "모범예비군증,훈련이수증,명문가증,복무확인서",
+    "sourceType": "PUBLIC_EVIDENCE",
+    "sourceLabel": "병무청 나라사랑가게 · 최신 확인",
+    "sourceUrl": "https://www.mma.go.kr/about/udgg/list.do?mc=mma0003357",
+    "lastVerifiedAt": "2026-11-23",
+    "status": "ACTIVE",
+    "district": "서해구"
+  },
+  {
+    "id": "seed-14ecf85fe1ae",
+    "name": "이문동사진관",
+    "address": "서울특별시동대문구이문로12길4- 3(이문동, (지하1층))",
+    "latitude": 37.5929937,
+    "longitude": 127.0583446,
+    "category": "기타",
+    "benefitType": "할인·우대",
+    "benefitDescription": "서비스 이용료의 10% 할인 *우정촬영시 1인 1만원",
+    "phone": "0507-1406-5701",
+    "eligibleTarget": "동원훈련 이수자, 모범예비군, 복무중인사람, 병역명문가",
+    "usageCondition": "없음",
+    "verificationMethod": "동원훈련이수,모범예비군,명문가증,복무확인서",
+    "sourceType": "PUBLIC_EVIDENCE",
+    "sourceLabel": "병무청 나라사랑가게 · 최신 확인",
+    "sourceUrl": "https://www.mma.go.kr/about/udgg/list.do?mc=mma0003357",
+    "lastVerifiedAt": "2026-11-23",
+    "status": "ACTIVE",
+    "district": "동대문구"
+  },
+  {
+    "id": "seed-ac754238d5f8",
+    "name": "아이스타안경원(마포)",
+    "address": "서울특별시마포구월드컵북로348(상암동, (1층))",
+    "latitude": 37.5767875,
+    "longitude": 126.8934968,
+    "category": "병원",
+    "benefitType": "할인·우대",
+    "benefitDescription": "서비스 이용료의 5% 할인 *현역복무중 추가 5% 할인",
+    "phone": "02-374-9001",
+    "eligibleTarget": "동원훈련 이수자, 모범예비군, 복무중인사람",
+    "usageCondition": "없음",
+    "verificationMethod": "동원훈련이수증,모범예비군증,복무확인서",
+    "sourceType": "PUBLIC_EVIDENCE",
+    "sourceLabel": "병무청 나라사랑가게 · 최신 확인",
+    "sourceUrl": "https://www.mma.go.kr/about/udgg/list.do?mc=mma0003357",
+    "lastVerifiedAt": "2026-11-23",
+    "status": "ACTIVE",
+    "district": "마포구"
+  },
+  {
+    "id": "seed-c71120ca489c",
+    "name": "루네뜨안경",
+    "address": "서울특별시마포구도화길24(도화동, (1층))",
+    "latitude": 37.5404616,
+    "longitude": 126.948742,
+    "category": "병원",
+    "benefitType": "할인·우대",
+    "benefitDescription": "서비스 이용료의 10% 할인",
+    "phone": "02-719-2220",
+    "eligibleTarget": "동원훈련 이수자, 모범예비군, 복무중인사람, 병역명문가",
+    "usageCondition": "없음",
+    "verificationMethod": "동원훈련이수,모범예비군,명문가증,복무확인서",
+    "sourceType": "PUBLIC_EVIDENCE",
+    "sourceLabel": "병무청 나라사랑가게 · 최신 확인",
+    "sourceUrl": "https://www.mma.go.kr/about/udgg/list.do?mc=mma0003357",
+    "lastVerifiedAt": "2026-11-23",
+    "status": "ACTIVE",
+    "district": "마포구"
+  },
+  {
+    "id": "seed-dff099b51f1c",
+    "name": "다비치안경수원천천동롯데마트옆점",
+    "address": "경기도수원시 장안구덕영대로535번길28103호(천천동, 리안플리츠상가)",
+    "latitude": 37.2970906,
+    "longitude": 126.981714,
+    "category": "병원",
+    "benefitType": "할인·우대",
+    "benefitDescription": "- 서비스 이용료의 10% 할인 - 기타 우대사항 : 무료 피팅 서비스, 검사, 코받침 교체",
+    "phone": "031-268-1116",
+    "eligibleTarget": "동원훈련이수자,모범예비군,복무중인현역병,사회복무요원,전문산업기능요원,병역명문가",
+    "usageCondition": "없음",
+    "verificationMethod": "동원훈련이수증,모범예비군증,복무확인서 등",
+    "sourceType": "PUBLIC_EVIDENCE",
+    "sourceLabel": "병무청 나라사랑가게 · 최신 확인",
+    "sourceUrl": "https://www.mma.go.kr/about/udgg/list.do?mc=mma0003357",
+    "lastVerifiedAt": "2026-11-23",
+    "status": "ACTIVE",
+    "district": "수원시"
+  },
+  {
+    "id": "seed-e1d4005147dc",
+    "name": "예쁜안경원 북수원점",
+    "address": "경기도수원시 장안구송원로471층 (송죽동, 해동빌딩)",
+    "latitude": 37.2996577,
+    "longitude": 127.0074722,
+    "category": "병원",
+    "benefitType": "할인·우대",
+    "benefitDescription": "- 서비스 이용료의 10% 할인",
+    "phone": "031-287-6162",
+    "eligibleTarget": "동원훈련이수자,모범예비군,복무중인현역병,사회복무요원,전문산업기능요원,병역명문가",
+    "usageCondition": "없음",
+    "verificationMethod": "동원훈련이수증,모범예비군증,복무확인서 등",
+    "sourceType": "PUBLIC_EVIDENCE",
+    "sourceLabel": "병무청 나라사랑가게 · 최신 확인",
+    "sourceUrl": "https://www.mma.go.kr/about/udgg/list.do?mc=mma0003357",
+    "lastVerifiedAt": "2026-11-23",
+    "status": "ACTIVE",
+    "district": "수원시"
+  },
+  {
+    "id": "seed-031b9b752681",
+    "name": "한솔아카데미",
+    "address": "서울특별시강남구강남대로42길13(도곡동)",
+    "latitude": 37.4854176,
+    "longitude": 127.0351028,
+    "category": "기타",
+    "benefitType": "할인·우대",
+    "benefitDescription": "학원 수강료의 20% 할인 * 이용방법 1) e-병무지갑 앱의 '전자문서지갑' 메뉴에서 '수강료 할인 대상 확인서' 발급 (수강료 할인 대상 확인서의 유효기간은 발급일로부터 1년) 2) '혜택, 편의서비스' 메뉴에서 '수강료 할인' 선택 3) 할인받고 싶은 지역, 학원 선택 후 이메일 발송, 학원에서 서류확인 후 할인 제공",
+    "phone": "02-575-7113",
+    "eligibleTarget": "사회복무요원, 모범예비군(선정된 날부터 3년), 병역명문가",
+    "usageCondition": "없음",
+    "verificationMethod": "수강료 할인 대상 확인서 (e-병무지갑 전자문서지갑)",
+    "sourceType": "PUBLIC_EVIDENCE",
+    "sourceLabel": "병무청 나라사랑가게 · 최신 확인",
+    "sourceUrl": "https://www.mma.go.kr/about/udgg/list.do?mc=mma0003357",
+    "lastVerifiedAt": "2026-11-23",
+    "status": "ACTIVE",
+    "district": "강남구"
+  },
+  {
+    "id": "seed-0543548e7c5c",
+    "name": "한국청소직업전문학원",
+    "address": "서울특별시동대문구황물로42(전농동, (3층 301호))",
+    "latitude": 37.5733554,
+    "longitude": 127.0462123,
+    "category": "기타",
+    "benefitType": "할인·우대",
+    "benefitDescription": "학원 수강료의 20% 할인 * 이용방법 1) e-병무지갑 앱의 '전자문서지갑' 메뉴에서 '수강료 할인 대상 확인서' 발급 (수강료 할인 대상 확인서의 유효기간은 발급일로부터 1년) 2) '혜택, 편의서비스' 메뉴에서 '수강료 할인' 선택 3) 할인받고 싶은 지역, 학원 선택 후 이메일 발송, 학원에서 서류확인 후 할인 제공",
+    "phone": "0507-1391-6353",
+    "eligibleTarget": "사회복무요원, 모범예비군(선정된 날부터 3년), 병역명문가",
+    "usageCondition": "없음",
+    "verificationMethod": "수강료 할인 대상 확인서 (e-병무지갑 전자문서지갑)",
+    "sourceType": "PUBLIC_EVIDENCE",
+    "sourceLabel": "병무청 나라사랑가게 · 최신 확인",
+    "sourceUrl": "https://www.mma.go.kr/about/udgg/list.do?mc=mma0003357",
+    "lastVerifiedAt": "2026-11-23",
+    "status": "ACTIVE",
+    "district": "동대문구"
+  },
+  {
+    "id": "seed-943de756c51f",
+    "name": "파고다어학원 신촌",
+    "address": "서울특별시서대문구신촌로121(창천동, (아남오피스텔))",
+    "latitude": 37.5561467,
+    "longitude": 126.9393341,
+    "category": "기타",
+    "benefitType": "할인·우대",
+    "benefitDescription": "학원 수강료의 20% 할인 * 이용방법 1) e-병무지갑 앱의 '전자문서지갑' 메뉴에서 '수강료 할인 대상 확인서' 발급 (수강료 할인 대상 확인서의 유효기간은 발급일로부터 1년) 2) '혜택, 편의서비스' 메뉴에서 '수강료 할인' 선택 3) 할인받고 싶은 지역, 학원 선택 후 이메일 발송, 학원에서 서류확인 후 할인 제공",
+    "phone": "02-717-4000",
+    "eligibleTarget": "사회복무요원, 모범예비군(선정된 날부터 3년), 병역명문가",
+    "usageCondition": "없음",
+    "verificationMethod": "수강료 할인 대상 확인서 (e-병무지갑 전자문서지갑)",
+    "sourceType": "PUBLIC_EVIDENCE",
+    "sourceLabel": "병무청 나라사랑가게 · 최신 확인",
+    "sourceUrl": "https://www.mma.go.kr/about/udgg/list.do?mc=mma0003357",
+    "lastVerifiedAt": "2026-11-23",
+    "status": "ACTIVE",
+    "district": "서대문구"
+  },
+  {
+    "id": "seed-6b754cf44b0c",
+    "name": "파고다어학원 강남",
+    "address": "서울특별시서초구강남대로419(서초동, (5층))",
+    "latitude": 37.4999096,
+    "longitude": 127.0263065,
+    "category": "기타",
+    "benefitType": "할인·우대",
+    "benefitDescription": "학원 수강료의 20% 할인 * 이용방법 1) e-병무지갑 앱의 '전자문서지갑' 메뉴에서 '수강료 할인 대상 확인서' 발급 (수강료 할인 대상 확인서의 유효기간은 발급일로부터 1년) 2) '혜택, 편의서비스' 메뉴에서 '수강료 할인' 선택 3) 할인받고 싶은 지역, 학원 선택 후 이메일 발송, 학원에서 서류확인 후 할인 제공",
+    "phone": "02-2051-4000",
+    "eligibleTarget": "사회복무요원, 모범예비군(선정된 날부터 3년), 병역명문가",
+    "usageCondition": "없음",
+    "verificationMethod": "수강료 할인 대상 확인서 (e-병무지갑 전자문서지갑)",
+    "sourceType": "PUBLIC_EVIDENCE",
+    "sourceLabel": "병무청 나라사랑가게 · 최신 확인",
+    "sourceUrl": "https://www.mma.go.kr/about/udgg/list.do?mc=mma0003357",
+    "lastVerifiedAt": "2026-11-23",
+    "status": "ACTIVE",
+    "district": "서초구"
+  },
+  {
+    "id": "seed-9aa01d2f320e",
+    "name": "㈜해커스어학원 / 종로캠퍼스",
+    "address": "서울특별시종로구인사동길12(인사동, (대일빌딩 4층))",
+    "latitude": 37.5719303,
+    "longitude": 126.9870618,
+    "category": "기타",
+    "benefitType": "할인·우대",
+    "benefitDescription": "학원 수강료의 20% 할인 * 이용방법 1) e-병무지갑 앱의 '전자문서지갑' 메뉴에서 '수강료 할인 대상 확인서' 발급 (수강료 할인 대상 확인서의 유효기간은 발급일로부터 1년) 2) '혜택, 편의서비스' 메뉴에서 '수강료 할인' 선택 3) 할인받고 싶은 지역, 학원 선택 후 이메일 발송, 학원에서 서류확인 후 할인 제공",
+    "phone": "02-502-2000",
+    "eligibleTarget": "사회복무요원, 모범예비군(선정된 날부터 3년), 병역명문가",
+    "usageCondition": "없음",
+    "verificationMethod": "수강료 할인 대상 확인서 (e-병무지갑 전자문서지갑)",
+    "sourceType": "PUBLIC_EVIDENCE",
+    "sourceLabel": "병무청 나라사랑가게 · 최신 확인",
+    "sourceUrl": "https://www.mma.go.kr/about/udgg/list.do?mc=mma0003357",
+    "lastVerifiedAt": "2026-11-23",
+    "status": "ACTIVE",
+    "district": "종로구"
+  },
+  {
+    "id": "seed-85845a8bcab5",
+    "name": "파고다어학원 종로",
+    "address": "서울특별시중구남대문로120(남대문로1가, (그레이츠 청계 2~3층))",
+    "latitude": 37.5678881,
+    "longitude": 126.982974,
+    "category": "기타",
+    "benefitType": "할인·우대",
+    "benefitDescription": "학원 수강료의 20% 할인 * 이용방법 1) e-병무지갑 앱의 '전자문서지갑' 메뉴에서 '수강료 할인 대상 확인서' 발급 (수강료 할인 대상 확인서의 유효기간은 발급일로부터 1년) 2) '혜택, 편의서비스' 메뉴에서 '수강료 할인' 선택 3) 할인받고 싶은 지역, 학원 선택 후 이메일 발송, 학원에서 서류확인 후 할인 제공",
+    "phone": "02-2274-4000",
+    "eligibleTarget": "사회복무요원, 모범예비군(선정된 날부터 3년), 병역명문가",
+    "usageCondition": "없음",
+    "verificationMethod": "수강료 할인 대상 확인서 (e-병무지갑 전자문서지갑)",
+    "sourceType": "PUBLIC_EVIDENCE",
+    "sourceLabel": "병무청 나라사랑가게 · 최신 확인",
+    "sourceUrl": "https://www.mma.go.kr/about/udgg/list.do?mc=mma0003357",
+    "lastVerifiedAt": "2026-11-23",
+    "status": "ACTIVE",
+    "district": "중구"
+  },
+  {
+    "id": "seed-eb11ea335f65",
+    "name": "아람컴퓨터전문학원",
+    "address": "서울특별시동작구동작대로29길91(사당동, (우성2공구상가 404호))",
+    "latitude": 37.4884367,
+    "longitude": 126.9763757,
+    "category": "기타",
+    "benefitType": "할인·우대",
+    "benefitDescription": "학원 수강료의 20% 할인 * 이용방법 1) e-병무지갑 앱의 '전자문서지갑' 메뉴에서 '수강료 할인 대상 확인서' 발급 (수강료 할인 대상 확인서의 유효기간은 발급일로부터 1년) 2) '혜택, 편의서비스' 메뉴에서 '수강료 할인' 선택 3) 할인받고 싶은 지역, 학원 선택 후 이메일 발송, 학원에서 서류확인 후 할인 제공",
+    "phone": "02-593-5424",
+    "eligibleTarget": "사회복무요원, 모범예비군(선정된 날부터 3년), 병역명문가",
+    "usageCondition": "없음",
+    "verificationMethod": "수강료 할인 대상 확인서 (e-병무지갑 전자문서지갑)",
+    "sourceType": "PUBLIC_EVIDENCE",
+    "sourceLabel": "병무청 나라사랑가게 · 최신 확인",
+    "sourceUrl": "https://www.mma.go.kr/about/udgg/list.do?mc=mma0003357",
+    "lastVerifiedAt": "2026-11-23",
+    "status": "ACTIVE",
+    "district": "동작구"
+  },
+  {
+    "id": "seed-5647ca80bc9a",
+    "name": "우리컴퓨터아카데미",
+    "address": "경기도구리시건원대로36(인창동, 406호)",
+    "latitude": 37.6043642,
+    "longitude": 127.140377,
+    "category": "기타",
+    "benefitType": "할인·우대",
+    "benefitDescription": "학원 수강료의 20%할인 이용방법 1) e-병무지갑 앱의 '전자문서지갑' 메뉴에서 '수강료 할인 대상 확인서' 발급 * 수강료 할인 대상 확인서의 유효기간은 발급일로부터 1년 2) '혜택, 편의서비스' 메뉴에서 '수강료 할인' 선택 3) 할인받고 싶은 지역, 학원 선택 후 이메일 발송, 학원에서 서류확인 후 할인 제공",
+    "phone": "031-555-6667",
+    "eligibleTarget": "동원훈련 이수자, 현역병·사회복무요원 등 복무자, 병역명문가",
+    "usageCondition": "없음",
+    "verificationMethod": "모범예비군증,복무확인서,병역명문가증",
+    "sourceType": "PUBLIC_EVIDENCE",
+    "sourceLabel": "병무청 나라사랑가게 · 최신 확인",
+    "sourceUrl": "https://www.mma.go.kr/about/udgg/list.do?mc=mma0003357",
+    "lastVerifiedAt": "2026-11-23",
+    "status": "ACTIVE",
+    "district": "구리시"
+  },
+  {
+    "id": "seed-6e7d506cf297",
+    "name": "중앙컴퓨터전산회계학원",
+    "address": "경기도광주시중앙로145번길23(경안동, 용궁빌딩)",
+    "latitude": 37.4124326,
+    "longitude": 127.2546464,
+    "category": "기타",
+    "benefitType": "할인·우대",
+    "benefitDescription": "학원 수강료의 20% 할인 * 이용방법 1) e-병무지갑 앱의 '전자문서지갑' 메뉴에서 '수강료 할인대상 확인서' 발급(수강료 할인 대상 확인서의 유효기간은 발급일로부터 1년) 2) '혜택, 편의서비스' 메뉴에서 '수강료 할인' 선택 3) 할인받고 싶은 지역, 학원 선택 후 이메일 발송, 학원에서 서류 확인 후 할인 제공",
+    "phone": "",
+    "eligibleTarget": "사회복무요원,모범예비군(선정된 날부터 3년), 병역명문가",
+    "usageCondition": "없음",
+    "verificationMethod": "수강료 할인 대상 확인서(e-병무지갑 전자문서지갑)",
+    "sourceType": "PUBLIC_EVIDENCE",
+    "sourceLabel": "병무청 나라사랑가게 · 최신 확인",
+    "sourceUrl": "https://www.mma.go.kr/about/udgg/list.do?mc=mma0003357",
+    "lastVerifiedAt": "2026-11-23",
+    "status": "ACTIVE",
+    "district": "광주시"
+  },
+  {
+    "id": "seed-00743d9a6363",
+    "name": "더플랜컴퓨터학원 이천점",
+    "address": "경기도이천시영창로143301호(관고동)",
+    "latitude": 37.2821977,
+    "longitude": 127.4386044,
+    "category": "기타",
+    "benefitType": "할인·우대",
+    "benefitDescription": "학원 수강료의 20% 할인 * 이용방법 1) e-병무지갑 앱의 '전자문서지갑' 메뉴에서 '수강료 할인대상 확인서' 발급(수강료 할인 대상 확인서의 유효기간은 발급일로부터 1년) 2) '혜택, 편의서비스' 메뉴에서 '수강료 할인' 선택 3) 할인받고 싶은 지역, 학원 선택 후 이메일 발송, 학원에서 서류 확인 후 할인 제공",
+    "phone": "031-631-4865",
+    "eligibleTarget": "사회복무요원,모범예비군(선정된 날부터 3년), 병역명문가",
+    "usageCondition": "없음",
+    "verificationMethod": "수강료 할인 대상 확인서(e-병무지갑 전자문서지갑)",
+    "sourceType": "PUBLIC_EVIDENCE",
+    "sourceLabel": "병무청 나라사랑가게 · 최신 확인",
+    "sourceUrl": "https://www.mma.go.kr/about/udgg/list.do?mc=mma0003357",
+    "lastVerifiedAt": "2026-11-23",
+    "status": "ACTIVE",
+    "district": "이천시"
+  },
+  {
+    "id": "seed-0ae8468c80a8",
+    "name": "바흐야마",
+    "address": "경기도성남시 수정구위례광장로27- 0(창곡동, 으뜸프라자 102호)",
+    "latitude": 37.4668777,
+    "longitude": 127.1401858,
+    "category": "병원",
+    "benefitType": "할인·우대",
+    "benefitDescription": "서비스 이용료의 15% 할인 기타 우대사항 : 무료 2회 1시간(눈운동 개인 PT) 눈운동 방법 특허등록 : 근시완화눈운동, 노안완화눈운동, 근시굴절수술 후 눈운동 세부 우대대상 : 예비군(당해연도 병무청 주관 동원훈련 이수자 및 병무청 모범 예비군 선발자),복무중인 사람,병역명문가 세부 증빙자료 : 당해연도 동원훈련이수증,모범예비군증,복무확인서,병역명문가증",
+    "phone": "",
+    "eligibleTarget": "예비군(당해연도 병무청 주관 동원훈련 이수자 및 병무청 모범 예비군 선발자),복무중인 사람,병역명문가",
+    "usageCondition": "없음",
+    "verificationMethod": "당해연도 동원훈련이수증,모범예비군증,복무확인서",
+    "sourceType": "PUBLIC_EVIDENCE",
+    "sourceLabel": "병무청 나라사랑가게 · 최신 확인",
+    "sourceUrl": "https://www.mma.go.kr/about/udgg/list.do?mc=mma0003357",
+    "lastVerifiedAt": "2026-11-23",
+    "status": "ACTIVE",
+    "district": "성남시"
+  },
+  {
+    "id": "seed-67c58ce1580b",
+    "name": "글라스타안경 죽전점",
+    "address": "경기도용인시 기흥구죽전로39(보정동, SJ타워 108호)",
+    "latitude": 37.3207307,
+    "longitude": 127.1131641,
+    "category": "병원",
+    "benefitType": "할인·우대",
+    "benefitDescription": "서비스 이용료의 10% 할인(안경 구입시 10% 할인) 기타 우대사항 : 안경 부대 용품(케이스, 수건 등) 무료 증정, C/L 무료 시험 착용 세부 우대대상 : 예비군(당해연도 병무청 주관 동원훈련 이수자 및 병무청 모범 예비군 선발자),복무중인 사람,병역명문가 세부 증빙자료 : 당해연도 동원훈련이수증,모범예비군증,복무확인서,병역명문가증",
+    "phone": "031-896-7755",
+    "eligibleTarget": "예비군(당해연도 병무청 주관 동원훈련 이수자 및 병무청 모범 예비군 선발자),복무중인 사람,병역명문가",
+    "usageCondition": "없음",
+    "verificationMethod": "당해연도 동원훈련이수증,모범예비군증,복무확인서",
+    "sourceType": "PUBLIC_EVIDENCE",
+    "sourceLabel": "병무청 나라사랑가게 · 최신 확인",
+    "sourceUrl": "https://www.mma.go.kr/about/udgg/list.do?mc=mma0003357",
+    "lastVerifiedAt": "2026-11-23",
+    "status": "ACTIVE",
+    "district": "용인시"
+  },
+  {
+    "id": "seed-97aac48136ff",
+    "name": "글라스타안경 아주대구내점",
+    "address": "경기도수원시 영통구월드컵로206(원천동, 성호관 1층)",
+    "latitude": 37.2802087,
+    "longitude": 127.0436252,
+    "category": "병원",
+    "benefitType": "할인·우대",
+    "benefitDescription": "서비스 이용료의 10% 할인 기타 우대사항 : 시력교정용 안경 구매시 할인, 안경 부대 용품 무료증정, 콘텍트렌즈 무료 시험착용 세부 우대대상 : 예비군(당해연도 병무청 주관 동원훈련 이수자 및 병무청 모범 예비군 선발자),복무중인 사람,병역명문가 세부 증빙자료 : 당해연도 동원훈련이수증,모범예비군증,복무확인서,병역명문가증",
+    "phone": "031-214-5990",
+    "eligibleTarget": "예비군(당해연도 병무청 주관 동원훈련 이수자 및 병무청 모범 예비군 선발자),복무중인 사람,병역명문가",
+    "usageCondition": "없음",
+    "verificationMethod": "당해연도 동원훈련이수증,모범예비군증,복무확인서",
+    "sourceType": "PUBLIC_EVIDENCE",
+    "sourceLabel": "병무청 나라사랑가게 · 최신 확인",
+    "sourceUrl": "https://www.mma.go.kr/about/udgg/list.do?mc=mma0003357",
+    "lastVerifiedAt": "2026-11-23",
+    "status": "ACTIVE",
+    "district": "수원시"
+  },
+  {
+    "id": "seed-972683851336",
+    "name": "오티오안경 화양점",
+    "address": "서울특별시광진구군자로85(군자동)",
+    "latitude": 37.5507765,
+    "longitude": 127.0709721,
+    "category": "병원",
+    "benefitType": "할인·우대",
+    "benefitDescription": "서비스 이용료의 15% 할인",
+    "phone": "02-468-1721",
+    "eligibleTarget": "동원훈련 이수자, 모범예비군, 복무중인사람, 병역명문가",
+    "usageCondition": "없음",
+    "verificationMethod": "동원훈련이수,모범예비군,명문가증,복무확인서",
+    "sourceType": "PUBLIC_EVIDENCE",
+    "sourceLabel": "병무청 나라사랑가게 · 최신 확인",
+    "sourceUrl": "https://www.mma.go.kr/about/udgg/list.do?mc=mma0003357",
+    "lastVerifiedAt": "2026-11-23",
+    "status": "ACTIVE",
+    "district": "광진구"
+  },
+  {
+    "id": "seed-14a81bfceb30",
+    "name": "선명안경",
+    "address": "경기도성남시 수정구수정로3461층 (산성동, 백강빌딩)",
+    "latitude": 37.4544064,
+    "longitude": 127.1499584,
+    "category": "병원",
+    "benefitType": "할인·우대",
+    "benefitDescription": "- 서비스 이용료의 20% 할인 - 안경테 및 안경렌즈 20% 할인",
+    "phone": "0507-1427-9990",
+    "eligibleTarget": "동원훈련이수자,모범예비군,복무중인현역병,사회복무요원,전문산업기능요원,병역명문가",
+    "usageCondition": "없음",
+    "verificationMethod": "동원훈련이수증,모범예비군증,복무확인서,명문가증",
+    "sourceType": "PUBLIC_EVIDENCE",
+    "sourceLabel": "병무청 나라사랑가게 · 최신 확인",
+    "sourceUrl": "https://www.mma.go.kr/about/udgg/list.do?mc=mma0003357",
+    "lastVerifiedAt": "2026-11-23",
+    "status": "ACTIVE",
+    "district": "성남시"
+  },
+  {
+    "id": "seed-06b27fa87b13",
+    "name": "가람동물병원",
+    "address": "경기도고양시 일산동구강석로156(마두동, 선경상가 101호)",
+    "latitude": 37.6546023,
+    "longitude": 126.777748,
+    "category": "병원",
+    "benefitType": "할인·우대",
+    "benefitDescription": "서비스 이용료의 10% 할인 기타 우대사항 : 예방접종, 진료비, 검사비, 수술비, 약품, 용품 등 전품목 10% 할인",
+    "phone": "031-906-0976",
+    "eligibleTarget": "동원훈련 이수자, 현역병·사회복무요원 등 복무자, 병역명문가",
+    "usageCondition": "없음",
+    "verificationMethod": "당해연도 동원훈련이수증,모범예비군증,복무확인서",
+    "sourceType": "PUBLIC_EVIDENCE",
+    "sourceLabel": "병무청 나라사랑가게 · 최신 확인",
+    "sourceUrl": "https://www.mma.go.kr/about/udgg/list.do?mc=mma0003357",
+    "lastVerifiedAt": "2026-11-23",
+    "status": "ACTIVE",
+    "district": "고양시"
+  },
+  {
+    "id": "seed-a2e6971352b8",
+    "name": "도매당 안경",
+    "address": "경기도수원시 장안구창룡대로181(연무동)",
+    "latitude": 37.2923478,
+    "longitude": 127.0297916,
+    "category": "병원",
+    "benefitType": "할인·우대",
+    "benefitDescription": "서비스 이용료의 10% 할인",
+    "phone": "031-248-2572",
+    "eligibleTarget": "동원훈련이수자,모범예비군,복무중인현역병,사회복무요원,전문산업기능요원,병역명문가",
+    "usageCondition": "없음",
+    "verificationMethod": "동원훈련이수증,모범예비군증,복무확인서,명문가증",
+    "sourceType": "PUBLIC_EVIDENCE",
+    "sourceLabel": "병무청 나라사랑가게 · 최신 확인",
+    "sourceUrl": "https://www.mma.go.kr/about/udgg/list.do?mc=mma0003357",
+    "lastVerifiedAt": "2026-11-23",
+    "status": "ACTIVE",
+    "district": "수원시"
+  },
+  {
+    "id": "seed-9f02a3110818",
+    "name": "글라스미 신갈점",
+    "address": "경기도용인시 기흥구신갈로58번길25(신갈동)",
+    "latitude": 37.2727831,
+    "longitude": 127.1084152,
+    "category": "병원",
+    "benefitType": "할인·우대",
+    "benefitDescription": "서비스 이용료의 10% 할인",
+    "phone": "031-283-8774",
+    "eligibleTarget": "동원훈련이수자,모범예비군,복무중인현역병,사회복무요원,전문산업기능요원,병역명문가",
+    "usageCondition": "없음",
+    "verificationMethod": "동원훈련이수증,모범예비군증,복무확인서,명문가증",
+    "sourceType": "PUBLIC_EVIDENCE",
+    "sourceLabel": "병무청 나라사랑가게 · 최신 확인",
+    "sourceUrl": "https://www.mma.go.kr/about/udgg/list.do?mc=mma0003357",
+    "lastVerifiedAt": "2026-11-23",
+    "status": "ACTIVE",
+    "district": "용인시"
+  },
+  {
+    "id": "seed-771d0829b0c5",
+    "name": "글라스월드안경 분당수내점",
+    "address": "경기도성남시 분당구내정로174번길42154호1층 (수내동, 파크타운 돌고래복합상가)",
+    "latitude": 37.3708674,
+    "longitude": 127.1225144,
+    "category": "병원",
+    "benefitType": "할인·우대",
+    "benefitDescription": "서비스 이용료의 30% 할인",
+    "phone": "031-711-8048",
+    "eligibleTarget": "동원훈련이수자,모범예비군,복무중인현역병,사회복무요원,전문산업기능요원,병역명문가",
+    "usageCondition": "없음",
+    "verificationMethod": "동원훈련이수증,모범예비군증,복무확인서,명문가증",
+    "sourceType": "PUBLIC_EVIDENCE",
+    "sourceLabel": "병무청 나라사랑가게 · 최신 확인",
+    "sourceUrl": "https://www.mma.go.kr/about/udgg/list.do?mc=mma0003357",
+    "lastVerifiedAt": "2026-11-23",
+    "status": "ACTIVE",
+    "district": "성남시"
+  },
+  {
+    "id": "seed-441682ac4827",
+    "name": "포천클라우드시네마",
+    "address": "경기도포천시영북면운천로23번길7- 8(영북면운천리)",
+    "latitude": 38.0906545,
+    "longitude": 127.272226,
+    "category": "문화·여가",
+    "benefitType": "할인·우대",
+    "benefitDescription": "영화관람료 1,000원 할인",
+    "phone": "031-531-7718",
+    "eligibleTarget": "복무중인 사람(현역병, 사회복무요원, 전문연구요원, 산업기능요원)",
+    "usageCondition": "없음",
+    "verificationMethod": "복무확인서",
+    "sourceType": "PUBLIC_EVIDENCE",
+    "sourceLabel": "병무청 나라사랑가게 · 최신 확인",
+    "sourceUrl": "https://www.mma.go.kr/about/udgg/list.do?mc=mma0003357",
+    "lastVerifiedAt": "2026-11-23",
+    "status": "ACTIVE",
+    "district": "포천시"
+  },
+  {
+    "id": "seed-bdff6ae13ffe",
+    "name": "다비치안경 성남야탑터미널점",
+    "address": "경기도성남시 분당구성남대로925번길16104호(야탑동)",
+    "latitude": 37.4125663,
+    "longitude": 127.1268966,
+    "category": "병원",
+    "benefitType": "할인·우대",
+    "benefitDescription": "서비스 이용료의 10% 할인 -군인가족 10% 할인",
+    "phone": "031-781-1357",
+    "eligibleTarget": "동원훈련이수자,모범예비군,복무중인현역병,사회복무요원,전문산업기능요원,병역명문가",
+    "usageCondition": "없음",
+    "verificationMethod": "동원훈련이수증,모범예비군증,복무확인서,명문가증",
+    "sourceType": "PUBLIC_EVIDENCE",
+    "sourceLabel": "병무청 나라사랑가게 · 최신 확인",
+    "sourceUrl": "https://www.mma.go.kr/about/udgg/list.do?mc=mma0003357",
+    "lastVerifiedAt": "2026-11-23",
+    "status": "ACTIVE",
+    "district": "성남시"
+  },
+  {
+    "id": "seed-71385e97ae0a",
+    "name": "스위트 안경원",
+    "address": "경기도평택시송탄로42511층 (지산동)",
+    "latitude": 37.0816419,
+    "longitude": 127.05778,
+    "category": "병원",
+    "benefitType": "할인·우대",
+    "benefitDescription": "서비스 이용료의 30% 할인 -안경수건, 안경케이스 증정 - 별도로 시력 검사 진행",
+    "phone": "031-667-8800",
+    "eligibleTarget": "동원훈련이수자,모범예비군,복무중인현역병,사회복무요원,전문산업기능요원,병역명문가",
+    "usageCondition": "없음",
+    "verificationMethod": "동원훈련이수증,모범예비군증,복무확인서,명문가증",
+    "sourceType": "PUBLIC_EVIDENCE",
+    "sourceLabel": "병무청 나라사랑가게 · 최신 확인",
+    "sourceUrl": "https://www.mma.go.kr/about/udgg/list.do?mc=mma0003357",
+    "lastVerifiedAt": "2026-11-23",
+    "status": "ACTIVE",
+    "district": "평택시"
+  },
+  {
+    "id": "seed-20b67f0a918e",
+    "name": "글라스미 렌즈미 장호원감곡점",
+    "address": "경기도이천시장호원읍장감로82- 11층 (장호원읍장호원리)",
+    "latitude": 37.1174192,
+    "longitude": 127.6317862,
+    "category": "병원",
+    "benefitType": "할인·우대",
+    "benefitDescription": "서비스 이용료의 10% 할인 - 콘택트렌즈 일부품목 할인불가 - 안경 및 안경렌즈 품목만 해당",
+    "phone": "031-641-2040",
+    "eligibleTarget": "동원훈련이수자,모범예비군,복무중인현역병,사회복무요원,전문산업기능요원,병역명문가",
+    "usageCondition": "없음",
+    "verificationMethod": "동원훈련이수증,모범예비군증,복무확인서,명문가증",
+    "sourceType": "PUBLIC_EVIDENCE",
+    "sourceLabel": "병무청 나라사랑가게 · 최신 확인",
+    "sourceUrl": "https://www.mma.go.kr/about/udgg/list.do?mc=mma0003357",
+    "lastVerifiedAt": "2026-11-23",
+    "status": "ACTIVE",
+    "district": "이천시"
+  },
+  {
+    "id": "seed-1ffd65167b2b",
+    "name": "룩옵티컬",
+    "address": "경기도수원시 영통구도청로10B1호(이의동, 롯데몰 광교점)",
+    "latitude": 37.2860178,
+    "longitude": 127.0554771,
+    "category": "병원",
+    "benefitType": "할인·우대",
+    "benefitDescription": "서비스 이용료의 10% 할인 -할인 상품 제외, 정상제품에 한함",
+    "phone": "031-8064-2074",
+    "eligibleTarget": "동원훈련이수자,모범예비군,복무중인현역병,사회복무요원,전문산업기능요원,병역명문가",
+    "usageCondition": "없음",
+    "verificationMethod": "동원훈련이수증,모범예비군증,복무확인서,명문가증",
+    "sourceType": "PUBLIC_EVIDENCE",
+    "sourceLabel": "병무청 나라사랑가게 · 최신 확인",
+    "sourceUrl": "https://www.mma.go.kr/about/udgg/list.do?mc=mma0003357",
+    "lastVerifiedAt": "2026-11-23",
+    "status": "ACTIVE",
+    "district": "수원시"
+  },
+  {
+    "id": "seed-f7f1224bbc65",
+    "name": "안경매니져 세교점",
+    "address": "경기도오산시수청로210101호(금암동, 휴먼시아 아파트 상가동)",
+    "latitude": 37.1769104,
+    "longitude": 127.0437007,
+    "category": "병원",
+    "benefitType": "할인·우대",
+    "benefitDescription": "서비스이용료의 10% 할인",
+    "phone": "031-374-1412",
+    "eligibleTarget": "동원훈련이수자,모범예비군,복무중인현역병,사회복무요원,전문산업기능요원,병역명문가",
+    "usageCondition": "없음",
+    "verificationMethod": "동원훈련이수증,모범예비군증,복무확인서,명문가증",
+    "sourceType": "PUBLIC_EVIDENCE",
+    "sourceLabel": "병무청 나라사랑가게 · 최신 확인",
+    "sourceUrl": "https://www.mma.go.kr/about/udgg/list.do?mc=mma0003357",
+    "lastVerifiedAt": "2026-11-23",
+    "status": "ACTIVE",
+    "district": "오산시"
+  },
+  {
+    "id": "seed-672420327332",
+    "name": "다비치안경 위례신도시점",
+    "address": "경기도성남시 수정구위례광장로328- 0(창곡동)",
+    "latitude": 37.4713447,
+    "longitude": 127.1429722,
+    "category": "병원",
+    "benefitType": "할인·우대",
+    "benefitDescription": "서비스이용료의 10% 할인 (콘택트렌즈는 제외, 안경,선그라스에 한함)",
+    "phone": "031-722-1005",
+    "eligibleTarget": "동원훈련이수자,모범예비군,복무중인현역병,사회복무요원,전문산업기능요원,병역명문가",
+    "usageCondition": "없음",
+    "verificationMethod": "동원훈련이수증,모범예비군증,복무확인서,명문가증",
+    "sourceType": "PUBLIC_EVIDENCE",
+    "sourceLabel": "병무청 나라사랑가게 · 최신 확인",
+    "sourceUrl": "https://www.mma.go.kr/about/udgg/list.do?mc=mma0003357",
+    "lastVerifiedAt": "2026-11-23",
+    "status": "ACTIVE",
+    "district": "성남시"
+  },
+  {
+    "id": "seed-03bd824e93a3",
+    "name": "대우마트안경원",
+    "address": "경기도고양시 일산동구중앙로1129(장항동, 동관 1층)",
+    "latitude": 37.648364,
+    "longitude": 126.7805086,
+    "category": "병원",
+    "benefitType": "할인·우대",
+    "benefitDescription": "서비스 이용료의 30% 할인",
+    "phone": "031-905-2252",
+    "eligibleTarget": "동원훈련 이수자, 현역병·사회복무요원 등 복무자, 병역명문가",
+    "usageCondition": "없음",
+    "verificationMethod": "당해연도 동원훈련이수증,모범예비군증,복무확인서",
+    "sourceType": "PUBLIC_EVIDENCE",
+    "sourceLabel": "병무청 나라사랑가게 · 최신 확인",
+    "sourceUrl": "https://www.mma.go.kr/about/udgg/list.do?mc=mma0003357",
+    "lastVerifiedAt": "2026-11-23",
+    "status": "ACTIVE",
+    "district": "고양시"
+  },
+  {
+    "id": "seed-1c143bf8de7e",
+    "name": "밝은안경",
+    "address": "경기도오산시누읍로10(누읍동)",
+    "latitude": 37.1414447,
+    "longitude": 127.048711,
+    "category": "병원",
+    "benefitType": "할인·우대",
+    "benefitDescription": "서비스이용료의 10% 할인",
+    "phone": "031-376-5110031-376-5110",
+    "eligibleTarget": "동원훈련이수자,모범예비군,복무중인현역병,사회복무요원,전문산업기능요원,병역명문가",
+    "usageCondition": "없음",
+    "verificationMethod": "동원훈련이수증,모범예비군증,복무확인서,명문가증",
+    "sourceType": "PUBLIC_EVIDENCE",
+    "sourceLabel": "병무청 나라사랑가게 · 최신 확인",
+    "sourceUrl": "https://www.mma.go.kr/about/udgg/list.do?mc=mma0003357",
+    "lastVerifiedAt": "2026-11-23",
+    "status": "ACTIVE",
+    "district": "오산시"
+  },
+  {
+    "id": "seed-ccbbdb916710",
+    "name": "하나안경원",
+    "address": "경기도용인시 수지구동천로27(동천동)",
+    "latitude": 37.3408646,
+    "longitude": 127.1000023,
+    "category": "병원",
+    "benefitType": "할인·우대",
+    "benefitDescription": "서비스이용료의 5-10% 할인",
+    "phone": "031-263-3397",
+    "eligibleTarget": "동원훈련이수자,모범예비군,복무중인현역병,사회복무요원,전문산업기능요원,병역명문가",
+    "usageCondition": "없음",
+    "verificationMethod": "동원훈련이수증,모범예비군증,복무확인서,명문가증",
+    "sourceType": "PUBLIC_EVIDENCE",
+    "sourceLabel": "병무청 나라사랑가게 · 최신 확인",
+    "sourceUrl": "https://www.mma.go.kr/about/udgg/list.do?mc=mma0003357",
+    "lastVerifiedAt": "2026-11-23",
+    "status": "ACTIVE",
+    "district": "용인시"
+  },
+  {
+    "id": "seed-1cf53df61747",
+    "name": "국제안경",
+    "address": "경기도안양시 만안구안양로291(안양동)",
+    "latitude": 37.398187,
+    "longitude": 126.921693,
+    "category": "병원",
+    "benefitType": "할인·우대",
+    "benefitDescription": "서비스이용료의 20% 할인 (다둥이고객 추가 할인)",
+    "phone": "0507-1438-7401",
+    "eligibleTarget": "동원훈련이수자,모범예비군,복무중인현역병,사회복무요원,전문산업기능요원,병역명문가",
+    "usageCondition": "없음",
+    "verificationMethod": "동원훈련이수증,모범예비군증,복무확인서,명문가증",
+    "sourceType": "PUBLIC_EVIDENCE",
+    "sourceLabel": "병무청 나라사랑가게 · 최신 확인",
+    "sourceUrl": "https://www.mma.go.kr/about/udgg/list.do?mc=mma0003357",
+    "lastVerifiedAt": "2026-11-23",
+    "status": "ACTIVE",
+    "district": "안양시"
+  },
+  {
+    "id": "seed-49eca3122bd4",
+    "name": "모먼트짐 학익점 헬스&PT",
+    "address": "인천광역시미추홀구노적산로70(학익동, 2층 모먼트짐 학익점)",
+    "latitude": 37.4403212,
+    "longitude": 126.6569452,
+    "category": "문화·여가",
+    "benefitType": "할인·우대",
+    "benefitDescription": "1. 서비스 이용료의 10% 할인(3,6,12개월 결제 시) 2. 일일 이용권의 25% 할인",
+    "phone": "0507-1340-1185",
+    "eligibleTarget": "복무중인자,모범예비군,동원훈련이수자(당해년도),명문가,병무청직원 및 직계가족,병역판정검사자(당해년도)",
+    "usageCondition": "없음",
+    "verificationMethod": "모범예비군증,복무확인서,명문가증,판정검사확인서",
+    "sourceType": "PUBLIC_EVIDENCE",
+    "sourceLabel": "병무청 나라사랑가게 · 최신 확인",
+    "sourceUrl": "https://www.mma.go.kr/about/udgg/list.do?mc=mma0003357",
+    "lastVerifiedAt": "2026-11-23",
+    "status": "ACTIVE",
+    "district": "미추홀구"
+  },
+  {
+    "id": "seed-84f29d66e6ad",
+    "name": "다비치안경 서현점",
+    "address": "경기도성남시 분당구서현로170109호(서현동, 풍림아이원플러스)",
+    "latitude": 37.3895221,
+    "longitude": 127.1227184,
+    "category": "병원",
+    "benefitType": "할인·우대",
+    "benefitDescription": "- 서비스이용료의 10% 할인 - 할인행사 진행건에 한해서는 할인 불가",
+    "phone": "0507-1478-7794",
+    "eligibleTarget": "동원훈련이수자,모범예비군,복무중인현역병,사회복무요원,전문산업기능요원,병역명문가",
+    "usageCondition": "없음",
+    "verificationMethod": "동원훈련이수증,모범예비군증,복무확인서,명문가증",
+    "sourceType": "PUBLIC_EVIDENCE",
+    "sourceLabel": "병무청 나라사랑가게 · 최신 확인",
+    "sourceUrl": "https://www.mma.go.kr/about/udgg/list.do?mc=mma0003357",
+    "lastVerifiedAt": "2026-11-23",
+    "status": "ACTIVE",
+    "district": "성남시"
+  },
+  {
+    "id": "seed-93bbaad093e2",
+    "name": "1001안경 명학역점",
+    "address": "경기도안양시 만안구안양로96101호(안양동, 유토피아상가)",
+    "latitude": 37.3838039,
+    "longitude": 126.9343025,
+    "category": "병원",
+    "benefitType": "할인·우대",
+    "benefitDescription": "서비스이용료의 40% 할인 - 기타우대사항 : 보청기 50% 할인 - 안경, 선글라스 40% 할인 - 네오이즘 원데이렌즈 1+1 혜택",
+    "phone": "031-468-5600",
+    "eligibleTarget": "동원훈련이수자,모범예비군,복무중인현역병,사회복무요원,전문산업기능요원,병역명문가",
+    "usageCondition": "없음",
+    "verificationMethod": "동원훈련이수증,모범예비군증,복무확인서,명문가증",
+    "sourceType": "PUBLIC_EVIDENCE",
+    "sourceLabel": "병무청 나라사랑가게 · 최신 확인",
+    "sourceUrl": "https://www.mma.go.kr/about/udgg/list.do?mc=mma0003357",
+    "lastVerifiedAt": "2026-11-23",
+    "status": "ACTIVE",
+    "district": "안양시"
+  },
+  {
+    "id": "seed-0805f26a6f52",
+    "name": "롯데시네마 서울대입구",
+    "address": "서울특별시관악구남부순환로1818- 2(봉천동)",
+    "latitude": 37.4812418,
+    "longitude": 126.9519819,
+    "category": "문화·여가",
+    "benefitType": "할인·우대",
+    "benefitDescription": "*(혜택) 2D 영화 1만원 관람(월6회), 콤보 3천원 할인(월3회) *롯데시네마 회원가입 필요 * 이용방법 1) e-병무지갑 로그인 후 [혜택편의서비스] 선택 2) [영화할인] 배너 클릭하여 쿠폰 다운로드 진행 3) 롯데시네마 이벤트 페이지에서 예매 시 주문/결제 화면에서 [할인권] 선택 후 쿠폰 적용하여 결제",
+    "phone": "1544-8855",
+    "eligibleTarget": "예비군 1~4년차",
+    "usageCondition": "없음",
+    "verificationMethod": "우대상세내용 참고",
+    "sourceType": "PUBLIC_EVIDENCE",
+    "sourceLabel": "병무청 나라사랑가게 · 최신 확인",
+    "sourceUrl": "https://www.mma.go.kr/about/udgg/list.do?mc=mma0003357",
+    "lastVerifiedAt": "2026-11-23",
+    "status": "ACTIVE",
+    "district": "관악구"
+  },
+  {
+    "id": "seed-afcf4d916e37",
+    "name": "롯데시네마 신림",
+    "address": "서울특별시관악구신림로330(신림동, (타임스트림 10~15층))",
+    "latitude": 37.4837269,
+    "longitude": 126.9300597,
+    "category": "문화·여가",
+    "benefitType": "할인·우대",
+    "benefitDescription": "*(혜택) 2D 영화 1만원 관람(월6회), 콤보 3천원 할인(월3회) *롯데시네마 회원가입 필요 * 이용방법 1) e-병무지갑 로그인 후 [혜택편의서비스] 선택 2) [영화할인] 배너 클릭하여 쿠폰 다운로드 진행 3) 롯데시네마 이벤트 페이지에서 예매 시 주문/결제 화면에서 [할인권] 선택 후 쿠폰 적용하여 결제",
+    "phone": "1544-8855",
+    "eligibleTarget": "예비군 1~4년차",
+    "usageCondition": "없음",
+    "verificationMethod": "우대상세내용 참고",
+    "sourceType": "PUBLIC_EVIDENCE",
+    "sourceLabel": "병무청 나라사랑가게 · 최신 확인",
+    "sourceUrl": "https://www.mma.go.kr/about/udgg/list.do?mc=mma0003357",
+    "lastVerifiedAt": "2026-11-23",
+    "status": "ACTIVE",
+    "district": "관악구"
+  },
+  {
+    "id": "seed-ae44cc04ec74",
+    "name": "롯데시네마 신대방",
+    "address": "서울특별시동작구시흥대로606(신대방동, (지하2층)))",
+    "latitude": 37.4863932,
+    "longitude": 126.9047068,
+    "category": "문화·여가",
+    "benefitType": "할인·우대",
+    "benefitDescription": "*(혜택) 2D 영화 1만원 관람(월6회), 콤보 3천원 할인(월3회) *롯데시네마 회원가입 필요 * 이용방법 1) e-병무지갑 로그인 후 [혜택편의서비스] 선택 2) [영화할인] 배너 클릭하여 쿠폰 다운로드 진행 3) 롯데시네마 이벤트 페이지에서 예매 시 주문/결제 화면에서 [할인권] 선택 후 쿠폰 적용하여 결제",
+    "phone": "1544-8855",
+    "eligibleTarget": "예비군 1~4년차",
+    "usageCondition": "없음",
+    "verificationMethod": "우대상세내용 참고",
+    "sourceType": "PUBLIC_EVIDENCE",
+    "sourceLabel": "병무청 나라사랑가게 · 최신 확인",
+    "sourceUrl": "https://www.mma.go.kr/about/udgg/list.do?mc=mma0003357",
+    "lastVerifiedAt": "2026-11-23",
+    "status": "ACTIVE",
+    "district": "동작구"
+  },
+  {
+    "id": "seed-b73bda8607e8",
+    "name": "롯데시네마 성남중앙",
+    "address": "경기도성남시 수정구산성대로267(신흥동)",
+    "latitude": 37.4410417,
+    "longitude": 127.1466641,
+    "category": "문화·여가",
+    "benefitType": "할인·우대",
+    "benefitDescription": "영화 1만원 관람(월6회), 기본콤보(스위트,반반)1만원 교환(월3회) * 롯데시네마 회원가입 필요",
+    "phone": "1544-8855",
+    "eligibleTarget": "예비군 1~4년차37.4413045",
+    "usageCondition": "없음",
+    "verificationMethod": "e-병무지갑-혜택편의서비스-영화할인-쿠폰다운로드",
+    "sourceType": "PUBLIC_EVIDENCE",
+    "sourceLabel": "병무청 나라사랑가게 · 최신 확인",
+    "sourceUrl": "https://www.mma.go.kr/about/udgg/list.do?mc=mma0003357",
+    "lastVerifiedAt": "2026-11-23",
+    "status": "ACTIVE",
+    "district": "성남시"
+  },
+  {
+    "id": "seed-afc6146075da",
+    "name": "롯데시네마 홍대입구",
+    "address": "서울특별시마포구양화로176(동교동, (동교동 스타피카소))",
+    "latitude": 37.5573056,
+    "longitude": 126.9249352,
+    "category": "문화·여가",
+    "benefitType": "할인·우대",
+    "benefitDescription": "*(혜택) 2D 영화 1만원 관람(월6회), 콤보 3천원 할인(월3회) *롯데시네마 회원가입 필요 * 이용방법 1) e-병무지갑 로그인 후 [혜택편의서비스] 선택 2) [영화할인] 배너 클릭하여 쿠폰 다운로드 진행 3) 롯데시네마 이벤트 페이지에서 예매 시 주문/결제 화면에서 [할인권] 선택 후 쿠폰 적용하여 결제",
+    "phone": "1544-8855",
+    "eligibleTarget": "예비군 1~4년차",
+    "usageCondition": "없음",
+    "verificationMethod": "우대상세내용 참고",
+    "sourceType": "PUBLIC_EVIDENCE",
+    "sourceLabel": "병무청 나라사랑가게 · 최신 확인",
+    "sourceUrl": "https://www.mma.go.kr/about/udgg/list.do?mc=mma0003357",
+    "lastVerifiedAt": "2026-11-23",
+    "status": "ACTIVE",
+    "district": "마포구"
+  },
+  {
+    "id": "seed-acd216310a98",
+    "name": "롯데시네마 은평",
+    "address": "서울특별시은평구통일로1050(진관동, (롯데몰은평점 5층))",
+    "latitude": 37.6365526,
+    "longitude": 126.9175275,
+    "category": "문화·여가",
+    "benefitType": "할인·우대",
+    "benefitDescription": "*(혜택) 2D 영화 1만원 관람(월6회), 콤보 3천원 할인(월3회) *롯데시네마 회원가입 필요 * 이용방법 1) e-병무지갑 로그인 후 [혜택편의서비스] 선택 2) [영화할인] 배너 클릭하여 쿠폰 다운로드 진행 3) 롯데시네마 이벤트 페이지에서 예매 시 주문/결제 화면에서 [할인권] 선택 후 쿠폰 적용하여 결제",
+    "phone": "1544-8855",
+    "eligibleTarget": "예비군 1~4년차",
+    "usageCondition": "없음",
+    "verificationMethod": "우대상세내용 참고",
+    "sourceType": "PUBLIC_EVIDENCE",
+    "sourceLabel": "병무청 나라사랑가게 · 최신 확인",
+    "sourceUrl": "https://www.mma.go.kr/about/udgg/list.do?mc=mma0003357",
+    "lastVerifiedAt": "2026-11-23",
+    "status": "ACTIVE",
+    "district": "은평구"
+  },
+  {
+    "id": "seed-26ddabdb1a13",
+    "name": "롯데시네마 에비뉴엘",
+    "address": "서울특별시중구남대문로73(남대문로2가)",
+    "latitude": 37.564028,
+    "longitude": 126.9818063,
+    "category": "문화·여가",
+    "benefitType": "할인·우대",
+    "benefitDescription": "*(혜택) 2D 영화 1만원 관람(월6회), 콤보 3천원 할인(월3회) *롯데시네마 회원가입 필요 * 이용방법 1) e-병무지갑 로그인 후 [혜택편의서비스] 선택 2) [영화할인] 배너 클릭하여 쿠폰 다운로드 진행 3) 롯데시네마 이벤트 페이지에서 예매 시 주문/결제 화면에서 [할인권] 선택 후 쿠폰 적용하여 결제",
+    "phone": "1544-8855",
+    "eligibleTarget": "예비군 1~4년차",
+    "usageCondition": "없음",
+    "verificationMethod": "우대상세내용 참고",
+    "sourceType": "PUBLIC_EVIDENCE",
+    "sourceLabel": "병무청 나라사랑가게 · 최신 확인",
+    "sourceUrl": "https://www.mma.go.kr/about/udgg/list.do?mc=mma0003357",
+    "lastVerifiedAt": "2026-11-23",
+    "status": "ACTIVE",
+    "district": "중구"
+  },
+  {
+    "id": "seed-ad88ab71253b",
+    "name": "롯데시네마 강동",
+    "address": "서울특별시강동구천호옛길85(성내동, (영화관씨네일레븐)))",
+    "latitude": 37.5365173,
+    "longitude": 127.1253972,
+    "category": "문화·여가",
+    "benefitType": "할인·우대",
+    "benefitDescription": "*(혜택) 2D 영화 1만원 관람(월6회), 콤보 3천원 할인(월3회) *롯데시네마 회원가입 필요 * 이용방법 1) e-병무지갑 로그인 후 [혜택편의서비스] 선택 2) [영화할인] 배너 클릭하여 쿠폰 다운로드 진행 3) 롯데시네마 이벤트 페이지에서 예매 시 주문/결제 화면에서 [할인권] 선택 후 쿠폰 적용하여 결제",
+    "phone": "1544-8855",
+    "eligibleTarget": "예비군 1~4년차",
+    "usageCondition": "없음",
+    "verificationMethod": "우대상세내용 참고",
+    "sourceType": "PUBLIC_EVIDENCE",
+    "sourceLabel": "병무청 나라사랑가게 · 최신 확인",
+    "sourceUrl": "https://www.mma.go.kr/about/udgg/list.do?mc=mma0003357",
+    "lastVerifiedAt": "2026-11-23",
+    "status": "ACTIVE",
+    "district": "강동구"
+  },
+  {
+    "id": "seed-c3739dc66e50",
+    "name": "롯데시네마 중랑",
+    "address": "서울특별시중랑구동일로951(묵동)",
+    "latitude": 37.615193,
+    "longitude": 127.0761619,
+    "category": "문화·여가",
+    "benefitType": "할인·우대",
+    "benefitDescription": "*(혜택) 2D 영화 1만원 관람(월6회), 콤보 3천원 할인(월3회) *롯데시네마 회원가입 필요 * 이용방법 1) e-병무지갑 로그인 후 [혜택편의서비스] 선택 2) [영화할인] 배너 클릭하여 쿠폰 다운로드 진행 3) 롯데시네마 이벤트 페이지에서 예매 시 주문/결제 화면에서 [할인권] 선택 후 쿠폰 적용하여 결제",
+    "phone": "1544-8855",
+    "eligibleTarget": "예비군 1~4년차",
+    "usageCondition": "없음",
+    "verificationMethod": "우대상세내용 참고",
+    "sourceType": "PUBLIC_EVIDENCE",
+    "sourceLabel": "병무청 나라사랑가게 · 최신 확인",
+    "sourceUrl": "https://www.mma.go.kr/about/udgg/list.do?mc=mma0003357",
+    "lastVerifiedAt": "2026-11-23",
+    "status": "ACTIVE",
+    "district": "중랑구"
+  },
+  {
+    "id": "seed-234aed331272",
+    "name": "롯데시네마 진접",
+    "address": "경기도남양주시진접읍해밀예당1로36(진접읍금곡리, 래일스타 9층)",
+    "latitude": 37.7121039,
+    "longitude": 127.1865419,
+    "category": "문화·여가",
+    "benefitType": "할인·우대",
+    "benefitDescription": "혜택 : 2D 영화 1만원 관람(월6회), 콤보 3천원 할인(월3회) * 롯데시네마 회원가입 필요 이용방법 1) e-병무지갑 로그인 후 [혜택·편의서비스] 선택 2) [영화할인] 배너 클릭하여 쿠폰 다운로드 진행 3) 롯데시네마 이벤트 페이지에서 예매 시 주문/결제 화면에서 [할인권] 선택 후 쿠폰 적용하여 결제",
+    "phone": "",
+    "eligibleTarget": "예비군 1~4년차",
+    "usageCondition": "없음",
+    "verificationMethod": "우대상세내용 참고",
+    "sourceType": "PUBLIC_EVIDENCE",
+    "sourceLabel": "병무청 나라사랑가게 · 최신 확인",
+    "sourceUrl": "https://www.mma.go.kr/about/udgg/list.do?mc=mma0003357",
+    "lastVerifiedAt": "2026-11-23",
+    "status": "ACTIVE",
+    "district": "남양주시"
+  },
+  {
+    "id": "seed-2c9621ed060e",
+    "name": "롯데시네마 의정부민락",
+    "address": "경기도의정부시천보로44(민락동, 8층-9층)",
+    "latitude": 37.7441926,
+    "longitude": 127.0962359,
+    "category": "문화·여가",
+    "benefitType": "할인·우대",
+    "benefitDescription": "혜택 : 2D 영화 1만원 관람(월6회), 콤보 3천원 할인(월3회) * 롯데시네마 회원가입 필요 이용방법 1) e-병무지갑 로그인 후 [혜택·편의서비스] 선택 2) [영화할인] 배너 클릭하여 쿠폰 다운로드 진행 3) 롯데시네마 이벤트 페이지에서 예매 시 주문/결제 화면에서 [할인권] 선택 후 쿠폰 적용하여 결제",
+    "phone": "",
+    "eligibleTarget": "예비군 1~4년차",
+    "usageCondition": "없음",
+    "verificationMethod": "우대상세내용 참고",
+    "sourceType": "PUBLIC_EVIDENCE",
+    "sourceLabel": "병무청 나라사랑가게 · 최신 확인",
+    "sourceUrl": "https://www.mma.go.kr/about/udgg/list.do?mc=mma0003357",
+    "lastVerifiedAt": "2026-11-23",
+    "status": "ACTIVE",
+    "district": "의정부시"
+  },
+  {
+    "id": "seed-c93bccd0393c",
+    "name": "롯데시네마 파주운정",
+    "address": "경기도파주시청암로17번길17(목동동)",
+    "latitude": 37.7300913,
+    "longitude": 126.7365081,
+    "category": "문화·여가",
+    "benefitType": "할인·우대",
+    "benefitDescription": "혜택 : 2D 영화 1만원 관람(월6회), 콤보 3천원 할인(월3회) * 롯데시네마 회원가입 필요 이용방법 1) e-병무지갑 로그인 후 [혜택·편의서비스] 선택 2) [영화할인] 배너 클릭하여 쿠폰 다운로드 진행 3) 롯데시네마 이벤트 페이지에서 예매 시 주문/결제 화면에서 [할인권] 선택 후 쿠폰 적용하여 결제",
+    "phone": "",
+    "eligibleTarget": "예비군 1~4년차",
+    "usageCondition": "없음",
+    "verificationMethod": "우대상세내용 참고",
+    "sourceType": "PUBLIC_EVIDENCE",
+    "sourceLabel": "병무청 나라사랑가게 · 최신 확인",
+    "sourceUrl": "https://www.mma.go.kr/about/udgg/list.do?mc=mma0003357",
+    "lastVerifiedAt": "2026-11-23",
+    "status": "ACTIVE",
+    "district": "파주시"
+  },
+  {
+    "id": "seed-4d58fce93305",
+    "name": "롯데시네마 판교",
+    "address": "경기도성남시 수정구창업로183층 (시흥동, 파미어스몰)",
+    "latitude": 37.4131056,
+    "longitude": 127.0981171,
+    "category": "문화·여가",
+    "benefitType": "할인·우대",
+    "benefitDescription": "영화 1만원 관람(월6회), 기본콤보(스위트,반반)1만원 교환(월3회) * 롯데시네마 회원가입 필요",
+    "phone": "1544-8855",
+    "eligibleTarget": "예비군 1~4년차",
+    "usageCondition": "없음",
+    "verificationMethod": "e-병무지갑-혜택편의서비스-영화할인-쿠폰다운로드",
+    "sourceType": "PUBLIC_EVIDENCE",
+    "sourceLabel": "병무청 나라사랑가게 · 최신 확인",
+    "sourceUrl": "https://www.mma.go.kr/about/udgg/list.do?mc=mma0003357",
+    "lastVerifiedAt": "2026-11-23",
+    "status": "ACTIVE",
+    "district": "성남시"
+  },
+  {
+    "id": "seed-d753f77fa668",
+    "name": "롯데시네마 북수원",
+    "address": "경기도수원시 장안구천천로100(천천동)",
+    "latitude": 37.3005425,
+    "longitude": 126.9837858,
+    "category": "문화·여가",
+    "benefitType": "할인·우대",
+    "benefitDescription": "영화 1만원 관람(월6회), 기본콤보(스위트,반반)1만원 교환(월3회) * 롯데시네마 회원가입 필요",
+    "phone": "1544-8855",
+    "eligibleTarget": "예비군 1~4년차",
+    "usageCondition": "없음",
+    "verificationMethod": "e-병무지갑-혜택편의서비스-영화할인-쿠폰다운로드",
+    "sourceType": "PUBLIC_EVIDENCE",
+    "sourceLabel": "병무청 나라사랑가게 · 최신 확인",
+    "sourceUrl": "https://www.mma.go.kr/about/udgg/list.do?mc=mma0003357",
+    "lastVerifiedAt": "2026-11-23",
+    "status": "ACTIVE",
+    "district": "수원시"
+  },
+  {
+    "id": "seed-d8958d3f4e87",
+    "name": "롯데시네마 용인기흥",
+    "address": "경기도용인시 기흥구기흥역로63(구갈동)",
+    "latitude": 37.2746646,
+    "longitude": 127.118806,
+    "category": "문화·여가",
+    "benefitType": "할인·우대",
+    "benefitDescription": "영화 1만원 관람(월6회), 기본콤보(스위트,반반)1만원 교환(월3회) * 롯데시네마 회원가입 필요",
+    "phone": "1544-8855",
+    "eligibleTarget": "예비군 1~4년차",
+    "usageCondition": "없음",
+    "verificationMethod": "e-병무지갑-혜택편의서비스-영화할인-쿠폰다운로드",
+    "sourceType": "PUBLIC_EVIDENCE",
+    "sourceLabel": "병무청 나라사랑가게 · 최신 확인",
+    "sourceUrl": "https://www.mma.go.kr/about/udgg/list.do?mc=mma0003357",
+    "lastVerifiedAt": "2026-11-23",
+    "status": "ACTIVE",
+    "district": "용인시"
+  },
+  {
+    "id": "seed-20e2e110d5e9",
+    "name": "롯데시네마 용인역북",
+    "address": "경기도용인시 처인구중부대로1294(역북동)",
+    "latitude": 37.2359108,
+    "longitude": 127.1885823,
+    "category": "문화·여가",
+    "benefitType": "할인·우대",
+    "benefitDescription": "영화 1만원 관람(월6회), 기본콤보(스위트,반반)1만원 교환(월3회) * 롯데시네마 회원가입 필요",
+    "phone": "1544-8855",
+    "eligibleTarget": "예비군 1~4년차",
+    "usageCondition": "없음",
+    "verificationMethod": "e-병무지갑-혜택편의서비스-영화할인-쿠폰다운로드",
+    "sourceType": "PUBLIC_EVIDENCE",
+    "sourceLabel": "병무청 나라사랑가게 · 최신 확인",
+    "sourceUrl": "https://www.mma.go.kr/about/udgg/list.do?mc=mma0003357",
+    "lastVerifiedAt": "2026-11-23",
+    "status": "ACTIVE",
+    "district": "용인시"
+  },
+  {
+    "id": "seed-ae4179aa4fb1",
+    "name": "롯데시네마 동탄",
+    "address": "경기도화성시 동탄구동탄역로1607층 (오산동, 롯데시네마 동탄)",
+    "latitude": 37.2010039,
+    "longitude": 127.0975455,
+    "category": "문화·여가",
+    "benefitType": "할인·우대",
+    "benefitDescription": "영화 1만원 관람(월6회), 기본콤보(스위트,반반)1만원 교환(월3회) * 롯데시네마 회원가입 필요",
+    "phone": "1544-8855",
+    "eligibleTarget": "예비군 1~4년차",
+    "usageCondition": "없음",
+    "verificationMethod": "e-병무지갑-혜택편의서비스-영화할인-쿠폰다운로드",
+    "sourceType": "PUBLIC_EVIDENCE",
+    "sourceLabel": "병무청 나라사랑가게 · 최신 확인",
+    "sourceUrl": "https://www.mma.go.kr/about/udgg/list.do?mc=mma0003357",
+    "lastVerifiedAt": "2026-11-23",
+    "status": "ACTIVE",
+    "district": "화성시"
+  },
+  {
+    "id": "seed-ad2da12e2298",
+    "name": "롯데시네마 병점",
+    "address": "경기도화성시 병점구효행로1052(병점동)",
+    "latitude": 37.2140772,
+    "longitude": 127.0424071,
+    "category": "문화·여가",
+    "benefitType": "할인·우대",
+    "benefitDescription": "영화 1만원 관람(월6회), 기본콤보(스위트,반반)1만원 교환(월3회) * 롯데시네마 회원가입 필요",
+    "phone": "1544-8855",
+    "eligibleTarget": "예비군 1~4년차",
+    "usageCondition": "없음",
+    "verificationMethod": "e-병무지갑-혜택편의서비스-영화할인-쿠폰다운로드",
+    "sourceType": "PUBLIC_EVIDENCE",
+    "sourceLabel": "병무청 나라사랑가게 · 최신 확인",
+    "sourceUrl": "https://www.mma.go.kr/about/udgg/list.do?mc=mma0003357",
+    "lastVerifiedAt": "2026-11-23",
+    "status": "ACTIVE",
+    "district": "화성시"
+  },
+  {
+    "id": "seed-117df0980e21",
+    "name": "롯데시네마 수지",
+    "address": "경기도용인시 수지구성복2로38(성복동)",
+    "latitude": 37.3130621,
+    "longitude": 127.0808433,
+    "category": "문화·여가",
+    "benefitType": "할인·우대",
+    "benefitDescription": "영화 1만원 관람(월6회), 기본콤보(스위트,반반)1만원 교환(월3회) * 롯데시네마 회원가입 필요",
+    "phone": "1544-8855",
+    "eligibleTarget": "예비군 1~4년차",
+    "usageCondition": "없음",
+    "verificationMethod": "e-병무지갑-혜택편의서비스-영화할인-쿠폰다운로드",
+    "sourceType": "PUBLIC_EVIDENCE",
+    "sourceLabel": "병무청 나라사랑가게 · 최신 확인",
+    "sourceUrl": "https://www.mma.go.kr/about/udgg/list.do?mc=mma0003357",
+    "lastVerifiedAt": "2026-11-23",
+    "status": "ACTIVE",
+    "district": "용인시"
+  },
+  {
+    "id": "seed-60179bf9872b",
+    "name": "롯데시네마 광명(광명사거리)",
+    "address": "경기도광명시오리로970(광명동)",
+    "latitude": 37.4792942,
+    "longitude": 126.8555671,
+    "category": "문화·여가",
+    "benefitType": "할인·우대",
+    "benefitDescription": "2D 영화 1만원 관람(월6회), 콤보 3천원 할인(월3회) * 롯데시네마 회원가입 필요",
+    "phone": "010-7542-3559",
+    "eligibleTarget": "예비군 1~4년차",
+    "usageCondition": "없음",
+    "verificationMethod": "e-병무지갑 어플 로그인->[영화할인]배너쿠폰다운",
+    "sourceType": "PUBLIC_EVIDENCE",
+    "sourceLabel": "병무청 나라사랑가게 · 최신 확인",
+    "sourceUrl": "https://www.mma.go.kr/about/udgg/list.do?mc=mma0003357",
+    "lastVerifiedAt": "2026-11-23",
+    "status": "ACTIVE",
+    "district": "광명시"
+  },
+  {
+    "id": "seed-ad977f755d15",
+    "name": "롯데시네마 광명아울렛점",
+    "address": "경기도광명시일직로17(일직동, 롯데프리미엄마울렛광명점 5F)",
+    "latitude": 37.423115,
+    "longitude": 126.8833888,
+    "category": "문화·여가",
+    "benefitType": "할인·우대",
+    "benefitDescription": "2D 영화 1만원 관람(월6회), 콤보 3천원 할인(월3회) * 롯데시네마 회원가입 필요",
+    "phone": "010-7514-3559",
+    "eligibleTarget": "1~4년차 예비군",
+    "usageCondition": "없음",
+    "verificationMethod": "e-병무지갑 어플 로그인",
+    "sourceType": "PUBLIC_EVIDENCE",
+    "sourceLabel": "병무청 나라사랑가게 · 최신 확인",
+    "sourceUrl": "https://www.mma.go.kr/about/udgg/list.do?mc=mma0003357",
+    "lastVerifiedAt": "2026-11-23",
+    "status": "ACTIVE",
+    "district": "광명시"
+  },
+  {
+    "id": "seed-f3b6282f48a4",
+    "name": "롯데시네마 센트럴락(안산)",
+    "address": "경기도안산시 단원구고잔로108(고잔동, 조이월드상가 901호)",
+    "latitude": 37.3186193,
+    "longitude": 126.8382076,
+    "category": "문화·여가",
+    "benefitType": "할인·우대",
+    "benefitDescription": "2D 영화 1만원 관람(월6회), 콤보 3천원 할인(월3회) * 롯데시네마 회원가입 필요",
+    "phone": "010-7562-3559",
+    "eligibleTarget": "예비군 1~4년차",
+    "usageCondition": "없음",
+    "verificationMethod": "e-병무지갑 어플 로그인",
+    "sourceType": "PUBLIC_EVIDENCE",
+    "sourceLabel": "병무청 나라사랑가게 · 최신 확인",
+    "sourceUrl": "https://www.mma.go.kr/about/udgg/list.do?mc=mma0003357",
+    "lastVerifiedAt": "2026-11-23",
+    "status": "ACTIVE",
+    "district": "안산시"
+  },
+  {
+    "id": "seed-55c60af676a7",
+    "name": "롯데시네마 안산",
+    "address": "경기도안산시 상록구항가울로422(성포동)",
+    "latitude": 37.317757,
+    "longitude": 126.8456157,
+    "category": "문화·여가",
+    "benefitType": "할인·우대",
+    "benefitDescription": "2D 영화 1만원 관람(월6회), 콤보 3천원 할인(월3회) * 롯데시네마 회원가입 필요",
+    "phone": "010-7513-3559",
+    "eligibleTarget": "예비군 1~4년차",
+    "usageCondition": "없음",
+    "verificationMethod": "e-병무지갑 어플 로그인",
+    "sourceType": "PUBLIC_EVIDENCE",
+    "sourceLabel": "병무청 나라사랑가게 · 최신 확인",
+    "sourceUrl": "https://www.mma.go.kr/about/udgg/list.do?mc=mma0003357",
+    "lastVerifiedAt": "2026-11-23",
+    "status": "ACTIVE",
+    "district": "안산시"
+  },
+  {
+    "id": "seed-fa2336dcbb10",
+    "name": "롯데시네마 부평역사",
+    "address": "인천광역시부평구광장로16(부평동, 부평민자역사)",
+    "latitude": 37.49019,
+    "longitude": 126.722752,
+    "category": "문화·여가",
+    "benefitType": "할인·우대",
+    "benefitDescription": "2D 영화 1만원 관람(월6회), 콤보 3천원 할인(월3회) * 롯데시네마 회원가입 필요",
+    "phone": "010-7504-3559",
+    "eligibleTarget": "예비군 1~4년차",
+    "usageCondition": "없음",
+    "verificationMethod": "e-병무지갑 어플 로그인",
+    "sourceType": "PUBLIC_EVIDENCE",
+    "sourceLabel": "병무청 나라사랑가게 · 최신 확인",
+    "sourceUrl": "https://www.mma.go.kr/about/udgg/list.do?mc=mma0003357",
+    "lastVerifiedAt": "2026-11-23",
+    "status": "ACTIVE",
+    "district": "부평구"
+  },
+  {
+    "id": "seed-46c40d6c8045",
+    "name": "롯데시네마 인천아시아드관",
+    "address": "인천광역시서해구봉수대로806(연희동)",
+    "latitude": 37.5480537,
+    "longitude": 126.6640948,
+    "category": "문화·여가",
+    "benefitType": "할인·우대",
+    "benefitDescription": "2D 영화 1만원 관람(월6회), 콤보 3천원 할인(월3회) * 롯데시네마 회원가입 필요",
+    "phone": "010-5829-3559",
+    "eligibleTarget": "예비군 1~4년차",
+    "usageCondition": "없음",
+    "verificationMethod": "e-병무지갑 어플 로그인",
+    "sourceType": "PUBLIC_EVIDENCE",
+    "sourceLabel": "병무청 나라사랑가게 · 최신 확인",
+    "sourceUrl": "https://www.mma.go.kr/about/udgg/list.do?mc=mma0003357",
+    "lastVerifiedAt": "2026-11-23",
+    "status": "ACTIVE",
+    "district": "서해구"
+  },
+  {
+    "id": "seed-450135f4bbc3",
+    "name": "포레온안경",
+    "address": "서울특별시강동구양재대로1360(둔촌동, (1층 1080호))",
+    "latitude": 37.5275415,
+    "longitude": 127.1367454,
+    "category": "병원",
+    "benefitType": "할인·우대",
+    "benefitDescription": "* 우대내용: 서비스 이용료의 20% 할인 / 콘택트렌즈 제외, 해외안경테 최대20%할인 * 기타사항: 국산안경테기준",
+    "phone": "0507-1402-5441",
+    "eligibleTarget": "동원훈련 이수자, 모범예비군, 복무중인사람, 병역명문가",
+    "usageCondition": "없음",
+    "verificationMethod": "동원훈련이수,모범예비군,명문가증,복무확인서",
+    "sourceType": "PUBLIC_EVIDENCE",
+    "sourceLabel": "병무청 나라사랑가게 · 최신 확인",
+    "sourceUrl": "https://www.mma.go.kr/about/udgg/list.do?mc=mma0003357",
+    "lastVerifiedAt": "2026-11-23",
+    "status": "ACTIVE",
+    "district": "강동구"
+  },
+  {
+    "id": "seed-497c0ace0c11",
+    "name": "인터넷피해구제협회",
+    "address": "서울특별시금천구범안로1130(가산동, (3층)))",
+    "latitude": 37.465677,
+    "longitude": 126.8874651,
+    "category": "기타",
+    "benefitType": "할인·우대",
+    "benefitDescription": "서비스 이용료의 5% 할인 * 기타사항: 나라사랑가게 등록 가게에 서비스 이용료 5% 할인",
+    "phone": "0507-1320-8896",
+    "eligibleTarget": "동원훈련 이수자, 모범예비군, 복무중인사람, 병역명문가",
+    "usageCondition": "없음",
+    "verificationMethod": "동원훈련이수,모범예비군,명문가증,복무확인서",
+    "sourceType": "PUBLIC_EVIDENCE",
+    "sourceLabel": "병무청 나라사랑가게 · 최신 확인",
+    "sourceUrl": "https://www.mma.go.kr/about/udgg/list.do?mc=mma0003357",
+    "lastVerifiedAt": "2026-11-23",
+    "status": "ACTIVE",
+    "district": "금천구"
+  },
+  {
+    "id": "seed-defcf2a7277f",
+    "name": "미켈란치과의원",
+    "address": "서울특별시강남구강남대로382(역삼동, (메리츠타워 지하1층))",
+    "latitude": 37.4969925,
+    "longitude": 127.0285172,
+    "category": "병원",
+    "benefitType": "할인·우대",
+    "benefitDescription": "* 서비스 이용료의 15~49% 할인 * 기타 우대사항: 비급여 진료에 대한 제휴혜택 제공 (임플란트/치아교정/일반진료) * 기타사항: 미켈란치과그룹 강남역점",
+    "phone": "1599-7402",
+    "eligibleTarget": "동원훈련 이수자, 모범예비군, 복무중인사람, 병역명문가",
+    "usageCondition": "없음",
+    "verificationMethod": "동원훈련이수,모범예비군,명문가증,복무확인서",
+    "sourceType": "PUBLIC_EVIDENCE",
+    "sourceLabel": "병무청 나라사랑가게 · 최신 확인",
+    "sourceUrl": "https://www.mma.go.kr/about/udgg/list.do?mc=mma0003357",
+    "lastVerifiedAt": "2026-11-23",
+    "status": "ACTIVE",
+    "district": "강남구"
+  },
+  {
+    "id": "seed-f7b8675266a9",
+    "name": "서울맥치과의원 강서점",
+    "address": "서울특별시강서구양천로490(등촌동, (3층 301호))",
+    "latitude": 37.56114,
+    "longitude": 126.8545767,
+    "category": "병원",
+    "benefitType": "할인·우대",
+    "benefitDescription": "* 서비스 이용료의 10% 할인 <비급여진료> * 기타 우대사항: 미백, 임플란트, 충치치료, 라미네이트",
+    "phone": "02-2659-2870",
+    "eligibleTarget": "동원훈련 이수자, 모범예비군, 복무중인사람, 병역명문가",
+    "usageCondition": "없음",
+    "verificationMethod": "동원훈련이수,모범예비군,명문가증,복무확인서",
+    "sourceType": "PUBLIC_EVIDENCE",
+    "sourceLabel": "병무청 나라사랑가게 · 최신 확인",
+    "sourceUrl": "https://www.mma.go.kr/about/udgg/list.do?mc=mma0003357",
+    "lastVerifiedAt": "2026-11-23",
+    "status": "ACTIVE",
+    "district": "강서구"
+  },
+  {
+    "id": "seed-c25ff269e611",
+    "name": "안양 남대문 안경",
+    "address": "경기도안양시 만안구장내로89번길5(안양동)",
+    "latitude": 37.3955466,
+    "longitude": 126.9182238,
+    "category": "병원",
+    "benefitType": "할인·우대",
+    "benefitDescription": "- 서비스 이용료의 30% 할인 * 일부 품목 제외",
+    "phone": "031-443-4439",
+    "eligibleTarget": "동원훈련이수자,모범예비군,복무중인현역병,사회복무요원,전문산업기능요원,병역명문가",
+    "usageCondition": "없음",
+    "verificationMethod": "동원훈련이수증,모범예비군증,복무확인서 등",
+    "sourceType": "PUBLIC_EVIDENCE",
+    "sourceLabel": "병무청 나라사랑가게 · 최신 확인",
+    "sourceUrl": "https://www.mma.go.kr/about/udgg/list.do?mc=mma0003357",
+    "lastVerifiedAt": "2026-11-23",
+    "status": "ACTIVE",
+    "district": "안양시"
+  },
+  {
+    "id": "seed-583ff0ff84da",
+    "name": "강남다움의원",
+    "address": "서울특별시서초구강남대로419(서초동, 파고다타워)",
+    "latitude": 37.4999096,
+    "longitude": 127.0263065,
+    "category": "병원",
+    "benefitType": "할인·우대",
+    "benefitDescription": "-비급여 진료 서비스 이용료의 최대 49% 할인 -기타 우대사항: 병원 최대 우대 혜택 적용 -전용 주소 혜택: https://clinstation.com/beauty/mma",
+    "phone": "0507-1309-7833",
+    "eligibleTarget": "동원훈련 이수자, 모범예비군, 복무중인사람, 병역명문가",
+    "usageCondition": "없음",
+    "verificationMethod": "동원훈련이수,모범예비군,복무확인서, 병명문가증,",
+    "sourceType": "PUBLIC_EVIDENCE",
+    "sourceLabel": "병무청 나라사랑가게 · 최신 확인",
+    "sourceUrl": "https://www.mma.go.kr/about/udgg/list.do?mc=mma0003357",
+    "lastVerifiedAt": "2026-11-23",
+    "status": "ACTIVE",
+    "district": "서초구"
+  },
+  {
+    "id": "seed-d091ef344f81",
+    "name": "자연치아살리기강서모아",
+    "address": "서울특별시강서구강서로323303호(내발산동, 효동메디컬빌딩)",
+    "latitude": 37.5546371,
+    "longitude": 126.8367532,
+    "category": "병원",
+    "benefitType": "할인·우대",
+    "benefitDescription": "서비스 이용료의 10% 할인",
+    "phone": "02-6951-3656",
+    "eligibleTarget": "당해연도 동원훈련 이수자, 모범 예비군, 복무중인 사람, 병역명문가",
+    "usageCondition": "없음",
+    "verificationMethod": "동원훈련이수,모범예비군,명문가증,복무확인서",
+    "sourceType": "PUBLIC_EVIDENCE",
+    "sourceLabel": "병무청 나라사랑가게 · 최신 확인",
+    "sourceUrl": "https://www.mma.go.kr/about/udgg/list.do?mc=mma0003357",
+    "lastVerifiedAt": "2026-11-23",
+    "status": "ACTIVE",
+    "district": "강서구"
+  },
+  {
+    "id": "seed-1e7c0b033f22",
+    "name": "연세비전안과의원",
+    "address": "서울특별시강동구천호대로10062층 (성내동)",
+    "latitude": 37.5380579,
+    "longitude": 127.1236483,
+    "category": "병원",
+    "benefitType": "할인·우대",
+    "benefitDescription": "비급여 항목 10% 할인. (백내장 수술 전문 병원. 망막전문의)",
+    "phone": "02-477-0977",
+    "eligibleTarget": "당해연도 동원훈련 이수자, 모범 예비군, 복무중인 사람(사회복무요원), 병역명문가",
+    "usageCondition": "없음",
+    "verificationMethod": "동원훈련이수, 모범예비군, 명문가증, 복무확인서",
+    "sourceType": "PUBLIC_EVIDENCE",
+    "sourceLabel": "병무청 나라사랑가게 · 최신 확인",
+    "sourceUrl": "https://www.mma.go.kr/about/udgg/list.do?mc=mma0003357",
+    "lastVerifiedAt": "2026-11-23",
+    "status": "ACTIVE",
+    "district": "강동구"
+  },
+  {
+    "id": "seed-3097d21e5822",
+    "name": "잠실 삼성안과",
+    "address": "서울특별시송파구올림픽로1147층 (잠실동, 서경빌딩)",
+    "latitude": 37.5114747,
+    "longitude": 127.0833172,
+    "category": "병원",
+    "benefitType": "할인·우대",
+    "benefitDescription": "비급여 항목 최대 40% 할인 검사비 무료 검사 후 당일 수술시 선글라스 증정",
+    "phone": "02-424-7523",
+    "eligibleTarget": "당해연도 동원훈련 이수자, 모범예비군, 복무중인사람(현역병, 사회복무요원, 전문​∙산업기능요원)",
+    "usageCondition": "x",
+    "verificationMethod": "동원훈련이수, 모범예비군, 명문가증, 복무확인서",
+    "sourceType": "PUBLIC_EVIDENCE",
+    "sourceLabel": "병무청 나라사랑가게 · 최신 확인",
+    "sourceUrl": "https://www.mma.go.kr/about/udgg/list.do?mc=mma0003357",
+    "lastVerifiedAt": "2026-11-23",
+    "status": "ACTIVE",
+    "district": "송파구"
+  },
+  {
+    "id": "seed-6f6971dd6913",
+    "name": "더어반핏(PT, 헬스)",
+    "address": "서울특별시강동구진황도로27길42층 (천호동)",
+    "latitude": 37.538533,
+    "longitude": 127.131644,
+    "category": "문화·여가",
+    "benefitType": "할인·우대",
+    "benefitDescription": "할인가에 추가 할인 10%",
+    "phone": "0507-1309-9776",
+    "eligibleTarget": "당해연도 동원훈련 이수자, 모범예비군, 복무중인사람(현역병, 사회복무요원, 전문​∙산업기능요원)",
+    "usageCondition": "x",
+    "verificationMethod": "동원훈련이수, 모범예비군, 명문가증, 복무확인서",
+    "sourceType": "PUBLIC_EVIDENCE",
+    "sourceLabel": "병무청 나라사랑가게 · 최신 확인",
+    "sourceUrl": "https://www.mma.go.kr/about/udgg/list.do?mc=mma0003357",
+    "lastVerifiedAt": "2026-11-23",
+    "status": "ACTIVE",
+    "district": "강동구"
+  },
+  {
+    "id": "seed-f2c776b7ee2d",
+    "name": "아이비스",
+    "address": "경기도안산시 상록구항가울로422(성포동, 1층)",
+    "latitude": 37.317757,
+    "longitude": 126.8456157,
+    "category": "병원",
+    "benefitType": "할인·우대",
+    "benefitDescription": "서비스 이용료의 20% 할인 - 안경코 교체 및 피팅 무상 - 안경,선글라스 렌즈만 교체시에도 20% 추가 할인 - 콘택트렌즈는 할인품목에서 제외",
+    "phone": "0507-1312-7476",
+    "eligibleTarget": "복무중인자,모범예비군,동원훈련이수자,명문가",
+    "usageCondition": "없음",
+    "verificationMethod": "명문가증,복무확인서,훈련이수증,모범예비군증",
+    "sourceType": "PUBLIC_EVIDENCE",
+    "sourceLabel": "병무청 나라사랑가게 · 최신 확인",
+    "sourceUrl": "https://www.mma.go.kr/about/udgg/list.do?mc=mma0003357",
+    "lastVerifiedAt": "2026-11-23",
+    "status": "ACTIVE",
+    "district": "안산시"
+  },
+  {
+    "id": "seed-573436527691",
+    "name": "BS코아이비인후과의원",
+    "address": "인천광역시계양구봉오대로668(작전동, 영산빌딩 2층,3층,5층)",
+    "latitude": 37.5297182,
+    "longitude": 126.7231336,
+    "category": "병원",
+    "benefitType": "할인·우대",
+    "benefitDescription": "비급여 항목의 49% 할인 - 기타 혜택에 대한 내용은 문의(법령에 위반되지 않는 범위에서 적용)",
+    "phone": "032-548-0005",
+    "eligibleTarget": "복무중인자,모범예비군,동원훈련이수자,명문가",
+    "usageCondition": "없음",
+    "verificationMethod": "명문가증,복무확인서,훈련이수증,모범예비군증",
+    "sourceType": "PUBLIC_EVIDENCE",
+    "sourceLabel": "병무청 나라사랑가게 · 최신 확인",
+    "sourceUrl": "https://www.mma.go.kr/about/udgg/list.do?mc=mma0003357",
+    "lastVerifiedAt": "2026-11-23",
+    "status": "ACTIVE",
+    "district": "계양구"
+  },
+  {
+    "id": "seed-c3c4b5721236",
+    "name": "도닥약국",
+    "address": "서울특별시영등포구가마산로483A-11호3층 (신길동)",
+    "latitude": 37.5060666,
+    "longitude": 126.9102358,
+    "category": "기타",
+    "benefitType": "할인·우대",
+    "benefitDescription": "10%할인",
+    "phone": "02-833-1080",
+    "eligibleTarget": "당해연도 동원훈련 이수자, 모범 예비군, 복무중인 사람, 병역명문가",
+    "usageCondition": "무",
+    "verificationMethod": "동원훈련이수증,모범예비군,명문가증,복무확인서",
+    "sourceType": "PUBLIC_EVIDENCE",
+    "sourceLabel": "병무청 나라사랑가게 · 최신 확인",
+    "sourceUrl": "https://www.mma.go.kr/about/udgg/list.do?mc=mma0003357",
+    "lastVerifiedAt": "2026-11-23",
+    "status": "ACTIVE",
+    "district": "영등포구"
+  },
+  {
+    "id": "seed-cc176781b9f7",
+    "name": "BS코아 이비인후과",
+    "address": "서울특별시강서구강서로3234층 (내발산동, 효동메디컬빌당)",
+    "latitude": 37.5546371,
+    "longitude": 126.8367532,
+    "category": "병원",
+    "benefitType": "할인·우대",
+    "benefitDescription": "비급여 항목 최대 49% 할인",
+    "phone": "02-6953-8226",
+    "eligibleTarget": "당해연도 동원훈련 이수자, 모범 예비군, 복무중인 사람, 병역명문가",
+    "usageCondition": "무",
+    "verificationMethod": "동원훈련이수증, 모범예비군, 명문가증, 복무확인서",
+    "sourceType": "PUBLIC_EVIDENCE",
+    "sourceLabel": "병무청 나라사랑가게 · 최신 확인",
+    "sourceUrl": "https://www.mma.go.kr/about/udgg/list.do?mc=mma0003357",
+    "lastVerifiedAt": "2026-11-23",
+    "status": "ACTIVE",
+    "district": "강서구"
+  },
+  {
+    "id": "seed-8eef1f4eeb33",
+    "name": "카페내가",
+    "address": "인천광역시강화군내가면고비고개로741번길56- 20(내가면고천리)",
+    "latitude": 37.7177507,
+    "longitude": 126.4097681,
+    "category": "카페",
+    "benefitType": "할인·우대",
+    "benefitDescription": "서비스 이용료의 10% 할인",
+    "phone": "0507-1385-5352",
+    "eligibleTarget": "복무중인자,모범예비군,동원훈련이수자,명문가",
+    "usageCondition": "없음",
+    "verificationMethod": "명문가증,복무확인서,훈련이수증,모범예비군증",
+    "sourceType": "PUBLIC_EVIDENCE",
+    "sourceLabel": "병무청 나라사랑가게 · 최신 확인",
+    "sourceUrl": "https://www.mma.go.kr/about/udgg/list.do?mc=mma0003357",
+    "lastVerifiedAt": "2026-11-23",
+    "status": "ACTIVE",
+    "district": "강화군"
+  },
+  {
+    "id": "seed-8e10b34cb0fc",
+    "name": "뽕뜨락피자 앤 카페",
+    "address": "인천광역시강화군내가면해안서로1027(내가면외포리)",
+    "latitude": 37.7050823,
+    "longitude": 126.3661969,
+    "category": "카페",
+    "benefitType": "할인·우대",
+    "benefitDescription": "서비스 이용료의 5% 할인",
+    "phone": "032-933-9322",
+    "eligibleTarget": "복무중인자,모범예비군,동원훈련이수자,명문가",
+    "usageCondition": "없음",
+    "verificationMethod": "명문가증,복무확인서,훈련이수증,모범예비군증",
+    "sourceType": "PUBLIC_EVIDENCE",
+    "sourceLabel": "병무청 나라사랑가게 · 최신 확인",
+    "sourceUrl": "https://www.mma.go.kr/about/udgg/list.do?mc=mma0003357",
+    "lastVerifiedAt": "2026-11-23",
+    "status": "ACTIVE",
+    "district": "강화군"
+  },
+  {
+    "id": "seed-ff84c55423e3",
+    "name": "날으는자동차",
+    "address": "서울특별시성북구삼선교로22길22(삼선동5가)",
+    "latitude": 37.5885362,
+    "longitude": 127.0146669,
+    "category": "기타",
+    "benefitType": "할인·우대",
+    "benefitDescription": "서비스 이용료의 20% 할인",
+    "phone": "02-764-8092",
+    "eligibleTarget": "예비군(당해연도 동원훈련 이수자), 복무중인 사람(현역병, 사회복무요원, 전문·산업기능요원), 병역명문가",
+    "usageCondition": "제한 없음",
+    "verificationMethod": "동원훈련이수증, 복무확인서, 병역명문가증 등",
+    "sourceType": "PUBLIC_EVIDENCE",
+    "sourceLabel": "병무청 나라사랑가게 · 최신 확인",
+    "sourceUrl": "https://www.mma.go.kr/about/udgg/list.do?mc=mma0003357",
+    "lastVerifiedAt": "2026-11-23",
+    "status": "ACTIVE",
+    "district": "성북구"
+  },
+  {
+    "id": "seed-f4052d1f0789",
+    "name": "안경창고 서천점",
+    "address": "경기도화성시 병점구영통로26번길33(반월동)",
+    "latitude": 37.2348649,
+    "longitude": 127.0676236,
+    "category": "병원",
+    "benefitType": "할인·우대",
+    "benefitDescription": "서비스 이용료의 10% 할인",
+    "phone": "031-205-0103",
+    "eligibleTarget": "동원훈련이수자,모범예비군,복무중인현역병,사회복무요원,전문산업기능요원,병역명문가",
+    "usageCondition": "없음",
+    "verificationMethod": "동원훈련이수증,모범예비군증,복무확인서,명문가증",
+    "sourceType": "PUBLIC_EVIDENCE",
+    "sourceLabel": "병무청 나라사랑가게 · 최신 확인",
+    "sourceUrl": "https://www.mma.go.kr/about/udgg/list.do?mc=mma0003357",
+    "lastVerifiedAt": "2026-11-23",
+    "status": "ACTIVE",
+    "district": "화성시"
+  },
+  {
+    "id": "seed-2d68c33c28a4",
+    "name": "우리들안경",
+    "address": "경기도수원시 권선구칠보로125번길20(호매실동)",
+    "latitude": 37.2667734,
+    "longitude": 126.9521669,
+    "category": "병원",
+    "benefitType": "할인·우대",
+    "benefitDescription": "서비스 이용료의 20% 할인",
+    "phone": "031-293-8878",
+    "eligibleTarget": "동원훈련이수자, 모범예비군, 복무중인 현역병, 사회복무요원, 전문산업기능요원, 병역명문가",
+    "usageCondition": "없음",
+    "verificationMethod": "동원훈련이수증, 모범예비군증, 복무확인서 등",
+    "sourceType": "PUBLIC_EVIDENCE",
+    "sourceLabel": "병무청 나라사랑가게 · 최신 확인",
+    "sourceUrl": "https://www.mma.go.kr/about/udgg/list.do?mc=mma0003357",
+    "lastVerifiedAt": "2026-11-23",
+    "status": "ACTIVE",
+    "district": "수원시"
+  },
+  {
+    "id": "seed-b4d256de6771",
+    "name": "1001안경원",
+    "address": "경기도광주시곤지암읍평촌길35- 10(곤지암읍삼리, 보람빌딩)",
+    "latitude": 37.3560012,
+    "longitude": 127.3263167,
+    "category": "병원",
+    "benefitType": "할인·우대",
+    "benefitDescription": "서비스이용료의 20% 할인",
+    "phone": "031-764-7216",
+    "eligibleTarget": "동원훈련이수자, 모범예비군, 복무중인 현역병, 사회복무요원, 전문산업기능요원, 병역명문가",
+    "usageCondition": "없음",
+    "verificationMethod": "동원훈련이수증, 모범예비군증, 복무확인서 등",
+    "sourceType": "PUBLIC_EVIDENCE",
+    "sourceLabel": "병무청 나라사랑가게 · 최신 확인",
+    "sourceUrl": "https://www.mma.go.kr/about/udgg/list.do?mc=mma0003357",
+    "lastVerifiedAt": "2026-11-23",
+    "status": "ACTIVE",
+    "district": "광주시"
+  },
+  {
+    "id": "seed-fce5047cd244",
+    "name": "오토라인모터스",
+    "address": "경기도수원시 권선구평동로76번길10- 5(평동)",
+    "latitude": 37.25763,
+    "longitude": 126.9939468,
+    "category": "기타",
+    "benefitType": "할인·우대",
+    "benefitDescription": "공임료 10% 할인(부속값 제외) 병무청 직원 10%할인(공임에 한함)",
+    "phone": "",
+    "eligibleTarget": "동원훈련이수자, 모범예비군, 복무중인 현역병, 사회복무요원, 전문산업기능요원, 병역명문가",
+    "usageCondition": "없음",
+    "verificationMethod": "동원훈련이수증, 모범예비군증, 복무확인서 등",
+    "sourceType": "PUBLIC_EVIDENCE",
+    "sourceLabel": "병무청 나라사랑가게 · 최신 확인",
+    "sourceUrl": "https://www.mma.go.kr/about/udgg/list.do?mc=mma0003357",
+    "lastVerifiedAt": "2026-11-23",
+    "status": "ACTIVE",
+    "district": "수원시"
+  },
+  {
+    "id": "seed-7975bc2a5562",
+    "name": "안경,원트",
+    "address": "경기도오산시경기대로154(원동)",
+    "latitude": 37.1383137,
+    "longitude": 127.0738584,
+    "category": "병원",
+    "benefitType": "할인·우대",
+    "benefitDescription": "서비스 이용료의 10% 할인",
+    "phone": "031-374-0990",
+    "eligibleTarget": "동원훈련이수자, 모범예비군, 복무중인 현역병, 사회복무요원, 전문산업기능요원, 병역명문가",
+    "usageCondition": "없음",
+    "verificationMethod": "동원훈련이수증, 모범예비군증, 복무확인서 등",
+    "sourceType": "PUBLIC_EVIDENCE",
+    "sourceLabel": "병무청 나라사랑가게 · 최신 확인",
+    "sourceUrl": "https://www.mma.go.kr/about/udgg/list.do?mc=mma0003357",
+    "lastVerifiedAt": "2026-11-23",
+    "status": "ACTIVE",
+    "district": "오산시"
+  },
+  {
+    "id": "seed-3b0408185994",
+    "name": "7209(갤러리카페)",
+    "address": "경기도수원시 팔달구신풍로23번길54(신풍동)",
+    "latitude": 37.2838892,
+    "longitude": 127.0119559,
+    "category": "카페",
+    "benefitType": "할인·우대",
+    "benefitDescription": "서비스 이용료의 10% 할인",
+    "phone": "031 302 1111",
+    "eligibleTarget": "동원훈련이수자, 모범예비군, 복무중인 현역병, 사회복무요원, 전문산업기능요원, 병역명문가",
+    "usageCondition": "없음",
+    "verificationMethod": "동원훈련이수증, 모범예비군증, 복무확인서 등",
+    "sourceType": "PUBLIC_EVIDENCE",
+    "sourceLabel": "병무청 나라사랑가게 · 최신 확인",
+    "sourceUrl": "https://www.mma.go.kr/about/udgg/list.do?mc=mma0003357",
+    "lastVerifiedAt": "2026-11-23",
+    "status": "ACTIVE",
+    "district": "수원시"
+  },
+  {
+    "id": "seed-97c3ffd84b38",
+    "name": "대창모터스",
+    "address": "경기도수원시 권선구평동로9번길20(고색동)",
+    "latitude": 37.2538592,
+    "longitude": 126.9875427,
+    "category": "기타",
+    "benefitType": "할인·우대",
+    "benefitDescription": "서비스 이용료의 5%할인 *부품값 제외",
+    "phone": "",
+    "eligibleTarget": "동원훈련이수자, 모범예비군, 복무중인 현역병, 사회복무요원, 전문산업기능요원, 병역명문가",
+    "usageCondition": "없음",
+    "verificationMethod": "동원훈련이수증, 모범예비군증, 복무확인서 등",
+    "sourceType": "PUBLIC_EVIDENCE",
+    "sourceLabel": "병무청 나라사랑가게 · 최신 확인",
+    "sourceUrl": "https://www.mma.go.kr/about/udgg/list.do?mc=mma0003357",
+    "lastVerifiedAt": "2026-11-23",
+    "status": "ACTIVE",
+    "district": "수원시"
+  },
+  {
+    "id": "seed-8c0374d28220",
+    "name": "역전헬스장 수원인계점",
+    "address": "경기도수원시 권선구경수대로4113층 (권선동)",
+    "latitude": 37.2631736,
+    "longitude": 127.024768,
+    "category": "문화·여가",
+    "benefitType": "할인·우대",
+    "benefitDescription": "서비스 이용료의 50%할인 *등본상 가족까지 할인 가능",
+    "phone": "",
+    "eligibleTarget": "동원훈련이수자, 모범예비군, 복무중인 현역병, 사회복무요원, 전문산업기능요원, 병역명문가",
+    "usageCondition": "없음",
+    "verificationMethod": "동원훈련이수증, 모범예비군증, 복무확인서 등",
+    "sourceType": "PUBLIC_EVIDENCE",
+    "sourceLabel": "병무청 나라사랑가게 · 최신 확인",
+    "sourceUrl": "https://www.mma.go.kr/about/udgg/list.do?mc=mma0003357",
+    "lastVerifiedAt": "2026-11-23",
+    "status": "ACTIVE",
+    "district": "수원시"
+  },
+  {
+    "id": "seed-ddd334b23514",
+    "name": "글라스안경 용인마평점",
+    "address": "경기도용인시 처인구금령로127(마평동)",
+    "latitude": 37.2354706,
+    "longitude": 127.2105405,
+    "category": "병원",
+    "benefitType": "할인·우대",
+    "benefitDescription": "서비스 이용료의 10% 할인 콘택트렌즈 제외",
+    "phone": "031-322-7117",
+    "eligibleTarget": "동원훈련이수자,모범예비군,복무중인현역병,사회복무요원,전문산업기능요원,병역명문가",
+    "usageCondition": "없음",
+    "verificationMethod": "동원훈련이수증,모범예비군증,복무확인서,명문가증",
+    "sourceType": "PUBLIC_EVIDENCE",
+    "sourceLabel": "병무청 나라사랑가게 · 최신 확인",
+    "sourceUrl": "https://www.mma.go.kr/about/udgg/list.do?mc=mma0003357",
+    "lastVerifiedAt": "2026-11-23",
+    "status": "ACTIVE",
+    "district": "용인시"
+  },
+  {
+    "id": "seed-b8350fb892cd",
+    "name": "메타폴리스안경원",
+    "address": "경기도화성시 동탄구동탄중앙로200B동(반송동, 메타폴리스몰)",
+    "latitude": 37.2030332,
+    "longitude": 127.067703,
+    "category": "병원",
+    "benefitType": "할인·우대",
+    "benefitDescription": "서비스 이용료의 10% 할인",
+    "phone": "",
+    "eligibleTarget": "동원훈련이수자,모범예비군,복무중인현역병,사회복무요원,전문산업기능요원,병역명문가",
+    "usageCondition": "없음",
+    "verificationMethod": "동원훈련이수증,모범예비군증,복무확인서,명문가증",
+    "sourceType": "PUBLIC_EVIDENCE",
+    "sourceLabel": "병무청 나라사랑가게 · 최신 확인",
+    "sourceUrl": "https://www.mma.go.kr/about/udgg/list.do?mc=mma0003357",
+    "lastVerifiedAt": "2026-11-23",
+    "status": "ACTIVE",
+    "district": "화성시"
+  },
+  {
+    "id": "seed-c89fb1df10d1",
+    "name": "아이뷰안경원화서역점",
+    "address": "경기도수원시 팔달구덕영대로693(화서동)",
+    "latitude": 37.284807,
+    "longitude": 126.9901274,
+    "category": "병원",
+    "benefitType": "할인·우대",
+    "benefitDescription": "서비스 이용료의 20-50% 할인",
+    "phone": "031-253-0075",
+    "eligibleTarget": "동원훈련이수자,모범예비군,복무중인현역병,사회복무요원,전문산업기능요원,병역명문가",
+    "usageCondition": "없음",
+    "verificationMethod": "동원훈련이수증,모범예비군증,복무확인서,명문가증",
+    "sourceType": "PUBLIC_EVIDENCE",
+    "sourceLabel": "병무청 나라사랑가게 · 최신 확인",
+    "sourceUrl": "https://www.mma.go.kr/about/udgg/list.do?mc=mma0003357",
+    "lastVerifiedAt": "2026-11-23",
+    "status": "ACTIVE",
+    "district": "수원시"
+  },
+  {
+    "id": "seed-ced6a1236a76",
+    "name": "K비젼안경수원인계점",
+    "address": "경기도수원시 팔달구권광로2781층 (인계동)",
+    "latitude": 37.2719037,
+    "longitude": 127.0360824,
+    "category": "병원",
+    "benefitType": "할인·우대",
+    "benefitDescription": "서비스 이용료의 10% 할인 안경관리키트 증정, 주기적인 무상 시력관리서비스",
+    "phone": "031 213 0804",
+    "eligibleTarget": "동원훈련이수자,모범예비군,복무중인현역병,사회복무요원,전문산업기능요원,병역명문가",
+    "usageCondition": "없음",
+    "verificationMethod": "동원훈련이수증,모범예비군증,복무확인서,명문가증",
+    "sourceType": "PUBLIC_EVIDENCE",
+    "sourceLabel": "병무청 나라사랑가게 · 최신 확인",
+    "sourceUrl": "https://www.mma.go.kr/about/udgg/list.do?mc=mma0003357",
+    "lastVerifiedAt": "2026-11-23",
+    "status": "ACTIVE",
+    "district": "수원시"
+  },
+  {
+    "id": "seed-926b65a97831",
+    "name": "목간통 찜질방사우나",
+    "address": "경기도동두천시지행로52501호(지행동)",
+    "latitude": 37.8922369,
+    "longitude": 127.0530383,
+    "category": "기타",
+    "benefitType": "할인·우대",
+    "benefitDescription": "서비스 이용료의 10% 할인",
+    "phone": "031-857-9200",
+    "eligibleTarget": "동원훈련 이수자, 현역병 사회복무요원 등 복무자, 병역명문가",
+    "usageCondition": "없음",
+    "verificationMethod": "동원훈련 이수증, 복무확인서, 병역명문가증 등",
+    "sourceType": "PUBLIC_EVIDENCE",
+    "sourceLabel": "병무청 나라사랑가게 · 최신 확인",
+    "sourceUrl": "https://www.mma.go.kr/about/udgg/list.do?mc=mma0003357",
+    "lastVerifiedAt": "2026-11-23",
+    "status": "ACTIVE",
+    "district": "동두천시"
+  },
+  {
+    "id": "seed-afc80b0b3884",
+    "name": "카페 오늘",
+    "address": "경기도연천군청산면궁평천길45(청산면궁평리)",
+    "latitude": 38.0302432,
+    "longitude": 127.1097164,
+    "category": "카페",
+    "benefitType": "할인·우대",
+    "benefitDescription": "음료 500원 할인",
+    "phone": "010-4169-1363",
+    "eligibleTarget": "동원훈련 이수자, 현역병 사회복무요원 등 복무자, 병역명문가",
+    "usageCondition": "없음",
+    "verificationMethod": "동원훈련 이수증, 복무확인서, 병역명문가증 등",
+    "sourceType": "PUBLIC_EVIDENCE",
+    "sourceLabel": "병무청 나라사랑가게 · 최신 확인",
+    "sourceUrl": "https://www.mma.go.kr/about/udgg/list.do?mc=mma0003357",
+    "lastVerifiedAt": "2026-11-23",
+    "status": "ACTIVE",
+    "district": "연천군"
+  },
+  {
+    "id": "seed-249e17eba6ad",
+    "name": "단골집정육점",
+    "address": "경기도파주시해올로20(다율동)",
+    "latitude": 37.7350748,
+    "longitude": 126.7297105,
+    "category": "음식",
+    "benefitType": "할인·우대",
+    "benefitDescription": "서비스 이용료의 5% 할인 * 단, 행사상품 및 별도 할인상품은 제외",
+    "phone": "031-948-7850",
+    "eligibleTarget": "동원훈련 이수자, 현역병 사회복무요원 등 복무자, 병역명문가",
+    "usageCondition": "없음",
+    "verificationMethod": "동원훈련 이수증, 복무확인서, 병역명문가증 등",
+    "sourceType": "PUBLIC_EVIDENCE",
+    "sourceLabel": "병무청 나라사랑가게 · 최신 확인",
+    "sourceUrl": "https://www.mma.go.kr/about/udgg/list.do?mc=mma0003357",
+    "lastVerifiedAt": "2026-11-23",
+    "status": "ACTIVE",
+    "district": "파주시"
   }
 ]

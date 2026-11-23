@@ -11,7 +11,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
 const val BUNDLED_SEED_NAME = "benefits"
-const val BUNDLED_SEED_VERSION = 13
+const val BUNDLED_SEED_VERSION = 14
 private val BUNDLED_SEED_SOURCE_TYPES = listOf(
     BenefitSourceType.LOCAL_GOV.name,
     BenefitSourceType.MANUAL_SEED.name,

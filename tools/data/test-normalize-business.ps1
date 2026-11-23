@@ -1,4 +1,4 @@
-$ErrorActionPreference = 'Stop'
+﻿$ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'lib/identity/normalize-business.ps1')
 function Assert-Equal { param($Actual,$Expected,[string]$Message); if ($Actual -cne $Expected) { throw "$Message (expected: $Expected, actual: $Actual)" } }
 function Assert-True { param([bool]$Condition,[string]$Message); if (-not $Condition) { throw $Message } }
@@ -47,4 +47,17 @@ $rDongtan=Get-NormalizedAddressParts '경기도 화성시 동탄구동탄반송1
 $rGwacheonB=Get-NormalizedAddressParts '경기도 과천시별양로28B동1069호(원문동, 슈르상가)' '' '경기도' '과천시'; Assert-Equal $rGwacheonB.RoadName '별양로' 'Glued Gwacheon road stays intact'; Assert-Equal $rGwacheonB.BuildingMain '28' 'Unambiguous non-digit B동 suffix extracts building 28'
 $rAnyangSangga=Get-NormalizedAddressParts '경기도 안양시 만안구안양천서로177상가1동36호2층 (안양동)' '' '경기도' '안양시'; Assert-Equal $rAnyangSangga.RoadName '안양천서로' 'Glued Anyang gu + road stays intact'; Assert-Equal $rAnyangSangga.BuildingMain '177' 'Unambiguous 상가1동 suffix extracts building 177'
 $rDigitGlued=Get-NormalizedAddressParts '경기도 과천시별양상가2로35118호1층 (별양동)' '' '경기도' '과천시'; Assert-Equal $rDigitGlued.RoadName '별양상가2로' 'Road with 2로 stays intact'; Assert-Equal $rDigitGlued.BuildingMain '' 'Ambiguous digit-glued 35118호 remains fail-closed'; Assert-Equal $rDigitGlued.AddressParseStatus 'PARTIAL' 'Ambiguous digit-glued address stays PARTIAL'
+$rSiheung=Get-NormalizedAddressParts '서울특별시금천구시흥대로291(독산동)' '' '' ''; Assert-Equal $rSiheung.RoadName '시흥대로' 'Metro gu followed by road containing 시 stays intact'; Assert-Equal $rSiheung.BuildingMain '291' 'Building after 시흥대로'
+$rGuroSiheung=Get-NormalizedAddressParts '서울특별시구로구시흥대로551(구로동)' '' '' ''; Assert-Equal $rGuroSiheung.RoadName '시흥대로' 'Guro-gu ending in 구 plus road with 시 stays intact'; Assert-Equal $rGuroSiheung.BuildingMain '551' 'Building after 구로구시흥대로'
+$rBupyeong=Get-NormalizedAddressParts '인천광역시부평구시장로32(부평동, 2층,3층)' '' '' ''; Assert-Equal $rBupyeong.RoadName '시장로' 'Incheon gu followed by 시장로 stays intact'; Assert-Equal $rBupyeong.BuildingMain '32' 'Building after 시장로'
+$rYeonsu=Get-NormalizedAddressParts '인천광역시연수구컨벤시아대로230번길54(송도동)' '' '' ''; Assert-Equal $rYeonsu.RoadName '컨벤시아대로230번길' 'Incheon gu followed by 컨벤시아대로 stays intact'; Assert-Equal $rYeonsu.BuildingMain '54' 'Building after 컨벤시아대로'
+$rNamdaemun=Get-NormalizedAddressParts '서울특별시중구남대문시장길61- 0(회현동1가)' '' '' ''; Assert-Equal $rNamdaemun.RoadName '남대문시장길' 'Jung-gu followed by 남대문시장길 stays intact'; Assert-Equal $rNamdaemun.BuildingMain '61' 'Building main after 남대문시장길'; Assert-Equal $rNamdaemun.BuildingSub '0' 'Building sub after 남대문시장길'
+$rUijeongbuUnder=Get-NormalizedAddressParts '경기도의정부시시민로지하100(의정부동, 서부가열 197호)' '' '' ''; Assert-Equal $rUijeongbuUnder.RoadName '시민로' 'Uijeongbu glued city + 시민로 stays intact'; Assert-Equal $rUijeongbuUnder.BuildingMain '100' 'Basement road building number 100 extracted'
+$rUijeongbuFloor=Get-NormalizedAddressParts '경기도의정부시시민로1461층 (의정부동)' '' '' ''; Assert-Equal $rUijeongbuFloor.RoadName '시민로' 'Uijeongbu glued city + 시민로 stays intact with glued floor'; Assert-Equal $rUijeongbuFloor.BuildingMain '' 'Glued floor remains fail-closed'
+$rApgujeong=Get-NormalizedAddressParts '서울특별시강남구압구정로124(신사동)' '' '' ''; Assert-Equal $rApgujeong.RoadName '압구정로' 'Road containing 구 (압구정로) stays intact'; Assert-Equal $rApgujeong.BuildingMain '124' 'Building after 압구정로'
+$rGucheonmyeon=Get-NormalizedAddressParts '서울특별시강동구구천면로170(천호동)' '' '' ''; Assert-Equal $rGucheonmyeon.RoadName '구천면로' 'Seoul gu followed by 구천면로 stays intact'; Assert-Equal $rGucheonmyeon.BuildingMain '170' 'Building after 구천면로'
+$rGunjaro=Get-NormalizedAddressParts '서울특별시광진구군자로102(군자동)' '' '' ''; Assert-Equal $rGunjaro.RoadName '군자로' 'Seoul gu followed by 군자로 stays intact'; Assert-Equal $rGunjaro.BuildingMain '102' 'Building after 군자로'
+$rGuwol=Get-NormalizedAddressParts '인천광역시남동구구월로305(만수동)' '' '' ''; Assert-Equal $rGuwol.RoadName '구월로' 'Incheon gu followed by 구월로 stays intact'; Assert-Equal $rGuwol.BuildingMain '305' 'Building after 구월로'
+$rHogupo=Get-NormalizedAddressParts '인천광역시남동구호구포로818(구월동)' '' '' ''; Assert-Equal $rHogupo.RoadName '호구포로' 'Incheon gu followed by 호구포로 stays intact'; Assert-Equal $rHogupo.BuildingMain '818' 'Building after 호구포로'
+$rGumi=Get-NormalizedAddressParts '경기도성남시 분당구구미로60(구미동)' '' '' ''; Assert-Equal $rGumi.RoadName '구미로' 'Bundang-gu followed by 구미로 stays intact'; Assert-Equal $rGumi.BuildingMain '60' 'Building after 구미로'
 Write-Host 'Normalization tests passed.'

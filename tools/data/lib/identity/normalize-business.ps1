@@ -1,4 +1,4 @@
-Set-StrictMode -Version Latest
+﻿Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 . (Join-Path (Split-Path -Parent $PSScriptRoot) 'poi-verification-contracts.ps1')
 
@@ -65,44 +65,52 @@ function Get-NormalizedAddressParts {
  if($road){
   $roadText=$road.Trim()
   $hadProvince=$false
+  $strippedProvince=''
   foreach($p in $script:Provinces){
-   if($roadText -match ('^(?:'+([regex]::Escape($p))+')\s*')){$roadText=$roadText.Substring($matches[0].Length);$hadProvince=$true;break}
+   if($roadText -match ('^(?:'+([regex]::Escape($p))+')\s*')){$roadText=$roadText.Substring($matches[0].Length);$hadProvince=$true;$strippedProvince=$p;break}
   }
-  if(-not $hadProvince -and $roadText -match '^서울시\s*'){$roadText=$roadText.Substring($matches[0].Length);$hadProvince=$true}
+  if(-not $hadProvince -and $roadText -match '^서울시\s*'){$roadText=$roadText.Substring($matches[0].Length);$hadProvince=$true;$strippedProvince='서울특별시'}
+  $effectiveProvince=if($parsed.Province){$parsed.Province}else{$strippedProvince}
+  $metroProvinces=@('서울특별시','인천광역시','부산광역시','대구광역시','광주광역시','대전광역시','울산광역시','세종특별자치시')
+  $isMetroProvince=($effectiveProvince -in $metroProvinces)
   $guCities=@('수원시','성남시','안양시','부천시','고양시','용인시','안산시','화성시')
-  $expectGluedGu=($parsed.Province -in @('서울특별시','인천광역시','부산광역시','대구광역시','광주광역시','대전광역시','울산광역시'))
+  $expectGluedGu=$isMetroProvince
+  $hadCity=$false
   if($parsed.City -and $roadText -match ('^(?:'+([regex]::Escape($parsed.City))+')\s*')){
    $roadText=$roadText.Substring($matches[0].Length)
+   $hadCity=$true
    if($parsed.City -in $guCities){$expectGluedGu=$true}
-  }elseif($roadText -match '^[가-힣]+(?:광역시|특별시|특별자치시|시)\s+'){
+  }elseif(-not $isMetroProvince -and $roadText -match '^[가-힣]+(?:광역시|특별시|특별자치시|시)\s+'){
    $matchedCity=($matches[0]).Trim()
    $roadText=$roadText.Substring($matches[0].Length)
+   $hadCity=$true
    if($matchedCity -in $guCities){$expectGluedGu=$true}
-  }elseif($hadProvince -and $roadText -match '^[가-힣]{1,5}시(?=[가-힣A-Za-z0-9]+(?:구|군|읍|면|로|길))'){
+  }elseif($hadProvince -and -not $isMetroProvince -and $roadText -match '^(?:시흥시|구리시|[^구시]{2,4}시)(?=[가-힣A-Za-z0-9]+(?:구|군|읍|면|로|길))'){
    $matchedCity=$matches[0]
    $roadText=$roadText.Substring($matchedCity.Length)
+   $hadCity=$true
    if($matchedCity -in $guCities){$expectGluedGu=$true}
   }
   if($parsed.District -and $roadText -match ('^(?:'+([regex]::Escape($parsed.District))+')\s*')){
    $roadText=$roadText.Substring($matches[0].Length)
   }elseif($roadText -match '^[가-힣]+(?:구|군)\s+'){
    $roadText=$roadText.Substring($matches[0].Length)
-  }elseif(($expectGluedGu -or $hadProvince) -and $roadText -match '^[가-힣]{1,4}군(?=[가-힣A-Za-z0-9]+(?:읍|면|로|길))'){
+  }elseif($expectGluedGu -and $roadText -match '^(?:구로구|[^구군시]{1,4}구)(?=[가-힣A-Za-z0-9]+(?:읍|면|로|길))'){
    $roadText=$roadText.Substring($matches[0].Length)
-  }elseif($expectGluedGu -and $roadText -match '^[가-힣]{1,4}구(?=[가-힣A-Za-z0-9]+(?:읍|면|로|길))'){
+  }elseif(($expectGluedGu -or $hadProvince) -and -not $hadCity -and $effectiveProvince -ne '서울특별시' -and $roadText -match '^(?:군위군|[^구군시]{2,4}군)(?=[가-힣A-Za-z0-9]+(?:읍|면|로|길))'){
    $roadText=$roadText.Substring($matches[0].Length)
   }
   if($parsed.Dong -and $parsed.Dong -match '(?:읍|면)$' -and $roadText -match ('^(?:'+([regex]::Escape($parsed.Dong))+')\s*')){
    $roadText=$roadText.Substring($matches[0].Length)
   }elseif($roadText -match '^[가-힣]+(?:읍|면)\s+'){
    $roadText=$roadText.Substring($matches[0].Length)
-  }elseif($hadProvince -and $roadText -match '^[가-힣]{1,4}(?:읍|면)(?=[가-힣A-Za-z0-9]+(?:로|길))'){
+  }elseif($hadProvince -and $effectiveProvince -ne '서울특별시' -and $roadText -match '^[^구군시읍면]{1,4}(?:읍|면)(?=[가-힣A-Za-z0-9]+(?:로|길))'){
    $roadText=$roadText.Substring($matches[0].Length)
   }
   if($roadText -match '^[가-힣]+동\s+'){
    $roadText=$roadText.Substring($matches[0].Length)
   }
-  $rm=[regex]::Match($roadText,'(?<road>[가-힣A-Za-z0-9]+(?:번안길|번길|길|로))\s*(?<tail>\d+(?:\s*-\s*\d+)?)(?=$|[\s,()]|[A-Za-z]+동|상가\d*동)')
+  $rm=[regex]::Match($roadText,'(?<road>[가-힣A-Za-z0-9]+(?:번안길|번길|길|로))\s*(?:지하\s*)?(?<tail>\d+(?:\s*-\s*\d+)?)(?=$|[\s,()]|[A-Za-z]+동|상가\d*동)')
   if($rm.Success){$roadName=$rm.Groups['road'].Value;$tail=$rm.Groups['tail'].Value;if($tail -match '^\d+\s*-\s*\d+$'){$parts=$tail -split '\s*-\s*';$main=$parts[0];$sub=$parts[1]}else{$main=$tail}}
   else { $roadOnly=[regex]::Match($roadText,'(?<road>[가-힣A-Za-z0-9]+(?:번안길|번길|길|로))');if($roadOnly.Success){$roadName=$roadOnly.Groups['road'].Value;$partial=$true} }
   if($road -match '(?:번길|길|로)\d+\s*-\s*\d+층'){$main='';$sub='';$ambiguous=$true;$warnings+='BUILDING_NUMBER_UNCERTAIN';$warnings+='FLOOR_UNIT_UNCERTAIN'}

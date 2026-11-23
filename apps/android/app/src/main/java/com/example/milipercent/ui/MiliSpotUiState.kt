@@ -19,6 +19,11 @@ sealed interface MapCameraTarget {
     data class Bounds(val bounds: GeoBounds) : MapCameraTarget
 }
 
+data class MapCameraSnapshot(
+    val center: GeoPoint,
+    val zoom: Double,
+)
+
 data class BenefitListItem(
     val benefit: Benefit,
     val distanceKm: Double?,
@@ -45,7 +50,9 @@ data class MiliSpotUiState(
     val isSearchInMapBoundsAvailable: Boolean = false,
     val isLocationFocusPending: Boolean = false,
     val cameraRequestId: Long = 0,
+    val appliedCameraRequestId: Long = -1L,
     val cameraTarget: MapCameraTarget = MapCameraTarget.Point(SEOUL_CENTER),
+    val lastCameraSnapshot: MapCameraSnapshot? = null,
     val locationLabel: String = "수도권",
     val isLoading: Boolean = true,
     val isRefreshing: Boolean = false,

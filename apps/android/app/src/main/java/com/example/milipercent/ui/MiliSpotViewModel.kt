@@ -212,12 +212,24 @@ class MiliSpotViewModel(
         ))
     }
 
-    fun onMapCameraIdle(center: GeoPoint, bounds: GeoBounds, byUserGesture: Boolean) {
+    fun onMapCameraIdle(
+        center: GeoPoint,
+        bounds: GeoBounds,
+        byUserGesture: Boolean,
+        zoom: Double = DEFAULT_MAP_ZOOM,
+    ) {
         val state = _uiState.value
         _uiState.value = state.copy(
             mapBounds = bounds,
+            lastCameraSnapshot = MapCameraSnapshot(center, zoom),
             isSearchInMapBoundsAvailable = if (byUserGesture) true else state.isSearchInMapBoundsAvailable,
         )
+    }
+
+    fun markCameraRequestApplied(requestId: Long) {
+        if (_uiState.value.appliedCameraRequestId != requestId) {
+            _uiState.value = _uiState.value.copy(appliedCameraRequestId = requestId)
+        }
     }
 
     fun searchInCurrentMapBounds() {

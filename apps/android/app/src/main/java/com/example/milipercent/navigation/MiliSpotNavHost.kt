@@ -47,7 +47,8 @@ fun MiliSpotNavHost(
     onAdminEnd: (String) -> Unit = {},
     onAdminDelete: (String) -> Unit = {},
     onClearSearch: () -> Unit = {},
-    onMapCameraIdle: (GeoPoint, GeoBounds, Boolean) -> Unit = { _, _, _ -> },
+    onMapCameraIdle: (GeoPoint, GeoBounds, Boolean, Double) -> Unit = { _, _, _, _ -> },
+    onCameraRequestApplied: (Long) -> Unit = {},
     onSearchInMapBounds: () -> Unit = {},
     onMapBenefitSelected: (String?) -> Unit = {},
 ) {
@@ -56,25 +57,25 @@ fun MiliSpotNavHost(
             state, navController, onNavigate, onSearchTextChanged, onSearch, onPresetSelected,
             onCategorySelected, onDistrictSelected, onBenefitSelected, onFavorite, onRefresh,
             onCurrentLocation, onMessageShown, onRegister, onLogin, onLogout, onAdminSave, onAdminEnd, onAdminDelete,
-            onClearSearch, onMapCameraIdle, onSearchInMapBounds, onMapBenefitSelected,
+            onClearSearch, onMapCameraIdle, onCameraRequestApplied, onSearchInMapBounds, onMapBenefitSelected,
         ) }
         composable<SavedRoute> { AppRoute(
             state, navController, onNavigate, onSearchTextChanged, onSearch, onPresetSelected,
             onCategorySelected, onDistrictSelected, onBenefitSelected, onFavorite, onRefresh,
             onCurrentLocation, onMessageShown, onRegister, onLogin, onLogout, onAdminSave, onAdminEnd, onAdminDelete,
-            onClearSearch, onMapCameraIdle, onSearchInMapBounds, onMapBenefitSelected,
+            onClearSearch, onMapCameraIdle, onCameraRequestApplied, onSearchInMapBounds, onMapBenefitSelected,
         ) }
         composable<AccountRoute> { AppRoute(
             state, navController, onNavigate, onSearchTextChanged, onSearch, onPresetSelected,
             onCategorySelected, onDistrictSelected, onBenefitSelected, onFavorite, onRefresh,
             onCurrentLocation, onMessageShown, onRegister, onLogin, onLogout, onAdminSave, onAdminEnd, onAdminDelete,
-            onClearSearch, onMapCameraIdle, onSearchInMapBounds, onMapBenefitSelected,
+            onClearSearch, onMapCameraIdle, onCameraRequestApplied, onSearchInMapBounds, onMapBenefitSelected,
         ) }
         composable<AdminRoute> { AppRoute(
             state, navController, onNavigate, onSearchTextChanged, onSearch, onPresetSelected,
             onCategorySelected, onDistrictSelected, onBenefitSelected, onFavorite, onRefresh,
             onCurrentLocation, onMessageShown, onRegister, onLogin, onLogout, onAdminSave, onAdminEnd, onAdminDelete,
-            onClearSearch, onMapCameraIdle, onSearchInMapBounds, onMapBenefitSelected,
+            onClearSearch, onMapCameraIdle, onCameraRequestApplied, onSearchInMapBounds, onMapBenefitSelected,
         ) }
         composable<BenefitDetailRoute> { entry ->
             val benefitId = entry.toRoute<BenefitDetailRoute>().benefitId
@@ -117,7 +118,8 @@ private fun AppRoute(
     onAdminEnd: (String) -> Unit,
     onAdminDelete: (String) -> Unit,
     onClearSearch: () -> Unit,
-    onMapCameraIdle: (GeoPoint, GeoBounds, Boolean) -> Unit,
+    onMapCameraIdle: (GeoPoint, GeoBounds, Boolean, Double) -> Unit,
+    onCameraRequestApplied: (Long) -> Unit,
     onSearchInMapBounds: () -> Unit,
     onMapBenefitSelected: (String?) -> Unit,
 ) {
@@ -154,6 +156,7 @@ private fun AppRoute(
         onAdminDelete = onAdminDelete,
         onClearSearch = onClearSearch,
         onMapCameraIdle = onMapCameraIdle,
+        onCameraRequestApplied = onCameraRequestApplied,
         onSearchInMapBounds = onSearchInMapBounds,
         onMapBenefitSelected = onMapBenefitSelected,
     )

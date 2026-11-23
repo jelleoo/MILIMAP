@@ -13,7 +13,6 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -58,9 +57,12 @@ fun BenefitMap(
     onSelect: (String) -> Unit,
     modifier: Modifier = Modifier,
     cameraTarget: MapCameraTarget = MapCameraTarget.Point(center),
+    appliedCameraRequestId: Long = -1L,
+    lastCameraSnapshot: MapCameraSnapshot? = null,
     selectedBenefitId: String? = null,
     onMapBlankClick: () -> Unit = {},
-    onCameraIdle: (GeoPoint, GeoBounds, Boolean) -> Unit = { _, _, _ -> },
+    onCameraRequestApplied: (Long) -> Unit = {},
+    onCameraIdle: (GeoPoint, GeoBounds, Boolean, Double) -> Unit = { _, _, _, _ -> },
 ) {
     if (BuildConfig.NAVER_MAP_NCP_KEY_ID.isBlank()) {
         OfflineCoordinateMap(
@@ -78,9 +80,12 @@ fun BenefitMap(
             cameraTarget = cameraTarget,
             currentLocation = currentLocation,
             cameraRequestId = cameraRequestId,
+            appliedCameraRequestId = appliedCameraRequestId,
+            lastCameraSnapshot = lastCameraSnapshot,
             selectedBenefitId = selectedBenefitId,
             onSelect = onSelect,
             onMapBlankClick = onMapBlankClick,
+            onCameraRequestApplied = onCameraRequestApplied,
             onCameraIdle = onCameraIdle,
             modifier = modifier,
         )
@@ -93,10 +98,13 @@ private fun NaverMapView(
     cameraTarget: MapCameraTarget,
     currentLocation: GeoPoint?,
     cameraRequestId: Long,
+    appliedCameraRequestId: Long,
+    lastCameraSnapshot: MapCameraSnapshot?,
     selectedBenefitId: String?,
     onSelect: (String) -> Unit,
     onMapBlankClick: () -> Unit,
-    onCameraIdle: (GeoPoint, GeoBounds, Boolean) -> Unit,
+    onCameraRequestApplied: (Long) -> Unit,
+    onCameraIdle: (GeoPoint, GeoBounds, Boolean, Double) -> Unit,
     modifier: Modifier,
 ) {
     val context = LocalContext.current
@@ -104,15 +112,20 @@ private fun NaverMapView(
     val density = LocalDensity.current.density
     val latestOnSelect by rememberUpdatedState(onSelect)
     val latestOnMapBlankClick by rememberUpdatedState(onMapBlankClick)
+    val latestOnCameraRequestApplied by rememberUpdatedState(onCameraRequestApplied)
     val latestOnCameraIdle by rememberUpdatedState(onCameraIdle)
     val mapView = remember { MapView(context).also { it.onCreate(null) } }
     val iconCache = remember(context) { mutableMapOf<Pair<String, Boolean>, OverlayImage>() }
     val markers = remember { mutableListOf<Marker>() }
     var renderedSignature by remember { mutableStateOf<String?>(null) }
-    var handledCameraTarget by remember { mutableStateOf<MapCameraTarget?>(null) }
+    var initializedCamera by remember { mutableStateOf(false) }
     var handledCameraRequestId by remember { mutableLongStateOf(-1L) }
     var listenersAttached by remember { mutableStateOf(false) }
-    var lastCameraReason by remember { mutableIntStateOf(CameraUpdate.REASON_DEVELOPER) }
+    val gestureState = remember {
+        object {
+            var sawUserGesture = false
+        }
+    }
 
     DisposableEffect(lifecycle, mapView) {
         val observer = LifecycleEventObserver { _, event ->
@@ -144,22 +157,35 @@ private fun NaverMapView(
                 if (!listenersAttached) {
                     listenersAttached = true
                     map.addOnCameraChangeListener { reason, _ ->
-                        lastCameraReason = reason
+                        if (reason == CameraUpdate.REASON_GESTURE) {
+                            gestureState.sawUserGesture = true
+                        }
                     }
                     map.addOnCameraIdleListener {
-                        val pos = map.cameraPosition.target
-                        val b = map.contentBounds
+                        val position = map.cameraPosition
+                        val bounds = map.contentBounds
+                        val byGesture = gestureState.sawUserGesture
+                        gestureState.sawUserGesture = false
                         latestOnCameraIdle(
-                            GeoPoint(pos.latitude, pos.longitude),
-                            GeoBounds(b.southLatitude, b.westLongitude, b.northLatitude, b.eastLongitude),
-                            lastCameraReason == CameraUpdate.REASON_GESTURE,
+                            GeoPoint(position.target.latitude, position.target.longitude),
+                            GeoBounds(bounds.southLatitude, bounds.westLongitude, bounds.northLatitude, bounds.eastLongitude),
+                            byGesture,
+                            position.zoom,
                         )
-                        lastCameraReason = CameraUpdate.REASON_DEVELOPER
                     }
                     map.setOnMapClickListener { _, _ -> latestOnMapBlankClick() }
                 }
-                if (handledCameraRequestId != cameraRequestId || handledCameraTarget == null) {
-                    val cameraUpdate = when (cameraTarget) {
+                if (!initializedCamera && appliedCameraRequestId == cameraRequestId && lastCameraSnapshot != null) {
+                    map.moveCamera(
+                        CameraUpdate.scrollAndZoomTo(
+                            LatLng(lastCameraSnapshot.center.latitude, lastCameraSnapshot.center.longitude),
+                            lastCameraSnapshot.zoom,
+                        ),
+                    )
+                    initializedCamera = true
+                    handledCameraRequestId = cameraRequestId
+                } else if (!initializedCamera || handledCameraRequestId != cameraRequestId) {
+                    val baseUpdate = when (cameraTarget) {
                         is MapCameraTarget.Point -> CameraUpdate.scrollAndZoomTo(
                             LatLng(cameraTarget.point.latitude, cameraTarget.point.longitude),
                             cameraTarget.zoom,
@@ -184,10 +210,16 @@ private fun NaverMapView(
                                 )
                             }
                         }
-                    }.animate(CameraAnimation.Easing, 450)
+                    }
+                    val cameraUpdate = if (initializedCamera || cameraRequestId > 0L) {
+                        baseUpdate.animate(CameraAnimation.Easing, 450)
+                    } else {
+                        baseUpdate
+                    }
                     map.moveCamera(cameraUpdate)
-                    handledCameraTarget = cameraTarget
+                    initializedCamera = true
                     handledCameraRequestId = cameraRequestId
+                    latestOnCameraRequestApplied(cameraRequestId)
                 }
                 map.locationOverlay.apply {
                     isVisible = currentLocation != null

@@ -1,4 +1,4 @@
-[CmdletBinding()]
+﻿[CmdletBinding()]
 param(
     [string]$CanonicalCsv = '.\data\canonical\capital-area-military-benefits.csv',
     [Parameter(Mandatory = $true)]
@@ -55,6 +55,8 @@ $culture = [Globalization.CultureInfo]::InvariantCulture
 $targetSet = if ($RowNumbers.Count -gt 0) { [Collections.Generic.HashSet[int]]::new($RowNumbers) } else { $null }
 
 $started = [DateTimeOffset]::Now
+Reset-MultiApiProviderTelemetry
+Set-MultiApiRequestCache -Enabled $true
 $results = [Collections.Generic.List[object]]::new()
 
 for ($i = 0; $i -lt $csvRows.Count; $i++) {
@@ -74,34 +76,42 @@ for ($i = 0; $i -lt $csvRows.Count; $i++) {
 
     $juso = [pscustomobject][ordered]@{ Status='SKIPPED'; ErrorCode=''; RoadAddress=''; AdmCd=''; RnMgtSn=''; BuldMnnm=''; BuldSlno='' }
     if ($Providers -contains 'JUSO') {
+        $prevHits = (Get-MultiApiProviderTelemetrySummary).JUSO.CacheHits
         try { $juso = Invoke-JusoRoadAddressLookup -Business $business -ApiKey $jusoKey } catch {
             $juso = [pscustomobject][ordered]@{ Status='JUSO_ERR'; ErrorCode='REQUEST_FAILED'; RoadAddress=''; AdmCd=''; RnMgtSn=''; BuldMnnm=''; BuldSlno='' }
         }
-        if ($DelayMilliseconds -gt 0) { Start-Sleep -Milliseconds $DelayMilliseconds }
+        $afterHits = (Get-MultiApiProviderTelemetrySummary).JUSO.CacheHits
+        if ($DelayMilliseconds -gt 0 -and $afterHits -eq $prevHits) { Start-Sleep -Milliseconds $DelayMilliseconds }
     }
 
     $sdsc = [pscustomobject][ordered]@{ Status='SKIPPED'; ErrorCode=''; BizesId=''; Name=''; RoadAddress=''; DistanceMeters=''; Latitude=$null; Longitude=$null }
     if ($Providers -contains 'SDSC2') {
+        $prevHits = (Get-MultiApiProviderTelemetrySummary).SDSC2.CacheHits
         try { $sdsc = Invoke-Sdsc2RadiusPoiDiscovery -Business $business -Latitude $lat -Longitude $lng -ServiceKey $sdsc2Key } catch {
             $sdsc = [pscustomobject][ordered]@{ Status='SDSC2_ERR'; ErrorCode='REQUEST_FAILED'; BizesId=''; Name=''; RoadAddress=''; DistanceMeters=''; Latitude=$null; Longitude=$null }
         }
-        if ($DelayMilliseconds -gt 0) { Start-Sleep -Milliseconds $DelayMilliseconds }
+        $afterHits = (Get-MultiApiProviderTelemetrySummary).SDSC2.CacheHits
+        if ($DelayMilliseconds -gt 0 -and $afterHits -eq $prevHits) { Start-Sleep -Milliseconds $DelayMilliseconds }
     }
 
     $kakao = [pscustomobject][ordered]@{ Status='SKIPPED'; ErrorCode=''; Evidence=''; PlaceName=''; RoadAddress=''; PhoneMatch=$false; DistanceMeters=''; PhoneMovedMeters=''; PlaceId=''; PlaceUrl='' }
     if ($Providers -contains 'KAKAO') {
+        $prevHits = (Get-MultiApiProviderTelemetrySummary).KAKAO.CacheHits
         try { $kakao = Invoke-KakaoLocalPoiVerification -Business $business -RawPhone ([string]$row.'업소전화번호') -Latitude $lat -Longitude $lng -RestApiKey $kakaoKey } catch {
             $kakao = [pscustomobject][ordered]@{ Status='KAKAO_ERR'; ErrorCode='REQUEST_FAILED'; Evidence=''; PlaceName=''; RoadAddress=''; PhoneMatch=$false; DistanceMeters=''; PhoneMovedMeters=''; PlaceId=''; PlaceUrl='' }
         }
-        if ($DelayMilliseconds -gt 0) { Start-Sleep -Milliseconds $DelayMilliseconds }
+        $afterHits = (Get-MultiApiProviderTelemetrySummary).KAKAO.CacheHits
+        if ($DelayMilliseconds -gt 0 -and $afterHits -eq $prevHits) { Start-Sleep -Milliseconds $DelayMilliseconds }
     }
 
     $naver = [pscustomobject][ordered]@{ DiscoveryStatus='SKIPPED'; CandidateCount=0; P1Class='SKIPPED'; P1Reason=''; EnhStatus='SKIPPED'; EnhReason=''; SelectedName=''; EnhSelectedName=''; EnhRoadAddress='' }
     if ($Providers -contains 'NAVER') {
+        $prevHits = (Get-MultiApiProviderTelemetrySummary).NAVER.CacheHits
         try { $naver = Invoke-NaverEnhancedPoiEvaluation -Business $business -ClientId $naverId -ClientSecret $naverSecret } catch {
             $naver = [pscustomobject][ordered]@{ DiscoveryStatus='FAILED'; CandidateCount=0; P1Class='ERR'; P1Reason='REQUEST_FAILED'; EnhStatus='NAVER_ERR'; EnhReason='REQUEST_FAILED'; SelectedName=''; EnhSelectedName=''; EnhRoadAddress='' }
         }
-        if ($DelayMilliseconds -gt 0) { Start-Sleep -Milliseconds $DelayMilliseconds }
+        $afterHits = (Get-MultiApiProviderTelemetrySummary).NAVER.CacheHits
+        if ($DelayMilliseconds -gt 0 -and $afterHits -eq $prevHits) { Start-Sleep -Milliseconds $DelayMilliseconds }
     }
 
     # On glued rows (BuildingMain empty), retry JUSO once with a deterministic standard road address from SDSC2 or KAKAO
@@ -155,7 +165,9 @@ $summary = [ordered]@{
     PublicLegalPin = @($results | Where-Object PublicLegalPin).Count
     MultiApiAgreed2Plus = @($results | Where-Object { $_.StrongApiCount -ge 2 }).Count
     AllPoiUnmatched = @($results | Where-Object AllPoiUnmatched).Count
+    ProviderTelemetry = (Get-MultiApiProviderTelemetrySummary)
 }
+Set-MultiApiRequestCache -Enabled $false
 $jsonOut = Join-Path $resolvedOut 'multi-api-poi-summary.json'
 $jsonBytes = [Text.UTF8Encoding]::new($false).GetBytes(($summary | ConvertTo-Json -Depth 10))
 [IO.File]::WriteAllBytes($jsonOut, $jsonBytes)

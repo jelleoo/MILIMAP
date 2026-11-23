@@ -1,11 +1,100 @@
-Set-StrictMode -Version Latest
+﻿Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
 $poiDataLibRoot = Split-Path -Parent $PSScriptRoot
 . (Join-Path $poiDataLibRoot 'poi-verification-contracts.ps1')
 . (Join-Path $poiDataLibRoot 'identity/normalize-business.ps1')
 . (Join-Path $poiDataLibRoot 'poi-discovery/discover-poi-candidates.ps1')
+. (Join-Path $poiDataLibRoot 'poi-discovery/address-entrance-db.ps1')
 . (Join-Path $poiDataLibRoot 'poi-matching/evaluate-poi-match.ps1')
+
+$script:MultiApiCacheEnabled = $false
+$script:MultiApiResponseCache = @{}
+
+function New-MultiApiEmptyTelemetryState {
+    return @{
+        JUSO  = @{ Calls = 0; CacheHits = 0; Failures = 0; TotalElapsedMs = 0L }
+        SDSC2 = @{ Calls = 0; CacheHits = 0; Failures = 0; TotalElapsedMs = 0L }
+        KAKAO = @{ Calls = 0; CacheHits = 0; Failures = 0; TotalElapsedMs = 0L }
+        NAVER = @{ Calls = 0; CacheHits = 0; Failures = 0; TotalElapsedMs = 0L }
+    }
+}
+
+$script:MultiApiProviderTelemetry = New-MultiApiEmptyTelemetryState
+
+function Set-MultiApiRequestCache {
+    param([Parameter(Mandatory)][bool]$Enabled)
+
+    $script:MultiApiCacheEnabled = $Enabled
+    if (-not $Enabled) {
+        $script:MultiApiResponseCache.Clear()
+    }
+}
+
+function Reset-MultiApiProviderTelemetry {
+    $script:MultiApiProviderTelemetry = New-MultiApiEmptyTelemetryState
+    $script:MultiApiResponseCache.Clear()
+}
+
+function Get-MultiApiProviderTelemetrySummary {
+    $summary = [ordered]@{}
+    foreach ($provider in @('JUSO', 'SDSC2', 'KAKAO', 'NAVER')) {
+        $entry = $script:MultiApiProviderTelemetry[$provider]
+        $summary[$provider] = [pscustomobject][ordered]@{
+            Calls = [int]$entry.Calls
+            CacheHits = [int]$entry.CacheHits
+            Failures = [int]$entry.Failures
+            TotalElapsedMs = [long]$entry.TotalElapsedMs
+        }
+    }
+    return [pscustomobject]$summary
+}
+
+function Get-MultiApiCacheHashKey {
+    param(
+        [Parameter(Mandatory)][string]$Provider,
+        [Parameter(Mandatory)][string]$RawIdentifier
+    )
+
+    $bytes = [Text.Encoding]::UTF8.GetBytes("$Provider|$RawIdentifier")
+    $hex = [BitConverter]::ToString([Security.Cryptography.SHA256]::HashData($bytes)).Replace('-', '').ToLowerInvariant()
+    return "$Provider`:$hex"
+}
+
+function Invoke-MultiApiCachedProviderRequest {
+    param(
+        [Parameter(Mandatory)][ValidateSet('JUSO', 'SDSC2', 'KAKAO', 'NAVER')][string]$Provider,
+        [Parameter(Mandatory)][string]$CacheKey,
+        [Parameter(Mandatory)][scriptblock]$Fetcher,
+        [scriptblock]$ShouldCache = { param($Response) $true },
+        [scriptblock]$IsErrorResponse = { param($Response) $false }
+    )
+
+    $stats = $script:MultiApiProviderTelemetry[$Provider]
+    if ($script:MultiApiCacheEnabled -and $script:MultiApiResponseCache.ContainsKey($CacheKey)) {
+        $stats.CacheHits++
+        return $script:MultiApiResponseCache[$CacheKey]
+    }
+
+    $stats.Calls++
+    $sw = [Diagnostics.Stopwatch]::StartNew()
+    try {
+        $response = & $Fetcher
+        $sw.Stop()
+        $stats.TotalElapsedMs += [long]$sw.ElapsedMilliseconds
+        if (& $IsErrorResponse $response) {
+            $stats.Failures++
+        } elseif ($script:MultiApiCacheEnabled -and (& $ShouldCache $response)) {
+            $script:MultiApiResponseCache[$CacheKey] = $response
+        }
+        return $response
+    } catch {
+        $sw.Stop()
+        $stats.TotalElapsedMs += [long]$sw.ElapsedMilliseconds
+        $stats.Failures++
+        throw
+    }
+}
 
 $script:MultiApiGenericTerms = [Collections.Generic.HashSet[string]]::new(
     [string[]]@(
@@ -235,7 +324,16 @@ function Invoke-JusoRoadAddressLookup {
     $anyFound = $false
     foreach ($kw in $queries) {
         $uri = "https://business.juso.go.kr/addrlink/addrLinkApi.do?confmKey=$([Uri]::EscapeDataString($ApiKey))&currentPage=1&countPerPage=5&keyword=$([Uri]::EscapeDataString($kw))&resultType=json"
-        $res = if ($null -ne $RequestInvoker) { & $RequestInvoker $uri } else { Invoke-RestMethod -Uri $uri -TimeoutSec 15 -MaximumRedirection 0 -ErrorAction Stop }
+        $cacheKey = Get-MultiApiCacheHashKey -Provider 'JUSO' -RawIdentifier $kw
+        $res = Invoke-MultiApiCachedProviderRequest -Provider 'JUSO' -CacheKey $cacheKey -Fetcher {
+            if ($null -ne $RequestInvoker) { & $RequestInvoker $uri } else { Invoke-RestMethod -Uri $uri -TimeoutSec 15 -MaximumRedirection 0 -ErrorAction Stop }
+        } -IsErrorResponse {
+            param($r)
+            $null -eq $r -or $null -eq $r.results -or [string]$r.results.common.errorCode -ne '0'
+        } -ShouldCache {
+            param($r)
+            $null -ne $r -and $null -ne $r.results -and [string]$r.results.common.errorCode -eq '0'
+        }
         $common = $res.results.common
         if ([string]$common.errorCode -ne '0') {
             return [pscustomobject][ordered]@{ Status='JUSO_ERR'; ErrorCode="code=$($common.errorCode)"; RoadAddress=''; AdmCd=''; RnMgtSn=''; BuldMnnm=''; BuldSlno='' }
@@ -314,7 +412,16 @@ function Invoke-Sdsc2RadiusPoiDiscovery {
         $all = [Collections.Generic.List[object]]::new()
         for ($page = 1; $page -le 2; $page++) {
             $uri = "https://apis.data.go.kr/B553077/api/open/sdsc2/storeListInRadius?serviceKey=$encKey&pageNo=$page&numOfRows=500&radius=$Radius&cx=$lngStr&cy=$latStr&type=json"
-            $res = if ($null -ne $RequestInvoker) { & $RequestInvoker $uri } else { Invoke-RestMethod -Uri $uri -TimeoutSec 20 -MaximumRedirection 0 -ErrorAction Stop }
+            $cacheKey = Get-MultiApiCacheHashKey -Provider 'SDSC2' -RawIdentifier "radius=$Radius&page=$page&lat=$latStr&lng=$lngStr"
+            $res = Invoke-MultiApiCachedProviderRequest -Provider 'SDSC2' -CacheKey $cacheKey -Fetcher {
+                if ($null -ne $RequestInvoker) { & $RequestInvoker $uri } else { Invoke-RestMethod -Uri $uri -TimeoutSec 20 -MaximumRedirection 0 -ErrorAction Stop }
+            } -IsErrorResponse {
+                param($r)
+                $null -eq $r -or $null -eq $r.header -or ([string]$r.header.resultCode -notin @('00', '03'))
+            } -ShouldCache {
+                param($r)
+                $null -ne $r -and $null -ne $r.header -and ([string]$r.header.resultCode -in @('00', '03'))
+            }
             $code = [string]$res.header.resultCode
             if ($code -eq '03') { break }
             if ($code -ne '00') { throw "SDSC2_CODE_$code" }
@@ -369,8 +476,11 @@ function Invoke-KakaoLocalPoiVerification {
 
     $invokeQuery = {
         param([string]$Uri)
-        if ($null -ne $RequestInvoker) { return & $RequestInvoker $Uri $headers }
-        return Invoke-RestMethod -Uri $Uri -Headers $headers -TimeoutSec 15 -MaximumRedirection 0 -ErrorAction Stop
+        $cacheKey = Get-MultiApiCacheHashKey -Provider 'KAKAO' -RawIdentifier $Uri
+        Invoke-MultiApiCachedProviderRequest -Provider 'KAKAO' -CacheKey $cacheKey -Fetcher {
+            if ($null -ne $RequestInvoker) { & $RequestInvoker $Uri $headers }
+            else { Invoke-RestMethod -Uri $Uri -Headers $headers -TimeoutSec 15 -MaximumRedirection 0 -ErrorAction Stop }
+        }
     }
 
     $q1 = "https://dapi.kakao.com/v2/local/search/keyword.json?query=$([Uri]::EscapeDataString($Business.OriginalName))&x=$lngStr&y=$latStr&radius=150&size=15"
@@ -475,7 +585,17 @@ function Invoke-NaverEnhancedPoiEvaluation {
     )
     $discParams = @{ Business=$Business; ClientId=$ClientId; ClientSecret=$ClientSecret }
     if ($null -ne $RequestInvoker) { $discParams.RequestInvoker = $RequestInvoker }
-    $batch = Invoke-PoiDiscovery @discParams
+    $naverCacheId = "$($Business.OriginalName)|$($Business.PreferredAddress)|$($Business.RoadName)|$($Business.BuildingMain)|$($Business.BuildingSub)"
+    $naverCacheKey = Get-MultiApiCacheHashKey -Provider 'NAVER' -RawIdentifier $naverCacheId
+    $batch = Invoke-MultiApiCachedProviderRequest -Provider 'NAVER' -CacheKey $naverCacheKey -Fetcher {
+        Invoke-PoiDiscovery @discParams
+    } -IsErrorResponse {
+        param($b)
+        $null -eq $b -or ([string]$b.Status -eq 'FAILED')
+    } -ShouldCache {
+        param($b)
+        $null -ne $b -and ([string]$b.Status -ne 'FAILED')
+    }
     $eval = Invoke-PoiMatchEvaluation -Business $Business -DiscoveryBatch $batch
 
     $sel = $eval.SelectedCandidate

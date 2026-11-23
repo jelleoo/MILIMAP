@@ -18,7 +18,7 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
-$script:ReleaseCutCliInvoked = ($PSBoundParameters.Count -gt 0 -and -not $LibraryOnly)
+$script:ReleaseCutCliInvoked = ($MyInvocation.InvocationName -ne '.' -or $PSBoundParameters.Count -gt 0)
 $script:ReleaseCutCliParams = @{
     CanonicalCsv = $CanonicalCsv
     DdcComparisonCsv = $DdcComparisonCsv
@@ -63,6 +63,138 @@ function Assert-ReleaseCutNoKakaoCoordinates {
     }
 }
 
+function Assert-ReleaseCutOutputPaths {
+    param([string[]]$OutputPaths, [string[]]$InputPaths)
+
+    $comparer = if ($IsWindows) { [StringComparer]::OrdinalIgnoreCase } else { [StringComparer]::Ordinal }
+    $destinations = [Collections.Generic.HashSet[string]]::new($comparer)
+    foreach ($destination in $OutputPaths) {
+        [void](Assert-ReleaseSafeFilePath -Path $destination)
+        if ([IO.Directory]::Exists($destination) -or [IO.Path]::EndsInDirectorySeparator($destination)) {
+            throw "RELEASE_CUT_OUTPUT_NOT_FILE: $destination"
+        }
+        if (-not $destinations.Add($destination)) {
+            throw "RELEASE_CUT_PATH_COLLISION: $destination"
+        }
+    }
+
+    foreach ($path in $InputPaths) {
+        if ($destinations.Contains($path)) {
+            throw "RELEASE_CUT_PATH_COLLISION: $path"
+        }
+    }
+
+    foreach ($destination in $OutputPaths) {
+        for ($parent = [IO.Path]::GetDirectoryName($destination); $parent; $parent = [IO.Path]::GetDirectoryName($parent)) {
+            if ($destinations.Contains($parent)) {
+                throw "RELEASE_CUT_PATH_COLLISION: $destination is inside output $parent"
+            }
+            if ([IO.File]::Exists($parent)) {
+                throw "RELEASE_CUT_OUTPUT_PARENT_NOT_DIRECTORY: $parent"
+            }
+        }
+    }
+}
+
+function Test-ReleaseCutPublishSeed {
+    param([string]$SeedPath, [string]$ManifestPath, $Manifest)
+
+    if (-not [IO.File]::Exists($ManifestPath)) {
+        if ([IO.File]::Exists($SeedPath)) {
+            throw "RELEASE_CUT_INSTALLED_MANIFEST_MISSING: $ManifestPath"
+        }
+        return $true
+    }
+
+    $installed = Get-Content -Raw -Encoding utf8 -LiteralPath $ManifestPath | ConvertFrom-Json
+    $version = if ($null -ne $installed) { $installed.PSObject.Properties['seedVersion'] }
+    if ($null -eq $version -or ($version.Value -isnot [int] -and $version.Value -isnot [long]) -or $version.Value -lt 1) {
+        throw "RELEASE_CUT_INSTALLED_VERSION_INVALID: $ManifestPath"
+    }
+
+    if ($Manifest.seedVersion -gt $version.Value) {
+        return $true
+    }
+    if ($Manifest.seedVersion -eq $version.Value) {
+        # GeneratedAt changes on every build. All release content and provenance must match.
+        $unchanged = $true
+        foreach ($property in $Manifest.PSObject.Properties) {
+            if ($property.Name -ceq 'generatedAt') { continue }
+            $previous = $installed.PSObject.Properties[$property.Name]
+            if ($null -eq $previous -or $previous.Value -cne $property.Value) {
+                $unchanged = $false
+                break
+            }
+        }
+        if ($unchanged -and [IO.File]::Exists($SeedPath) -and
+            (Get-ReleaseFileNormalizedLfSha256 -Path $SeedPath) -ceq $Manifest.seedSha256) {
+            return $false
+        }
+    }
+
+    throw "RELEASE_CUT_VERSION_NOT_NEWER: installed=$($version.Value), requested=$($Manifest.seedVersion)"
+}
+
+function Install-ReleaseCutOutput {
+    param([string]$Source, [string]$Destination)
+
+    $parent = [IO.Path]::GetDirectoryName($Destination)
+    [void][IO.Directory]::CreateDirectory($parent)
+    $temporary = Join-Path $parent ('.milimap-release-cut-' + [Guid]::NewGuid().ToString('N') + '.tmp')
+    try {
+        Copy-Item -LiteralPath $Source -Destination $temporary -ErrorAction Stop
+        [IO.File]::Move($temporary, $Destination, $true)
+    } finally {
+        [IO.File]::Delete($temporary)
+    }
+}
+
+function Install-ReleaseCutOutputs {
+    param([object[]]$Outputs, [string]$StagingDir)
+
+    # Snapshot original bytes before touching any destination.
+    for ($i = 0; $i -lt $Outputs.Count; $i++) {
+        $output = $Outputs[$i]
+        if ([IO.File]::Exists($output.Destination)) {
+            $output.Backup = Join-Path $StagingDir "original-$i"
+            [IO.File]::Copy($output.Destination, $output.Backup)
+        }
+    }
+
+    $installedCount = 0
+    try {
+        foreach ($output in $Outputs) {
+            Install-ReleaseCutOutput -Source $output.Source -Destination $output.Destination
+            $installedCount++
+        }
+    } catch {
+        $applyFailure = $_
+        $restoreFailures = [Collections.Generic.List[string]]::new()
+        for ($i = $installedCount - 1; $i -ge 0; $i--) {
+            $output = $Outputs[$i]
+            try {
+                if ($output.Backup) {
+                    Install-ReleaseCutOutput -Source $output.Backup -Destination $output.Destination
+                } else {
+                    [IO.File]::Delete($output.Destination)
+                }
+            } catch {
+                $restoreFailures.Add("$($output.Destination) ($($_.Exception.Message))")
+            }
+        }
+        if ($restoreFailures.Count -gt 0) {
+            $details = $restoreFailures -join ' | '
+            $failure = [IO.IOException]::new(
+                "RELEASE_CUT_ROLLBACK_FAILED: $details. Original backups remain in $StagingDir.",
+                $applyFailure.Exception
+            )
+            $failure.Data['ReleaseCutPreserveStaging'] = $true
+            throw $failure
+        }
+        throw
+    }
+}
+
 function Invoke-BenefitSeedReleaseCut {
     [CmdletBinding()]
     param(
@@ -92,7 +224,8 @@ function Invoke-BenefitSeedReleaseCut {
     $resolvedDestManifest = Resolve-ReleaseCutPath -Path $DestinationManifestPath -RepoRoot $repoRoot
     $resolvedCandidateOut = if ([string]::IsNullOrWhiteSpace($CandidateOutputCsv)) { '' } else { Resolve-ReleaseCutPath -Path $CandidateOutputCsv -RepoRoot $repoRoot }
 
-    foreach ($requiredFile in @($resolvedCanonicalCsv, $resolvedDdcCsv, $resolvedPajuCsv, $resolvedYangjuCsv, $resolvedMmaCsv, $resolvedCoordCsv, $resolvedManualJson)) {
+    $inputPaths = @($resolvedCanonicalCsv, $resolvedDdcCsv, $resolvedPajuCsv, $resolvedYangjuCsv, $resolvedMmaCsv, $resolvedCoordCsv, $resolvedManualJson)
+    foreach ($requiredFile in $inputPaths) {
         if (-not (Test-Path -LiteralPath $requiredFile -PathType Leaf)) {
             throw "RELEASE_CUT_INPUT_MISSING: $requiredFile"
         }
@@ -117,6 +250,7 @@ function Invoke-BenefitSeedReleaseCut {
 
     $stagingDir = Join-Path ([IO.Path]::GetTempPath()) ('milimap-release-cut-' + [Guid]::NewGuid().ToString('N'))
     [void][IO.Directory]::CreateDirectory($stagingDir)
+    $retainStaging = $false
     try {
         $stagedCandidatesCsv = Join-Path $stagingDir 'candidates.csv'
         $stagedIntermediateJson = Join-Path $stagingDir 'intermediate.json'
@@ -172,20 +306,36 @@ function Invoke-BenefitSeedReleaseCut {
         }
 
         if ($Apply) {
-            foreach ($targetPath in @($resolvedDestSeedJson, $resolvedDestManifest)) {
-                $parent = Split-Path -Parent $targetPath
-                if (-not (Test-Path -LiteralPath $parent -PathType Container)) {
-                    [void][IO.Directory]::CreateDirectory($parent)
+            $outputPaths = @($resolvedDestSeedJson, $resolvedDestManifest)
+            if ($resolvedCandidateOut) { $outputPaths += $resolvedCandidateOut }
+
+            # Serialize Apply invocations so version checks and backups see the same installed state.
+            $mutex = [Threading.Mutex]::new($false, 'MILIMAP_BENEFIT_SEED_RELEASE_CUT')
+            try {
+                try {
+                    [void]$mutex.WaitOne()
+                } catch [Threading.AbandonedMutexException] {
+                    # WaitOne grants ownership even when the previous process exits unexpectedly.
                 }
-            }
-            [IO.File]::Copy($stagedSeedJson, $resolvedDestSeedJson, $true)
-            [IO.File]::Copy($stagedManifestJson, $resolvedDestManifest, $true)
-            if (-not [string]::IsNullOrWhiteSpace($resolvedCandidateOut)) {
-                $candParent = Split-Path -Parent $resolvedCandidateOut
-                if (-not (Test-Path -LiteralPath $candParent -PathType Container)) {
-                    [void][IO.Directory]::CreateDirectory($candParent)
+                try {
+                    Assert-ReleaseCutOutputPaths -OutputPaths $outputPaths -InputPaths $inputPaths
+                    $outputs = @()
+                    if (Test-ReleaseCutPublishSeed -SeedPath $resolvedDestSeedJson -ManifestPath $resolvedDestManifest -Manifest $manifest) {
+                        $outputs += [pscustomobject]@{ Source = $stagedSeedJson; Destination = $resolvedDestSeedJson; Backup = $null }
+                        $outputs += [pscustomobject]@{ Source = $stagedManifestJson; Destination = $resolvedDestManifest; Backup = $null }
+                    }
+                    if ($resolvedCandidateOut -and (
+                        -not [IO.File]::Exists($resolvedCandidateOut) -or
+                        (Get-FileHash -LiteralPath $resolvedCandidateOut).Hash -cne (Get-FileHash -LiteralPath $stagedCandidatesCsv).Hash
+                    )) {
+                        $outputs += [pscustomobject]@{ Source = $stagedCandidatesCsv; Destination = $resolvedCandidateOut; Backup = $null }
+                    }
+                    Install-ReleaseCutOutputs -Outputs $outputs -StagingDir $stagingDir
+                } finally {
+                    $mutex.ReleaseMutex()
                 }
-                [IO.File]::Copy($stagedCandidatesCsv, $resolvedCandidateOut, $true)
+            } finally {
+                $mutex.Dispose()
             }
         }
 
@@ -207,8 +357,11 @@ function Invoke-BenefitSeedReleaseCut {
             CanonicalCsvSha256 = [string]$manifest.canonicalCsvSha256
             SeedSha256 = [string]$manifest.seedSha256
         }
+    } catch {
+        $retainStaging = $_.Exception.Data.Contains('ReleaseCutPreserveStaging')
+        throw
     } finally {
-        if (Test-Path -LiteralPath $stagingDir) {
+        if (-not $retainStaging -and (Test-Path -LiteralPath $stagingDir)) {
             Remove-Item -LiteralPath $stagingDir -Recurse -Force -ErrorAction SilentlyContinue
         }
     }

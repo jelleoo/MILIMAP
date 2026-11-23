@@ -106,6 +106,10 @@ class MainActivity : ComponentActivity() {
                         onAdminSave = viewModel::saveAdmin,
                         onAdminEnd = viewModel::endAdminBenefit,
                         onAdminDelete = viewModel::deleteManualBenefit,
+                        onClearSearch = viewModel::clearSearch,
+                        onMapCameraIdle = viewModel::onMapCameraIdle,
+                        onSearchInMapBounds = viewModel::searchInCurrentMapBounds,
+                        onMapBenefitSelected = viewModel::selectMapBenefit,
                     )
                 }
             }

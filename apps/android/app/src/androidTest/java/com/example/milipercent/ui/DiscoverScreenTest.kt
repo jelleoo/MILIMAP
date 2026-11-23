@@ -3,7 +3,7 @@ package com.example.milipercent.ui
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
-import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performClick
 import androidx.navigation.compose.rememberNavController
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.example.milipercent.data.local.BenefitSourceType
@@ -40,13 +40,13 @@ class DiscoverScreenTest {
             }
         }
 
-        composeRule.onNodeWithText("군 혜택 지도").assertIsDisplayed()
-        composeRule.onNodeWithText("내장 혜택 DB").assertIsDisplayed()
+        composeRule.onNodeWithTag("map_slot").assertIsDisplayed()
         composeRule.onNodeWithTag("benefit_search").assertIsDisplayed()
         composeRule.onNodeWithTag("category_filter").assertIsDisplayed()
-        composeRule.onNodeWithTag("district_filter").assertIsDisplayed()
         composeRule.onNodeWithTag("current_location").assertIsDisplayed()
         composeRule.onNodeWithTag("benefit_card_test-benefit").assertIsDisplayed()
+        composeRule.onNodeWithTag("toggle_filters").performClick()
+        composeRule.onNodeWithTag("district_filter").assertIsDisplayed()
     }
 
     private fun state(): MiliSpotUiState {

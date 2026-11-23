@@ -17,6 +17,8 @@ import com.example.milipercent.model.BenefitStatus
 import com.example.milipercent.model.BenefitDistrict
 import com.example.milipercent.model.BenefitUiModel
 import com.example.milipercent.model.CollectionProgress
+import com.example.milipercent.model.GeoBounds
+import com.example.milipercent.model.GeoPoint
 import com.example.milipercent.model.LocalUser
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -101,6 +103,84 @@ class MiliSpotViewModelTest {
         assertEquals(0, favorites.toggleCalls)
     }
 
+    @Test
+    fun initialStateKeepsMapCleanUntilCategoryOrSearch() = runTest(dispatcher.scheduler) {
+        val viewModel = MiliSpotViewModel(
+            FakeBenefitRepository(listOf(benefit("seed-1"))),
+            FakeAccountRepository(),
+            FakeFavoriteRepository(),
+            FakeAdminRepository(),
+            FakeSeedInstaller(),
+            FakeSessionStorage(),
+            mmaConfigured = false,
+        )
+        advanceUntilIdle()
+
+        assertFalse(viewModel.uiState.value.showMapMarkers)
+        assertTrue(viewModel.uiState.value.mapBenefits.isEmpty())
+        assertEquals(listOf("seed-1"), viewModel.uiState.value.visibleBenefits.map { it.benefit.id })
+
+        viewModel.selectCategory("기타")
+        assertTrue(viewModel.uiState.value.showMapMarkers)
+        assertEquals(listOf("seed-1"), viewModel.uiState.value.mapBenefits.map { it.id })
+    }
+
+    @Test
+    fun searchMovesCameraToMatchedBenefitInsteadOfSeoulCenter() = runTest(dispatcher.scheduler) {
+        val ddcBenefit = benefit(
+            id = "ddc-1",
+            name = "동두천 맛집",
+            address = "경기도 동두천시 평화로 1",
+            lat = 37.9035,
+            lng = 127.0555,
+            category = "음식",
+            district = "동두천시",
+        )
+        val viewModel = MiliSpotViewModel(
+            FakeBenefitRepository(listOf(ddcBenefit)),
+            FakeAccountRepository(),
+            FakeFavoriteRepository(),
+            FakeAdminRepository(),
+            FakeSeedInstaller(),
+            FakeSessionStorage(),
+            mmaConfigured = false,
+        )
+        advanceUntilIdle()
+
+        viewModel.updateSearchText("동두천 맛집")
+        viewModel.submitSearch()
+
+        assertTrue(viewModel.uiState.value.showMapMarkers)
+        assertEquals(GeoPoint(37.9035, 127.0555), viewModel.uiState.value.center)
+        assertEquals(MapCameraTarget.Point(GeoPoint(37.9035, 127.0555), SINGLE_RESULT_ZOOM), viewModel.uiState.value.cameraTarget)
+    }
+
+    @Test
+    fun userMapGestureEnablesSearchInMapBoundsAndAppliesViewportFilter() = runTest(dispatcher.scheduler) {
+        val seoulItem = benefit("seoul-1", name = "서울 카페", address = "서울", lat = 37.56, lng = 126.97, category = "카페", district = "중구")
+        val pajuItem = benefit("paju-1", name = "파주 카페", address = "파주", lat = 37.76, lng = 126.77, category = "카페", district = "파주시")
+        val viewModel = MiliSpotViewModel(
+            FakeBenefitRepository(listOf(seoulItem, pajuItem)),
+            FakeAccountRepository(),
+            FakeFavoriteRepository(),
+            FakeAdminRepository(),
+            FakeSeedInstaller(),
+            FakeSessionStorage(),
+            mmaConfigured = false,
+        )
+        advanceUntilIdle()
+
+        val pajuBounds = GeoBounds(37.74, 126.75, 37.78, 126.80)
+        viewModel.onMapCameraIdle(GeoPoint(37.76, 126.77), pajuBounds, byUserGesture = true)
+        assertTrue(viewModel.uiState.value.isSearchInMapBoundsAvailable)
+
+        viewModel.searchInCurrentMapBounds()
+        assertFalse(viewModel.uiState.value.isSearchInMapBoundsAvailable)
+        assertTrue(viewModel.uiState.value.showMapMarkers)
+        assertEquals(listOf("paju-1"), viewModel.uiState.value.visibleBenefits.map { it.benefit.id })
+        assertEquals(listOf("paju-1"), viewModel.uiState.value.mapBenefits.map { it.id })
+    }
+
     private class FakeSessionStorage(initial: Long? = null) : SessionStorage {
         private var id = initial
         override fun userId(): Long? = id
@@ -153,6 +233,14 @@ class MiliSpotViewModelTest {
     }
 
     private companion object {
-        fun benefit(id: String) = Benefit(id, "혜택", "서울특별시 마포구", 37.5, 126.9, "기타", "할인", "설명", null, null, null, null, BenefitSourceType.LOCAL_GOV, "테스트", null, null, BenefitStatus.ACTIVE, "마포구")
+        fun benefit(
+            id: String,
+            name: String = "혜택",
+            address: String = "서울특별시 마포구",
+            lat: Double = 37.5,
+            lng: Double = 126.9,
+            category: String = "기타",
+            district: String = "마포구",
+        ) = Benefit(id, name, address, lat, lng, category, "할인", "설명", null, null, null, null, BenefitSourceType.LOCAL_GOV, "테스트", null, null, BenefitStatus.ACTIVE, district)
     }
 }

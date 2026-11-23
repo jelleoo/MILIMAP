@@ -13,6 +13,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -32,16 +33,21 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.example.milipercent.BuildConfig
+import com.example.milipercent.model.GeoBounds
 import com.example.milipercent.model.GeoPoint
 import com.example.milipercent.ui.map.BenefitMapItem
+import com.example.milipercent.ui.map.categoryAccentColorInt
 import com.example.milipercent.ui.map.createBenefitMarkerIcon
 import com.example.milipercent.ui.map.markerSetSignature
 import com.naver.maps.geometry.LatLng
+import com.naver.maps.geometry.LatLngBounds
 import com.naver.maps.map.CameraAnimation
 import com.naver.maps.map.CameraUpdate
 import com.naver.maps.map.MapView
 import com.naver.maps.map.overlay.Marker
+import com.naver.maps.map.overlay.OverlayImage
 import kotlin.math.hypot
+import kotlin.math.roundToInt
 
 @Composable
 fun BenefitMap(
@@ -51,32 +57,62 @@ fun BenefitMap(
     cameraRequestId: Long,
     onSelect: (String) -> Unit,
     modifier: Modifier = Modifier,
+    cameraTarget: MapCameraTarget = MapCameraTarget.Point(center),
+    selectedBenefitId: String? = null,
+    onMapBlankClick: () -> Unit = {},
+    onCameraIdle: (GeoPoint, GeoBounds, Boolean) -> Unit = { _, _, _ -> },
 ) {
     if (BuildConfig.NAVER_MAP_NCP_KEY_ID.isBlank()) {
-        OfflineCoordinateMap(benefits, center, currentLocation, onSelect, modifier)
+        OfflineCoordinateMap(
+            benefits = benefits,
+            center = center,
+            currentLocation = currentLocation,
+            selectedBenefitId = selectedBenefitId,
+            onSelect = onSelect,
+            onMapBlankClick = onMapBlankClick,
+            modifier = modifier,
+        )
     } else {
-        NaverMapView(benefits, center, currentLocation, cameraRequestId, onSelect, modifier)
+        NaverMapView(
+            benefits = benefits,
+            cameraTarget = cameraTarget,
+            currentLocation = currentLocation,
+            cameraRequestId = cameraRequestId,
+            selectedBenefitId = selectedBenefitId,
+            onSelect = onSelect,
+            onMapBlankClick = onMapBlankClick,
+            onCameraIdle = onCameraIdle,
+            modifier = modifier,
+        )
     }
 }
 
 @Composable
 private fun NaverMapView(
     benefits: List<BenefitMapItem>,
-    center: GeoPoint,
+    cameraTarget: MapCameraTarget,
     currentLocation: GeoPoint?,
     cameraRequestId: Long,
+    selectedBenefitId: String?,
     onSelect: (String) -> Unit,
+    onMapBlankClick: () -> Unit,
+    onCameraIdle: (GeoPoint, GeoBounds, Boolean) -> Unit,
     modifier: Modifier,
 ) {
     val context = LocalContext.current
     val lifecycle = LocalLifecycleOwner.current.lifecycle
+    val density = LocalDensity.current.density
     val latestOnSelect by rememberUpdatedState(onSelect)
+    val latestOnMapBlankClick by rememberUpdatedState(onMapBlankClick)
+    val latestOnCameraIdle by rememberUpdatedState(onCameraIdle)
     val mapView = remember { MapView(context).also { it.onCreate(null) } }
-    val markerIcon = remember(context) { createBenefitMarkerIcon(context) }
+    val iconCache = remember(context) { mutableMapOf<Pair<String, Boolean>, OverlayImage>() }
     val markers = remember { mutableListOf<Marker>() }
-    var renderedSignature by remember { mutableStateOf("") }
-    var cameraCenter by remember { mutableStateOf<GeoPoint?>(null) }
+    var renderedSignature by remember { mutableStateOf<String?>(null) }
+    var handledCameraTarget by remember { mutableStateOf<MapCameraTarget?>(null) }
     var handledCameraRequestId by remember { mutableLongStateOf(-1L) }
+    var listenersAttached by remember { mutableStateOf(false) }
+    var lastCameraReason by remember { mutableIntStateOf(CameraUpdate.REASON_DEVELOPER) }
 
     DisposableEffect(lifecycle, mapView) {
         val observer = LifecycleEventObserver { _, event ->
@@ -105,40 +141,102 @@ private fun NaverMapView(
             view.getMapAsync { map ->
                 map.uiSettings.isZoomControlEnabled = false
                 map.uiSettings.isLocationButtonEnabled = false
-                if (cameraCenter != center || handledCameraRequestId != cameraRequestId) {
-                    map.moveCamera(
-                        CameraUpdate.scrollAndZoomTo(LatLng(center.latitude, center.longitude), 13.5)
-                            .animate(CameraAnimation.Easing, 450),
-                    )
-                    cameraCenter = center
+                if (!listenersAttached) {
+                    listenersAttached = true
+                    map.addOnCameraChangeListener { reason, _ ->
+                        lastCameraReason = reason
+                    }
+                    map.addOnCameraIdleListener {
+                        val pos = map.cameraPosition.target
+                        val b = map.contentBounds
+                        latestOnCameraIdle(
+                            GeoPoint(pos.latitude, pos.longitude),
+                            GeoBounds(b.southLatitude, b.westLongitude, b.northLatitude, b.eastLongitude),
+                            lastCameraReason == CameraUpdate.REASON_GESTURE,
+                        )
+                        lastCameraReason = CameraUpdate.REASON_DEVELOPER
+                    }
+                    map.setOnMapClickListener { _, _ -> latestOnMapBlankClick() }
+                }
+                if (handledCameraRequestId != cameraRequestId || handledCameraTarget == null) {
+                    val cameraUpdate = when (cameraTarget) {
+                        is MapCameraTarget.Point -> CameraUpdate.scrollAndZoomTo(
+                            LatLng(cameraTarget.point.latitude, cameraTarget.point.longitude),
+                            cameraTarget.zoom,
+                        )
+                        is MapCameraTarget.Bounds -> {
+                            val b = cameraTarget.bounds
+                            if (b.southLatitude >= b.northLatitude || b.westLongitude >= b.eastLongitude || b.isNearlyPoint) {
+                                CameraUpdate.scrollAndZoomTo(
+                                    LatLng(b.center.latitude, b.center.longitude),
+                                    SINGLE_RESULT_ZOOM,
+                                )
+                            } else {
+                                CameraUpdate.fitBounds(
+                                    LatLngBounds(
+                                        LatLng(b.southLatitude, b.westLongitude),
+                                        LatLng(b.northLatitude, b.eastLongitude),
+                                    ),
+                                    (48f * density).roundToInt(),
+                                    (136f * density).roundToInt(),
+                                    (48f * density).roundToInt(),
+                                    (200f * density).roundToInt(),
+                                )
+                            }
+                        }
+                    }.animate(CameraAnimation.Easing, 450)
+                    map.moveCamera(cameraUpdate)
+                    handledCameraTarget = cameraTarget
                     handledCameraRequestId = cameraRequestId
                 }
                 map.locationOverlay.apply {
                     isVisible = currentLocation != null
                     currentLocation?.let { position = LatLng(it.latitude, it.longitude) }
                 }
-                val candidates = benefits.take(500)
-                val signature = markerSetSignature(candidates)
-                if (signature != renderedSignature) {
+                val contentBounds = map.contentBounds
+                val candidates = selectMapMarkerCandidates(benefits, contentBounds, selectedBenefitId)
+                val renderKey = "${markerSetSignature(candidates)}#${selectedBenefitId.orEmpty()}"
+                if (renderKey != renderedSignature) {
                     markers.forEach { it.map = null }
                     markers.clear()
                     candidates.forEach { benefit ->
+                        val isSelected = benefit.id == selectedBenefitId
                         markers += Marker().apply {
                             position = LatLng(benefit.latitude, benefit.longitude)
-                            icon = markerIcon
+                            icon = iconCache.getOrPut(benefit.category to isSelected) {
+                                createBenefitMarkerIcon(context, benefit.category, isSelected)
+                            }
                             anchor = PointF(0.5f, 1f)
                             captionText = benefit.name
-                            captionMinZoom = 13.0
-                            captionTextSize = 11f
+                            captionMinZoom = if (isSelected) 0.0 else 14.0
+                            captionTextSize = if (isSelected) 12f else 11f
+                            isHideCollidedSymbols = true
+                            isHideCollidedCaptions = !isSelected
+                            zIndex = if (isSelected) 100 else 0
                             setOnClickListener { latestOnSelect(benefit.id); true }
                             this.map = map
                         }
                     }
-                    renderedSignature = signature
+                    renderedSignature = renderKey
                 }
             }
         },
     )
+}
+
+private fun selectMapMarkerCandidates(
+    benefits: List<BenefitMapItem>,
+    contentBounds: LatLngBounds,
+    selectedBenefitId: String?,
+): List<BenefitMapItem> {
+    if (benefits.size <= MAX_RENDERED_MARKERS) return benefits
+    val inView = benefits.filter {
+        it.id == selectedBenefitId || contentBounds.contains(LatLng(it.latitude, it.longitude))
+    }
+    if (inView.size >= MAX_RENDERED_MARKERS) return inView.take(MAX_RENDERED_MARKERS)
+    val inViewIds = inView.mapTo(HashSet(inView.size)) { it.id }
+    val remaining = benefits.asSequence().filter { it.id !in inViewIds }.take(MAX_RENDERED_MARKERS - inView.size)
+    return inView + remaining
 }
 
 @Composable
@@ -146,24 +244,28 @@ private fun OfflineCoordinateMap(
     benefits: List<BenefitMapItem>,
     center: GeoPoint,
     currentLocation: GeoPoint?,
+    selectedBenefitId: String?,
     onSelect: (String) -> Unit,
+    onMapBlankClick: () -> Unit,
     modifier: Modifier,
 ) {
     val radius = with(LocalDensity.current) { 28.dp.toPx() }
     Box(modifier.background(PrimarySoft)) {
         Canvas(Modifier.fillMaxSize().pointerInput(benefits) {
             detectTapGestures { tap ->
-                benefits.map { item -> item to mapPoint(item.latitude, item.longitude, size.width.toFloat(), size.height.toFloat()) }
+                val hit = benefits.map { item -> item to mapPoint(item.latitude, item.longitude, size.width.toFloat(), size.height.toFloat()) }
                     .minByOrNull { (_, point) -> hypot(tap.x - point.x, tap.y - point.y) }
                     ?.takeIf { (_, point) -> hypot(tap.x - point.x, tap.y - point.y) <= radius }
-                    ?.let { (item) -> onSelect(item.id) }
+                if (hit != null) onSelect(hit.first.id) else onMapBlankClick()
             }
         }) {
             drawRect(PrimarySoft)
             benefits.forEach { item ->
                 val point = mapPoint(item.latitude, item.longitude, size.width, size.height)
-                drawCircle(Color.White, 13f, point)
-                drawCircle(PrimaryDark, 8f, point)
+                val accent = Color(categoryAccentColorInt(item.category))
+                val isSelected = item.id == selectedBenefitId
+                drawCircle(Color.White, if (isSelected) 16f else 12f, point)
+                drawCircle(accent, if (isSelected) 11f else 8f, point)
             }
             val focus = mapPoint(center.latitude, center.longitude, size.width, size.height)
             drawCircle(PrimaryDark.copy(alpha = .18f), 28f, focus)
@@ -175,7 +277,7 @@ private fun OfflineCoordinateMap(
             }
         }
         Surface(
-            modifier = Modifier.align(Alignment.TopCenter).padding(12.dp),
+            modifier = Modifier.align(Alignment.BottomStart).padding(12.dp),
             color = Navy.copy(alpha = .9f),
             shape = RoundedCornerShape(50),
         ) {
@@ -194,3 +296,5 @@ private fun mapPoint(latitude: Double, longitude: Double, width: Float, height: 
     val y = (1 - ((latitude - 36.85) / (38.30 - 36.85)).coerceIn(.01, .99)).toFloat() * height
     return Offset(x, y)
 }
+
+private const val MAX_RENDERED_MARKERS = 300

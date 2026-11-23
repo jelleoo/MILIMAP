@@ -1,4 +1,4 @@
-﻿Set-StrictMode -Version Latest
+Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
 $poiDataLibRoot = Split-Path -Parent $PSScriptRoot
@@ -13,10 +13,10 @@ $script:MultiApiResponseCache = @{}
 
 function New-MultiApiEmptyTelemetryState {
     return @{
-        JUSO  = @{ Calls = 0; CacheHits = 0; Failures = 0; TotalElapsedMs = 0L }
-        SDSC2 = @{ Calls = 0; CacheHits = 0; Failures = 0; TotalElapsedMs = 0L }
-        KAKAO = @{ Calls = 0; CacheHits = 0; Failures = 0; TotalElapsedMs = 0L }
-        NAVER = @{ Calls = 0; CacheHits = 0; Failures = 0; TotalElapsedMs = 0L }
+        JUSO  = @{ Calls = 0; CacheHits = 0; Failures = 0; PartialResponses = 0; TotalElapsedMs = 0L }
+        SDSC2 = @{ Calls = 0; CacheHits = 0; Failures = 0; PartialResponses = 0; TotalElapsedMs = 0L }
+        KAKAO = @{ Calls = 0; CacheHits = 0; Failures = 0; PartialResponses = 0; TotalElapsedMs = 0L }
+        NAVER = @{ Calls = 0; CacheHits = 0; Failures = 0; PartialResponses = 0; TotalElapsedMs = 0L }
     }
 }
 
@@ -44,6 +44,7 @@ function Get-MultiApiProviderTelemetrySummary {
             Calls = [int]$entry.Calls
             CacheHits = [int]$entry.CacheHits
             Failures = [int]$entry.Failures
+            PartialResponses = [int]$entry.PartialResponses
             TotalElapsedMs = [long]$entry.TotalElapsedMs
         }
     }
@@ -67,7 +68,8 @@ function Invoke-MultiApiCachedProviderRequest {
         [Parameter(Mandatory)][string]$CacheKey,
         [Parameter(Mandatory)][scriptblock]$Fetcher,
         [scriptblock]$ShouldCache = { param($Response) $true },
-        [scriptblock]$IsErrorResponse = { param($Response) $false }
+        [scriptblock]$IsErrorResponse = { param($Response) $false },
+        [scriptblock]$IsPartialResponse = { param($Response) $false }
     )
 
     $stats = $script:MultiApiProviderTelemetry[$Provider]
@@ -84,6 +86,8 @@ function Invoke-MultiApiCachedProviderRequest {
         $stats.TotalElapsedMs += [long]$sw.ElapsedMilliseconds
         if (& $IsErrorResponse $response) {
             $stats.Failures++
+        } elseif (& $IsPartialResponse $response) {
+            $stats.PartialResponses++
         } elseif ($script:MultiApiCacheEnabled -and (& $ShouldCache $response)) {
             $script:MultiApiResponseCache[$CacheKey] = $response
         }
@@ -585,8 +589,9 @@ function Invoke-NaverEnhancedPoiEvaluation {
     )
     $discParams = @{ Business=$Business; ClientId=$ClientId; ClientSecret=$ClientSecret }
     if ($null -ne $RequestInvoker) { $discParams.RequestInvoker = $RequestInvoker }
-    $naverCacheId = "$($Business.OriginalName)|$($Business.PreferredAddress)|$($Business.RoadName)|$($Business.BuildingMain)|$($Business.BuildingSub)"
-    $naverCacheKey = Get-MultiApiCacheHashKey -Provider 'NAVER' -RawIdentifier $naverCacheId
+    $queryPlan = @(Get-PoiDiscoveryQueryPlan $Business)
+    $planJson = ConvertTo-Json -InputObject $queryPlan -Compress
+    $naverCacheKey = Get-MultiApiCacheHashKey -Provider 'NAVER' -RawIdentifier $planJson
     $batch = Invoke-MultiApiCachedProviderRequest -Provider 'NAVER' -CacheKey $naverCacheKey -Fetcher {
         Invoke-PoiDiscovery @discParams
     } -IsErrorResponse {
@@ -594,7 +599,14 @@ function Invoke-NaverEnhancedPoiEvaluation {
         $null -eq $b -or ([string]$b.Status -eq 'FAILED')
     } -ShouldCache {
         param($b)
-        $null -ne $b -and ([string]$b.Status -ne 'FAILED')
+        $null -ne $b -and ([string]$b.Status -ceq 'COMPLETE')
+    } -IsPartialResponse {
+        param($b)
+        $null -ne $b -and ([string]$b.Status -ceq 'PARTIAL')
+    }
+    if ($batch.SourceRowNumber -ne $Business.SourceRowNumber) {
+        $batch = New-PoiDiscoveryBatch -SourceRowNumber $Business.SourceRowNumber -Status $batch.Status `
+            -Candidates $batch.Candidates -QueryAttempts $batch.QueryAttempts
     }
     $eval = Invoke-PoiMatchEvaluation -Business $Business -DiscoveryBatch $batch
 
@@ -606,7 +618,7 @@ function Invoke-NaverEnhancedPoiEvaluation {
 
     if ($eval.Classification -eq 'GREEN') {
         $enhStatus = 'NAVER_ENH_STRONG'
-    } else {
+    } elseif ($batch.Status -ceq 'COMPLETE') {
         $enhMatches = [Collections.Generic.List[object]]::new()
         foreach ($c in @($batch.Candidates)) {
             $nm = Test-MultiApiCandidateNameMatch $Business ([string]$c.OriginalName)

@@ -13,6 +13,7 @@ import com.example.milipercent.data.session.SessionStorage
 import com.example.milipercent.location.LocationDataSource
 import com.example.milipercent.location.LocationFocusState
 import com.example.milipercent.location.LocationUpdate
+import com.example.milipercent.model.Benefit
 import com.example.milipercent.model.GeoBounds
 import com.example.milipercent.model.GeoPoint
 import com.example.milipercent.model.LocalUser
@@ -38,6 +39,8 @@ class MiliSpotViewModel(
     private var favoriteJob: kotlinx.coroutines.Job? = null
     private var locationTrackingJob: kotlinx.coroutines.Job? = null
     private var locationFocusState = LocationFocusState()
+    private var indexedBenefits: List<SearchableBenefit> = emptyList()
+    private var benefitsById: Map<String, Benefit> = emptyMap()
 
     init {
         observeBenefits()
@@ -62,12 +65,12 @@ class MiliSpotViewModel(
 
     fun navigate(destination: AppDestination) {
         if (destination == AppDestination.ADMIN && _uiState.value.user?.isAdmin != true) {
-            publish(_uiState.value.copy(
+            _uiState.value = _uiState.value.copy(
                 destination = AppDestination.ACCOUNT,
                 transientMessage = "관리자 권한이 필요합니다.",
-            ))
+            )
         } else {
-            publish(_uiState.value.copy(destination = destination))
+            _uiState.value = _uiState.value.copy(destination = destination)
         }
     }
 
@@ -118,8 +121,8 @@ class MiliSpotViewModel(
             ))
             return
         }
-        val matches = createBenefitListItems(
-            benefits = state.benefits,
+        val matches = createBenefitListItemsFromIndex(
+            indexedBenefits = indexedBenefits,
             category = state.selectedCategory,
             district = district,
             activeSearch = state.activeSearch,
@@ -130,27 +133,36 @@ class MiliSpotViewModel(
         val cameraFit = computeBoundsCameraTarget(matches)
         if (cameraFit != null) {
             val (newCenter, target) = cameraFit
-            publish(state.copy(
-                selectedDistrict = district,
-                mapBounds = null,
-                searchBounds = null,
-                showMapMarkers = true,
-                selectedMapBenefitId = null,
-                isSearchInMapBoundsAvailable = false,
-                center = newCenter,
-                cameraTarget = target,
-                cameraRequestId = state.cameraRequestId + 1,
-                locationLabel = district.displayName,
-            ))
+            val distanceOriginChanged =
+                (state.activeSearch.isNotBlank() || state.currentLocation == null) && newCenter != state.center
+            val finalVisible = if (distanceOriginChanged) reRankBenefitListItems(matches, newCenter) else matches
+            publish(
+                state = state.copy(
+                    selectedDistrict = district,
+                    mapBounds = null,
+                    searchBounds = null,
+                    showMapMarkers = true,
+                    selectedMapBenefitId = null,
+                    isSearchInMapBoundsAvailable = false,
+                    center = newCenter,
+                    cameraTarget = target,
+                    cameraRequestId = state.cameraRequestId + 1,
+                    locationLabel = district.displayName,
+                ),
+                precomputedVisible = finalVisible,
+            )
         } else {
-            publish(state.copy(
-                selectedDistrict = district,
-                searchBounds = null,
-                showMapMarkers = true,
-                selectedMapBenefitId = null,
-                isSearchInMapBoundsAvailable = false,
-                locationLabel = district.displayName,
-            ))
+            publish(
+                state = state.copy(
+                    selectedDistrict = district,
+                    searchBounds = null,
+                    showMapMarkers = true,
+                    selectedMapBenefitId = null,
+                    isSearchInMapBoundsAvailable = false,
+                    locationLabel = district.displayName,
+                ),
+                precomputedVisible = matches,
+            )
         }
     }
 
@@ -166,29 +178,33 @@ class MiliSpotViewModel(
             clearSearch()
             return
         }
-        val presetCenter = destinationCenters[query.lowercase()]
-        val matches = createBenefitListItems(
-            benefits = state.benefits,
+        val searchCenter = destinationCenters[query.lowercase()] ?: state.center
+        val matches = createBenefitListItemsFromIndex(
+            indexedBenefits = indexedBenefits,
             category = state.selectedCategory,
             district = state.selectedDistrict,
             activeSearch = query,
-            center = presetCenter ?: state.center,
+            center = searchCenter,
             currentLocation = state.currentLocation,
             searchBounds = null,
         )
         val (newCenter, target) = computeSearchCameraTarget(query, matches, state.center)
-        publish(state.copy(
-            activeSearch = query,
-            mapBounds = null,
-            searchBounds = null,
-            showMapMarkers = true,
-            selectedMapBenefitId = null,
-            isSearchInMapBoundsAvailable = false,
-            center = newCenter,
-            cameraTarget = target,
-            locationLabel = query,
-            cameraRequestId = state.cameraRequestId + 1,
-        ))
+        val finalVisible = if (newCenter == searchCenter) matches else reRankBenefitListItems(matches, newCenter)
+        publish(
+            state = state.copy(
+                activeSearch = query,
+                mapBounds = null,
+                searchBounds = null,
+                showMapMarkers = true,
+                selectedMapBenefitId = null,
+                isSearchInMapBoundsAvailable = false,
+                center = newCenter,
+                cameraTarget = target,
+                locationLabel = query,
+                cameraRequestId = state.cameraRequestId + 1,
+            ),
+            precomputedVisible = finalVisible,
+        )
     }
 
     fun selectPreset(preset: String) {
@@ -252,13 +268,13 @@ class MiliSpotViewModel(
         val state = _uiState.value
         if (benefitId == null) {
             _uiState.value = state.copy(selectedMapBenefitId = null)
-        } else if (state.benefits.any { it.id == benefitId }) {
+        } else if (benefitId in benefitsById) {
             _uiState.value = state.copy(selectedMapBenefitId = benefitId)
         }
     }
 
     fun selectBenefit(benefitId: String) {
-        if (_uiState.value.benefits.any { it.id == benefitId }) {
+        if (benefitId in benefitsById) {
             _uiState.value = _uiState.value.copy(selectedBenefitId = benefitId)
         }
     }
@@ -270,10 +286,10 @@ class MiliSpotViewModel(
     fun toggleFavorite(benefitId: String) {
         val user = _uiState.value.user
         if (user == null) {
-            publish(_uiState.value.copy(
+            _uiState.value = _uiState.value.copy(
                 destination = AppDestination.ACCOUNT,
                 transientMessage = "찜을 저장하려면 먼저 로그인해 주세요.",
-            ))
+            )
             return
         }
         viewModelScope.launch {
@@ -300,7 +316,7 @@ class MiliSpotViewModel(
     fun logout() {
         sessionStore.clear()
         setUser(null)
-        publish(_uiState.value.copy(destination = AppDestination.DISCOVER, transientMessage = "로그아웃되었습니다."))
+        _uiState.value = _uiState.value.copy(destination = AppDestination.DISCOVER, transientMessage = "로그아웃되었습니다.")
     }
 
     fun saveAdmin(input: AdminBenefitInput, existingId: String? = null) {
@@ -362,23 +378,26 @@ class MiliSpotViewModel(
             _uiState.value = _uiState.value.copy(isLocationFocusPending = true)
             return false
         }
-        publish(_uiState.value.copy(
-            searchText = "",
-            activeSearch = "",
-            selectedCategory = "전체",
-            selectedDistrict = com.example.milipercent.model.BenefitDistrict.ALL,
-            mapBounds = null,
-            searchBounds = null,
-            showMapMarkers = false,
-            selectedMapBenefitId = null,
-            isSearchInMapBoundsAvailable = false,
-            center = latest,
-            currentLocation = latest,
-            cameraTarget = MapCameraTarget.Point(latest, CURRENT_LOCATION_ZOOM),
-            isLocationFocusPending = false,
-            cameraRequestId = locationFocusState.cameraRequestId,
-            locationLabel = "현재 위치",
-        ))
+        publish(
+            state = _uiState.value.copy(
+                searchText = "",
+                activeSearch = "",
+                selectedCategory = "전체",
+                selectedDistrict = com.example.milipercent.model.BenefitDistrict.ALL,
+                mapBounds = null,
+                searchBounds = null,
+                showMapMarkers = false,
+                selectedMapBenefitId = null,
+                isSearchInMapBoundsAvailable = false,
+                center = latest,
+                currentLocation = latest,
+                cameraTarget = MapCameraTarget.Point(latest, CURRENT_LOCATION_ZOOM),
+                isLocationFocusPending = false,
+                cameraRequestId = locationFocusState.cameraRequestId,
+                locationLabel = "현재 위치",
+            ),
+            recomputeSaved = true,
+        )
         return true
     }
 
@@ -390,7 +409,12 @@ class MiliSpotViewModel(
     private fun observeBenefits() {
         viewModelScope.launch {
             benefitRepository.observeDomainBenefits().collectLatest { benefits ->
-                publish(_uiState.value.copy(benefits = benefits, isLoading = false))
+                indexedBenefits = benefits.toSearchableBenefits()
+                benefitsById = benefits.associateBy(Benefit::id)
+                publish(
+                    state = _uiState.value.copy(benefits = benefits, isLoading = false),
+                    recomputeSaved = true,
+                )
             }
         }
     }
@@ -444,7 +468,7 @@ class MiliSpotViewModel(
         } else {
             _uiState.value.copy(currentLocation = point, isLocationFocusPending = false)
         }
-        publish(next)
+        publish(next, recomputeSaved = true)
     }
 
     private fun cancelPendingLocationFocus() {
@@ -454,40 +478,62 @@ class MiliSpotViewModel(
         }
     }
 
-    private fun publish(state: MiliSpotUiState) {
-        val visible = createBenefitListItems(
-            state.benefits, state.selectedCategory, state.selectedDistrict,
-            state.activeSearch, state.center, state.currentLocation, state.searchBounds,
+    private fun publish(
+        state: MiliSpotUiState,
+        precomputedVisible: List<BenefitListItem>? = null,
+        recomputeSaved: Boolean = false,
+    ) {
+        val visible = precomputedVisible ?: createBenefitListItemsFromIndex(
+            indexedBenefits = indexedBenefits,
+            category = state.selectedCategory,
+            district = state.selectedDistrict,
+            activeSearch = state.activeSearch,
+            center = state.center,
+            currentLocation = state.currentLocation,
+            searchBounds = state.searchBounds,
         )
-        _uiState.value = state.copy(
-            visibleBenefits = visible,
-            savedBenefits = createBenefitListItems(
-                state.benefits,
-                category = "전체",
-                district = com.example.milipercent.model.BenefitDistrict.ALL,
-                activeSearch = "",
+        val saved = if (recomputeSaved) {
+            createSavedBenefitListItems(
+                benefitsById = benefitsById,
+                favoriteIds = state.favoriteIds,
                 center = state.center,
                 currentLocation = state.currentLocation,
-            ).filter { it.benefit.id in state.favoriteIds },
+            )
+        } else {
+            state.savedBenefits
+        }
+        _uiState.value = state.copy(
+            visibleBenefits = visible,
+            savedBenefits = saved,
         )
     }
 
     private fun completeLogin(user: LocalUser, message: String) {
         sessionStore.save(user)
         setUser(user)
-        publish(_uiState.value.copy(destination = AppDestination.DISCOVER, transientMessage = message))
+        _uiState.value = _uiState.value.copy(destination = AppDestination.DISCOVER, transientMessage = message)
     }
 
     private fun setUser(user: LocalUser?) {
         favoriteJob?.cancel()
         if (user == null) {
-            publish(_uiState.value.copy(user = null, favoriteIds = emptySet()))
+            _uiState.value = _uiState.value.copy(user = null, favoriteIds = emptySet(), savedBenefits = emptyList())
             return
         }
-        publish(_uiState.value.copy(user = user, favoriteIds = emptySet()))
+        _uiState.value = _uiState.value.copy(user = user, favoriteIds = emptySet(), savedBenefits = emptyList())
         favoriteJob = viewModelScope.launch {
             favoriteRepository.observeIds(user.id).collectLatest { favoriteIds ->
-                publish(_uiState.value.copy(user = user, favoriteIds = favoriteIds))
+                val current = _uiState.value
+                _uiState.value = current.copy(
+                    user = user,
+                    favoriteIds = favoriteIds,
+                    savedBenefits = createSavedBenefitListItems(
+                        benefitsById = benefitsById,
+                        favoriteIds = favoriteIds,
+                        center = current.center,
+                        currentLocation = current.currentLocation,
+                    ),
+                )
             }
         }
     }

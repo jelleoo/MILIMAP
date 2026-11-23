@@ -207,6 +207,59 @@ class MiliSpotViewModelTest {
         assertTrue(viewModel.uiState.value.cameraRequestId > viewModel.uiState.value.appliedCameraRequestId)
     }
 
+    @Test
+    fun savedBenefitsReflectsOnlyActiveFavoritesAndSurvivesFilterChanges() = runTest(dispatcher.scheduler) {
+        val activeFav = benefit("fav-1", name = "찜한 맛집", district = "동두천시", category = "음식")
+        val endedFav = Benefit(
+            "fav-ended", "종료 찜", "서울", 37.5, 126.9, "기타", "할인", "설명", null, null, null, null,
+            BenefitSourceType.LOCAL_GOV, "테스트", null, null, BenefitStatus.ENDED, "마포구",
+        )
+        val notFav = benefit("other-1", name = "비찜 맛집", district = "파주시", category = "음식")
+        val user = LocalUser(1L, "user@test.com", "사용자", false)
+        val viewModel = MiliSpotViewModel(
+            FakeBenefitRepository(listOf(activeFav, endedFav, notFav)),
+            FakeAccountRepository(user),
+            FakeFavoriteRepository(flowOf(setOf("fav-1", "fav-ended"))),
+            FakeAdminRepository(),
+            FakeSeedInstaller(),
+            FakeSessionStorage(1L),
+            mmaConfigured = false,
+        )
+        advanceUntilIdle()
+
+        assertEquals(listOf("fav-1"), viewModel.uiState.value.savedBenefits.map { it.benefit.id })
+
+        viewModel.selectDistrict(BenefitDistrict.MAPO)
+        viewModel.updateSearchText("비찜")
+        viewModel.submitSearch()
+        assertEquals(listOf("fav-1"), viewModel.uiState.value.savedBenefits.map { it.benefit.id })
+
+        viewModel.logout()
+        assertTrue(viewModel.uiState.value.savedBenefits.isEmpty())
+    }
+
+    @Test
+    fun searchRecomputesDistancesRelativeToResolvedSearchCenter() = runTest(dispatcher.scheduler) {
+        val ddcItem = benefit("ddc-1", name = "동두천 단독가게", address = "경기도 동두천시 평화로 10", lat = 37.9035, lng = 127.0555, category = "음식", district = "동두천시")
+        val viewModel = MiliSpotViewModel(
+            FakeBenefitRepository(listOf(ddcItem)),
+            FakeAccountRepository(),
+            FakeFavoriteRepository(),
+            FakeAdminRepository(),
+            FakeSeedInstaller(),
+            FakeSessionStorage(),
+            mmaConfigured = false,
+        )
+        advanceUntilIdle()
+
+        viewModel.updateSearchText("동두천 단독가게")
+        viewModel.submitSearch()
+
+        val matched = viewModel.uiState.value.visibleBenefits.single()
+        assertEquals("ddc-1", matched.benefit.id)
+        assertEquals(0.0, matched.distanceKm ?: -1.0, 0.001)
+    }
+
     private class FakeSessionStorage(initial: Long? = null) : SessionStorage {
         private var id = initial
         override fun userId(): Long? = id
@@ -237,14 +290,18 @@ class MiliSpotViewModelTest {
         }
     }
 
-    private class FakeAccountRepository : AccountRepository {
-        override fun observeUser(id: Long): Flow<LocalUser?> = flowOf(null)
+    private class FakeAccountRepository(
+        private val user: LocalUser? = null,
+    ) : AccountRepository {
+        override fun observeUser(id: Long): Flow<LocalUser?> = flowOf(user?.takeIf { it.id == id })
         override suspend fun register(email: String, displayName: String, password: String) = Result.failure<LocalUser>(UnsupportedOperationException())
         override suspend fun login(email: String, password: String) = Result.failure<LocalUser>(UnsupportedOperationException())
     }
-    private class FakeFavoriteRepository : FavoriteRepository {
+    private class FakeFavoriteRepository(
+        private val idsFlow: Flow<Set<String>> = flowOf(emptySet()),
+    ) : FavoriteRepository {
         var toggleCalls = 0
-        override fun observeIds(userId: Long) = flowOf(emptySet<String>())
+        override fun observeIds(userId: Long) = idsFlow
         override suspend fun toggle(userId: Long, benefitId: String): Boolean {
             toggleCalls += 1
             return false

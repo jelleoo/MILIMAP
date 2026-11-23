@@ -25,6 +25,7 @@ import com.example.milipercent.data.local.RoomBenefitLocalDataSource
 import com.example.milipercent.data.seed.AssetJsonSource
 import com.example.milipercent.data.seed.BundledSeedSynchronizer
 import com.example.milipercent.data.session.SessionStore
+import com.example.milipercent.data.sync.BenefitSyncPreferences
 import com.example.milipercent.location.AndroidLocationDataSource
 import com.example.milipercent.navigation.MiliSpotNavHost
 import com.example.milipercent.network.BenefitApiClient
@@ -58,6 +59,7 @@ class MainActivity : ComponentActivity() {
             ),
             sessionStore = SessionStore(applicationContext),
             mmaConfigured = BuildConfig.MMA_API_URL.isNotBlank() && BuildConfig.MMA_SERVICE_KEY.isNotBlank(),
+            syncPreferences = BenefitSyncPreferences(applicationContext),
         )
     }
 

@@ -10,6 +10,9 @@ import com.example.milipercent.data.admin.AdminBenefitRepository
 import com.example.milipercent.data.favorite.FavoriteRepository
 import com.example.milipercent.data.seed.BundledSeedInstaller
 import com.example.milipercent.data.session.SessionStorage
+import com.example.milipercent.data.sync.BenefitSyncPolicy
+import com.example.milipercent.data.sync.BenefitSyncPreferenceStore
+import com.example.milipercent.data.sync.InMemoryBenefitSyncPreferences
 import com.example.milipercent.location.LocationDataSource
 import com.example.milipercent.location.LocationFocusState
 import com.example.milipercent.location.LocationUpdate
@@ -33,8 +36,15 @@ class MiliSpotViewModel(
     private val seedSynchronizer: BundledSeedInstaller,
     private val sessionStore: SessionStorage,
     private val mmaConfigured: Boolean,
+    private val syncPreferences: BenefitSyncPreferenceStore = InMemoryBenefitSyncPreferences(),
+    private val currentTimeMillis: () -> Long = System::currentTimeMillis,
+    private val autoRefreshCooldownMillis: Long = BenefitSyncPolicy.DEFAULT_AUTO_REFRESH_COOLDOWN_MILLIS,
 ) : ViewModel() {
-    private val _uiState = MutableStateFlow(MiliSpotUiState())
+    private val _uiState = MutableStateFlow(
+        MiliSpotUiState(
+            lastSyncLabel = BenefitSyncPolicy.formatSyncLabel(syncPreferences.lastSuccessfulSyncAtMillis()),
+        ),
+    )
     val uiState: StateFlow<MiliSpotUiState> = _uiState.asStateFlow()
     private var favoriteJob: kotlinx.coroutines.Job? = null
     private var locationTrackingJob: kotlinx.coroutines.Job? = null
@@ -54,7 +64,13 @@ class MiliSpotViewModel(
             _uiState.value = _uiState.value.copy(isRefreshing = true, refreshFailed = false)
             try {
                 benefitRepository.refreshBenefits()
-                _uiState.value = _uiState.value.copy(isRefreshing = false, lastSyncLabel = "나라사랑가게 API 동기화 완료")
+                val syncedAt = currentTimeMillis()
+                syncPreferences.recordSuccessfulSync(syncedAt)
+                _uiState.value = _uiState.value.copy(
+                    isRefreshing = false,
+                    refreshFailed = false,
+                    lastSyncLabel = BenefitSyncPolicy.formatSyncLabel(syncedAt),
+                )
             } catch (exception: CancellationException) {
                 throw exception
             } catch (_: Exception) {
@@ -434,7 +450,16 @@ class MiliSpotViewModel(
         viewModelScope.launch {
             try {
                 seedSynchronizer.synchronizeIfNeeded()
-                if (mmaConfigured) refresh()
+                if (mmaConfigured) {
+                    val lastSyncedAt = syncPreferences.lastSuccessfulSyncAtMillis()
+                    if (BenefitSyncPolicy.shouldAutoRefresh(lastSyncedAt, currentTimeMillis(), autoRefreshCooldownMillis)) {
+                        refresh()
+                    } else {
+                        _uiState.value = _uiState.value.copy(
+                            lastSyncLabel = BenefitSyncPolicy.formatSyncLabel(lastSyncedAt),
+                        )
+                    }
+                }
             } catch (exception: CancellationException) {
                 throw exception
             } catch (_: Exception) {
@@ -556,6 +581,9 @@ class MiliSpotViewModel(
         private val seedSynchronizer: BundledSeedInstaller,
         private val sessionStore: SessionStorage,
         private val mmaConfigured: Boolean,
+        private val syncPreferences: BenefitSyncPreferenceStore = InMemoryBenefitSyncPreferences(),
+        private val currentTimeMillis: () -> Long = System::currentTimeMillis,
+        private val autoRefreshCooldownMillis: Long = BenefitSyncPolicy.DEFAULT_AUTO_REFRESH_COOLDOWN_MILLIS,
     ) : ViewModelProvider.Factory {
         @Suppress("UNCHECKED_CAST")
         override fun <T : ViewModel> create(modelClass: Class<T>): T {
@@ -568,6 +596,9 @@ class MiliSpotViewModel(
                 seedSynchronizer,
                 sessionStore,
                 mmaConfigured,
+                syncPreferences,
+                currentTimeMillis,
+                autoRefreshCooldownMillis,
             ) as T
         }
     }

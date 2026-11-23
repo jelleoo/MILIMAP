@@ -9,6 +9,8 @@ import com.example.milipercent.data.favorite.FavoriteRepository
 import com.example.milipercent.data.seed.BundledSeedInstaller
 import com.example.milipercent.data.seed.BundledSeedSyncResult
 import com.example.milipercent.data.session.SessionStorage
+import com.example.milipercent.data.sync.BenefitSyncPolicy
+import com.example.milipercent.data.sync.InMemoryBenefitSyncPreferences
 import com.example.milipercent.model.Benefit
 import com.example.milipercent.model.BenefitCollection
 import com.example.milipercent.model.BenefitDetail
@@ -260,6 +262,125 @@ class MiliSpotViewModelTest {
         assertEquals(0.0, matched.distanceKm ?: -1.0, 0.001)
     }
 
+    @Test
+    fun startupSkipsAutoRefreshWithinCooldownAndShowsFormattedTimestamp() = runTest(dispatcher.scheduler) {
+        val lastSyncedAt = 1_763_900_000_000L
+        val now = lastSyncedAt + BenefitSyncPolicy.DEFAULT_AUTO_REFRESH_COOLDOWN_MILLIS - 1_000L
+        val syncPrefs = InMemoryBenefitSyncPreferences(initialTimestampMillis = lastSyncedAt)
+        val repository = FakeBenefitRepository(listOf(benefit("seed-1")))
+
+        val viewModel = MiliSpotViewModel(
+            repository,
+            FakeAccountRepository(),
+            FakeFavoriteRepository(),
+            FakeAdminRepository(),
+            FakeSeedInstaller(),
+            FakeSessionStorage(),
+            mmaConfigured = true,
+            syncPreferences = syncPrefs,
+            currentTimeMillis = { now },
+        )
+        advanceUntilIdle()
+
+        assertEquals(0, repository.refreshCalls)
+        assertEquals(BenefitSyncPolicy.formatSyncLabel(lastSyncedAt), viewModel.uiState.value.lastSyncLabel)
+        assertFalse(viewModel.uiState.value.refreshFailed)
+    }
+
+    @Test
+    fun startupAutoRefreshesWhenCooldownExpiredAndPersistsNewTimestamp() = runTest(dispatcher.scheduler) {
+        val lastSyncedAt = 1_763_800_000_000L
+        val now = lastSyncedAt + BenefitSyncPolicy.DEFAULT_AUTO_REFRESH_COOLDOWN_MILLIS
+        val syncPrefs = InMemoryBenefitSyncPreferences(initialTimestampMillis = lastSyncedAt)
+        val repository = FakeBenefitRepository(listOf(benefit("seed-1")))
+
+        val viewModel = MiliSpotViewModel(
+            repository,
+            FakeAccountRepository(),
+            FakeFavoriteRepository(),
+            FakeAdminRepository(),
+            FakeSeedInstaller(),
+            FakeSessionStorage(),
+            mmaConfigured = true,
+            syncPreferences = syncPrefs,
+            currentTimeMillis = { now },
+        )
+        advanceUntilIdle()
+
+        assertEquals(1, repository.refreshCalls)
+        assertEquals(now, syncPrefs.lastSuccessfulSyncAtMillis())
+        assertEquals(BenefitSyncPolicy.formatSyncLabel(now), viewModel.uiState.value.lastSyncLabel)
+    }
+
+    @Test
+    fun manualRefreshBypassesCooldownAndUpdatesTimestamp() = runTest(dispatcher.scheduler) {
+        val lastSyncedAt = 1_763_900_000_000L
+        var now = lastSyncedAt + 60_000L
+        val syncPrefs = InMemoryBenefitSyncPreferences(initialTimestampMillis = lastSyncedAt)
+        val repository = FakeBenefitRepository(listOf(benefit("seed-1")))
+
+        val viewModel = MiliSpotViewModel(
+            repository,
+            FakeAccountRepository(),
+            FakeFavoriteRepository(),
+            FakeAdminRepository(),
+            FakeSeedInstaller(),
+            FakeSessionStorage(),
+            mmaConfigured = true,
+            syncPreferences = syncPrefs,
+            currentTimeMillis = { now },
+        )
+        advanceUntilIdle()
+        assertEquals(0, repository.refreshCalls)
+
+        now += 120_000L
+        viewModel.refresh()
+        advanceUntilIdle()
+
+        assertEquals(1, repository.refreshCalls)
+        assertEquals(now, syncPrefs.lastSuccessfulSyncAtMillis())
+        assertEquals(BenefitSyncPolicy.formatSyncLabel(now), viewModel.uiState.value.lastSyncLabel)
+    }
+
+    @Test
+    fun failedRefreshDoesNotRecordTimestampSoNextStartupRetries() = runTest(dispatcher.scheduler) {
+        val syncPrefs = InMemoryBenefitSyncPreferences()
+        val failingRepo = FakeBenefitRepository(listOf(benefit("cached")), refreshError = IllegalStateException("offline"))
+
+        MiliSpotViewModel(
+            failingRepo,
+            FakeAccountRepository(),
+            FakeFavoriteRepository(),
+            FakeAdminRepository(),
+            FakeSeedInstaller(),
+            FakeSessionStorage(),
+            mmaConfigured = true,
+            syncPreferences = syncPrefs,
+            currentTimeMillis = { 1_763_900_000_000L },
+        )
+        advanceUntilIdle()
+
+        assertEquals(1, failingRepo.refreshCalls)
+        assertEquals(null, syncPrefs.lastSuccessfulSyncAtMillis())
+
+        val recoveryRepo = FakeBenefitRepository(listOf(benefit("cached")))
+        MiliSpotViewModel(
+            recoveryRepo,
+            FakeAccountRepository(),
+            FakeFavoriteRepository(),
+            FakeAdminRepository(),
+            FakeSeedInstaller(),
+            FakeSessionStorage(),
+            mmaConfigured = true,
+            syncPreferences = syncPrefs,
+            currentTimeMillis = { 1_763_900_060_000L },
+        )
+        advanceUntilIdle()
+
+        assertEquals(1, recoveryRepo.refreshCalls)
+        assertEquals(1_763_900_060_000L, syncPrefs.lastSuccessfulSyncAtMillis())
+    }
+
     private class FakeSessionStorage(initial: Long? = null) : SessionStorage {
         private var id = initial
         override fun userId(): Long? = id
@@ -286,7 +407,18 @@ class MiliSpotViewModelTest {
         override fun observeBenefitById(id: String): Flow<BenefitDetail?> = flowOf(null)
         override suspend fun refreshBenefits(onProgress: (CollectionProgress) -> Unit): BenefitSyncResult {
             refreshCalls += 1
-            throw requireNotNull(refreshError)
+            refreshError?.let { throw it }
+            return BenefitSyncResult(
+                analysis = BenefitAnalyzer.analyze(
+                    BenefitCollection(
+                        benefits = emptyList(),
+                        apiTotalCount = 0,
+                        pageSize = 100,
+                        totalPages = 1,
+                    ),
+                ),
+                roomStoredCount = 0,
+            )
         }
     }
 

@@ -41,10 +41,10 @@ if (-not $rejectedMissingList) {
     throw 'Expected ConvertFrom-WeeklyMmaJsonpListText to reject payload missing list array'
 }
 
-# 2. Metro comparison: cd= match, normalized (name, addr) fallback, new candidate, missing canonical, non-metro ignore, ended ignore
+# 2. Metro comparison: cd= match, normalized (name, addr) fallback, content drift (DISCOUNT|PHONE), new candidate, missing canonical, non-metro ignore, ended ignore
 $liveItems = @(
-    [pscustomobject]@{ udgigwan_cd = '1001'; udae_ggm = '코드매칭점'; addr = '서울특별시 종로구 종로 1'; udgigwan_telno = '02-000-0001'; udggeopjong_gbnm = '카페'; jbc_nm = '서울'; hyhaeje_yn = '' },
-    [pscustomobject]@{ udgigwan_cd = '1002'; udae_ggm = '이름주소 매칭'; addr = '경기도 수원시 팔달구 효원로 10 (1층)'; udgigwan_telno = '031-000-0002'; udggeopjong_gbnm = '병원'; jbc_nm = '경인'; hyhaeje_yn = '' },
+    [pscustomobject]@{ udgigwan_cd = '1001'; udae_ggm = '코드매칭점'; addr = '서울특별시 종로구 종로 1'; udgigwan_telno = '02-000-9999'; udsangse_cn = '전 메뉴 20% 할인'; uddaesang_cn = '현역병'; udggeopjong_gbnm = '카페'; jbc_nm = '서울'; hyhaeje_yn = '' },
+    [pscustomobject]@{ udgigwan_cd = '1002'; udae_ggm = '이름주소 매칭'; addr = '경기도 수원시 팔달구 효원로 10 (1층)'; udgigwan_telno = '031-000-0002'; udsangse_cn = '10% 할인'; uddaesang_cn = '현역병'; udggeopjong_gbnm = '병원'; jbc_nm = '경인'; hyhaeje_yn = '' },
     [pscustomobject]@{ udgigwan_cd = '1003'; udae_ggm = '신규수도권점'; addr = '인천광역시 부평구 부평대로 20'; udgigwan_telno = '032-000-0003'; udggeopjong_gbnm = '안경점'; jbc_nm = '인천'; hyhaeje_yn = '' },
     [pscustomobject]@{ udgigwan_cd = '1004'; udae_ggm = '부산비수도권점'; addr = '부산광역시 해운대구 해운대로 30'; udgigwan_telno = '051-000-0004'; udggeopjong_gbnm = '음식점'; jbc_nm = '부산.울산'; hyhaeje_yn = '' },
     [pscustomobject]@{ udgigwan_cd = '1005'; udae_ggm = '남해경인관할점'; addr = '경상남도 남해군 서부로 1337'; udgigwan_telno = '055-000-0005'; udggeopjong_gbnm = '음식점'; jbc_nm = '경인'; hyhaeje_yn = '' },
@@ -52,11 +52,11 @@ $liveItems = @(
 )
 
 $canonicalRows = @(
-    [pscustomobject]@{ businessId = 'biz-1'; 업소명 = '코드매칭점'; 시도 = '서울특별시'; 시군구 = '종로구'; 소재지도로명주소 = '서울특별시 종로구 종로 1'; 출처유형 = '공공데이터'; 출처URL = 'https://www.mma.go.kr/about/udgg/list.do?mc=mma0003357'; 최근확인일 = '2026-11-23'; 좌표검증상태 = '확인 완료'; 혜택상태 = '이용 가능'; 비고 = '병무청 나라사랑가게 공식목록(cd=1001, 업종=카페)' },
-    [pscustomobject]@{ businessId = 'biz-2'; 업소명 = '이름주소매칭'; 시도 = '경기도'; 시군구 = '수원시'; 소재지도로명주소 = '경기도수원시팔달구효원로10(1층)'; 출처유형 = '공공데이터'; 출처URL = 'https://www.mma.go.kr/about/udgg/list.do?mc=mma0003357'; 최근확인일 = '2026-11-23'; 좌표검증상태 = '확인 완료'; 혜택상태 = '이용 가능'; 비고 = '사전 수집' },
-    [pscustomobject]@{ businessId = 'biz-3'; 업소명 = '정본미관측점'; 시도 = '경기도'; 시군구 = '성남시'; 소재지도로명주소 = '경기도 성남시 분당구 판교로 99'; 출처유형 = '공공데이터'; 출처URL = 'https://www.mma.go.kr/about/udgg/list.do?mc=mma0003357'; 최근확인일 = '2026-11-22'; 좌표검증상태 = '확인 완료'; 혜택상태 = '이용 가능'; 비고 = '병무청 나라사랑가게 공식목록(cd=1099, 업종=병원)' },
-    [pscustomobject]@{ businessId = 'biz-4'; 업소명 = '이미종료된점'; 시도 = '경기도'; 시군구 = '안양시'; 소재지도로명주소 = '경기도 안양시 동안구 시민대로 1'; 출처유형 = '공공데이터'; 출처URL = 'https://www.mma.go.kr/about/udgg/list.do?mc=mma0003357'; 최근확인일 = '2026-11-22'; 좌표검증상태 = '미확인'; 혜택상태 = '종료'; 비고 = 'cd=1098' },
-    [pscustomobject]@{ businessId = 'biz-5'; 업소명 = '파주지자체가게'; 시도 = '경기도'; 시군구 = '파주시'; 소재지도로명주소 = '경기도 파주시 중앙로 1'; 출처유형 = '지자체 공식 자료'; 출처URL = 'https://www.paju.go.kr/user/soldier/BD_discountStoreList.do?q_ctgCd=1001'; 최근확인일 = '2026-11-22'; 좌표검증상태 = '확인 완료'; 혜택상태 = '이용 가능'; 비고 = '' }
+    [pscustomobject]@{ businessId = 'biz-1'; 업소명 = '코드매칭점'; 시도 = '서울특별시'; 시군구 = '종로구'; 소재지도로명주소 = '서울특별시 종로구 종로 1'; 업소전화번호 = '02-000-0001'; 할인정보 = '전 메뉴 10% 할인'; 적용대상 = '현역병'; 출처유형 = '공공데이터'; 출처URL = 'https://www.mma.go.kr/about/udgg/list.do?mc=mma0003357'; 최근확인일 = '2026-11-23'; 좌표검증상태 = '확인 완료'; 혜택상태 = '이용 가능'; 비고 = '병무청 나라사랑가게 공식목록(cd=1001, 업종=카페)' },
+    [pscustomobject]@{ businessId = 'biz-2'; 업소명 = '이름주소매칭'; 시도 = '경기도'; 시군구 = '수원시'; 소재지도로명주소 = '경기도수원시팔달구효원로10(1층)'; 업소전화번호 = '0310000002'; 할인정보 = '10%   할인'; 적용대상 = '현역병'; 출처유형 = '공공데이터'; 출처URL = 'https://www.mma.go.kr/about/udgg/list.do?mc=mma0003357'; 최근확인일 = '2026-11-23'; 좌표검증상태 = '확인 완료'; 혜택상태 = '이용 가능'; 비고 = '사전 수집' },
+    [pscustomobject]@{ businessId = 'biz-3'; 업소명 = '정본미관측점'; 시도 = '경기도'; 시군구 = '성남시'; 소재지도로명주소 = '경기도 성남시 분당구 판교로 99'; 업소전화번호 = '031-000-0003'; 할인정보 = '5% 할인'; 적용대상 = '현역병'; 출처유형 = '공공데이터'; 출처URL = 'https://www.mma.go.kr/about/udgg/list.do?mc=mma0003357'; 최근확인일 = '2026-11-22'; 좌표검증상태 = '확인 완료'; 혜택상태 = '이용 가능'; 비고 = '병무청 나라사랑가게 공식목록(cd=1099, 업종=병원)' },
+    [pscustomobject]@{ businessId = 'biz-4'; 업소명 = '이미종료된점'; 시도 = '경기도'; 시군구 = '안양시'; 소재지도로명주소 = '경기도 안양시 동안구 시민대로 1'; 업소전화번호 = ''; 할인정보 = ''; 적용대상 = ''; 출처유형 = '공공데이터'; 출처URL = 'https://www.mma.go.kr/about/udgg/list.do?mc=mma0003357'; 최근확인일 = '2026-11-22'; 좌표검증상태 = '미확인'; 혜택상태 = '종료'; 비고 = 'cd=1098' },
+    [pscustomobject]@{ businessId = 'biz-5'; 업소명 = '파주지자체가게'; 시도 = '경기도'; 시군구 = '파주시'; 소재지도로명주소 = '경기도 파주시 중앙로 1'; 업소전화번호 = ''; 할인정보 = ''; 적용대상 = ''; 출처유형 = '지자체 공식 자료'; 출처URL = 'https://www.paju.go.kr/user/soldier/BD_discountStoreList.do?q_ctgCd=1001'; 최근확인일 = '2026-11-22'; 좌표검증상태 = '확인 완료'; 혜택상태 = '이용 가능'; 비고 = '' }
 )
 
 $drift = Compare-WeeklyMmaMetroToCanonical -LiveItems $liveItems -CanonicalRows $canonicalRows
@@ -65,10 +65,25 @@ Assert-WeeklyEqual -Actual $drift.liveMetroCount -Expected 3 -Message 'Only acti
 Assert-WeeklyEqual -Actual $drift.canonicalMmaCount -Expected 4 -Message 'Only MMA canonical rows should be counted'
 Assert-WeeklyEqual -Actual $drift.canonicalActiveMmaCount -Expected 3 -Message 'Ended canonical MMA rows should be excluded from active comparison'
 Assert-WeeklyEqual -Actual $drift.matchedCount -Expected 2 -Message 'Both cd= match and normalized (name, addr) match should succeed'
+Assert-WeeklyEqual -Actual $drift.changedCount -Expected 1 -Message 'Exactly 1 matched MMA row has content changes (DISCOUNT|PHONE)'
+Assert-WeeklyEqual -Actual $drift.changedCandidates[0].BusinessId -Expected 'biz-1' -Message 'Changed candidate must be biz-1'
+Assert-WeeklyEqual -Actual $drift.changedCandidates[0].ChangedFields -Expected 'DISCOUNT|PHONE' -Message 'Changed fields must record DISCOUNT|PHONE'
 Assert-WeeklyEqual -Actual $drift.newCandidateCount -Expected 1 -Message 'Exactly 1 new metro candidate expected'
 Assert-WeeklyEqual -Actual $drift.newCandidates[0].InstitutionCode -Expected '1003' -Message 'New candidate cd must be 1003'
 Assert-WeeklyEqual -Actual $drift.missingCanonicalCount -Expected 1 -Message 'Exactly 1 missing active canonical MMA row expected'
 Assert-WeeklyEqual -Actual $drift.missingCanonical[0].BusinessId -Expected 'biz-3' -Message 'Missing canonical row must be biz-3'
+
+# 2b. Yangju XLSX attachment hash check
+$yjSampleBytes = [Text.Encoding]::UTF8.GetBytes('yangju-xlsx-sample-v1')
+$yjSampleHash = [BitConverter]::ToString([Security.Cryptography.SHA256]::HashData($yjSampleBytes)).Replace('-', '').ToLowerInvariant()
+$yjOk = Test-WeeklyYangjuAttachmentDrift -AttachmentBytes $yjSampleBytes -BaselineHash $yjSampleHash -BaselineByteSize $yjSampleBytes.Length
+Assert-WeeklyEqual -Actual $yjOk.status -Expected 'OK' -Message 'Matching SHA-256 hash should yield OK'
+Assert-WeeklyEqual -Actual $yjOk.hashMatched -Expected $true -Message 'hashMatched should be true when bytes match'
+
+$yjChangedBytes = [Text.Encoding]::UTF8.GetBytes('yangju-xlsx-sample-v2')
+$yjDrift = Test-WeeklyYangjuAttachmentDrift -AttachmentBytes $yjChangedBytes -BaselineHash $yjSampleHash -BaselineByteSize $yjSampleBytes.Length
+Assert-WeeklyEqual -Actual $yjDrift.status -Expected 'DRIFT_DETECTED' -Message 'Modified bytes should yield DRIFT_DETECTED'
+Assert-WeeklyEqual -Actual $yjDrift.hashMatched -Expected $false -Message 'hashMatched should be false when bytes differ'
 
 # 3. Markdown report generation
 $summaryFixture = [pscustomobject][ordered]@{

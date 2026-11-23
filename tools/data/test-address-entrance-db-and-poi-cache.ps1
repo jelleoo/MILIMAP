@@ -1,4 +1,4 @@
-﻿Set-StrictMode -Version Latest
+Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
 . (Join-Path $PSScriptRoot 'lib/poi-discovery/multi-api-poi-verification.ps1')
@@ -130,6 +130,56 @@ try {
     $statsAfterErr = Get-MultiApiProviderTelemetrySummary
     Assert-EntrcEqual $statsAfterErr.JUSO.Calls 3 'Total JUSO Calls includes uncached retries'
     Assert-EntrcEqual $statsAfterErr.JUSO.Failures 2 'JUSO Failures increments on API errors'
+
+    $script:NaverMockCalls = 0
+    $script:NaverMockFailures = 1
+    $mockNaver = {
+        param($uri, $headers)
+        $script:NaverMockCalls++
+        if ($script:NaverMockFailures -gt 0) {
+            $script:NaverMockFailures--
+            throw 'temporary fixture failure'
+        }
+        [pscustomobject]@{ items = @([pscustomobject]@{
+            title = '임진강나루'
+            roadAddress = '경기도 파주시 문산읍 반구정로 53-51'
+            mapx = '1267600000'
+            mapy = '378510000'
+        }) }
+    }
+    $partial = Invoke-NaverEnhancedPoiEvaluation -Business $bPaju -RequestInvoker $mockNaver
+    Assert-EntrcEqual $partial.DiscoveryStatus 'PARTIAL' 'One failed query must produce PARTIAL'
+    Assert-EntrcEqual $partial.EnhStatus 'YELLOW' 'Partial batches cannot be upgraded to strong evidence'
+    $full = Invoke-NaverEnhancedPoiEvaluation -Business $bPaju -RequestInvoker $mockNaver
+    Assert-EntrcEqual $full.DiscoveryStatus 'COMPLETE' 'A partial batch must be retried'
+    $callsAfterComplete = $script:NaverMockCalls
+
+    $anotherRow = $bPaju.PSObject.Copy()
+    $anotherRow.SourceRowNumber++
+    $cached = Invoke-NaverEnhancedPoiEvaluation -Business $anotherRow -RequestInvoker $mockNaver
+    Assert-EntrcEqual $cached.DiscoveryStatus 'COMPLETE' 'A shared query plan must use the current row number'
+    Assert-EntrcEqual $script:NaverMockCalls $callsAfterComplete 'An equivalent plan must use the cache'
+
+    $differentPlan = $anotherRow.PSObject.Copy()
+    $differentPlan.BaseName = '다른 업체 검색어'
+    $lookup = Invoke-NaverEnhancedPoiEvaluation -Business $differentPlan -RequestInvoker $mockNaver
+    Assert-EntrcEqual $lookup.DiscoveryStatus 'COMPLETE' 'The changed plan must complete independently'
+    if ($script:NaverMockCalls -le $callsAfterComplete) { throw 'A different query plan needs a fresh request' }
+
+    $statsNaver = (Get-MultiApiProviderTelemetrySummary).NAVER
+    Assert-EntrcEqual $statsNaver.Calls 3 'Partial, complete, and changed plan must count as lookups'
+    Assert-EntrcEqual $statsNaver.CacheHits 1 'Only the complete shared plan is a hit'
+    Assert-EntrcEqual $statsNaver.PartialResponses 1 'Partial responses must be visible separately'
+    Assert-EntrcEqual $statsNaver.Failures 0 'This sequence contains no total failure'
+
+    $failedPlan = $bPaju.PSObject.Copy()
+    $failedPlan.BaseName = '별도 실패 검색어'
+    $alwaysFails = { throw 'unavailable fixture' }
+    $failed = Invoke-NaverEnhancedPoiEvaluation -Business $failedPlan -RequestInvoker $alwaysFails
+    Assert-EntrcEqual $failed.DiscoveryStatus 'FAILED' 'All query failures must produce FAILED'
+    $recovered = Invoke-NaverEnhancedPoiEvaluation -Business $failedPlan -RequestInvoker $mockNaver
+    Assert-EntrcEqual $recovered.DiscoveryStatus 'COMPLETE' 'A failed batch must be retried'
+    Assert-EntrcEqual (Get-MultiApiProviderTelemetrySummary).NAVER.Failures 1 'Total failure must remain separate'
 } finally {
     Set-MultiApiRequestCache -Enabled $false
     Reset-MultiApiProviderTelemetry

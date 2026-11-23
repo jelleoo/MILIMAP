@@ -13,6 +13,8 @@ import com.example.milipercent.data.session.SessionStorage
 import com.example.milipercent.location.LocationDataSource
 import com.example.milipercent.location.LocationFocusState
 import com.example.milipercent.location.LocationUpdate
+import com.example.milipercent.model.GeoBounds
+import com.example.milipercent.model.GeoPoint
 import com.example.milipercent.model.LocalUser
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -70,11 +72,86 @@ class MiliSpotViewModel(
     }
 
     fun selectCategory(category: String) {
-        publish(_uiState.value.copy(selectedCategory = category))
+        val state = _uiState.value
+        if (state.showMapMarkers &&
+            state.selectedCategory == category &&
+            state.activeSearch.isBlank() &&
+            state.selectedDistrict == com.example.milipercent.model.BenefitDistrict.ALL
+        ) {
+            publish(state.copy(
+                selectedCategory = "전체",
+                showMapMarkers = false,
+                searchBounds = null,
+                selectedMapBenefitId = null,
+                isSearchInMapBoundsAvailable = false,
+            ))
+            return
+        }
+        val browsingMap = state.activeSearch.isBlank() &&
+            state.selectedDistrict == com.example.milipercent.model.BenefitDistrict.ALL
+        val nextSearchBounds = if (browsingMap) state.mapBounds else state.searchBounds
+        val nextCenter = nextSearchBounds?.center ?: state.center
+        val nextLabel = if (browsingMap && nextSearchBounds != null && state.locationLabel != "현재 위치") {
+            "현재 지도 영역"
+        } else {
+            state.locationLabel
+        }
+        publish(state.copy(
+            selectedCategory = category,
+            showMapMarkers = true,
+            searchBounds = nextSearchBounds,
+            center = nextCenter,
+            locationLabel = nextLabel,
+            selectedMapBenefitId = null,
+            isSearchInMapBoundsAvailable = false,
+        ))
     }
 
     fun selectDistrict(district: com.example.milipercent.model.BenefitDistrict) {
-        publish(_uiState.value.copy(selectedDistrict = district))
+        val state = _uiState.value
+        if (district == com.example.milipercent.model.BenefitDistrict.ALL) {
+            publish(state.copy(
+                selectedDistrict = district,
+                searchBounds = null,
+                selectedMapBenefitId = null,
+                isSearchInMapBoundsAvailable = false,
+            ))
+            return
+        }
+        val matches = createBenefitListItems(
+            benefits = state.benefits,
+            category = state.selectedCategory,
+            district = district,
+            activeSearch = state.activeSearch,
+            center = state.center,
+            currentLocation = state.currentLocation,
+            searchBounds = null,
+        )
+        val cameraFit = computeBoundsCameraTarget(matches)
+        if (cameraFit != null) {
+            val (newCenter, target) = cameraFit
+            publish(state.copy(
+                selectedDistrict = district,
+                mapBounds = null,
+                searchBounds = null,
+                showMapMarkers = true,
+                selectedMapBenefitId = null,
+                isSearchInMapBoundsAvailable = false,
+                center = newCenter,
+                cameraTarget = target,
+                cameraRequestId = state.cameraRequestId + 1,
+                locationLabel = district.displayName,
+            ))
+        } else {
+            publish(state.copy(
+                selectedDistrict = district,
+                searchBounds = null,
+                showMapMarkers = true,
+                selectedMapBenefitId = null,
+                isSearchInMapBoundsAvailable = false,
+                locationLabel = district.displayName,
+            ))
+        }
     }
 
     fun updateSearchText(searchText: String) {
@@ -83,13 +160,34 @@ class MiliSpotViewModel(
 
     fun submitSearch() {
         cancelPendingLocationFocus()
-        val query = _uiState.value.searchText.trim()
-        val center = destinationCenters[query] ?: SEOUL_CENTER
-        publish(_uiState.value.copy(
+        val state = _uiState.value
+        val query = state.searchText.trim()
+        if (query.isBlank()) {
+            clearSearch()
+            return
+        }
+        val presetCenter = destinationCenters[query.lowercase()]
+        val matches = createBenefitListItems(
+            benefits = state.benefits,
+            category = state.selectedCategory,
+            district = state.selectedDistrict,
             activeSearch = query,
-            center = center,
-            locationLabel = query.ifBlank { "서울 전체" },
-            cameraRequestId = _uiState.value.cameraRequestId + 1,
+            center = presetCenter ?: state.center,
+            currentLocation = state.currentLocation,
+            searchBounds = null,
+        )
+        val (newCenter, target) = computeSearchCameraTarget(query, matches, state.center)
+        publish(state.copy(
+            activeSearch = query,
+            mapBounds = null,
+            searchBounds = null,
+            showMapMarkers = true,
+            selectedMapBenefitId = null,
+            isSearchInMapBoundsAvailable = false,
+            center = newCenter,
+            cameraTarget = target,
+            locationLabel = query,
+            cameraRequestId = state.cameraRequestId + 1,
         ))
     }
 
@@ -100,13 +198,51 @@ class MiliSpotViewModel(
 
     fun clearSearch() {
         cancelPendingLocationFocus()
-        publish(_uiState.value.copy(
+        val state = _uiState.value
+        publish(state.copy(
             searchText = "",
             activeSearch = "",
-            center = SEOUL_CENTER,
-            locationLabel = "서울 전체",
-            cameraRequestId = _uiState.value.cameraRequestId + 1,
+            selectedCategory = "전체",
+            selectedDistrict = com.example.milipercent.model.BenefitDistrict.ALL,
+            searchBounds = null,
+            showMapMarkers = false,
+            selectedMapBenefitId = null,
+            isSearchInMapBoundsAvailable = false,
+            locationLabel = if (state.currentLocation != null) "현재 위치" else "수도권",
         ))
+    }
+
+    fun onMapCameraIdle(center: GeoPoint, bounds: GeoBounds, byUserGesture: Boolean) {
+        val state = _uiState.value
+        _uiState.value = state.copy(
+            mapBounds = bounds,
+            isSearchInMapBoundsAvailable = if (byUserGesture) true else state.isSearchInMapBoundsAvailable,
+        )
+    }
+
+    fun searchInCurrentMapBounds() {
+        val state = _uiState.value
+        val bounds = state.mapBounds
+        publish(state.copy(
+            searchText = "",
+            activeSearch = "",
+            selectedDistrict = com.example.milipercent.model.BenefitDistrict.ALL,
+            searchBounds = bounds,
+            center = bounds?.center ?: state.center,
+            showMapMarkers = true,
+            selectedMapBenefitId = null,
+            isSearchInMapBoundsAvailable = false,
+            locationLabel = "현재 지도 영역",
+        ))
+    }
+
+    fun selectMapBenefit(benefitId: String?) {
+        val state = _uiState.value
+        if (benefitId == null) {
+            _uiState.value = state.copy(selectedMapBenefitId = null)
+        } else if (state.benefits.any { it.id == benefitId }) {
+            _uiState.value = state.copy(selectedMapBenefitId = benefitId)
+        }
     }
 
     fun selectBenefit(benefitId: String) {
@@ -215,8 +351,18 @@ class MiliSpotViewModel(
             return false
         }
         publish(_uiState.value.copy(
+            searchText = "",
+            activeSearch = "",
+            selectedCategory = "전체",
+            selectedDistrict = com.example.milipercent.model.BenefitDistrict.ALL,
+            mapBounds = null,
+            searchBounds = null,
+            showMapMarkers = false,
+            selectedMapBenefitId = null,
+            isSearchInMapBoundsAvailable = false,
             center = latest,
             currentLocation = latest,
+            cameraTarget = MapCameraTarget.Point(latest, CURRENT_LOCATION_ZOOM),
             isLocationFocusPending = false,
             cameraRequestId = locationFocusState.cameraRequestId,
             locationLabel = "현재 위치",
@@ -261,14 +407,24 @@ class MiliSpotViewModel(
         }
     }
 
-    private fun updateLocation(point: com.example.milipercent.model.GeoPoint) {
+    private fun updateLocation(point: GeoPoint) {
         val previousCameraRequest = locationFocusState.cameraRequestId
         locationFocusState = locationFocusState.withLocation(point)
         val focused = locationFocusState.cameraRequestId > previousCameraRequest
         val next = if (focused) {
             _uiState.value.copy(
+                searchText = "",
+                activeSearch = "",
+                selectedCategory = "전체",
+                selectedDistrict = com.example.milipercent.model.BenefitDistrict.ALL,
+                mapBounds = null,
+                searchBounds = null,
+                showMapMarkers = false,
+                selectedMapBenefitId = null,
+                isSearchInMapBoundsAvailable = false,
                 currentLocation = point,
                 center = point,
+                cameraTarget = MapCameraTarget.Point(point, CURRENT_LOCATION_ZOOM),
                 locationLabel = "현재 위치",
                 cameraRequestId = locationFocusState.cameraRequestId,
                 isLocationFocusPending = false,
@@ -289,7 +445,7 @@ class MiliSpotViewModel(
     private fun publish(state: MiliSpotUiState) {
         val visible = createBenefitListItems(
             state.benefits, state.selectedCategory, state.selectedDistrict,
-            state.activeSearch, state.center, state.currentLocation,
+            state.activeSearch, state.center, state.currentLocation, state.searchBounds,
         )
         _uiState.value = state.copy(
             visibleBenefits = visible,

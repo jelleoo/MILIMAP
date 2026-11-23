@@ -4,6 +4,7 @@ import com.example.milipercent.data.local.BenefitSourceType
 import com.example.milipercent.model.Benefit
 import com.example.milipercent.model.BenefitDistrict
 import com.example.milipercent.model.BenefitStatus
+import com.example.milipercent.model.GeoBounds
 import com.example.milipercent.model.GeoPoint
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
@@ -68,6 +69,74 @@ class DiscoverStateTest {
 
         assertEquals(listOf("coordinate", "no-coordinate"), result.map { it.benefit.id })
         assertNull(result.last().distanceKm)
+    }
+
+    @Test
+    fun searchBoundsFiltersOnlyLocatedBenefitsInsideViewport() {
+        val inside = benefit("in", "안쪽 식당", "서울특별시 마포구", "음식", "마포구", latitude = 37.555, longitude = 126.925)
+        val outside = benefit("out", "바깥 식당", "경기도 동두천시", "음식", "동두천시", latitude = 37.905, longitude = 127.055)
+        val unlocated = benefit("nocoord", "좌표없음 식당", "서울특별시 마포구", "음식", "마포구")
+        val bounds = GeoBounds(southLatitude = 37.54, westLongitude = 126.91, northLatitude = 37.57, eastLongitude = 126.95)
+
+        val result = createBenefitListItems(
+            benefits = listOf(inside, outside, unlocated),
+            category = "음식",
+            district = BenefitDistrict.ALL,
+            activeSearch = "",
+            center = SEOUL_CENTER,
+            currentLocation = null,
+            searchBounds = bounds,
+        )
+
+        assertEquals(listOf("in"), result.map { it.benefit.id })
+    }
+
+    @Test
+    fun searchCameraTargetFocusesSinglePinFitsMultiplePinsAndUsesStationPreset() {
+        val singlePin = BenefitListItem(
+            benefit("ddc-one", "동두천 카페", "경기도 동두천시", "카페", "동두천시", latitude = 37.903, longitude = 127.055),
+            distanceKm = 0.2,
+        )
+        val (singleCenter, singleTarget) = computeSearchCameraTarget("동두천 카페", listOf(singlePin), SEOUL_CENTER)
+        assertEquals(GeoPoint(37.903, 127.055), singleCenter)
+        assertEquals(MapCameraTarget.Point(GeoPoint(37.903, 127.055), SINGLE_RESULT_ZOOM), singleTarget)
+
+        val twoPins = listOf(
+            singlePin,
+            BenefitListItem(
+                benefit("ddc-two", "보산 음식점", "경기도 동두천시", "음식", "동두천시", latitude = 37.915, longitude = 127.065),
+                distanceKm = 1.5,
+            ),
+        )
+        val (stationCenter, stationTarget) = computeSearchCameraTarget("동두천역", twoPins, SEOUL_CENTER)
+        assertEquals(destinationCenters["동두천역"], stationCenter)
+        assertEquals(MapCameraTarget.Point(destinationCenters["동두천역"]!!, DEFAULT_MAP_ZOOM), stationTarget)
+
+        val (_, boundsTarget) = computeSearchCameraTarget("동두천", twoPins, SEOUL_CENTER)
+        // "동두천" is also in destinationCenters; test non-preset multi-pin search query:
+        val (_, multiMatchTarget) = computeSearchCameraTarget("치킨", twoPins, SEOUL_CENTER)
+        assertTrue(multiMatchTarget is MapCameraTarget.Bounds)
+        assertTrue(boundsTarget is MapCameraTarget.Point)
+
+        val (fallbackCenter, fallbackTarget) = computeSearchCameraTarget("없는검색어", emptyList(), GeoPoint(37.5, 127.0))
+        assertEquals(GeoPoint(37.5, 127.0), fallbackCenter)
+        assertEquals(MapCameraTarget.Point(GeoPoint(37.5, 127.0), DEFAULT_MAP_ZOOM), fallbackTarget)
+    }
+
+    @Test
+    fun orderedCategoriesPlacesPrimaryCategoriesFirstAndEtcLast() {
+        val benefits = listOf(
+            benefit("1", "가", "서울", "기타", "중구"),
+            benefit("2", "나", "서울", "체험", "중구"),
+            benefit("3", "다", "서울", "병원", "중구"),
+            benefit("4", "라", "서울", "카페", "중구"),
+            benefit("5", "마", "서울", "음식", "중구"),
+        )
+
+        assertEquals(
+            listOf("전체", "음식", "카페", "병원", "체험", "기타"),
+            orderedCategories(benefits),
+        )
     }
 
     private fun benefit(

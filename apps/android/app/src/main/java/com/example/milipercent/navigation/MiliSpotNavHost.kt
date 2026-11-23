@@ -16,12 +16,14 @@ import androidx.navigation.compose.composable
 import androidx.navigation.toRoute
 import com.example.milipercent.data.admin.AdminBenefitInput
 import com.example.milipercent.model.BenefitDistrict
+import com.example.milipercent.model.GeoBounds
+import com.example.milipercent.model.GeoPoint
+import com.example.milipercent.model.LocalUser
 import com.example.milipercent.ui.AppDestination
 import com.example.milipercent.ui.BenefitDetailScreen
 import com.example.milipercent.ui.MiliSpotUiState
 import com.example.milipercent.ui.MilitaryBenefitApp
 import com.example.milipercent.ui.map.openNaverMap
-import com.example.milipercent.model.LocalUser
 
 @Composable
 fun MiliSpotNavHost(
@@ -44,27 +46,35 @@ fun MiliSpotNavHost(
     onAdminSave: (AdminBenefitInput, String?) -> Unit = { _, _ -> },
     onAdminEnd: (String) -> Unit = {},
     onAdminDelete: (String) -> Unit = {},
+    onClearSearch: () -> Unit = {},
+    onMapCameraIdle: (GeoPoint, GeoBounds, Boolean) -> Unit = { _, _, _ -> },
+    onSearchInMapBounds: () -> Unit = {},
+    onMapBenefitSelected: (String?) -> Unit = {},
 ) {
     NavHost(navController = navController, startDestination = DiscoverRoute) {
         composable<DiscoverRoute> { AppRoute(
             state, navController, onNavigate, onSearchTextChanged, onSearch, onPresetSelected,
             onCategorySelected, onDistrictSelected, onBenefitSelected, onFavorite, onRefresh,
             onCurrentLocation, onMessageShown, onRegister, onLogin, onLogout, onAdminSave, onAdminEnd, onAdminDelete,
+            onClearSearch, onMapCameraIdle, onSearchInMapBounds, onMapBenefitSelected,
         ) }
         composable<SavedRoute> { AppRoute(
             state, navController, onNavigate, onSearchTextChanged, onSearch, onPresetSelected,
             onCategorySelected, onDistrictSelected, onBenefitSelected, onFavorite, onRefresh,
             onCurrentLocation, onMessageShown, onRegister, onLogin, onLogout, onAdminSave, onAdminEnd, onAdminDelete,
+            onClearSearch, onMapCameraIdle, onSearchInMapBounds, onMapBenefitSelected,
         ) }
         composable<AccountRoute> { AppRoute(
             state, navController, onNavigate, onSearchTextChanged, onSearch, onPresetSelected,
             onCategorySelected, onDistrictSelected, onBenefitSelected, onFavorite, onRefresh,
             onCurrentLocation, onMessageShown, onRegister, onLogin, onLogout, onAdminSave, onAdminEnd, onAdminDelete,
+            onClearSearch, onMapCameraIdle, onSearchInMapBounds, onMapBenefitSelected,
         ) }
         composable<AdminRoute> { AppRoute(
             state, navController, onNavigate, onSearchTextChanged, onSearch, onPresetSelected,
             onCategorySelected, onDistrictSelected, onBenefitSelected, onFavorite, onRefresh,
             onCurrentLocation, onMessageShown, onRegister, onLogin, onLogout, onAdminSave, onAdminEnd, onAdminDelete,
+            onClearSearch, onMapCameraIdle, onSearchInMapBounds, onMapBenefitSelected,
         ) }
         composable<BenefitDetailRoute> { entry ->
             val benefitId = entry.toRoute<BenefitDetailRoute>().benefitId
@@ -106,6 +116,10 @@ private fun AppRoute(
     onAdminSave: (AdminBenefitInput, String?) -> Unit,
     onAdminEnd: (String) -> Unit,
     onAdminDelete: (String) -> Unit,
+    onClearSearch: () -> Unit,
+    onMapCameraIdle: (GeoPoint, GeoBounds, Boolean) -> Unit,
+    onSearchInMapBounds: () -> Unit,
+    onMapBenefitSelected: (String?) -> Unit,
 ) {
     MilitaryBenefitApp(
         state = state,
@@ -138,5 +152,9 @@ private fun AppRoute(
         onAdminSave = onAdminSave,
         onAdminEnd = onAdminEnd,
         onAdminDelete = onAdminDelete,
+        onClearSearch = onClearSearch,
+        onMapCameraIdle = onMapCameraIdle,
+        onSearchInMapBounds = onSearchInMapBounds,
+        onMapBenefitSelected = onMapBenefitSelected,
     )
 }

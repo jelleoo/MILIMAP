@@ -1,0 +1,55 @@
+name: Weekly Benefit Drift Check
+
+on:
+  schedule:
+    # Weekly at Monday 04:00 KST (Sunday 19:00 UTC)
+    - cron: "0 19 * * 0"
+  workflow_dispatch:
+    inputs:
+      fail_on_fetch_error:
+        description: "Fail workflow if any live official source fetch fails"
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+jobs:
+  weekly-drift-check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7.0.1
+
+      - name: Run drift check script self-tests
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          & tools/data/test-canonical-business-ids.ps1
+          & tools/data/test-release-artifact-pipeline.ps1
+          & tools/data/test-run-weekly-benefit-drift-check.ps1
+
+      - name: Run read-only official source drift check
+        shell: pwsh
+        env:
+          FAIL_ON_FETCH_ERROR: ${{ inputs.fail_on_fetch_error || false }}
+          DRIFT_OUT_DIR: ${{ runner.temp }}/weekly-drift-report
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $failFlag = ($env:FAIL_ON_FETCH_ERROR -eq 'true')
+          & tools/data/run-weekly-benefit-drift-check.ps1 `
+            -OutputDirectory $env:DRIFT_OUT_DIR `
+            -StepSummaryPath $env:GITHUB_STEP_SUMMARY `
+            -FailOnFetchError:$failFlag
+
+      - name: Upload weekly drift report artifact
+        if: always()
+        uses: actions/upload-artifact@v7.0.1
+        with:
+          name: weekly-benefit-drift-report
+          path: ${{ runner.temp }}/weekly-drift-report
+          if-no-files-found: warn
+          retention-days: 30

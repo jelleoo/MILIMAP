@@ -35,7 +35,7 @@ jobs:
       - name: Run read-only official source drift check
         shell: pwsh
         env:
-          FAIL_ON_FETCH_ERROR: ${{ inputs.fail_on_fetch_error || false }}
+          FAIL_ON_FETCH_ERROR: ${{ github.event_name == 'schedule' || inputs.fail_on_fetch_error }}
           DRIFT_OUT_DIR: ${{ runner.temp }}/weekly-drift-report
         run: |
           $ErrorActionPreference = 'Stop'

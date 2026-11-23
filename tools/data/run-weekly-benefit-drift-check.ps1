@@ -6,13 +6,15 @@ param(
     [string]$MmaListUrl = 'https://open.mma.go.kr/caisGGGS/mmanrsrListAjaxJsonCallNew.json?jbc_cd=&udggeopjong_gbcd=&callback=MmaBenefitList',
     [int]$TimeoutSeconds = 30,
     [string]$StepSummaryPath = '',
-    [string]$YangjuAttachmentUrl = 'https://www.yangju.go.kr/health/downloadBbsFile.do?key=2716&bbsNo=81&atchmnflNo=200411',
+    [string]$YangjuAttachmentUrl = '',
     [string]$YangjuControlJsonPath = 'tools/data/testdata/benefit-evidence-xlsx/yangju-live-control.json',
     [switch]$FailOnFetchError
 )
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
+
+. (Join-Path $PSScriptRoot 'lib/benefit-source/discover-official-benefit-sources.ps1')
 
 function Normalize-WeeklyDriftIdentityPart {
     param([AllowNull()][string]$Value)
@@ -38,39 +40,59 @@ function Normalize-WeeklyDriftPhone {
 function Get-WeeklyDriftField {
     param(
         [AllowNull()]$Item,
-        [Parameter(Mandatory)][string[]]$CandidateNames
+        [Parameter(Mandatory)][string[]]$CandidateNames,
+        [switch]$PreserveAbsence
     )
 
-    if ($null -eq $Item) { return '' }
-    foreach ($name in $CandidateNames) {
-        $prop = $Item.PSObject.Properties[$name]
-        if ($null -ne $prop -and $null -ne $prop.Value) {
+    $present = $false
+    if ($null -ne $Item) {
+        foreach ($name in $CandidateNames) {
+            $prop = $Item.PSObject.Properties[$name]
+            if ($null -eq $prop) { continue }
+            $present = $true
             $text = ([string]$prop.Value).Trim()
-            if (-not [string]::IsNullOrWhiteSpace($text)) {
-                return $text
-            }
+            if (-not [string]::IsNullOrWhiteSpace($text)) { return $text }
         }
     }
+    if ($PreserveAbsence -and -not $present) { return $null }
     return ''
 }
 
 function ConvertFrom-WeeklyMmaJsonpListText {
-    param([Parameter(Mandatory)][AllowEmptyString()][string]$RawText)
+    param(
+        [Parameter(Mandatory)][AllowEmptyString()][string]$RawText,
+        [string]$ExpectedCallback = 'MmaBenefitList'
+    )
 
-    $cleaned = $RawText
-    if ($cleaned.Length -gt 0 -and $cleaned[0] -eq [char]0xFEFF) {
-        $cleaned = $cleaned.Substring(1)
+    if ($ExpectedCallback -cnotmatch '^[A-Za-z_$][A-Za-z0-9_$]*$') {
+        throw 'WEEKLY_MMA_JSONP_INVALID: Invalid expected callback name.'
     }
-    $match = [regex]::Match($cleaned, '^\s*[A-Za-z_][A-Za-z0-9_]*\(([\s\S]*)\)\s*;?\s*$')
+    $pattern = '\A\s*' + [regex]::Escape($ExpectedCallback) + '\s*\((?<json>.*)\)\s*;?\s*\z'
+    $match = [regex]::Match($RawText.TrimStart([char]0xFEFF), $pattern, [Text.RegularExpressions.RegexOptions]::Singleline, [TimeSpan]::FromSeconds(1))
     if (-not $match.Success) {
-        throw 'WEEKLY_MMA_JSONP_INVALID: Expected callback wrapper around JSON payload.'
+        throw 'WEEKLY_MMA_JSONP_INVALID: Expected the configured callback wrapper around the JSON payload.'
     }
-    $jsonBody = $match.Groups[1].Value
-    $parsed = $jsonBody | ConvertFrom-Json -ErrorAction Stop
-    if ($null -eq $parsed -or $parsed -isnot [pscustomobject] -or $null -eq $parsed.PSObject.Properties['list'] -or $null -eq $parsed.list) {
-        throw 'WEEKLY_MMA_JSONP_MISSING_LIST: Parsed JSONP payload does not contain a list array.'
+    try {
+        $json = $match.Groups['json'].Value
+        # ConvertFrom-Json alone accepts JavaScript extensions such as trailing commas.
+        [Text.Json.JsonDocument]::Parse($json).Dispose()
+        $parsed = ConvertFrom-Json -InputObject $json -NoEnumerate
+    } catch {
+        throw 'WEEKLY_MMA_JSONP_INVALID: Callback contains malformed JSON.'
     }
-    return @($parsed.list)
+    if ($parsed -isnot [pscustomobject] -or $null -eq $parsed.PSObject.Properties['success'] -or $parsed.success -isnot [bool] -or -not $parsed.success) {
+        throw 'WEEKLY_MMA_JSONP_UNSUCCESSFUL: The source did not return a successful list response.'
+    }
+    $list = $parsed.PSObject.Properties['list']
+    if ($null -eq $list -or $list.Value -isnot [array] -or $list.Value.Count -eq 0) {
+        throw 'WEEKLY_MMA_JSONP_UNUSABLE_LIST: The response must contain a nonempty list array.'
+    }
+    foreach ($item in $list.Value) {
+        if ($item -isnot [pscustomobject]) {
+            throw 'WEEKLY_MMA_JSONP_UNUSABLE_LIST: Every list entry must be a JSON object.'
+        }
+    }
+    return $list.Value
 }
 
 function Read-WeeklyUtf8WebResponseText {
@@ -142,10 +164,13 @@ function Compare-WeeklyMmaMetroToCanonical {
 
         $cd = Get-WeeklyDriftField -Item $item -CandidateNames @('udgigwan_cd', 'udgigwancd', 'institutionCode')
         $name = Get-WeeklyDriftField -Item $item -CandidateNames @('udae_ggm', 'sangho', 'businessName', 'udgigwan_yhnm')
-        $phone = Get-WeeklyDriftField -Item $item -CandidateNames @('udgigwan_telno', 'telno', 'phone')
+        $phone = Get-WeeklyDriftField -Item $item -CandidateNames @('udgigwan_telno', 'telno', 'phone') -PreserveAbsence
         $category = Get-WeeklyDriftField -Item $item -CandidateNames @('udggeopjong_gbnm', 'upjong_nm', 'category')
         $office = Get-WeeklyDriftField -Item $item -CandidateNames @('jbc_nm', 'regionalOffice')
 
+        if (-not $cd -and -not (Normalize-WeeklyDriftIdentityPart $name)) {
+            throw 'WEEKLY_MMA_METRO_IDENTITY_MISSING: An active metro row has no usable institution code or name.'
+        }
         $liveMetroItems.Add($item)
         if (-not [string]::IsNullOrWhiteSpace($cd)) { [void]$liveCds.Add($cd) }
         $key = "$(Normalize-WeeklyDriftIdentityPart $name)|$(Normalize-WeeklyDriftIdentityPart $addr)"
@@ -162,22 +187,24 @@ function Compare-WeeklyMmaMetroToCanonical {
         if ($null -ne $matchedCanonical) {
             $matchedCount++
             if ((Get-WeeklyDriftField -Item $matchedCanonical -CandidateNames @('혜택상태')) -ceq '이용 가능') {
-                $liveDiscount = Normalize-WeeklyDriftClaimText (Get-WeeklyDriftField -Item $item -CandidateNames @('udsangse_cn', 'benefitDetail'))
+                $liveDiscountRaw = Get-WeeklyDriftField -Item $item -CandidateNames @('udsangse_cn', 'benefitDetail') -PreserveAbsence
+                $liveDiscount = Normalize-WeeklyDriftClaimText $liveDiscountRaw
                 $canDiscount = Normalize-WeeklyDriftClaimText (Get-WeeklyDriftField -Item $matchedCanonical -CandidateNames @('할인정보'))
-                $liveTarget = Normalize-WeeklyDriftClaimText (Get-WeeklyDriftField -Item $item -CandidateNames @('uddaesang_cn', 'eligibleTarget'))
+                $liveTargetRaw = Get-WeeklyDriftField -Item $item -CandidateNames @('uddaesang_cn', 'eligibleTarget') -PreserveAbsence
+                $liveTarget = Normalize-WeeklyDriftClaimText $liveTargetRaw
                 $canTarget = Normalize-WeeklyDriftClaimText (Get-WeeklyDriftField -Item $matchedCanonical -CandidateNames @('적용대상'))
                 $livePhoneNorm = Normalize-WeeklyDriftPhone $phone
                 $canPhoneRaw = Get-WeeklyDriftField -Item $matchedCanonical -CandidateNames @('업소전화번호')
                 $canPhoneNorm = Normalize-WeeklyDriftPhone $canPhoneRaw
 
                 $diffTags = [Collections.Generic.List[string]]::new()
-                if ($liveDiscount -and $canDiscount -and ($liveDiscount -cne $canDiscount)) {
+                if ($null -ne $liveDiscountRaw -and $liveDiscount -cne $canDiscount) {
                     $diffTags.Add('DISCOUNT')
                 }
-                if ($liveTarget -and $canTarget -and ($liveTarget -cne $canTarget)) {
+                if ($null -ne $liveTargetRaw -and $liveTarget -cne $canTarget) {
                     $diffTags.Add('TARGET')
                 }
-                if ($livePhoneNorm -and $canPhoneNorm -and ($livePhoneNorm -cne $canPhoneNorm)) {
+                if ($null -ne $phone -and $livePhoneNorm -cne $canPhoneNorm) {
                     $diffTags.Add('PHONE')
                 }
 
@@ -193,7 +220,7 @@ function Compare-WeeklyMmaMetroToCanonical {
                         CanonicalTarget = $canTarget
                         LiveTarget = $liveTarget
                         CanonicalPhone = $canPhoneRaw
-                        LivePhone = $phone
+                        LivePhone = [string]$phone
                     })
                 }
             }
@@ -202,11 +229,15 @@ function Compare-WeeklyMmaMetroToCanonical {
                 InstitutionCode = $cd
                 BusinessName = $name
                 RoadAddress = $addr
-                Phone = $phone
+                Phone = [string]$phone
                 Category = $category
                 RegionalOffice = $office
             })
         }
+    }
+
+    if ($liveMetroItems.Count -eq 0) {
+        throw 'WEEKLY_MMA_METRO_EMPTY: The official list contains no active metro records.'
     }
 
     $canonicalActiveMmaRows = @(
@@ -252,12 +283,99 @@ function Compare-WeeklyMmaMetroToCanonical {
     }
 }
 
+function Get-WeeklyYangjuBoardId {
+    param([uri]$PageUrl, [string]$Href, [string]$Path, [string]$IdParameter)
+
+    $target = $null
+    if (-not [uri]::TryCreate($PageUrl, [Net.WebUtility]::HtmlDecode($Href), [ref]$target) -or
+        $target.Scheme -cne 'https' -or $target.Host -cne 'www.yangju.go.kr' -or -not $target.IsDefaultPort -or
+        $target.UserInfo -or $target.Fragment -or $target.AbsolutePath -cne $Path) {
+        return
+    }
+
+    $query = [System.Web.HttpUtility]::ParseQueryString($target.Query)
+    if ($query['key'] -cne '2716' -or $query['bbsNo'] -cne '81') { return }
+    $id = 0L
+    $rawId = $query[$IdParameter]
+    if ($rawId -cmatch '^[1-9][0-9]*$' -and [long]::TryParse($rawId, [ref]$id)) { return $id }
+}
+
+function Get-WeeklyYangjuPageAnchors {
+    param([string]$Html)
+
+    $pattern = '(?is)<a\b[^>]*\shref\s*=\s*(?<quote>["''])(?<href>.*?)\k<quote>[^>]*>(?<label>.*?)</a\s*>'
+    foreach ($anchor in [regex]::Matches($Html, $pattern)) {
+        [pscustomobject]@{
+            Href = $anchor.Groups['href'].Value
+            Label = [Net.WebUtility]::HtmlDecode(($anchor.Groups['label'].Value -replace '<[^>]+>', '')).Trim()
+        }
+    }
+}
+
+function Find-WeeklyYangjuNoticeUrl {
+    param([uri]$BoardUrl, [string]$Html)
+
+    $path = '/health/selectBbsNttView.do'
+    $newestId = 0L
+    foreach ($anchor in @(Get-WeeklyYangjuPageAnchors -Html $Html)) {
+        if ($anchor.Label -notmatch '군\s*장병\s*할인\s*[·ㆍ・‧∙/]?\s*우대\s*업소.*현황') { continue }
+        $id = Get-WeeklyYangjuBoardId -PageUrl $BoardUrl -Href $anchor.Href -Path $path -IdParameter 'nttNo'
+        if ($id -gt $newestId) { $newestId = $id }
+    }
+    if ($newestId -eq 0) {
+        throw 'WEEKLY_YANGJU_NOTICE_NOT_FOUND: No verified military discount inventory notice was found.'
+    }
+    return [uri]::new($BoardUrl, $path + '?key=2716&bbsNo=81&nttNo=' + $newestId)
+}
+
+function Find-WeeklyYangjuAttachmentUrl {
+    param([uri]$NoticeUrl, [string]$Html)
+
+    $path = '/health/downloadBbsFile.do'
+    $ids = [Collections.Generic.HashSet[long]]::new()
+    $pattern = '(?is)<div\b[^>]*\sclass\s*=\s*["''][^"'']*\bdown_view\b[^"'']*["''][^>]*>(?<body>.*?)</div\s*>'
+    foreach ($block in [regex]::Matches($Html, $pattern)) {
+        $body = $block.Groups['body'].Value
+        $filename = [regex]::Match($body, '(?is)<span\b[^>]*>(.*?)</span\s*>').Groups[1].Value
+        $filename = [Net.WebUtility]::HtmlDecode(($filename -replace '<[^>]+>', '')).Trim()
+        if ($filename -notmatch '군\s*장병\s*할인\s*[·ㆍ・‧∙/]?\s*우대\s*업소\s*현황.*\.xlsx$') { continue }
+
+        $downloadIds = @(
+            foreach ($anchor in @(Get-WeeklyYangjuPageAnchors -Html $body)) {
+                Get-WeeklyYangjuBoardId -PageUrl $NoticeUrl -Href $anchor.Href -Path $path -IdParameter 'atchmnflNo'
+            }
+        )
+        if ($downloadIds.Count -eq 0) {
+            throw 'WEEKLY_YANGJU_ATTACHMENT_UNVERIFIED: The inventory workbook download is outside the verified Yangju board.'
+        }
+        foreach ($id in $downloadIds) { [void]$ids.Add($id) }
+    }
+    if ($ids.Count -ne 1) {
+        throw 'WEEKLY_YANGJU_ATTACHMENT_UNVERIFIED: The newest notice must identify exactly one verified inventory workbook.'
+    }
+    return [uri]::new($NoticeUrl, $path + '?key=2716&bbsNo=81&atchmnflNo=' + ($ids | Select-Object -First 1))
+}
+
+function Invoke-WeeklyYangjuRequest {
+    param([uri]$Uri, [int]$TimeoutSeconds, [int]$MaximumRedirection = 0)
+
+    $response = Invoke-WebRequest -Uri $Uri -Headers @{ 'User-Agent' = 'MILIMAP-Phase5-EvidenceVerifier/1.0' } -MaximumRedirection $MaximumRedirection -TimeoutSec $TimeoutSeconds
+    if ([int]$response.StatusCode -ne 200) {
+        throw "WEEKLY_YANGJU_HTTP_FAILED: HTTP status $($response.StatusCode)"
+    }
+    return $response
+}
+
 function Test-WeeklyYangjuAttachmentDrift {
     param(
-        [Parameter(Mandatory)][byte[]]$AttachmentBytes,
+        [Parameter(Mandatory)][AllowEmptyCollection()][byte[]]$AttachmentBytes,
         [Parameter(Mandatory)][string]$BaselineHash,
         [long]$BaselineByteSize = 0
     )
+
+    if (-not (Test-BenefitXlsxBinaryPackage -Bytes $AttachmentBytes)) {
+        throw 'WEEKLY_YANGJU_XLSX_INVALID: Download is not an XLSX workbook package.'
+    }
 
     $actualHash = [BitConverter]::ToString([Security.Cryptography.SHA256]::HashData($AttachmentBytes)).Replace('-', '').ToLowerInvariant()
     $expectedHash = $BaselineHash.Trim().ToLowerInvariant()
@@ -425,7 +543,9 @@ try {
         throw "HTTP status $($mmaResp.StatusCode)"
     }
     $mmaText = Read-WeeklyUtf8WebResponseText -Response $mmaResp
-    $mmaLiveItems = @(ConvertFrom-WeeklyMmaJsonpListText -RawText $mmaText)
+    $mmaCallback = [System.Web.HttpUtility]::ParseQueryString(([uri]$MmaListUrl).Query)['callback']
+    if (-not $mmaCallback) { $mmaCallback = 'MmaBenefitList' }
+    $mmaLiveItems = @(ConvertFrom-WeeklyMmaJsonpListText -RawText $mmaText -ExpectedCallback $mmaCallback)
     $mmaDrift = Compare-WeeklyMmaMetroToCanonical -LiveItems $mmaLiveItems -CanonicalRows $canonicalRows
 
     @($mmaDrift.changedCandidates) | Export-Csv -LiteralPath $mmaChangedCsv -NoTypeInformation -Encoding utf8
@@ -477,10 +597,19 @@ try {
         throw "Yangju baseline control JSON missing: $resolvedYangjuControlPath"
     }
     $yjBaseline = Get-Content -Raw -Encoding utf8 -LiteralPath $resolvedYangjuControlPath | ConvertFrom-Json
-    $yjResp = Invoke-WebRequest -Uri $YangjuAttachmentUrl -Headers @{ 'User-Agent' = 'MILIMAP-Phase5-EvidenceVerifier/1.0' } -MaximumRedirection 3 -TimeoutSec $TimeoutSeconds
-    if ([int]$yjResp.StatusCode -ne 200) {
-        throw "HTTP status $($yjResp.StatusCode)"
+    $yjNoticeUrl = $null
+    $yjRedirectLimit = 3
+    $yjAttachmentUrl = $YangjuAttachmentUrl
+    if ([string]::IsNullOrWhiteSpace($yjAttachmentUrl)) {
+        $yjRedirectLimit = 0
+        $yjBoardUrl = [uri]'https://www.yangju.go.kr/health/selectBbsNttList.do?key=2716&bbsNo=81&searchCnd=SJ&searchKrwd=%EA%B5%B0%EC%9E%A5%EB%B3%91'
+        $yjBoard = Invoke-WeeklyYangjuRequest -Uri $yjBoardUrl -TimeoutSeconds $TimeoutSeconds
+        $yjNoticeUrl = Find-WeeklyYangjuNoticeUrl -BoardUrl $yjBoardUrl -Html (Read-WeeklyUtf8WebResponseText -Response $yjBoard)
+        $yjNotice = Invoke-WeeklyYangjuRequest -Uri $yjNoticeUrl -TimeoutSeconds $TimeoutSeconds
+        $yjAttachmentUrl = Find-WeeklyYangjuAttachmentUrl -NoticeUrl $yjNoticeUrl -Html (Read-WeeklyUtf8WebResponseText -Response $yjNotice)
     }
+    $yjResp = Invoke-WeeklyYangjuRequest -Uri $yjAttachmentUrl -TimeoutSeconds $TimeoutSeconds -MaximumRedirection $yjRedirectLimit
+
     $yjBytes = if ($yjResp.Content -is [byte[]]) {
         [byte[]]$yjResp.Content
     } else {
@@ -490,7 +619,8 @@ try {
     $yjCheck = Test-WeeklyYangjuAttachmentDrift -AttachmentBytes $yjBytes -BaselineHash ([string]$yjBaseline.ContentHash) -BaselineByteSize ([long]$yjBaseline.WorkbookByteSize)
     $yjSummary = [pscustomobject][ordered]@{
         generatedAtUtc = [DateTimeOffset]::UtcNow.ToString('yyyy-MM-ddTHH:mm:ssZ', [Globalization.CultureInfo]::InvariantCulture)
-        attachmentUrl = $YangjuAttachmentUrl
+        noticeUrl = [string]$yjNoticeUrl
+        attachmentUrl = [string]$yjAttachmentUrl
         status = $yjCheck.status
         hashMatched = $yjCheck.hashMatched
         actualHash = $yjCheck.actualHash

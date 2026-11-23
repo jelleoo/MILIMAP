@@ -64,15 +64,45 @@ interface BenefitDao {
     @Query(
         """
         DELETE FROM benefits
-        WHERE sourceRowNumber IS NULL
-          AND sourceType IN (:bundledSourceTypes)
-          AND id NOT IN (:retainedIds)
+        WHERE sourceType = :sourceType
+          AND id IN (:ids)
         """,
     )
+    suspend fun deleteBySourceAndIds(sourceType: String, ids: List<String>)
+
+    @Query(
+        """
+        SELECT id FROM benefits
+        WHERE sourceRowNumber IS NULL
+          AND sourceType IN (:bundledSourceTypes)
+        """,
+    )
+    suspend fun getBundledSeedIds(bundledSourceTypes: List<String>): List<String>
+
+    @Query(
+        """
+        DELETE FROM benefits
+        WHERE sourceRowNumber IS NULL
+          AND sourceType IN (:bundledSourceTypes)
+          AND id IN (:ids)
+        """,
+    )
+    suspend fun deleteBundledSeedRowsByIds(
+        bundledSourceTypes: List<String>,
+        ids: List<String>,
+    )
+
+    @Transaction
     suspend fun deleteRetiredBundledSeedRows(
         bundledSourceTypes: List<String>,
         retainedIds: List<String>,
-    )
+    ) {
+        val existingIds = getBundledSeedIds(bundledSourceTypes)
+        val retiredIds = computeRetiredIds(existingIds, retainedIds)
+        retiredIds.chunked(SQLITE_DELETE_CHUNK_SIZE).forEach { chunk ->
+            deleteBundledSeedRowsByIds(bundledSourceTypes, chunk)
+        }
+    }
 
     @Query("SELECT COUNT(*) FROM benefits WHERE sourceType = :sourceType")
     suspend fun countBySource(sourceType: String): Int
@@ -97,7 +127,12 @@ interface BenefitDao {
         require(benefits.all { it.sourceType == sourceType }) {
             "교체하려는 데이터의 sourceType이 일치하지 않습니다."
         }
-        deleteBySource(sourceType)
-        insertAll(benefits)
+        val diff = computeBenefitSourceDiff(getBySource(sourceType), benefits)
+        diff.removedIds.chunked(SQLITE_DELETE_CHUNK_SIZE).forEach { chunk ->
+            deleteBySourceAndIds(sourceType, chunk)
+        }
+        if (diff.toUpsert.isNotEmpty()) {
+            upsertAll(diff.toUpsert)
+        }
     }
 }

@@ -6,6 +6,8 @@ param(
     [string]$MmaListUrl = 'https://open.mma.go.kr/caisGGGS/mmanrsrListAjaxJsonCallNew.json?jbc_cd=&udggeopjong_gbcd=&callback=MmaBenefitList',
     [int]$TimeoutSeconds = 30,
     [string]$StepSummaryPath = '',
+    [string]$YangjuAttachmentUrl = 'https://www.yangju.go.kr/health/downloadBbsFile.do?key=2716&bbsNo=81&atchmnflNo=200411',
+    [string]$YangjuControlJsonPath = 'tools/data/testdata/benefit-evidence-xlsx/yangju-live-control.json',
     [switch]$FailOnFetchError
 )
 
@@ -17,6 +19,20 @@ function Normalize-WeeklyDriftIdentityPart {
 
     if ([string]::IsNullOrWhiteSpace($Value)) { return '' }
     return ([regex]::Replace($Value.Trim().ToLowerInvariant(), '[^a-z0-9가-힣]', ''))
+}
+
+function Normalize-WeeklyDriftClaimText {
+    param([AllowNull()][string]$Value)
+
+    if ([string]::IsNullOrWhiteSpace($Value)) { return '' }
+    return ([regex]::Replace($Value.Trim(), '\s+', ' ')).Trim()
+}
+
+function Normalize-WeeklyDriftPhone {
+    param([AllowNull()][string]$Value)
+
+    if ([string]::IsNullOrWhiteSpace($Value)) { return '' }
+    return ($Value -replace '[^0-9]', '')
 }
 
 function Get-WeeklyDriftField {
@@ -88,15 +104,25 @@ function Compare-WeeklyMmaMetroToCanonical {
 
     $canonicalCds = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
     $canonicalKeys = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
+    $canonicalByCd = @{}
+    $canonicalByKey = @{}
     foreach ($cRow in $canonicalMmaRows) {
         $note = Get-WeeklyDriftField -Item $cRow -CandidateNames @('비고')
         if ($note -match 'cd=([0-9]+)') {
-            [void]$canonicalCds.Add($Matches[1])
+            $rowCd = $Matches[1]
+            [void]$canonicalCds.Add($rowCd)
+            if (-not $canonicalByCd.ContainsKey($rowCd)) {
+                $canonicalByCd[$rowCd] = $cRow
+            }
         }
         $namePart = Normalize-WeeklyDriftIdentityPart (Get-WeeklyDriftField -Item $cRow -CandidateNames @('업소명'))
         $addrPart = Normalize-WeeklyDriftIdentityPart (Get-WeeklyDriftField -Item $cRow -CandidateNames @('소재지도로명주소'))
         if (-not [string]::IsNullOrWhiteSpace($namePart) -and -not [string]::IsNullOrWhiteSpace($addrPart)) {
-            [void]$canonicalKeys.Add("$namePart|$addrPart")
+            $rowKey = "$namePart|$addrPart"
+            [void]$canonicalKeys.Add($rowKey)
+            if (-not $canonicalByKey.ContainsKey($rowKey)) {
+                $canonicalByKey[$rowKey] = $cRow
+            }
         }
     }
 
@@ -104,6 +130,7 @@ function Compare-WeeklyMmaMetroToCanonical {
     $liveCds = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
     $liveKeys = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
     $newCandidates = [Collections.Generic.List[object]]::new()
+    $changedCandidates = [Collections.Generic.List[object]]::new()
     $matchedCount = 0
 
     foreach ($item in @($LiveItems)) {
@@ -124,9 +151,52 @@ function Compare-WeeklyMmaMetroToCanonical {
         $key = "$(Normalize-WeeklyDriftIdentityPart $name)|$(Normalize-WeeklyDriftIdentityPart $addr)"
         if ($key -ne '|') { [void]$liveKeys.Add($key) }
 
-        $inCanonical = ($cd -and $canonicalCds.Contains($cd)) -or ($key -ne '|' -and $canonicalKeys.Contains($key))
-        if ($inCanonical) {
+        $matchedCanonical = if ($cd -and $canonicalByCd.ContainsKey($cd)) {
+            $canonicalByCd[$cd]
+        } elseif ($key -ne '|' -and $canonicalByKey.ContainsKey($key)) {
+            $canonicalByKey[$key]
+        } else {
+            $null
+        }
+
+        if ($null -ne $matchedCanonical) {
             $matchedCount++
+            if ((Get-WeeklyDriftField -Item $matchedCanonical -CandidateNames @('혜택상태')) -ceq '이용 가능') {
+                $liveDiscount = Normalize-WeeklyDriftClaimText (Get-WeeklyDriftField -Item $item -CandidateNames @('udsangse_cn', 'benefitDetail'))
+                $canDiscount = Normalize-WeeklyDriftClaimText (Get-WeeklyDriftField -Item $matchedCanonical -CandidateNames @('할인정보'))
+                $liveTarget = Normalize-WeeklyDriftClaimText (Get-WeeklyDriftField -Item $item -CandidateNames @('uddaesang_cn', 'eligibleTarget'))
+                $canTarget = Normalize-WeeklyDriftClaimText (Get-WeeklyDriftField -Item $matchedCanonical -CandidateNames @('적용대상'))
+                $livePhoneNorm = Normalize-WeeklyDriftPhone $phone
+                $canPhoneRaw = Get-WeeklyDriftField -Item $matchedCanonical -CandidateNames @('업소전화번호')
+                $canPhoneNorm = Normalize-WeeklyDriftPhone $canPhoneRaw
+
+                $diffTags = [Collections.Generic.List[string]]::new()
+                if ($liveDiscount -and $canDiscount -and ($liveDiscount -cne $canDiscount)) {
+                    $diffTags.Add('DISCOUNT')
+                }
+                if ($liveTarget -and $canTarget -and ($liveTarget -cne $canTarget)) {
+                    $diffTags.Add('TARGET')
+                }
+                if ($livePhoneNorm -and $canPhoneNorm -and ($livePhoneNorm -cne $canPhoneNorm)) {
+                    $diffTags.Add('PHONE')
+                }
+
+                if ($diffTags.Count -gt 0) {
+                    $changedCandidates.Add([pscustomobject][ordered]@{
+                        BusinessId = (Get-WeeklyDriftField -Item $matchedCanonical -CandidateNames @('businessId'))
+                        InstitutionCode = $cd
+                        BusinessName = $name
+                        RoadAddress = $addr
+                        ChangedFields = ($diffTags -join '|')
+                        CanonicalDiscount = $canDiscount
+                        LiveDiscount = $liveDiscount
+                        CanonicalTarget = $canTarget
+                        LiveTarget = $liveTarget
+                        CanonicalPhone = $canPhoneRaw
+                        LivePhone = $phone
+                    })
+                }
+            }
         } else {
             $newCandidates.Add([pscustomobject][ordered]@{
                 InstitutionCode = $cd
@@ -173,10 +243,32 @@ function Compare-WeeklyMmaMetroToCanonical {
         canonicalMmaCount = $canonicalMmaRows.Count
         canonicalActiveMmaCount = $canonicalActiveMmaRows.Count
         matchedCount = $matchedCount
+        changedCount = $changedCandidates.Count
         newCandidateCount = $newCandidates.Count
         missingCanonicalCount = $missingCanonical.Count
+        changedCandidates = @($changedCandidates)
         newCandidates = @($newCandidates)
         missingCanonical = @($missingCanonical)
+    }
+}
+
+function Test-WeeklyYangjuAttachmentDrift {
+    param(
+        [Parameter(Mandatory)][byte[]]$AttachmentBytes,
+        [Parameter(Mandatory)][string]$BaselineHash,
+        [long]$BaselineByteSize = 0
+    )
+
+    $actualHash = [BitConverter]::ToString([Security.Cryptography.SHA256]::HashData($AttachmentBytes)).Replace('-', '').ToLowerInvariant()
+    $expectedHash = $BaselineHash.Trim().ToLowerInvariant()
+    $hashMatched = ($actualHash -ceq $expectedHash)
+    return [pscustomobject][ordered]@{
+        status = if ($hashMatched) { 'OK' } else { 'DRIFT_DETECTED' }
+        hashMatched = $hashMatched
+        actualHash = $actualHash
+        baselineHash = $expectedHash
+        actualByteSize = [long]$AttachmentBytes.Length
+        baselineByteSize = $BaselineByteSize
     }
 }
 
@@ -214,8 +306,8 @@ function New-WeeklyDriftMarkdownReport {
     $lines.Add('')
     $lines.Add('## 후속 확인 기준')
     $lines.Add('- `동두천시` / `파주시`: 아티팩트 내 CSV(`ddc-comparison.csv`, `paju-comparison.csv`)의 변경·종료 후보를 확인합니다.')
-    $lines.Add('- `병무청 나라사랑가게(수도권)`: `mma-new-candidates.csv`와 `mma-missing-canonical.csv`를 검토한 뒤 수동 승인 절차로 다음 `seedVersion`에 반영합니다.')
-    $lines.Add('- `양주시`: 첨부 CSV 공고 확인 후 `tools/data/compare-yangju-benefits.ps1`로 수동 비교합니다.')
+    $lines.Add('- `병무청 나라사랑가게(수도권)`: `mma-changed-candidates.csv`, `mma-new-candidates.csv`, `mma-missing-canonical.csv`를 검토한 뒤 수동 승인 절차로 다음 `seedVersion`에 반영합니다.')
+    $lines.Add('- `양주시`: 첨부 XLSX 해시 변경(`DRIFT_DETECTED`) 감지 시 공고 파일을 내려받아 `tools/data/compare-yangju-benefits.ps1`로 비교합니다.')
 
     return ($lines -join "`n") + "`n"
 }
@@ -323,6 +415,7 @@ try {
 }
 
 # 3. 병무청 나라사랑가게 수도권 공개 JSONP 목록 (open.mma.go.kr)
+$mmaChangedCsv = Join-Path $resolvedOutDir 'mma-changed-candidates.csv'
 $mmaNewCsv = Join-Path $resolvedOutDir 'mma-new-candidates.csv'
 $mmaMissingCsv = Join-Path $resolvedOutDir 'mma-missing-canonical.csv'
 $mmaSummaryJson = Join-Path $resolvedOutDir 'mma-summary.json'
@@ -335,6 +428,7 @@ try {
     $mmaLiveItems = @(ConvertFrom-WeeklyMmaJsonpListText -RawText $mmaText)
     $mmaDrift = Compare-WeeklyMmaMetroToCanonical -LiveItems $mmaLiveItems -CanonicalRows $canonicalRows
 
+    @($mmaDrift.changedCandidates) | Export-Csv -LiteralPath $mmaChangedCsv -NoTypeInformation -Encoding utf8
     @($mmaDrift.newCandidates) | Export-Csv -LiteralPath $mmaNewCsv -NoTypeInformation -Encoding utf8
     @($mmaDrift.missingCanonical) | Export-Csv -LiteralPath $mmaMissingCsv -NoTypeInformation -Encoding utf8
 
@@ -346,6 +440,7 @@ try {
         canonicalMmaCount = $mmaDrift.canonicalMmaCount
         canonicalActiveMmaCount = $mmaDrift.canonicalActiveMmaCount
         matchedCount = $mmaDrift.matchedCount
+        changedCount = $mmaDrift.changedCount
         newCandidateCount = $mmaDrift.newCandidateCount
         missingCanonicalCount = $mmaDrift.missingCanonicalCount
         automaticCanonicalMutation = $false
@@ -358,7 +453,7 @@ try {
         status = 'OK'
         officialCount = [int]$mmaDrift.liveMetroCount
         canonicalCount = [int]$mmaDrift.canonicalActiveMmaCount
-        detail = "일치=$($mmaDrift.matchedCount), 신규후보=$($mmaDrift.newCandidateCount), 정본미관측=$($mmaDrift.missingCanonicalCount)"
+        detail = "일치=$($mmaDrift.matchedCount), 내용변경=$($mmaDrift.changedCount), 신규후보=$($mmaDrift.newCandidateCount), 정본미관측=$($mmaDrift.missingCanonicalCount)"
         error = ''
     })
 } catch {
@@ -373,17 +468,63 @@ try {
     })
 }
 
-# 4. 양주시 (수동 첨부 CSV 비교 안내)
+# 4. 양주시 (공식 첨부 XLSX 해시 자동 점검)
 $yangjuCount = @($canonicalRows | Where-Object { (Get-WeeklyDriftField -Item $_ -CandidateNames @('시군구')) -ceq '양주시' -and (Get-WeeklyDriftField -Item $_ -CandidateNames @('출처유형')) -match '지자체' }).Count
-$sources.Add([pscustomobject][ordered]@{
-    id = 'yangju'
-    name = '양주시 (yangju.go.kr)'
-    status = 'MANUAL_CSV_REQUIRED'
-    officialCount = $null
-    canonicalCount = $yangjuCount
-    detail = '공고 첨부 CSV 수동 비교 대상 (compare-yangju-benefits.ps1)'
-    error = ''
-})
+$yangjuSummaryJson = Join-Path $resolvedOutDir 'yangju-summary.json'
+try {
+    $resolvedYangjuControlPath = if ([IO.Path]::IsPathRooted($YangjuControlJsonPath)) { $YangjuControlJsonPath } else { Join-Path $repoRoot $YangjuControlJsonPath }
+    if (-not (Test-Path -LiteralPath $resolvedYangjuControlPath -PathType Leaf)) {
+        throw "Yangju baseline control JSON missing: $resolvedYangjuControlPath"
+    }
+    $yjBaseline = Get-Content -Raw -Encoding utf8 -LiteralPath $resolvedYangjuControlPath | ConvertFrom-Json
+    $yjResp = Invoke-WebRequest -Uri $YangjuAttachmentUrl -Headers @{ 'User-Agent' = 'MILIMAP-Phase5-EvidenceVerifier/1.0' } -MaximumRedirection 3 -TimeoutSec $TimeoutSeconds
+    if ([int]$yjResp.StatusCode -ne 200) {
+        throw "HTTP status $($yjResp.StatusCode)"
+    }
+    $yjBytes = if ($yjResp.Content -is [byte[]]) {
+        [byte[]]$yjResp.Content
+    } else {
+        $yjResp.RawContentStream.Position = 0
+        $yjResp.RawContentStream.ToArray()
+    }
+    $yjCheck = Test-WeeklyYangjuAttachmentDrift -AttachmentBytes $yjBytes -BaselineHash ([string]$yjBaseline.ContentHash) -BaselineByteSize ([long]$yjBaseline.WorkbookByteSize)
+    $yjSummary = [pscustomobject][ordered]@{
+        generatedAtUtc = [DateTimeOffset]::UtcNow.ToString('yyyy-MM-ddTHH:mm:ssZ', [Globalization.CultureInfo]::InvariantCulture)
+        attachmentUrl = $YangjuAttachmentUrl
+        status = $yjCheck.status
+        hashMatched = $yjCheck.hashMatched
+        actualHash = $yjCheck.actualHash
+        baselineHash = $yjCheck.baselineHash
+        actualByteSize = $yjCheck.actualByteSize
+        baselineByteSize = $yjCheck.baselineByteSize
+        canonicalCount = $yangjuCount
+        automaticCanonicalMutation = $false
+    }
+    $yjSummary | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $yangjuSummaryJson -Encoding utf8
+    $sources.Add([pscustomobject][ordered]@{
+        id = 'yangju'
+        name = '양주시 (yangju.go.kr)'
+        status = $yjCheck.status
+        officialCount = $null
+        canonicalCount = $yangjuCount
+        detail = if ($yjCheck.hashMatched) {
+            "공식 첨부 XLSX 해시 일치(변경 없음, bytes=$($yjCheck.actualByteSize))"
+        } else {
+            "공식 첨부 XLSX 해시 변경 감지(bytes=$($yjCheck.actualByteSize), compare-yangju-benefits.ps1 실행 필요)"
+        }
+        error = ''
+    })
+} catch {
+    $sources.Add([pscustomobject][ordered]@{
+        id = 'yangju'
+        name = '양주시 (yangju.go.kr)'
+        status = 'FETCH_FAILED'
+        officialCount = $null
+        canonicalCount = $yangjuCount
+        detail = '양주시 공식 첨부 XLSX 해시 조회 실패'
+        error = $_.Exception.Message
+    })
+}
 
 $summary = [pscustomobject][ordered]@{
     contractType = 'WeeklyBenefitDriftSummary'

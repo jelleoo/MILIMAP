@@ -1,14 +1,14 @@
 {
   "manifestVersion": 1,
   "seedName": "benefits",
-  "seedVersion": 12,
+  "seedVersion": 13,
   "hashAlgorithm": "SHA-256-LF-UTF8",
-  "generatedAt": "2026-11-22T14:29:42Z",
-  "canonicalCsvSha256": "02fb6679375987d5abff65e09692a514b17be0ff2f2dc200ae102355b8229ca4",
-  "totalCount": 372,
-  "exactPinCount": 349,
+  "generatedAt": "2026-11-23T06:12:49Z",
+  "canonicalCsvSha256": "5e92cff3763334601015c2277c55851d80ca3aa161ea410e770d1029de342746",
+  "totalCount": 839,
+  "exactPinCount": 816,
   "unconfirmedCoordinateCount": 23,
-  "seedSha256": "783cd3be691b2e6dd65396c5f5ccb90cdfd2001ccbebdb9f08352ea23304fa24",
+  "seedSha256": "91cbbaeee329dbf452f467f299e351bb47451b9484746632f5cbdf99f17f2ef8",
   "manualSeedCount": 0,
   "manualSeedSha256": "e813d564bccbeefe1db875d1c9abb55d63c52b639acc61134a5f1d19cc489b67"
 }

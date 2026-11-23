@@ -6,8 +6,8 @@ $repoRoot = Split-Path (Split-Path $PSScriptRoot -Parent) -Parent
 $canonicalPath = Join-Path $repoRoot 'data/canonical/capital-area-military-benefits.csv'
 $rows = @(Import-Csv -LiteralPath $canonicalPath -Encoding utf8)
 
-if ($rows.Count -ne 496) {
-    throw "Canonical row count changed (expected 496, actual $($rows.Count))"
+if ($rows.Count -ne 963) {
+    throw "Canonical row count changed (expected 963, actual $($rows.Count))"
 }
 
 $missing = @($rows | Where-Object {

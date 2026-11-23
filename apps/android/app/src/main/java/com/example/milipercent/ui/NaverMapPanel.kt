@@ -36,8 +36,8 @@ import com.example.milipercent.model.GeoBounds
 import com.example.milipercent.model.GeoPoint
 import com.example.milipercent.ui.map.BenefitMapItem
 import com.example.milipercent.ui.map.categoryAccentColorInt
+import com.example.milipercent.ui.map.computeMarkerDiff
 import com.example.milipercent.ui.map.createBenefitMarkerIcon
-import com.example.milipercent.ui.map.markerSetSignature
 import com.naver.maps.geometry.LatLng
 import com.naver.maps.geometry.LatLngBounds
 import com.naver.maps.map.CameraAnimation
@@ -116,8 +116,13 @@ private fun NaverMapView(
     val latestOnCameraIdle by rememberUpdatedState(onCameraIdle)
     val mapView = remember { MapView(context).also { it.onCreate(null) } }
     val iconCache = remember(context) { mutableMapOf<Pair<String, Boolean>, OverlayImage>() }
-    val markers = remember { mutableListOf<Marker>() }
-    var renderedSignature by remember { mutableStateOf<String?>(null) }
+    val markerPool = remember { LinkedHashMap<String, Marker>() }
+    val renderedItems = remember { LinkedHashMap<String, BenefitMapItem>() }
+    val selectionState = remember {
+        object {
+            var lastSelectedId: String? = null
+        }
+    }
     var initializedCamera by remember { mutableStateOf(false) }
     var handledCameraRequestId by remember { mutableLongStateOf(-1L) }
     var listenersAttached by remember { mutableStateOf(false) }
@@ -141,8 +146,9 @@ private fun NaverMapView(
         lifecycle.addObserver(observer)
         onDispose {
             lifecycle.removeObserver(observer)
-            markers.forEach { it.map = null }
-            markers.clear()
+            markerPool.values.forEach { it.map = null }
+            markerPool.clear()
+            renderedItems.clear()
             mapView.onDestroy()
         }
     }
@@ -227,33 +233,68 @@ private fun NaverMapView(
                 }
                 val contentBounds = map.contentBounds
                 val candidates = selectMapMarkerCandidates(benefits, contentBounds, selectedBenefitId)
-                val renderKey = "${markerSetSignature(candidates)}#${selectedBenefitId.orEmpty()}"
-                if (renderKey != renderedSignature) {
-                    markers.forEach { it.map = null }
-                    markers.clear()
-                    candidates.forEach { benefit ->
-                        val isSelected = benefit.id == selectedBenefitId
-                        markers += Marker().apply {
-                            position = LatLng(benefit.latitude, benefit.longitude)
-                            icon = iconCache.getOrPut(benefit.category to isSelected) {
-                                createBenefitMarkerIcon(context, benefit.category, isSelected)
-                            }
-                            anchor = PointF(0.5f, 1f)
-                            captionText = benefit.name
-                            captionMinZoom = if (isSelected) 0.0 else 14.0
-                            captionTextSize = if (isSelected) 12f else 11f
-                            isHideCollidedSymbols = true
-                            isHideCollidedCaptions = !isSelected
-                            zIndex = if (isSelected) 100 else 0
-                            setOnClickListener { latestOnSelect(benefit.id); true }
-                            this.map = map
-                        }
-                    }
-                    renderedSignature = renderKey
+                val diff = computeMarkerDiff(
+                    renderedItems = renderedItems,
+                    previousSelectedId = selectionState.lastSelectedId,
+                    nextItems = candidates,
+                    nextSelectedId = selectedBenefitId,
+                )
+                diff.toRemoveIds.forEach { id ->
+                    markerPool.remove(id)?.map = null
+                    renderedItems.remove(id)
                 }
+                diff.toUpdate.forEach { item ->
+                    val existing = markerPool[item.id]
+                    if (existing != null) {
+                        applyMarkerAppearance(
+                            marker = existing,
+                            benefit = item,
+                            isSelected = item.id == selectedBenefitId,
+                            iconCache = iconCache,
+                            context = context,
+                        )
+                        renderedItems[item.id] = item
+                    }
+                }
+                diff.toAdd.forEach { item ->
+                    val marker = Marker().apply {
+                        applyMarkerAppearance(
+                            marker = this,
+                            benefit = item,
+                            isSelected = item.id == selectedBenefitId,
+                            iconCache = iconCache,
+                            context = context,
+                        )
+                        setOnClickListener { latestOnSelect(item.id); true }
+                        this.map = map
+                    }
+                    markerPool[item.id] = marker
+                    renderedItems[item.id] = item
+                }
+                selectionState.lastSelectedId = selectedBenefitId
             }
         },
     )
+}
+
+private fun applyMarkerAppearance(
+    marker: Marker,
+    benefit: BenefitMapItem,
+    isSelected: Boolean,
+    iconCache: MutableMap<Pair<String, Boolean>, OverlayImage>,
+    context: android.content.Context,
+) {
+    marker.position = LatLng(benefit.latitude, benefit.longitude)
+    marker.icon = iconCache.getOrPut(benefit.category to isSelected) {
+        createBenefitMarkerIcon(context, benefit.category, isSelected)
+    }
+    marker.anchor = PointF(0.5f, 1f)
+    marker.captionText = benefit.name
+    marker.captionMinZoom = if (isSelected) 0.0 else 14.0
+    marker.captionTextSize = if (isSelected) 12f else 11f
+    marker.isHideCollidedSymbols = true
+    marker.isHideCollidedCaptions = !isSelected
+    marker.zIndex = if (isSelected) 100 else 0
 }
 
 private fun selectMapMarkerCandidates(

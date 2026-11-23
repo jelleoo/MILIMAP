@@ -3,6 +3,8 @@ package com.example.milipercent.data.seed
 import com.example.milipercent.data.local.BenefitEntity
 import com.example.milipercent.data.local.BenefitSourceType
 import com.example.milipercent.data.local.SeedStateEntity
+import java.util.concurrent.Executors
+import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -272,6 +274,42 @@ class BundledSeedSynchronizerUnitTest {
         assertEquals(1, manifestReads)
         assertEquals(1, legacyReads)
         assertEquals(1, manualReads)
+    }
+
+    @Test
+    fun `시드 읽기와 무결성 검증은 주입된 ioDispatcher에서 실행된다`() {
+        val observedThreads = mutableSetOf<String>()
+        val legacy = legacySeedJson(
+            legacyItem(id = "seed-1", name = "업체1", address = "서울특별시 마포구 테스트로 1", latitude = null, longitude = null),
+        )
+        val manual = """{"items":[]}"""
+        val manifest = buildManifestJson(1, legacy, manual, totalCount = 1, exactPinCount = 0, unconfirmedCoordinateCount = 1, manualSeedCount = 0)
+        val store = FakeBundledSeedStore()
+        val callerThread = Thread.currentThread().name
+        val executor = Executors.newSingleThreadExecutor { runnable ->
+            Thread(runnable, "seed-io-worker")
+        }
+        val dispatcher = executor.asCoroutineDispatcher()
+
+        try {
+            val result = runBlocking {
+                BundledSeedSynchronizer(
+                    store = store,
+                    manifestSource = SeedJsonSource { observedThreads += Thread.currentThread().name; manifest },
+                    legacySeedSource = SeedJsonSource { observedThreads += Thread.currentThread().name; legacy },
+                    manualSeedSource = SeedJsonSource { observedThreads += Thread.currentThread().name; manual },
+                    currentTimeMillis = { 500L },
+                    ioDispatcher = dispatcher,
+                ).synchronizeIfNeeded()
+            }
+
+            assertTrue(result.installed)
+            assertEquals(1, observedThreads.size)
+            assertTrue(observedThreads.all { it.startsWith("seed-io-worker") })
+            assertTrue(!callerThread.startsWith("seed-io-worker"))
+        } finally {
+            executor.shutdownNow()
+        }
     }
 
     private fun synchronizer(

@@ -6,6 +6,9 @@ import com.example.milipercent.data.local.BenefitEntity
 import com.example.milipercent.data.local.BenefitSourceType
 import com.example.milipercent.data.local.SeedStateEntity
 import java.util.Locale
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 const val BUNDLED_SEED_NAME = "benefits"
 const val BUNDLED_SEED_VERSION = 13
@@ -81,6 +84,7 @@ class BundledSeedSynchronizer internal constructor(
     private val legacySeedSource: SeedJsonSource,
     private val manualSeedSource: SeedJsonSource,
     private val currentTimeMillis: () -> Long = System::currentTimeMillis,
+    private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
 ) : BundledSeedInstaller {
     constructor(
         database: BenefitDatabase,
@@ -88,16 +92,59 @@ class BundledSeedSynchronizer internal constructor(
         legacySeedSource: SeedJsonSource,
         manualSeedSource: SeedJsonSource,
         currentTimeMillis: () -> Long = System::currentTimeMillis,
+        ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
     ) : this(
         store = RoomBundledSeedStore(database),
         manifestSource = manifestSource,
         legacySeedSource = legacySeedSource,
         manualSeedSource = manualSeedSource,
         currentTimeMillis = currentTimeMillis,
+        ioDispatcher = ioDispatcher,
+    )
+
+    private data class PreparedBundledSeed(
+        val manifest: BundledSeedManifest,
+        val entities: List<BenefitEntity>,
+        val expectedTotalCount: Int,
     )
 
     override suspend fun synchronizeIfNeeded(): BundledSeedSyncResult {
-        // 모든 입력은 transaction 진입 전에 단일 읽기, checksum, parsing과 validation을 끝낸다.
+        // 모든 입력은 transaction 진입 전에 IO 스레드에서 단일 읽기, checksum, parsing과 validation을 끝낸다.
+        val prepared = withContext(ioDispatcher) { prepareBundledSeed() }
+        val manifest = prepared.manifest
+        val entities = prepared.entities
+        val expectedTotalCount = prepared.expectedTotalCount
+
+        return store.inTransaction {
+            val installedVersion = seedVersion(manifest.seedName)
+            if (installedVersion != null && installedVersion >= manifest.seedVersion) {
+                return@inTransaction BundledSeedSyncResult(
+                    installed = false,
+                    storedCount = countAllBenefits(),
+                )
+            }
+
+            deleteRetiredBundledSeedRows(
+                bundledSourceTypes = BUNDLED_SEED_SOURCE_TYPES,
+                retainedIds = entities.map(BenefitEntity::id),
+            )
+            upsertAllBenefits(entities)
+            upsertSeedState(
+                SeedStateEntity(
+                    name = manifest.seedName,
+                    version = manifest.seedVersion,
+                    installedAt = currentTimeMillis(),
+                ),
+            )
+            val bundledStoredCount = countBundledSeedRows(BUNDLED_SEED_SOURCE_TYPES)
+            check(bundledStoredCount == expectedTotalCount) {
+                "내장 seed 저장 건수가 올바르지 않습니다. (예상: $expectedTotalCount, 실제: $bundledStoredCount)"
+            }
+            BundledSeedSyncResult(installed = true, storedCount = countAllBenefits())
+        }
+    }
+
+    private fun prepareBundledSeed(): PreparedBundledSeed {
         val manifest = BundledSeedManifestLoader(manifestSource).loadAndValidate()
 
         val legacyRawText = legacySeedSource.readText()
@@ -150,34 +197,11 @@ class BundledSeedSynchronizer internal constructor(
         val entities = legacyEntities + manualEntities
         val expectedTotalCount = manifest.totalCount + manifest.manualSeedCount
         validateCombinedEntities(entities)
-
-        return store.inTransaction {
-            val installedVersion = seedVersion(manifest.seedName)
-            if (installedVersion != null && installedVersion >= manifest.seedVersion) {
-                return@inTransaction BundledSeedSyncResult(
-                    installed = false,
-                    storedCount = countAllBenefits(),
-                )
-            }
-
-            deleteRetiredBundledSeedRows(
-                bundledSourceTypes = BUNDLED_SEED_SOURCE_TYPES,
-                retainedIds = entities.map(BenefitEntity::id),
-            )
-            upsertAllBenefits(entities)
-            upsertSeedState(
-                SeedStateEntity(
-                    name = manifest.seedName,
-                    version = manifest.seedVersion,
-                    installedAt = currentTimeMillis(),
-                ),
-            )
-            val bundledStoredCount = countBundledSeedRows(BUNDLED_SEED_SOURCE_TYPES)
-            check(bundledStoredCount == expectedTotalCount) {
-                "내장 seed 저장 건수가 올바르지 않습니다. (예상: $expectedTotalCount, 실제: $bundledStoredCount)"
-            }
-            BundledSeedSyncResult(installed = true, storedCount = countAllBenefits())
-        }
+        return PreparedBundledSeed(
+            manifest = manifest,
+            entities = entities,
+            expectedTotalCount = expectedTotalCount,
+        )
     }
 
     private fun validateCombinedEntities(entities: List<BenefitEntity>) {

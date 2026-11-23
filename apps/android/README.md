@@ -1,87 +1,46 @@
 # MILIMAP Android
 
-현재 Android 기준선은 `dev`의 Room / Repository / ViewModel / UiState / Compose 구조입니다.
+## 실행 환경
 
-## Current baseline
+- Android Studio
+- Gradle 실행용 JDK 17
+- Android SDK 37
+- Android 7.0(API 24) 이상 기기 또는 에뮬레이터
 
-- namespace: `com.example.milipercent`
-- applicationId: `com.example.militarybenefits`
-- Room database: version 4
-- migrations: `MIGRATION_1_2`, `MIGRATION_2_3`, `MIGRATION_3_4`
-- compileSdk: 37
-- targetSdk: 37
-- minSdk: 24
-- Gradle runtime: JDK 17
-- Java source/target: 11
-- bundled release seed version: 7
+## 앱 실행
 
-## Implemented MVP
+1. Android Studio에서 저장소의 `apps/android` 폴더를 엽니다.
+2. Gradle 동기화가 끝나면 상단에서 `app`과 실행할 기기를 선택합니다.
+3. **Run**을 눌러 앱을 실행합니다.
 
-현재 Android MVP에는 다음이 포함됩니다.
+앱에 포함된 혜택 데이터로 검색과 상세 화면을 둘러볼 수 있습니다. 네이버 지도와 병무청 나라사랑가게 동기화는 아래 설정을 추가하면 사용할 수 있습니다.
 
-- Discover / Saved / Account / Admin / BenefitDetail navigation
-- 이름/주소 검색 및 지역 탐색
-- Naver Map 및 현재 위치
-- Room 기반 혜택 저장 및 seed synchronization
-- MMA API pagination/retry/cache/reconciliation
-- 로그인·세션
-- 사용자별 찜
-- 관리자 수동 혜택 관리
-- 좌표가 확정된 release candidate 지도 표시
+## API 설정
 
-2026-09-10 P3 병합 직후 release seed는 249건이며 정확 지도 핀 111건, 좌표 미확정 138건입니다. 좌표 미확정 항목에 좌표를 추정해서 넣지 않습니다.
+[설정 예시](local.properties.example)를 참고해 `local.properties`에 필요한 항목을 추가합니다.
 
-## Open in Android Studio
+| 설정 | 용도 |
+| --- | --- |
+| `NAVER_MAP_NCP_KEY_ID` | 네이버 클라우드 Maps Client ID |
+| `MMA_API_URL` | 병무청 나라사랑가게 API 주소 |
+| `MMA_SERVICE_KEY` | 공공데이터포털 서비스 키 |
 
-Repository root가 아니라 `apps/android`를 엽니다.
+네이버 클라우드의 **Mobile Dynamic Map** 설정에 앱 패키지 이름 `com.example.militarybenefits`를 등록합니다. 설정을 저장한 뒤 앱을 다시 실행하세요.
 
-Windows에서는 가능하면 저장소를 ASCII 문자만 포함한 경로(예: `C:\Users\PC\AndroidStudioProjects\MILIMAP`)에 둡니다. 과거 한글 경로에서 Gradle test worker class loading 문제가 재현된 적이 있습니다.
+`local.properties`는 각자의 PC에 보관하세요. 실제 병무청 서비스 키를 넣은 빌드는 로컬 테스트에 사용하세요.
 
-Gradle launcher/daemon runtime은 JDK 17 기준을 사용합니다. Java compile source/target은 11입니다.
+## 빌드 및 테스트
 
-## Local configuration
+`apps/android` 폴더에서 실행합니다.
 
-`local.properties.example`을 `local.properties`로 복사하고 개인 SDK/API 설정을 입력합니다. 실제 키는 commit하지 않습니다.
-
-주요 항목:
-
-```properties
-sdk.dir=C\:\\Users\\YOUR_NAME\\AppData\\Local\\Android\\Sdk
-MMA_API_URL=YOUR_MMA_API_URL
-MMA_SERVICE_KEY=YOUR_DATA_GO_KR_SERVICE_KEY
-NAVER_MAP_NCP_KEY_ID=YOUR_NCP_KEY_ID
-```
-
-`local.properties`에 넣은 값은 Git에는 포함되지 않지만 BuildConfig로 들어가는 값은 APK에서 추출될 수 있습니다. 공개 배포 전 API-key exposure는 별도 보안 Issue로 해결해야 합니다.
-
-## Verification
-
-기본 Android gate:
+**Windows**
 
 ```powershell
 .\gradlew.bat lintDebug testDebugUnitTest assembleDebug
 ```
 
-androidTest 컴파일/생성까지 확인할 때:
+**macOS / Linux**
 
-```powershell
-.\gradlew.bat compileDebugAndroidTestKotlin assembleDebugAndroidTest
+```bash
+./gradlew lintDebug testDebugUnitTest assembleDebug
 ```
-
-Emulator 또는 실기기가 준비된 경우 실제 instrumentation:
-
-```powershell
-.\gradlew.bat connectedDebugAndroidTest
-```
-
-androidTest APK가 빌드되었다는 사실과 emulator/device에서 instrumentation이 실제 실행됐다는 사실은 구분해서 보고합니다.
-
-## Architecture rules
-
-- Room은 Android 로컬 Source of Truth입니다.
-- Repository -> ViewModel -> UiState -> Compose 흐름을 유지합니다.
-- 새 직접 SQLite/AppController 경로를 추가하지 않습니다.
-- Room schema/migration, 인증 방식, API 계약, dependency 변경은 별도 승인 없이 진행하지 않습니다.
-- seed version과 Room schema version은 서로 다른 개념입니다.
-
-현재 팀 전체 작업과 Phase는 `../../docs/current-work.md`, 아키텍처 기준은 `../../docs/architecture.md`, 협업 규칙은 `../../docs/team-workflow.md`를 참고합니다.

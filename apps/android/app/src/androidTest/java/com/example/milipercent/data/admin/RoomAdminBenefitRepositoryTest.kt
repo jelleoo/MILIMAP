@@ -55,6 +55,9 @@ class RoomAdminBenefitRepositoryTest {
         assertTrue(runCatching { repository.create(input(name = " ")) }.isFailure)
         assertTrue(runCatching { repository.create(input(benefitDescription = " ")) }.isFailure)
         assertTrue(runCatching { repository.create(input(sourceLabel = " ")) }.isFailure)
+        assertTrue(runCatching { repository.create(input(sourceUrl = "file:///etc/passwd")) }.isFailure)
+        assertTrue(runCatching { repository.create(input(sourceUrl = "intent://scan/#Intent;end")) }.isFailure)
+        assertTrue(runCatching { repository.create(input(sourceUrl = "https://www.mma.go.kr/notice")) }.isSuccess)
     }
 
     @Test
@@ -78,11 +81,12 @@ class RoomAdminBenefitRepositoryTest {
         name: String = "새 가게",
         benefitDescription: String = "군인 할인",
         sourceLabel: String = "운영팀 확인",
+        sourceUrl: String? = null,
     ) = AdminBenefitInput(
         name = name, address = "서울특별시 마포구", latitude = null, longitude = null,
         category = "음식점", benefitType = "할인", benefitDescription = benefitDescription,
         phone = null, eligibleTarget = null, usageCondition = null, verificationMethod = null,
-        sourceLabel = sourceLabel, sourceUrl = null, lastVerifiedAt = null,
+        sourceLabel = sourceLabel, sourceUrl = sourceUrl, lastVerifiedAt = null,
         status = BenefitStatus.ACTIVE, district = "마포구",
     )
 }

@@ -83,7 +83,7 @@ class BenefitRepositoryTest {
         assertTrue(local.current.all { it.sourceType == MMA_SOURCE_TYPE })
         assertTrue(local.current.all { it.syncedAt == 123_456L })
         assertTrue(local.current.all { it.latitude == null && it.longitude == null })
-        assertEquals(setOf("마포구", "강남구", "UNKNOWN"), local.current.map { it.district }.toSet())
+        assertEquals(setOf("마포구", "강남구", "성남시", "부평구"), local.current.map { it.district }.toSet())
     }
 
     @Test

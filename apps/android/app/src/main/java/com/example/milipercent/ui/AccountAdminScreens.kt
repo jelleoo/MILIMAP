@@ -19,6 +19,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -179,7 +180,25 @@ fun AdminScreen(
     var name by remember { mutableStateOf("") }
     var address by remember { mutableStateOf("") }
     var description by remember { mutableStateOf("") }
-    var editingId by remember { mutableStateOf<String?>(null) }
+    var editingBenefit by remember { mutableStateOf<Benefit?>(null) }
+
+    fun resetForm() {
+        editingBenefit = null
+        name = ""
+        address = ""
+        description = ""
+    }
+
+    LaunchedEffect(benefits, editingBenefit?.id) {
+        val currentId = editingBenefit?.id ?: return@LaunchedEffect
+        val refreshed = benefits.firstOrNull { it.id == currentId }
+        if (refreshed == null) {
+            resetForm()
+        } else {
+            editingBenefit = refreshed
+        }
+    }
+
     LazyColumn(
         modifier = modifier.fillMaxSize().padding(18.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp),
@@ -189,32 +208,35 @@ fun AdminScreen(
             OutlinedTextField(name, { name = it }, Modifier.fillMaxWidth(), label = { Text("업체명") })
             OutlinedTextField(address, { address = it }, Modifier.fillMaxWidth(), label = { Text("주소") })
             OutlinedTextField(description, { description = it }, Modifier.fillMaxWidth(), label = { Text("혜택 내용") })
-            Button(
-                onClick = {
-                    onSave(
-                        AdminBenefitInput(
-                            name = name,
-                            address = address,
-                            latitude = null,
-                            longitude = null,
-                            category = "기타",
-                            benefitType = "할인·우대",
-                            benefitDescription = description,
-                            phone = null,
-                            eligibleTarget = null,
-                            usageCondition = null,
-                            verificationMethod = null,
-                            sourceLabel = "운영팀 직접 등록",
-                            sourceUrl = null,
-                            lastVerifiedAt = null,
-                            status = BenefitStatus.ACTIVE,
-                            district = null,
-                        ),
-                        editingId,
-                    )
-                },
+            Row(
                 modifier = Modifier.fillMaxWidth(),
-            ) { Text(if (editingId == null) "수동 혜택 등록" else "수정 내용 저장") }
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Button(
+                    onClick = {
+                        val existing = editingBenefit
+                        onSave(
+                            buildAdminBenefitInput(
+                                name = name,
+                                address = address,
+                                description = description,
+                                existing = existing,
+                            ),
+                            existing?.id,
+                        )
+                        if (name.isNotBlank() && address.isNotBlank() && description.isNotBlank()) {
+                            resetForm()
+                        }
+                    },
+                    modifier = Modifier.weight(1f),
+                ) { Text(if (editingBenefit == null) "수동 혜택 등록" else "수정 내용 저장") }
+                if (editingBenefit != null) {
+                    TextButton(
+                        onClick = ::resetForm,
+                        modifier = Modifier.testTag("admin_cancel_edit"),
+                    ) { Text("편집 취소") }
+                }
+            }
         }
         items(benefits, key = Benefit::id) { benefit ->
             Card(colors = CardDefaults.cardColors(containerColor = androidx.compose.ui.graphics.Color.White)) {
@@ -225,7 +247,7 @@ fun AdminScreen(
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             TextButton(
                                 onClick = {
-                                    editingId = benefit.id
+                                    editingBenefit = benefit
                                     name = benefit.name
                                     address = benefit.address
                                     description = benefit.benefitDescription
@@ -240,3 +262,27 @@ fun AdminScreen(
         }
     }
 }
+
+internal fun buildAdminBenefitInput(
+    name: String,
+    address: String,
+    description: String,
+    existing: Benefit?,
+): AdminBenefitInput = AdminBenefitInput(
+    name = name,
+    address = address,
+    latitude = existing?.latitude,
+    longitude = existing?.longitude,
+    category = existing?.category ?: "기타",
+    benefitType = existing?.benefitType ?: "할인·우대",
+    benefitDescription = description,
+    phone = existing?.phone,
+    eligibleTarget = existing?.eligibleTarget,
+    usageCondition = existing?.usageCondition,
+    verificationMethod = existing?.verificationMethod,
+    sourceLabel = existing?.sourceLabel ?: "운영팀 직접 등록",
+    sourceUrl = existing?.sourceUrl,
+    lastVerifiedAt = existing?.lastVerifiedAt,
+    status = existing?.status ?: BenefitStatus.ACTIVE,
+    district = existing?.district,
+)

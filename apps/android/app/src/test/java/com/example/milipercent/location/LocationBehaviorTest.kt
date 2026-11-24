@@ -25,4 +25,32 @@ class LocationBehaviorTest {
         assertEquals(2, focused.requestFocus().cameraRequestId)
         assertTrue(LocationFocusState().requestFocus().cancelPendingFocus().let { !it.focusPending })
     }
+
+    @Test
+    fun staleCoarseNetworkFixDoesNotOverwriteFresherOrMoreAccurateGpsFix() {
+        val gpsFix = LocationFixCandidate(
+            point = GeoPoint(37.5665, 126.9780),
+            provider = "gps",
+            timeMillis = 1_000_000L,
+            accuracyMeters = 10f,
+        )
+        val coarseNetworkFix = LocationFixCandidate(
+            point = GeoPoint(37.5500, 126.9200),
+            provider = "network",
+            timeMillis = 1_030_000L,
+            accuracyMeters = 500f,
+        )
+        val muchNewerNetworkFix = LocationFixCandidate(
+            point = GeoPoint(37.5700, 126.9800),
+            provider = "network",
+            timeMillis = 1_200_000L,
+            accuracyMeters = 500f,
+        )
+
+        assertEquals(gpsFix, LocationFixSelector.selectBest(listOf(gpsFix, coarseNetworkFix)))
+        assertFalse(LocationFixSelector.isBetterCandidate(coarseNetworkFix, gpsFix))
+        assertTrue(LocationFixSelector.isBetterCandidate(muchNewerNetworkFix, gpsFix))
+        assertEquals("GPS", LocationFixSelector.providerDisplayName("gps"))
+        assertEquals("네트워크", LocationFixSelector.providerDisplayName("network"))
+    }
 }

@@ -94,6 +94,43 @@ class BenefitReconcilerTest {
         assertEquals("1970-01-01", stored.lastVerifiedAt)
         assertEquals(null, stored.latitude)
         assertEquals(null, stored.longitude)
+        assertEquals("마포구", stored.district)
+    }
+
+    @Test
+    fun `gyeonggi and incheon MMA rows extract capital area district instead of UNKNOWN`() {
+        val result = BenefitReconciler().reconcile(
+            existing = emptyList(),
+            remote = listOf(
+                mma("수원 식당", "경기도 수원시 팔달구 효원로 1", "031-1111", "할인"),
+                mma("부평 카페", "인천광역시 부평구 시장로 10", "032-2222", "우대"),
+                mma("서해 가게", "인천광역시 서해구 청라대로 5", "032-3333", "할인"),
+            ),
+            syncedAt = 1L,
+        )
+
+        val byName = result.entities.associateBy(BenefitEntity::name)
+        assertEquals("수원시", byName.getValue("수원 식당").district)
+        assertEquals("부평구", byName.getValue("부평 카페").district)
+        assertEquals("서해구", byName.getValue("서해 가게").district)
+    }
+
+    @Test
+    fun `existing MMA row with UNKNOWN district is backfilled from capital area address`() {
+        val legacyUnknown = entity(
+            id = "mma_unknown_district",
+            sourceType = BenefitSourceType.MMA_API,
+            name = "파주 가게",
+            address = "경기도 파주시 중앙로 1",
+        ).copy(district = "UNKNOWN")
+
+        val reconciled = BenefitReconciler().reconcile(
+            existing = listOf(legacyUnknown),
+            remote = listOf(mma("파주 가게", "경기도 파주시 중앙로 1", "031-9999", "할인")),
+            syncedAt = 10L,
+        ).entities.single()
+
+        assertEquals("파주시", reconciled.district)
     }
 
     @Test

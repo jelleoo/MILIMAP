@@ -39,6 +39,10 @@ class BenefitReconciler {
             if (current != null) {
                 matched += 1
                 if (current.sourceType == BenefitSourceType.MMA_API.name) {
+                    val resolvedDistrict = current.district
+                        ?.takeIf { it.isNotBlank() && it != BenefitAnalyzer.UNKNOWN_DISTRICT }
+                        ?: BenefitAnalyzer.extractCapitalAreaDistrict(row.address ?: current.address)
+                        ?: BenefitAnalyzer.UNKNOWN_DISTRICT
                     current.copy(
                         phone = current.phone.takeUnless(String?::isNullOrBlank)
                             ?: row.phone.trimmedOrNull(),
@@ -52,6 +56,7 @@ class BenefitReconciler {
                         sourceUrl = MMA_SOURCE_URL,
                         lastVerifiedAt = verifiedDate(syncedAt),
                         status = BenefitStatus.ACTIVE.name,
+                        district = resolvedDistrict,
                         syncedAt = syncedAt,
                     )
                 } else {
@@ -120,7 +125,7 @@ class BenefitReconciler {
             sourceUrl = MMA_SOURCE_URL,
             lastVerifiedAt = verifiedDate(syncedAt),
             status = BenefitStatus.ACTIVE.name,
-            district = BenefitAnalyzer.extractSeoulDistrict(address) ?: BenefitAnalyzer.UNKNOWN_DISTRICT,
+            district = BenefitAnalyzer.extractCapitalAreaDistrict(address) ?: BenefitAnalyzer.UNKNOWN_DISTRICT,
             syncedAt = syncedAt,
         )
     }

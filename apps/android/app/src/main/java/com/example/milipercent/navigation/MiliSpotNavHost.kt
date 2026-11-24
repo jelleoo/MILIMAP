@@ -53,30 +53,14 @@ fun MiliSpotNavHost(
     onMapBenefitSelected: (String?) -> Unit = {},
 ) {
     NavHost(navController = navController, startDestination = DiscoverRoute) {
-        composable<DiscoverRoute> { AppRoute(
-            state, navController, onNavigate, onSearchTextChanged, onSearch, onPresetSelected,
-            onCategorySelected, onDistrictSelected, onBenefitSelected, onFavorite, onRefresh,
-            onCurrentLocation, onMessageShown, onRegister, onLogin, onLogout, onAdminSave, onAdminEnd, onAdminDelete,
-            onClearSearch, onMapCameraIdle, onCameraRequestApplied, onSearchInMapBounds, onMapBenefitSelected,
-        ) }
-        composable<SavedRoute> { AppRoute(
-            state, navController, onNavigate, onSearchTextChanged, onSearch, onPresetSelected,
-            onCategorySelected, onDistrictSelected, onBenefitSelected, onFavorite, onRefresh,
-            onCurrentLocation, onMessageShown, onRegister, onLogin, onLogout, onAdminSave, onAdminEnd, onAdminDelete,
-            onClearSearch, onMapCameraIdle, onCameraRequestApplied, onSearchInMapBounds, onMapBenefitSelected,
-        ) }
-        composable<AccountRoute> { AppRoute(
-            state, navController, onNavigate, onSearchTextChanged, onSearch, onPresetSelected,
-            onCategorySelected, onDistrictSelected, onBenefitSelected, onFavorite, onRefresh,
-            onCurrentLocation, onMessageShown, onRegister, onLogin, onLogout, onAdminSave, onAdminEnd, onAdminDelete,
-            onClearSearch, onMapCameraIdle, onCameraRequestApplied, onSearchInMapBounds, onMapBenefitSelected,
-        ) }
-        composable<AdminRoute> { AppRoute(
-            state, navController, onNavigate, onSearchTextChanged, onSearch, onPresetSelected,
-            onCategorySelected, onDistrictSelected, onBenefitSelected, onFavorite, onRefresh,
-            onCurrentLocation, onMessageShown, onRegister, onLogin, onLogout, onAdminSave, onAdminEnd, onAdminDelete,
-            onClearSearch, onMapCameraIdle, onCameraRequestApplied, onSearchInMapBounds, onMapBenefitSelected,
-        ) }
+        composable<DiscoverRoute> {
+            AppRoute(
+                state, navController, onNavigate, onSearchTextChanged, onSearch, onPresetSelected,
+                onCategorySelected, onDistrictSelected, onBenefitSelected, onFavorite, onRefresh,
+                onCurrentLocation, onMessageShown, onRegister, onLogin, onLogout, onAdminSave, onAdminEnd, onAdminDelete,
+                onClearSearch, onMapCameraIdle, onCameraRequestApplied, onSearchInMapBounds, onMapBenefitSelected,
+            )
+        }
         composable<BenefitDetailRoute> { entry ->
             val benefitId = entry.toRoute<BenefitDetailRoute>().benefitId
             val benefit = state.benefits.firstOrNull { it.id == benefitId }
@@ -88,7 +72,13 @@ fun MiliSpotNavHost(
                     benefit = benefit,
                     isFavorite = benefit.id in state.favoriteIds,
                     onBack = navController::popBackStack,
-                    onFavorite = { onFavorite(benefit.id) },
+                    onFavorite = {
+                        val requiresLogin = state.user == null
+                        onFavorite(benefit.id)
+                        if (requiresLogin) {
+                            navController.popBackStack()
+                        }
+                    },
                     onOpenNaverMap = { context.openNaverMap(benefit) },
                 )
             }
@@ -126,15 +116,7 @@ private fun AppRoute(
     MilitaryBenefitApp(
         state = state,
         navController = navController,
-        onNavigate = { destination ->
-            onNavigate(destination)
-            when (if (destination == AppDestination.ADMIN && state.user?.isAdmin != true) AppDestination.ACCOUNT else destination) {
-                AppDestination.DISCOVER -> navController.navigate(DiscoverRoute) { launchSingleTop = true; restoreState = true }
-                AppDestination.SAVED -> navController.navigate(SavedRoute) { launchSingleTop = true; restoreState = true }
-                AppDestination.ACCOUNT -> navController.navigate(AccountRoute) { launchSingleTop = true; restoreState = true }
-                AppDestination.ADMIN -> navController.navigate(AdminRoute) { launchSingleTop = true; restoreState = true }
-            }
-        },
+        onNavigate = onNavigate,
         onSearchTextChanged = onSearchTextChanged,
         onSearch = onSearch,
         onPresetSelected = onPresetSelected,
@@ -142,7 +124,9 @@ private fun AppRoute(
         onDistrictSelected = onDistrictSelected,
         onBenefitSelected = { benefitId ->
             onBenefitSelected(benefitId)
-            navController.navigate(BenefitDetailRoute(benefitId))
+            navController.navigate(BenefitDetailRoute(benefitId)) {
+                launchSingleTop = true
+            }
         },
         onFavorite = onFavorite,
         onRefresh = onRefresh,

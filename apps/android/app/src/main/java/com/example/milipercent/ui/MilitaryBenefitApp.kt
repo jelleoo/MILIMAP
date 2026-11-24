@@ -1,5 +1,6 @@
 package com.example.milipercent.ui
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -91,6 +92,9 @@ fun MilitaryBenefitApp(
     onMapBenefitSelected: (String?) -> Unit = {},
 ) {
     val snackbarHost = remember { SnackbarHostState() }
+    BackHandler(enabled = state.destination != AppDestination.DISCOVER) {
+        onNavigate(AppDestination.DISCOVER)
+    }
     LaunchedEffect(state.transientMessage) {
         state.transientMessage?.let { message ->
             snackbarHost.showSnackbar(message)
@@ -130,7 +134,7 @@ fun MilitaryBenefitApp(
             )
             AppDestination.SAVED -> SavedScreen(state.savedBenefits, state.favoriteIds, onBenefitSelected, onFavorite, Modifier.padding(padding))
             AppDestination.ACCOUNT -> AccountScreen(state.user, onRegister, onLogin, onLogout, Modifier.padding(padding))
-            AppDestination.ADMIN -> AdminScreen(state.user, state.benefits, onAdminSave, onAdminEnd, onAdminDelete, Modifier.padding(padding))
+            AppDestination.ADMIN -> AdminScreen(state.user, state.adminBenefits, onAdminSave, onAdminEnd, onAdminDelete, Modifier.padding(padding))
         }
     }
 }

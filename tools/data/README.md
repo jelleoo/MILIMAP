@@ -1,6 +1,10 @@
 # 데이터 도구
 
-`data/canonical/capital-area-military-benefits.csv`가 `businessId`를 포함한 23열 정본입니다. `convert-benefits.ps1`은 정본 전체를 출시 전 중간 JSON으로 변환하고, `build-release-benefit-seed.ps1`은 최신 공식 혜택 후보만 골라 Android Room 초기 시드를 만듭니다. 중간 JSON은 Git에 저장하지 않고 임시 경로에 생성합니다.
+`data/canonical/capital-area-military-benefits.csv`가 `businessId`를 포함한 23열 정본입니다(2026-11-24 기준 `1,137`건, Android 번들 시드 `seedVersion 14` / `1,018`건 / 지도 핀 `998`건 `98.0%`). `convert-benefits.ps1`은 정본 전체를 출시 전 중간 JSON으로 변환하고, `build-release-benefit-seed.ps1`은 최신 공식 혜택 후보만 골라 Android Room 초기 시드를 만듭니다. 중간 JSON은 Git에 저장하지 않고 임시 경로에 생성합니다.
+
+> 최근 추가된 운영 자동화 도구:
+> - 원클릭 시드 릴리스 컷(사전 검증·버전 증가 강제·실패 시 롤백): `tools/data/invoke-benefit-seed-release-cut.ps1`
+> - 주간 읽기 전용 공식 출처 변경 점검(`ProductionAction=NONE`, 리포트 생성 전용): `tools/data/run-weekly-benefit-drift-check.ps1` (`.github/workflows/weekly-benefit-drift-check.yml`)
 
 기존 출시 시드에 있는 세부 지역명(예: 파주시의 읍·면·동)은 `-DistrictReferenceJson`으로 보존합니다. 새 정본 행에 기존 ID가 없으면 정본의 `시군구`를 사용합니다. 업소명과 주소로 계산한 안정 ID는 유지되므로, 같은 업소가 다음 시드에도 남아 있으면 사용자의 찜도 유지됩니다.
 

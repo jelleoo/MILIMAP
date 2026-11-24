@@ -1,4 +1,4 @@
-Set-StrictMode -Version Latest
+﻿Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
 $benefitLibraryPath = Join-Path (Split-Path $PSScriptRoot -Parent) 'benefit-verification-contracts.ps1'
@@ -6,20 +6,77 @@ $benefitLibraryPath = Join-Path (Split-Path $PSScriptRoot -Parent) 'benefit-veri
 
 function Get-BenefitObservationTime { return [DateTime]::UtcNow.ToString('o') }
 
+function Test-BenefitPrivateOrReservedIpAddress {
+    param([Parameter(Mandatory)][Net.IPAddress]$Address)
+
+    if ($Address.IsIPv4MappedToIPv6) {
+        $Address = $Address.MapToIPv4()
+    }
+    if ([Net.IPAddress]::IsLoopback($Address) -or
+        $Address.Equals([Net.IPAddress]::Any) -or
+        $Address.Equals([Net.IPAddress]::Broadcast) -or
+        $Address.Equals([Net.IPAddress]::IPv6Any) -or
+        $Address.Equals([Net.IPAddress]::IPv6Loopback) -or
+        $Address.IsIPv6LinkLocal -or
+        $Address.IsIPv6SiteLocal -or
+        $Address.IsIPv6Multicast) {
+        return $true
+    }
+
+    $bytes = $Address.GetAddressBytes()
+    if ($Address.AddressFamily -eq [Net.Sockets.AddressFamily]::InterNetwork) {
+        if ($bytes[0] -eq 0 -or
+            $bytes[0] -eq 10 -or
+            $bytes[0] -eq 127 -or
+            ($bytes[0] -eq 100 -and $bytes[1] -ge 64 -and $bytes[1] -le 127) -or
+            ($bytes[0] -eq 169 -and $bytes[1] -eq 254) -or
+            ($bytes[0] -eq 172 -and $bytes[1] -ge 16 -and $bytes[1] -le 31) -or
+            ($bytes[0] -eq 192 -and $bytes[1] -eq 168) -or
+            ($bytes[0] -eq 192 -and $bytes[1] -eq 0 -and $bytes[2] -eq 0) -or
+            ($bytes[0] -eq 192 -and $bytes[1] -eq 0 -and $bytes[2] -eq 2) -or
+            ($bytes[0] -eq 198 -and ($bytes[1] -eq 18 -or $bytes[1] -eq 19)) -or
+            $bytes[0] -ge 224) {
+            return $true
+        }
+        return $false
+    }
+
+    if ($Address.AddressFamily -eq [Net.Sockets.AddressFamily]::InterNetworkV6) {
+        # Unique local fc00::/7, link-local fe80::/10, multicast ff00::/8, documentation 2001:db8::/32
+        if ((($bytes[0] -band 0xfe) -eq 0xfc) -or
+            ($bytes[0] -eq 0xfe -and ($bytes[1] -band 0xc0) -eq 0x80) -or
+            ($bytes[0] -eq 0xff) -or
+            ($bytes[0] -eq 0x20 -and $bytes[1] -eq 0x01 -and $bytes[2] -eq 0x0d -and $bytes[3] -eq 0xb8)) {
+            return $true
+        }
+    }
+    return $false
+}
+
 function Test-BenefitSafeHttpUri {
     param([Parameter(Mandatory)][string]$Url)
     $uri = $null
     if (-not [Uri]::TryCreate($Url, [UriKind]::Absolute, [ref]$uri)) { return $false }
     if ($uri.Scheme -notin @('http', 'https') -or -not [string]::IsNullOrEmpty($uri.UserInfo) -or [string]::IsNullOrWhiteSpace($uri.Host)) { return $false }
-    $targetHost = $uri.Host.TrimEnd('.').ToLowerInvariant()
-    if ($targetHost -eq 'localhost' -or $targetHost.EndsWith('.localhost') -or $targetHost.EndsWith('.local') -or -not $targetHost.Contains('.')) { return $false }
+    $targetHost = $uri.DnsSafeHost.Trim('[', ']').TrimEnd('.').ToLowerInvariant()
+    if ([string]::IsNullOrWhiteSpace($targetHost)) { return $false }
+    if ($targetHost -eq 'localhost' -or
+        $targetHost.EndsWith('.localhost') -or
+        $targetHost.EndsWith('.local') -or
+        $targetHost.EndsWith('.internal') -or
+        $targetHost.EndsWith('.arpa')) {
+        return $false
+    }
+
     $address = $null
     if ([Net.IPAddress]::TryParse($targetHost, [ref]$address)) {
-        if ([Net.IPAddress]::IsLoopback($address) -or $address.IsIPv6LinkLocal -or $address.Equals([Net.IPAddress]::IPv6Any)) { return $false }
-        $bytes = $address.GetAddressBytes()
-        if ($address.AddressFamily -eq [Net.Sockets.AddressFamily]::InterNetwork -and ($bytes[0] -eq 0 -or $bytes[0] -eq 10 -or $bytes[0] -eq 127 -or ($bytes[0] -eq 169 -and $bytes[1] -eq 254) -or ($bytes[0] -eq 192 -and $bytes[1] -eq 168) -or ($bytes[0] -eq 172 -and $bytes[1] -ge 16 -and $bytes[1] -le 31))) { return $false }
-        if ($address.AddressFamily -eq [Net.Sockets.AddressFamily]::InterNetworkV6 -and (($bytes[0] -band 0xfe) -eq 0xfc)) { return $false }
+        if (Test-BenefitPrivateOrReservedIpAddress -Address $address) { return $false }
+        return $true
     }
+
+    if (-not $targetHost.Contains('.')) { return $false }
+    # Reject numeric/octal/hex obfuscated IPv4 labels (e.g. 0177.0.0.1, 0x7f.0.0.1)
+    if ($targetHost -match '^(?:0x[0-9a-f]+|0[0-7]+|\d+)(?:\.(?:0x[0-9a-f]+|0[0-7]+|\d+)){1,3}$') { return $false }
     return $true
 }
 
@@ -31,8 +88,22 @@ function Test-BenefitXlsxBinaryPackage {
         try {
             $archive = [IO.Compression.ZipArchive]::new($stream, [IO.Compression.ZipArchiveMode]::Read, $false)
             try {
+                if ($archive.Entries.Count -gt 512) { return $false }
+                $seen = [Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
                 $names = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
-                foreach ($entry in $archive.Entries) { [void]$names.Add($entry.FullName) }
+                $totalUncompressed = 0L
+                foreach ($entry in $archive.Entries) {
+                    if ([string]::IsNullOrWhiteSpace($entry.FullName) -or
+                        $entry.FullName -match '(^|/)\.\.(/|$)|\\' -or
+                        $entry.FullName.StartsWith('/') -or
+                        -not $seen.Add($entry.FullName)) {
+                        return $false
+                    }
+                    if ($entry.Length -lt 0 -or $entry.Length -gt 32MB) { return $false }
+                    $totalUncompressed += $entry.Length
+                    if ($totalUncompressed -gt 128MB) { return $false }
+                    [void]$names.Add($entry.FullName)
+                }
                 return $names.Contains('[Content_Types].xml') -and $names.Contains('xl/workbook.xml') -and $names.Contains('xl/_rels/workbook.xml.rels')
             } finally { $archive.Dispose() }
         } finally { $stream.Dispose() }

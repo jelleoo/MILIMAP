@@ -357,13 +357,58 @@ function Find-WeeklyYangjuAttachmentUrl {
 }
 
 function Invoke-WeeklyYangjuRequest {
-    param([uri]$Uri, [int]$TimeoutSeconds, [int]$MaximumRedirection = 0)
+    param(
+        [uri]$Uri,
+        [int]$TimeoutSeconds,
+        [int]$MaximumRedirection = 0,
+        [int]$MaxResponseBytes = 20MB
+    )
 
+    if (-not (Test-BenefitSafeHttpUri -Url $Uri.AbsoluteUri) -or $Uri.Scheme -cne 'https') {
+        throw "WEEKLY_YANGJU_URL_UNSAFE: $($Uri.AbsoluteUri)"
+    }
     $response = Invoke-WebRequest -Uri $Uri -Headers @{ 'User-Agent' = 'MILIMAP-Phase5-EvidenceVerifier/1.0' } -MaximumRedirection $MaximumRedirection -TimeoutSec $TimeoutSeconds
     if ([int]$response.StatusCode -ne 200) {
         throw "WEEKLY_YANGJU_HTTP_FAILED: HTTP status $($response.StatusCode)"
     }
+    $rawStreamProp = $response.PSObject.Properties['RawContentStream']
+    $contentLength = if ($response.Content -is [byte[]]) {
+        [long]$response.Content.Length
+    } elseif ($null -ne $rawStreamProp -and $null -ne $rawStreamProp.Value) {
+        [long]$rawStreamProp.Value.Length
+    } else {
+        [long][Text.Encoding]::UTF8.GetByteCount([string]$response.Content)
+    }
+    if ($contentLength -gt $MaxResponseBytes) {
+        throw "WEEKLY_YANGJU_RESPONSE_TOO_LARGE: $contentLength bytes"
+    }
     return $response
+}
+
+function ConvertTo-WeeklySafeCsvCell {
+    param([AllowNull()][string]$Value)
+
+    if ([string]::IsNullOrEmpty($Value)) { return '' }
+    if ($Value -match '^[\t\r]*[=+\-@]' -or $Value[0] -eq "`t" -or $Value[0] -eq "`r") {
+        return "'" + $Value
+    }
+    return $Value
+}
+
+function ConvertTo-WeeklySafeCsvRows {
+    param([AllowEmptyCollection()][object[]]$Rows)
+
+    $safe = [Collections.Generic.List[object]]::new()
+    foreach ($row in @($Rows)) {
+        if ($null -eq $row) { continue }
+        $ordered = [ordered]@{}
+        foreach ($prop in $row.PSObject.Properties) {
+            $rawVal = if ($null -eq $prop.Value) { '' } else { [string]$prop.Value }
+            $ordered[$prop.Name] = ConvertTo-WeeklySafeCsvCell -Value $rawVal
+        }
+        $safe.Add([pscustomobject]$ordered)
+    }
+    return @($safe)
 }
 
 function Test-WeeklyYangjuAttachmentDrift {
@@ -394,7 +439,13 @@ function Format-WeeklyMarkdownCell {
     param([AllowNull()][string]$Value)
 
     if ([string]::IsNullOrWhiteSpace($Value)) { return '-' }
-    return (($Value -replace '[\r\n]+', ' ') -replace '\|', '\|').Trim()
+    $sanitized = ($Value -replace '[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]', '')
+    $sanitized = ($sanitized -replace '[\r\n]+', ' ').Trim()
+    $sanitized = $sanitized.Replace('&', '&amp;').Replace('<', '&lt;').Replace('>', '&gt;').Replace('|', '\|').Replace('`', '\`')
+    if ($sanitized.Length -gt 500) {
+        $sanitized = $sanitized.Substring(0, 497) + '...'
+    }
+    return $sanitized
 }
 
 function New-WeeklyDriftMarkdownReport {
@@ -538,9 +589,17 @@ $mmaNewCsv = Join-Path $resolvedOutDir 'mma-new-candidates.csv'
 $mmaMissingCsv = Join-Path $resolvedOutDir 'mma-missing-canonical.csv'
 $mmaSummaryJson = Join-Path $resolvedOutDir 'mma-summary.json'
 try {
-    $mmaResp = Invoke-WebRequest -Uri $MmaListUrl -MaximumRedirection 3 -TimeoutSec $TimeoutSeconds
+    if (-not (Test-BenefitSafeHttpUri -Url $MmaListUrl) -or ([uri]$MmaListUrl).Scheme -cne 'https') {
+        throw "WEEKLY_MMA_URL_UNSAFE: $MmaListUrl"
+    }
+    $mmaResp = Invoke-WebRequest -Uri $MmaListUrl -MaximumRedirection 0 -TimeoutSec $TimeoutSeconds
     if ([int]$mmaResp.StatusCode -ne 200) {
         throw "HTTP status $($mmaResp.StatusCode)"
+    }
+    $mmaRawStreamProp = $mmaResp.PSObject.Properties['RawContentStream']
+    $mmaByteCount = if ($null -ne $mmaRawStreamProp -and $null -ne $mmaRawStreamProp.Value) { [long]$mmaRawStreamProp.Value.Length } else { [long][Text.Encoding]::UTF8.GetByteCount([string]$mmaResp.Content) }
+    if ($mmaByteCount -gt 20MB) {
+        throw "WEEKLY_MMA_RESPONSE_TOO_LARGE: $mmaByteCount bytes"
     }
     $mmaText = Read-WeeklyUtf8WebResponseText -Response $mmaResp
     $mmaCallback = [System.Web.HttpUtility]::ParseQueryString(([uri]$MmaListUrl).Query)['callback']
@@ -548,9 +607,9 @@ try {
     $mmaLiveItems = @(ConvertFrom-WeeklyMmaJsonpListText -RawText $mmaText -ExpectedCallback $mmaCallback)
     $mmaDrift = Compare-WeeklyMmaMetroToCanonical -LiveItems $mmaLiveItems -CanonicalRows $canonicalRows
 
-    @($mmaDrift.changedCandidates) | Export-Csv -LiteralPath $mmaChangedCsv -NoTypeInformation -Encoding utf8
-    @($mmaDrift.newCandidates) | Export-Csv -LiteralPath $mmaNewCsv -NoTypeInformation -Encoding utf8
-    @($mmaDrift.missingCanonical) | Export-Csv -LiteralPath $mmaMissingCsv -NoTypeInformation -Encoding utf8
+    @(ConvertTo-WeeklySafeCsvRows -Rows @($mmaDrift.changedCandidates)) | Export-Csv -LiteralPath $mmaChangedCsv -NoTypeInformation -Encoding utf8
+    @(ConvertTo-WeeklySafeCsvRows -Rows @($mmaDrift.newCandidates)) | Export-Csv -LiteralPath $mmaNewCsv -NoTypeInformation -Encoding utf8
+    @(ConvertTo-WeeklySafeCsvRows -Rows @($mmaDrift.missingCanonical)) | Export-Csv -LiteralPath $mmaMissingCsv -NoTypeInformation -Encoding utf8
 
     $mmaMetaSummary = [pscustomobject][ordered]@{
         generatedAtUtc = [DateTimeOffset]::UtcNow.ToString('yyyy-MM-ddTHH:mm:ssZ', [Globalization.CultureInfo]::InvariantCulture)

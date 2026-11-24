@@ -1,4 +1,4 @@
-Set-StrictMode -Version Latest
+﻿Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
 . (Join-Path $PSScriptRoot 'run-weekly-benefit-drift-check.ps1') -LibraryOnly
@@ -229,6 +229,29 @@ $md = New-WeeklyDriftMarkdownReport -Summary $summaryFixture
 if ($md -notmatch 'ProductionAction.*NONE' -or $md -notmatch 'FETCH_FAILED' -or $md -notmatch 'MANUAL_CSV_REQUIRED' -or $md -notmatch 'timeout') {
     throw 'Generated weekly drift markdown report is missing expected fields.'
 }
+
+# 3b. Markdown escaping & CSV formula neutralization
+$maliciousSummary = [pscustomobject][ordered]@{
+    contractType = 'WeeklyBenefitDriftSummary'
+    contractVersion = 1
+    generatedAtUtc = '2026-11-24T00:00:00Z'
+    canonicalRowCount = 1
+    automaticCanonicalMutation = $false
+    productionAction = 'NONE'
+    sources = @(
+        [pscustomobject][ordered]@{ id = 'mma'; name = '병무청'; status = 'FETCH_FAILED'; officialCount = $null; canonicalCount = 1; detail = '조회 실패'; error = "<script>alert(1)</script>`n|injected|" }
+    )
+}
+$safeMd = New-WeeklyDriftMarkdownReport -Summary $maliciousSummary
+if ($safeMd.Contains('<script>') -or -not $safeMd.Contains('&lt;script&gt;') -or -not $safeMd.Contains('\|injected\|')) {
+    throw "Markdown report must escape HTML tags and pipe characters: $safeMd"
+}
+
+Assert-WeeklyEqual (ConvertTo-WeeklySafeCsvCell -Value '=CMD|" /C calc"!A0') "'=CMD|"" /C calc""!A0" 'Leading = must be neutralized for CSV'
+Assert-WeeklyEqual (ConvertTo-WeeklySafeCsvCell -Value '+1+1') "'+1+1" 'Leading + must be neutralized for CSV'
+Assert-WeeklyEqual (ConvertTo-WeeklySafeCsvCell -Value '-2+3') "'-2+3" 'Leading - must be neutralized for CSV'
+Assert-WeeklyEqual (ConvertTo-WeeklySafeCsvCell -Value '@SUM(1,2)') "'@SUM(1,2)" 'Leading @ must be neutralized for CSV'
+Assert-WeeklyEqual (ConvertTo-WeeklySafeCsvCell -Value '일반 가게') '일반 가게' 'Normal Korean text must remain unchanged'
 
 # 4. Path safety guard rejects writing inside data/ or apps/
 $unsafeRejected = $false

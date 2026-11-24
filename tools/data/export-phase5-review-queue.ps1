@@ -187,6 +187,16 @@ function Get-InternalPhase5ReviewQueueRowValue {
     return ([string]$prop.Value).Trim()
 }
 
+function ConvertTo-InternalPhase5ReviewQueueSafeCsvCell {
+    param([AllowNull()][string]$Value)
+
+    if ([string]::IsNullOrEmpty($Value)) { return '' }
+    if ($Value -match '^[\t\r]*[=+\-@]' -or $Value[0] -eq "`t" -or $Value[0] -eq "`r") {
+        return "'" + $Value
+    }
+    return $Value
+}
+
 function Export-Phase5ReviewQueue {
     [CmdletBinding(DefaultParameterSetName = 'ByRoot')]
     param(
@@ -525,31 +535,31 @@ function Export-Phase5ReviewQueue {
     $csvRows = @(
         foreach ($item in $sortedItems) {
             [pscustomobject][ordered]@{
-                OperatorBucket = $item.OperatorBucket
-                BusinessId = $item.BusinessId
-                CanonicalRowNumber = if ($null -eq $item.CanonicalRowNumber) { '' } else { [string]$item.CanonicalRowNumber }
-                BusinessName = $item.BusinessName
-                District = $item.District
-                RoadAddress = $item.RoadAddress
-                CanonicalBenefitStatus = $item.CanonicalBenefitStatus
-                CanonicalCoordinateStatus = $item.CanonicalCoordinateStatus
-                Domain = $item.Domain
-                ReviewRoute = $item.ReviewRoute
-                BenefitState = if ($null -eq $item.BenefitState) { '' } else { $item.BenefitState }
-                ReviewClass = if ($null -eq $item.ReviewClass) { '' } else { $item.ReviewClass }
-                LocationClassification = if ($null -eq $item.LocationClassification) { '' } else { $item.LocationClassification }
-                OperationalStatus = $item.OperationalStatus
-                Comparable = [string]$item.Comparable
-                ChangeCandidates = (@($item.ChangeCandidates) -join ';')
-                ReasonCodes = (@($item.ReasonCodes) -join ';')
-                DiagnosticReasons = (@($item.DiagnosticReasons) -join ';')
-                ObservedAt = $item.ObservedAt
-                RunId = $item.RunId
-                ReviewKey = $item.ReviewKey
-                CurrentObservationId = $item.CurrentObservationId
-                SourceUrls = (@($item.SourceUrls) -join ' | ')
-                ApprovalRequired = [string]$item.ApprovalRequired
-                ProductionAction = $item.ProductionAction
+                OperatorBucket = ConvertTo-InternalPhase5ReviewQueueSafeCsvCell $item.OperatorBucket
+                BusinessId = ConvertTo-InternalPhase5ReviewQueueSafeCsvCell $item.BusinessId
+                CanonicalRowNumber = if ($null -eq $item.CanonicalRowNumber) { '' } else { ConvertTo-InternalPhase5ReviewQueueSafeCsvCell ([string]$item.CanonicalRowNumber) }
+                BusinessName = ConvertTo-InternalPhase5ReviewQueueSafeCsvCell $item.BusinessName
+                District = ConvertTo-InternalPhase5ReviewQueueSafeCsvCell $item.District
+                RoadAddress = ConvertTo-InternalPhase5ReviewQueueSafeCsvCell $item.RoadAddress
+                CanonicalBenefitStatus = ConvertTo-InternalPhase5ReviewQueueSafeCsvCell $item.CanonicalBenefitStatus
+                CanonicalCoordinateStatus = ConvertTo-InternalPhase5ReviewQueueSafeCsvCell $item.CanonicalCoordinateStatus
+                Domain = ConvertTo-InternalPhase5ReviewQueueSafeCsvCell $item.Domain
+                ReviewRoute = ConvertTo-InternalPhase5ReviewQueueSafeCsvCell $item.ReviewRoute
+                BenefitState = if ($null -eq $item.BenefitState) { '' } else { ConvertTo-InternalPhase5ReviewQueueSafeCsvCell $item.BenefitState }
+                ReviewClass = if ($null -eq $item.ReviewClass) { '' } else { ConvertTo-InternalPhase5ReviewQueueSafeCsvCell $item.ReviewClass }
+                LocationClassification = if ($null -eq $item.LocationClassification) { '' } else { ConvertTo-InternalPhase5ReviewQueueSafeCsvCell $item.LocationClassification }
+                OperationalStatus = ConvertTo-InternalPhase5ReviewQueueSafeCsvCell $item.OperationalStatus
+                Comparable = ConvertTo-InternalPhase5ReviewQueueSafeCsvCell ([string]$item.Comparable)
+                ChangeCandidates = ConvertTo-InternalPhase5ReviewQueueSafeCsvCell ((@($item.ChangeCandidates) -join ';'))
+                ReasonCodes = ConvertTo-InternalPhase5ReviewQueueSafeCsvCell ((@($item.ReasonCodes) -join ';'))
+                DiagnosticReasons = ConvertTo-InternalPhase5ReviewQueueSafeCsvCell ((@($item.DiagnosticReasons) -join ';'))
+                ObservedAt = ConvertTo-InternalPhase5ReviewQueueSafeCsvCell $item.ObservedAt
+                RunId = ConvertTo-InternalPhase5ReviewQueueSafeCsvCell $item.RunId
+                ReviewKey = ConvertTo-InternalPhase5ReviewQueueSafeCsvCell $item.ReviewKey
+                CurrentObservationId = ConvertTo-InternalPhase5ReviewQueueSafeCsvCell $item.CurrentObservationId
+                SourceUrls = ConvertTo-InternalPhase5ReviewQueueSafeCsvCell ((@($item.SourceUrls) -join ' | '))
+                ApprovalRequired = ConvertTo-InternalPhase5ReviewQueueSafeCsvCell ([string]$item.ApprovalRequired)
+                ProductionAction = ConvertTo-InternalPhase5ReviewQueueSafeCsvCell $item.ProductionAction
             }
         }
     )

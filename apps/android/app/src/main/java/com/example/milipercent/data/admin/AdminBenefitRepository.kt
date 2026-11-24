@@ -97,6 +97,19 @@ class RoomAdminBenefitRepository(
         require(input.benefitType.isNotBlank()) { "혜택 유형을 입력하세요." }
         require(input.benefitDescription.isNotBlank()) { "혜택 내용을 입력하세요." }
         require(input.sourceLabel.isNotBlank()) { "출처를 입력하세요." }
+        require((input.latitude == null) == (input.longitude == null)) {
+            "위도와 경도는 함께 입력하거나 모두 비워야 합니다."
+        }
+        if (input.latitude != null && input.longitude != null) {
+            require(
+                input.latitude.isFinite() &&
+                    input.longitude.isFinite() &&
+                    input.latitude in -90.0..90.0 &&
+                    input.longitude in -180.0..180.0,
+            ) {
+                "위도 또는 경도 값이 올바르지 않습니다."
+            }
+        }
         if (!input.sourceUrl.isNullOrBlank()) {
             require(SafeExternalUri.resolveSafeHttpUrl(input.sourceUrl) != null) {
                 "출처 URL은 http 또는 https 주소여야 합니다."

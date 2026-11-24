@@ -19,10 +19,12 @@ import com.example.milipercent.model.CollectionProgress
 import com.example.milipercent.network.BenefitPageSource
 import java.io.IOException
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.withContext
 
 interface BenefitDataRepository {
     fun observeBenefits(): Flow<List<BenefitUiModel>>
@@ -58,28 +60,31 @@ class BenefitRepository(
     ): BenefitSyncResult {
         // DB에는 전체 페이지 수집과 병합이 모두 끝난 뒤에만 접근한다.
         val collection = collectAllBenefits(onProgress)
-        val analysis = BenefitAnalyzer.analyze(collection)
-        val reconciler = BenefitReconciler()
-        val scopedRemote = collection.benefits.filter { reconciler.isCurrentProductRegion(it.address) }
-        require(scopedRemote.isNotEmpty()) { "수도권 나라사랑가게 API 응답이 없어 기존 캐시를 교체하지 않습니다." }
         val allStoredBenefits = localDataSource.getAllBenefits()
-        val publishedOfficialIdsByIdentity = allStoredBenefits.uniquePublishedBenefitIdsByIdentity()
-        val remoteMmaCandidates = scopedRemote.filterNot { remote ->
-            !remote.name.isBlank() && !remote.address.isNullOrBlank() &&
-                BenefitIdentity.normalizedKey(remote.name, remote.address) in publishedOfficialIdsByIdentity
-        }
-        val reconciliation = try {
-            if (remoteMmaCandidates.isEmpty()) {
-                ReconciliationResult(entities = emptyList(), matchedCount = 0, addedCount = 0)
-            } else {
-                reconciler.reconcile(
-                    existing = allStoredBenefits.filter { entity -> entity.sourceType == MMA_SOURCE_TYPE },
-                    remote = remoteMmaCandidates,
-                    syncedAt = currentTimeMillis(),
-                )
+        val (analysis, reconciliation) = withContext(Dispatchers.Default) {
+            val analysisResult = BenefitAnalyzer.analyze(collection)
+            val reconciler = BenefitReconciler()
+            val scopedRemote = collection.benefits.filter { reconciler.isCurrentProductRegion(it.address) }
+            require(scopedRemote.isNotEmpty()) { "수도권 나라사랑가게 API 응답이 없어 기존 캐시를 교체하지 않습니다." }
+            val publishedOfficialIdsByIdentity = allStoredBenefits.uniquePublishedBenefitIdsByIdentity()
+            val remoteMmaCandidates = scopedRemote.filterNot { remote ->
+                !remote.name.isBlank() && !remote.address.isNullOrBlank() &&
+                    BenefitIdentity.normalizedKey(remote.name, remote.address) in publishedOfficialIdsByIdentity
             }
-        } catch (exception: RemoteBenefitConflictException) {
-            throw BenefitIdentityCollisionException(cause = exception)
+            val reconciliationResult = try {
+                if (remoteMmaCandidates.isEmpty()) {
+                    ReconciliationResult(entities = emptyList(), matchedCount = 0, addedCount = 0)
+                } else {
+                    reconciler.reconcile(
+                        existing = allStoredBenefits.filter { entity -> entity.sourceType == MMA_SOURCE_TYPE },
+                        remote = remoteMmaCandidates,
+                        syncedAt = currentTimeMillis(),
+                    )
+                }
+            } catch (exception: RemoteBenefitConflictException) {
+                throw BenefitIdentityCollisionException(cause = exception)
+            }
+            analysisResult to reconciliationResult
         }
 
         localDataSource.replaceBenefits(

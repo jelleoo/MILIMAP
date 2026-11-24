@@ -32,6 +32,7 @@ data class BenefitListItem(
 data class MiliSpotUiState(
     val destination: AppDestination = AppDestination.DISCOVER,
     val benefits: List<Benefit> = emptyList(),
+    val adminBenefits: List<Benefit> = emptyList(),
     val visibleBenefits: List<BenefitListItem> = emptyList(),
     val savedBenefits: List<BenefitListItem> = emptyList(),
     val selectedBenefitId: String? = null,

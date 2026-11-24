@@ -447,6 +447,84 @@ class MiliSpotViewModelTest {
         assertEquals(2L, session.userId())
     }
 
+    @Test
+    fun adminUserObservesAllBenefitsIncludingEndedAndLogoutClearsAdminBenefits() = runTest(dispatcher.scheduler) {
+        val activeItem = benefit("manual-active", name = "활성 수동 가게")
+        val endedItem = Benefit(
+            "manual-ended", "종료 수동 가게", "서울", 37.5, 126.9, "음식", "할인", "설명", null, null, null, null,
+            BenefitSourceType.MANUAL_LOCAL, "운영팀", null, null, BenefitStatus.ENDED, "마포구",
+        )
+        val adminUser = LocalUser(1L, "admin@test.com", "관리자", isAdmin = true)
+        val adminRepo = FakeAdminRepository(flowOf(listOf(activeItem, endedItem)))
+
+        val viewModel = MiliSpotViewModel(
+            FakeBenefitRepository(listOf(activeItem)),
+            FakeAccountRepository(adminUser),
+            FakeFavoriteRepository(),
+            adminRepo,
+            FakeSeedInstaller(),
+            FakeSessionStorage(1L),
+            mmaConfigured = false,
+        )
+        advanceUntilIdle()
+
+        assertEquals(listOf("manual-active"), viewModel.uiState.value.benefits.map(Benefit::id))
+        assertEquals(listOf("manual-active", "manual-ended"), viewModel.uiState.value.adminBenefits.map(Benefit::id))
+
+        viewModel.logout()
+        advanceUntilIdle()
+
+        assertTrue(viewModel.uiState.value.adminBenefits.isEmpty())
+    }
+
+    @Test
+    fun buildAdminBenefitInputPreservesExistingMetadataDuringManualEdit() {
+        val existing = Benefit(
+            id = "manual_local_1",
+            name = "기존 가게",
+            address = "경기도 성남시 분당구 판교로 1",
+            latitude = 37.402,
+            longitude = 127.108,
+            category = "음식",
+            benefitType = "10% 할인",
+            benefitDescription = "기존 설명",
+            phone = "031-123-4567",
+            eligibleTarget = "현역 장병",
+            usageCondition = "신분증 제시",
+            verificationMethod = "현장 확인",
+            sourceType = BenefitSourceType.MANUAL_LOCAL,
+            sourceLabel = "성남시 확인",
+            sourceUrl = "https://www.seongnam.go.kr/notice",
+            lastVerifiedAt = "2026-11-20",
+            status = BenefitStatus.NEEDS_VERIFICATION,
+            district = "성남시",
+        )
+
+        val edited = buildAdminBenefitInput(
+            name = "수정된 가게",
+            address = "경기도 성남시 분당구 판교로 2",
+            description = "수정된 설명",
+            existing = existing,
+        )
+
+        assertEquals("수정된 가게", edited.name)
+        assertEquals("경기도 성남시 분당구 판교로 2", edited.address)
+        assertEquals("수정된 설명", edited.benefitDescription)
+        assertEquals(37.402, edited.latitude)
+        assertEquals(127.108, edited.longitude)
+        assertEquals("음식", edited.category)
+        assertEquals("10% 할인", edited.benefitType)
+        assertEquals("031-123-4567", edited.phone)
+        assertEquals("현역 장병", edited.eligibleTarget)
+        assertEquals("신분증 제시", edited.usageCondition)
+        assertEquals("현장 확인", edited.verificationMethod)
+        assertEquals("성남시 확인", edited.sourceLabel)
+        assertEquals("https://www.seongnam.go.kr/notice", edited.sourceUrl)
+        assertEquals("2026-11-20", edited.lastVerifiedAt)
+        assertEquals(BenefitStatus.NEEDS_VERIFICATION, edited.status)
+        assertEquals("성남시", edited.district)
+    }
+
     private class FakeSessionStorage(initial: Long? = null) : SessionStorage {
         private var id = initial
         override fun userId(): Long? = id
@@ -511,8 +589,10 @@ class MiliSpotViewModelTest {
             return false
         }
     }
-    private class FakeAdminRepository : AdminBenefitRepository {
-        override fun observeAll(): Flow<List<Benefit>> = flowOf(emptyList())
+    private class FakeAdminRepository(
+        private val allBenefits: Flow<List<Benefit>> = flowOf(emptyList()),
+    ) : AdminBenefitRepository {
+        override fun observeAll(): Flow<List<Benefit>> = allBenefits
         override suspend fun create(input: com.example.milipercent.data.admin.AdminBenefitInput) = ""
         override suspend fun update(id: String, input: com.example.milipercent.data.admin.AdminBenefitInput) = Unit
         override suspend fun end(id: String) = Unit

@@ -38,6 +38,16 @@ object BenefitAnalyzer {
     const val MISSING_BENEFIT_TYPE = "(없음)"
 
     val seoulDistricts: List<String> = BenefitDistrict.seoulDistrictNames
+    private val gyeonggiDistricts: List<String> = listOf(
+        "가평군", "고양시", "과천시", "광명시", "광주시", "구리시", "군포시", "김포시",
+        "남양주시", "동두천시", "부천시", "성남시", "수원시", "시흥시", "안산시", "안성시",
+        "안양시", "양주시", "양평군", "여주시", "연천군", "오산시", "용인시", "의왕시",
+        "의정부시", "이천시", "파주시", "평택시", "포천시", "하남시", "화성시",
+    ).sortedByDescending(String::length)
+    private val incheonDistricts: List<String> = listOf(
+        "강화군", "검단구", "계양구", "남동구", "동구", "미추홀구", "부평구",
+        "서구", "서해구", "연수구", "영종구", "옹진군", "제물포구", "중구",
+    ).sortedByDescending(String::length)
 
     fun analyze(collection: BenefitCollection): BenefitAnalysisResult {
         val allBenefits = collection.benefits
@@ -78,6 +88,31 @@ object BenefitAnalyzer {
         val normalizedAddress = normalizeForComparison(address) ?: return null
         if (!isSeoulAddress(normalizedAddress)) return null
         return seoulDistricts.firstOrNull(normalizedAddress::contains)
+    }
+
+    fun extractCapitalAreaDistrict(address: String?): String? {
+        val normalizedAddress = normalizeForComparison(address) ?: return null
+        if (isSeoulAddress(normalizedAddress)) {
+            return seoulDistricts.firstOrNull(normalizedAddress::contains)
+        }
+        val gyeonggiRemainder = when {
+            normalizedAddress.startsWith("경기도") -> normalizedAddress.removePrefix("경기도")
+            normalizedAddress.startsWith("경기") -> normalizedAddress.removePrefix("경기")
+            else -> null
+        }
+        if (gyeonggiRemainder != null) {
+            return gyeonggiDistricts.firstOrNull(gyeonggiRemainder::startsWith)
+        }
+        val incheonRemainder = when {
+            normalizedAddress.startsWith("인천광역시") -> normalizedAddress.removePrefix("인천광역시")
+            normalizedAddress.startsWith("인천시") -> normalizedAddress.removePrefix("인천시")
+            normalizedAddress.startsWith("인천") -> normalizedAddress.removePrefix("인천")
+            else -> null
+        }
+        if (incheonRemainder != null) {
+            return incheonDistricts.firstOrNull(incheonRemainder::startsWith)
+        }
+        return null
     }
 
     fun findSuspectedDuplicates(benefits: List<MmaBenefit>): DuplicateAnalysis {

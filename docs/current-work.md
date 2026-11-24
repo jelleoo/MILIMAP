@@ -2,9 +2,19 @@
 
 이 문서는 팀원과 Codex가 저장소를 clone한 뒤 가장 먼저 확인하는 현재 개발 진입점입니다.
 
-## 최신 `dev` 상태 (2026-11-20)
+## 최신 `dev` 상태 (2026-11-24)
 
-- **Approval-to-Public-Release MVP & C-Lite 기본 활성화 완료:**
+- **Android 지도 탐색·성능·안정성·보안 개선 완료 (PR #202~#237):**
+  - 풀스크린 지도 중심 탐색, 현 지도 영역 재검색, 바텀시트 UX 및 마커 재사용/IO 분리/검색 인덱스 최적화 (`#202`, `#204`, `#208`, `#210`)
+  - 찜 보존 diff 기반 Room 동기화 및 병무청 API 업체의 내장 시드 승격 시 단일 트랜잭션 찜 이관 (`#206`, `#229`)
+  - 앱 시작 시 6시간 API 자동 동기화 쿨다운 적용 (`#216`, `#217`)
+  - Android 보안 하드닝 및 세션 복원 코루틴 누수 수정 (`#234`, `#235`): PBKDF2-HMAC-SHA256 비밀번호 해싱(기존 SHA-256 하위 호환), 비밀번호 마스킹, `allowBackup="false"` 및 DB/SharedPreferences 백업 제외, `cleartextTrafficPermitted="false"`, `sourceUrl`/`tel:` URI 검증, `sessionJob` 취소, `BenefitApiClient` HTTPS/리다이렉트 차단/응답 크기 제한
+  - Android 안정화 (`#236`, `#237`): 단일 루트 셸 내비게이션 통합, 관리자 `observeAll()`(`ENDED` 포함) 및 수동 편집 메타데이터 보존·좌표쌍 검증, 경기·인천 MMA API 수도권 시군구 분류, `_uiState.update` 원자적 갱신 및 `Dispatchers.Default` 분리, GPS/네트워크 위치 최신성·정확도 선택 및 한글 안내
+- **수도권 정본·번들 시드 확장 및 자동화 운영 도구 보강 (`seedVersion 14`, PR #214~#238):**
+  - 행정안전부 위치정보요약DB(출입구 DB) 기반 수도권 좌표 182건 보강(`#214`, `#215`) 및 원클릭 릴리스 컷 도구(`tools/data/invoke-benefit-seed-release-cut.ps1`)의 버전 증가 강제·사전 검증·실패 복구 반영 (`#224`, `#228`)
+  - 주간 공식 출처 변경 점검 워크플로(`.github/workflows/weekly-benefit-drift-check.yml`, `tools/data/run-weekly-benefit-drift-check.ps1`) 도입 및 응답 구조 검증·양주 최신 XLSX 공고 탐색 반영 (`#218`, `#219`, `#233`)
+  - 네이버 POI 검증 캐시 `COMPLETE` 응답 전용 저장 (`#232`), 파이프라인 SSRF/ZIP/CSV 수식 주입/Markdown 이스케이프 하드닝 및 CI GitHub Actions 커밋 SHA 고정 (`#238`)
+- **Approval-to-Public-Release MVP & C-Lite 기본 활성화 완료 (2026-11-20, PR #152~#162):**
   - PR 0 ([#153](https://github.com/jelleoo/MILIMAP/issues/153) / [#154](https://github.com/jelleoo/MILIMAP/pull/154)): Android `BenefitXmlParser` `DefaultHandler2` (`startDTD`/`resolveEntity`) 호환 수정
   - Design v0.2 ([#151](https://github.com/jelleoo/MILIMAP/issues/151) / [#152](https://github.com/jelleoo/MILIMAP/pull/152)): 승인-배포 데이터 흐름 사양 확정
   - PR 1 ([#155](https://github.com/jelleoo/MILIMAP/issues/155) / [#156](https://github.com/jelleoo/MILIMAP/pull/156)): 읽기 전용 Review Queue Summary Exporter (`tools/data/export-phase5-review-queue.ps1`)
@@ -13,31 +23,26 @@
   - PR A ([#161](https://github.com/jelleoo/MILIMAP/issues/161) / [#162](https://github.com/jelleoo/MILIMAP/pull/162)): HTML 소스 `C_LITE_V1` 기본 활성화 (`RAW_SOURCE_PAYLOAD = 0`, 비-HTML `MMA/XLSX/HWPX/PDF`는 `LEGACY` 유지)
 - **Phase 4 디지털 어댑터 완료 / 스캔 OCR 보류(Deferred):**
   - `P4-0` foundation, `P4-1` HWPX native adapter, `P4-2B` PDF native ruled-grid adapter (`PdfPig 0.1.16`) 구현 완료.
-  - 스캔 PDF 한국어 OCR (`Issue #125` / `P4-3` / `P4-3B`)은 Option A 합의에 따라 **공식 보류(Deferred)** 처리(전체 `496`건 중 단일 수원 PDF `18`건=`3.6%`, 수동 전사 + `PR #158` 승인 원장 경로 적용). `OCR dependency=NOT_APPROVED`, `P4-3B=BLOCKED`.
+  - 스캔 PDF 한국어 OCR (`Issue #125` / `P4-3` / `P4-3B`)은 Option A 합의에 따라 **공식 보류(Deferred)** 처리(단일 수원 PDF `18`건은 수동 전사 + `PR #158` 승인 원장 경로 적용). `OCR dependency=NOT_APPROVED`, `P4-3B=BLOCKED`.
   - 상세 근거: [Phase 4 OCR deferral & digital closeout](handover/2026-11-20-phase4-ocr-deferral-and-digital-closeout.md)
-- **운영 게이트 유지:** `ProductionAction=NONE`, `LiveHTTP=NOT_AUTHORIZED` (`Issue #134`), `OCR dependency=NOT_APPROVED`, `P4-3B=BLOCKED`.
+- **운영 게이트 및 미착수 범위 유지:**
+  - `ProductionAction=NONE` (주간 드리프트 워크플로 포함 모든 자동화 도구는 정본·시드를 자동 수정하지 않고 검토 리포트만 생성), Phase 5.2 정식 실행의 `LiveHTTP=NOT_AUTHORIZED` (`Issue #134`), `OCR dependency=NOT_APPROVED`, `P4-3B=BLOCKED`.
+  - **Pending (미착수):** `packages/contracts`, `services/api`, `infra`, iOS 클라이언트, 서버 DB/인증 및 Release R8 활성화(`applicationId` 변경 포함 Play 스토어 출시 시점 검토).
 
 ## 현재 기준선
 
 - 개발 기준 브랜치: `dev`
-- Phase 1 code baseline: `97d6070113196e922fb76af7508314b6eda8e7b7`
-- Phase 2 Task 6 merge baseline: `d43c00ee07b471a55ed7ece4abecc1dc242ed8ce`
-- Phase 2 Core Foundation: Issue #43 / Task 7 validation PR #50
-- current dev baseline: `e013e3b980d25318c50941ec13778b961ec02d18` (PR #162 merged, 2026-11-20)
-- 기준일: 2026-11-20
-- Phase 1 A — Business Identity / Normalization: PR #37 merged
-- Phase 1 B — POI Discovery: PR #34 merged
-- Phase 1 C — POI Matching / Evaluation: PR #36 merged
-- Phase 1 Integration: PR #39 merged
-- Candidate diagnostics / provenance: PR #41 merged
-- Phase 1 Integration closeout: Issue #38 / PR #42 (`Closes #38`)
-- release candidates: 249
-- exact map pins: 111
-- coordinate-unconfirmed: 138
-- latest-benefit-evidence 부족 canonical hold: 247
-- Android bundled seed version: 7
+- 기준일: 2026-11-24
+- current dev baseline: `2482e903b535b3b7dc2c38b4c0466abf6e08a12e` (PR #237 merged; 후속 PR #238 진행 중)
+- 정본 CSV (`data/canonical/capital-area-military-benefits.csv`): `1,137`건 (23열 + `businessId`)
+- Android 번들 시드 (`apps/android/app/src/main/assets/benefits.seed.json`, `benefits.seed.manifest.json`): `seedVersion: 14`, `1,018`건 (전부 `ACTIVE`; `PUBLIC_EVIDENCE` 757건 + `LOCAL_GOV` 261건)
+- 지도 핀 커버리지: `998`건 (`98.0%`), 좌표 미확정 `20`건 (`2.0%`)
+- 역사적 기준선:
+  - Phase 1 code baseline: `97d6070113196e922fb76af7508314b6eda8e7b7` (PR #34, #36, #37, #39, #41, #42)
+  - Phase 2 Task 6 merge baseline: `d43c00ee07b471a55ed7ece4abecc1dc242ed8ce` (Issue #43 / PR #50)
+  - 2026-11-20 MVP baseline: `e013e3b980d25318c50941ec13778b961ec02d18` (PR #162, 정본 496건 / seedVersion 7 / 249건)
 
-현재 코드/설정이 이 문서와 다르면 최신 `dev` 코드와 해당 Issue/PR을 우선합니다. release data 수치는 이번 closeout에서 변경하지 않았다.
+현재 코드/설정이 이 문서와 다르면 최신 `dev` 코드와 해당 Issue/PR을 우선합니다.
 
 ## Phase 4 P4-0 — Document Adapter Foundation
 

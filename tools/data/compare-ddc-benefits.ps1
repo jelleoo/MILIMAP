@@ -1,4 +1,4 @@
-[CmdletBinding()]
+﻿[CmdletBinding()]
 param(
     [switch]$LibraryOnly,
     [string]$CanonicalCsv,
@@ -92,17 +92,19 @@ function Normalize-DdcDiscount {
 function ConvertFrom-DdcOfficialListHtml {
     param([Parameter(Mandatory = $true)][string]$Html)
 
+    $regexTimeout = [TimeSpan]::FromSeconds(5)
+    $regexOptions = [Text.RegularExpressions.RegexOptions]::IgnoreCase -bor [Text.RegularExpressions.RegexOptions]::Singleline
     $rows = [System.Collections.Generic.List[object]]::new()
-    $tableMatches = [regex]::Matches($Html, '(?is)<table\b[^>]*>(?<table>.*?)</table>')
+    $tableMatches = [regex]::Matches($Html, '<table\b[^>]*>(?<table>.*?)</table>', $regexOptions, $regexTimeout)
     foreach ($tableMatch in $tableMatches) {
         $tableHtml = $tableMatch.Groups['table'].Value
-        $captionMatch = [regex]::Match($tableHtml, '(?is)<caption\b[^>]*>(?<caption>.*?)</caption>')
+        $captionMatch = [regex]::Match($tableHtml, '<caption\b[^>]*>(?<caption>.*?)</caption>', $regexOptions, $regexTimeout)
         $caption = ConvertFrom-DdcHtmlText $captionMatch.Groups['caption'].Value
         if ($caption -notmatch '군\s*장병\s*할인업소') { continue }
 
-        $headerMatch = [regex]::Match($tableHtml, '(?is)<thead\b[^>]*>.*?<tr\b[^>]*>(?<header>.*?)</tr>.*?</thead>')
+        $headerMatch = [regex]::Match($tableHtml, '<thead\b[^>]*>.*?<tr\b[^>]*>(?<header>.*?)</tr>.*?</thead>', $regexOptions, $regexTimeout)
         if (-not $headerMatch.Success) { continue }
-        $headers = @([regex]::Matches($headerMatch.Groups['header'].Value, '(?is)<th\b[^>]*>(?<cell>.*?)</th>') | ForEach-Object {
+        $headers = @([regex]::Matches($headerMatch.Groups['header'].Value, '<th\b[^>]*>(?<cell>.*?)</th>', $regexOptions, $regexTimeout) | ForEach-Object {
             ConvertFrom-DdcHtmlText $_.Groups['cell'].Value
         })
         $nameIndex = [Array]::IndexOf([string[]]$headers, '업소명')
@@ -111,11 +113,11 @@ function ConvertFrom-DdcOfficialListHtml {
         $discountIndex = [Array]::IndexOf([string[]]$headers, '할인')
         if ($nameIndex -lt 0 -or $addressIndex -lt 0 -or $phoneIndex -lt 0 -or $discountIndex -lt 0) { continue }
 
-        $bodyMatch = [regex]::Match($tableHtml, '(?is)<tbody\b[^>]*>(?<body>.*?)</tbody>')
+        $bodyMatch = [regex]::Match($tableHtml, '<tbody\b[^>]*>(?<body>.*?)</tbody>', $regexOptions, $regexTimeout)
         if (-not $bodyMatch.Success) { continue }
-        $rowMatches = [regex]::Matches($bodyMatch.Groups['body'].Value, '(?is)<tr\b[^>]*>(?<row>.*?)</tr>')
+        $rowMatches = [regex]::Matches($bodyMatch.Groups['body'].Value, '<tr\b[^>]*>(?<row>.*?)</tr>', $regexOptions, $regexTimeout)
         foreach ($rowMatch in $rowMatches) {
-            $cells = @([regex]::Matches($rowMatch.Groups['row'].Value, '(?is)<td\b[^>]*>(?<cell>.*?)</td>') | ForEach-Object {
+            $cells = @([regex]::Matches($rowMatch.Groups['row'].Value, '<td\b[^>]*>(?<cell>.*?)</td>', $regexOptions, $regexTimeout) | ForEach-Object {
                 ConvertFrom-DdcHtmlText $_.Groups['cell'].Value
             })
             if ($cells.Count -le [Math]::Max([Math]::Max($nameIndex, $addressIndex), [Math]::Max($phoneIndex, $discountIndex))) { continue }
@@ -206,15 +208,30 @@ $canonicalRows = @(
 )
 if ($canonicalRows.Count -eq 0) { throw '지정한 동두천 공식 출처 URL을 사용하는 정본 행이 없습니다.' }
 
-$response = Invoke-WebRequest -Uri $SourceUrl -MaximumRedirection 3 -TimeoutSec $TimeoutSeconds
+$response = Invoke-WebRequest -Uri $SourceUrl -MaximumRedirection 0 -TimeoutSec $TimeoutSeconds
 if ([int]$response.StatusCode -ne 200) { throw "동두천 공식 페이지 응답 코드가 200이 아닙니다: $($response.StatusCode)" }
+if ([Text.Encoding]::UTF8.GetByteCount([string]$response.Content) -gt 10MB) { throw '동두천 공식 페이지 응답 크기가 허용 한도(10MB)를 초과했습니다.' }
 $officialRows = @(ConvertFrom-DdcOfficialListHtml -Html $response.Content)
 if ($officialRows.Count -eq 0) { throw '동두천 공식 페이지에서 할인업소 표를 읽지 못했습니다.' }
 $comparisonRows = @(Compare-DdcBenefits -CanonicalRows $canonicalRows -OfficialRows $officialRows)
 
+$safeComparisonRows = @(
+    foreach ($row in $comparisonRows) {
+        $ordered = [ordered]@{}
+        foreach ($prop in $row.PSObject.Properties) {
+            $text = if ($null -eq $prop.Value) { '' } else { [string]$prop.Value }
+            if ($text -match '^[\t\r]*[=+\-@]' -or ($text.Length -gt 0 -and ($text[0] -eq "`t" -or $text[0] -eq "`r"))) {
+                $text = "'" + $text
+            }
+            $ordered[$prop.Name] = $text
+        }
+        [pscustomobject]$ordered
+    }
+)
+
 $resolvedOutputCsv = [IO.Path]::GetFullPath($OutputCsv)
 New-Item -ItemType Directory -Force -Path (Split-Path -Parent $resolvedOutputCsv) | Out-Null
-$comparisonRows | Export-Csv -LiteralPath $resolvedOutputCsv -NoTypeInformation -Encoding utf8
+$safeComparisonRows | Export-Csv -LiteralPath $resolvedOutputCsv -NoTypeInformation -Encoding utf8
 
 $summary = [ordered]@{
     generatedAt = [DateTimeOffset]::Now.ToString('o')

@@ -1,10 +1,10 @@
 # MILIMAP Development Roadmap
 
 - Status: Directional roadmap
-- Date: 2026-11-20
+- Date: 2026-11-24
 - Current development branch: `dev`
-- Current state: Phase 1~3 COMPLETE; Phase 4 digital adapters (`P4-0`/`P4-1`/`P4-2B`) COMPLETE, scanned PDF OCR (`P4-3`/`Issue #125`) formally DEFERRED; Phase 5 + C-Lite HTML (`RAW=0`) & Approval-to-Release MVP merged with `LiveHTTP=NOT_AUTHORIZED` (`Issue #134`)
-- Next gate: Issue #134 DDC terms/`robots.txt` + team 24h clearance + explicit 1-GET human go/no-go; post-MVP Phase B/Admin Web ADR (`Pending`)
+- Current state: Phase 1~3 COMPLETE; Phase 4 digital adapters (`P4-0`/`P4-1`/`P4-2B`) COMPLETE, scanned PDF OCR (`P4-3`/`Issue #125`) formally DEFERRED; Phase 5 + C-Lite HTML (`RAW=0`), Approval-to-Release MVP, weekly read-only drift workflow, Android map/security/stability hardening merged (`seedVersion 14`, canonical 1,137 rows, bundled seed 1,018 items, 998 pins / 98.0%); Phase 5.2 formal live execution remains `LiveHTTP=NOT_AUTHORIZED` (`Issue #134`)
+- Next gate: Issue #134 DDC terms/`robots.txt` + team 24h clearance + explicit 1-GET human go/no-go; post-MVP backend/server API (`packages/contracts`, `services/api`, `infra`) and Play Store release R8/packageId review (`Pending`)
 
 이 문서는 MILIMAP의 장기 개발 방향을 팀원이 한눈에 확인하기 위한 로드맵입니다.
 

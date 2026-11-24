@@ -426,6 +426,13 @@ try {
     [IO.File]::WriteAllText($evidencePath, '{"tampered":true}', [Text.UTF8Encoding]::new($false))
     Assert-RqTestThrowsMatching { Export-Phase5ReviewQueue -HistoryRoot $historyRoot -CanonicalCsvPath $canonicalPath -OutputDirectory (Join-Path $tempRoot 'export-tamper') } 'hash mismatch' 'Tampered projection artifact must fail closed'
 
+    # CSV formula injection neutralization
+    Assert-RqTestEqual (ConvertTo-InternalPhase5ReviewQueueSafeCsvCell '=HYPERLINK("https://evil.example")') "'=HYPERLINK(""https://evil.example"")" 'Leading = must be neutralized'
+    Assert-RqTestEqual (ConvertTo-InternalPhase5ReviewQueueSafeCsvCell '+1+1') "'+1+1" 'Leading + must be neutralized'
+    Assert-RqTestEqual (ConvertTo-InternalPhase5ReviewQueueSafeCsvCell '-2+3') "'-2+3" 'Leading - must be neutralized'
+    Assert-RqTestEqual (ConvertTo-InternalPhase5ReviewQueueSafeCsvCell '@SUM(1,2)') "'@SUM(1,2)" 'Leading @ must be neutralized'
+    Assert-RqTestEqual (ConvertTo-InternalPhase5ReviewQueueSafeCsvCell '정상 업체명') '정상 업체명' 'Safe text must remain unchanged'
+
     Write-Host 'PASS: Phase 5 review queue summary exporter'
 } finally {
     if (Test-Path -LiteralPath $tempRoot) {

@@ -1,4 +1,4 @@
-$ErrorActionPreference = 'Stop'
+﻿$ErrorActionPreference = 'Stop'
 
 $contractPath = Join-Path $PSScriptRoot 'lib/benefit-verification-contracts.ps1'
 $sourcePath = Join-Path $PSScriptRoot 'lib/benefit-source/discover-official-benefit-sources.ps1'
@@ -46,7 +46,32 @@ $noProvider = Invoke-OfficialBenefitSourceDiscovery -Benefit $benefitWithoutUrl 
 Assert-Equal $noProvider.Status 'FAILED' 'Missing discovery provider must fail closed'
 Assert-True ($noProvider.ReasonCodes -contains 'DISCOVERY_PROVIDER_NOT_CONFIGURED') 'Missing discovery provider reason must be preserved'
 
-$unsafeUrls = @('file:///etc/passwd', 'data:text/plain,unsafe', 'http://localhost/benefit', 'http://127.0.0.1/benefit', 'http://10.0.0.1/benefit', 'http://172.16.0.1/benefit', 'http://192.168.0.1/benefit', 'http://169.254.169.254/latest', 'http://intranet/benefit', 'http://router.local/benefit', 'http://0.0.0.0/benefit', 'http://[::]/benefit', 'http://[fc00::1]/benefit', 'https://user:password@city.example.go.kr/benefit')
+$unsafeUrls = @(
+    'file:///etc/passwd',
+    'data:text/plain,unsafe',
+    'http://localhost/benefit',
+    'http://127.0.0.1/benefit',
+    'http://10.0.0.1/benefit',
+    'http://172.16.0.1/benefit',
+    'http://192.168.0.1/benefit',
+    'http://169.254.169.254/latest',
+    'http://100.64.0.1/cgnat',
+    'http://[::ffff:169.254.169.254]/latest',
+    'http://[::ffff:127.0.0.1]/loopback',
+    'http://[::ffff:10.0.0.1]/private',
+    'http://[::1]/loopback',
+    'http://[fe80::1]/linklocal',
+    'http://[ff02::1]/multicast',
+    'http://0177.0.0.1/octal',
+    'http://0x7f.0.0.1/hex',
+    'http://metadata.google.internal/computeMetadata',
+    'http://intranet/benefit',
+    'http://router.local/benefit',
+    'http://0.0.0.0/benefit',
+    'http://[::]/benefit',
+    'http://[fc00::1]/benefit',
+    'https://user:password@city.example.go.kr/benefit'
+)
 foreach ($url in $unsafeUrls) {
     Assert-Throws { Get-BenefitSourceDocument -Candidate (New-BenefitSourceCandidate -SourceRowNumber 2 -Url $url) -RequestInvoker { param($Uri) throw 'RequestInvoker must not run for unsafe URLs' } } "Unsafe URL must be rejected before fetch: $url"
 }
@@ -112,6 +137,19 @@ $validatedBinaryXlsx = Get-BenefitSourceDocument -Candidate $ambiguousBinaryCand
 Assert-Equal $validatedBinaryXlsx.SourceFormat XLSX 'An extensionless ambiguous binary is XLSX only when its package is safely recognizable'
 $arbitraryPk = Get-BenefitSourceDocument -Candidate $ambiguousBinaryCandidate -RequestInvoker { param($Uri) [pscustomobject]@{ StatusCode=200; ContentType='application/octer-stream'; Text=''; Bytes=[byte[]](0x50,0x4b,0x03,0x04,0x00) } }
 Assert-Equal $arbitraryPk.SourceFormat UNSUPPORTED 'An arbitrary PK-prefixed binary is not an XLSX document'
+
+$traversalStream = [IO.MemoryStream]::new()
+$traversalArchive = [IO.Compression.ZipArchive]::new($traversalStream, [IO.Compression.ZipArchiveMode]::Create, $true)
+foreach ($entryName in @('[Content_Types].xml', 'xl/workbook.xml', 'xl/_rels/workbook.xml.rels', '../evil.xml')) {
+    $entry = $traversalArchive.CreateEntry($entryName)
+    $writer = [IO.StreamWriter]::new($entry.Open(), [Text.UTF8Encoding]::new($false))
+    $writer.Write('<x/>')
+    $writer.Dispose()
+}
+$traversalArchive.Dispose()
+$traversalBytes = $traversalStream.ToArray()
+$traversalStream.Dispose()
+Assert-True (-not (Test-BenefitXlsxBinaryPackage -Bytes $traversalBytes)) 'XLSX archive with path traversal entry must be rejected'
 
 $pdfBytes = New-DocumentTestPdfBytes
 $hwpxBytes = New-DocumentTestHwpxBytes

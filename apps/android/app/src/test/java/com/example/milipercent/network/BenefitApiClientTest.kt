@@ -22,11 +22,23 @@ class BenefitApiClientTest {
     }
 
     @Test
+    fun `기본 설정은 평문 http 요청을 거부하고 service key를 노출하지 않는다`() {
+        val exception = requestFailure(
+            apiUrl = "http://apis.data.go.kr/1300000/test",
+            serviceKey = SENTINEL_SERVICE_KEY,
+        )
+
+        assertEquals("API 요청을 준비하지 못했습니다.", exception.message)
+        exception.assertCredentialSafe()
+    }
+
+    @Test
     fun `timeout 실패는 URL cause와 service key를 throwable에 남기지 않는다`() {
         val exception = withTestUrlHandler {
             requestFailure(
                 apiUrl = "$TEST_PROTOCOL://example.test/timeout",
                 serviceKey = SENTINEL_SERVICE_KEY,
+                allowedSchemes = setOf("https", TEST_PROTOCOL),
             )
         }
 
@@ -40,6 +52,7 @@ class BenefitApiClientTest {
             requestFailure(
                 apiUrl = "$TEST_PROTOCOL://example.test/io",
                 serviceKey = SENTINEL_SERVICE_KEY,
+                allowedSchemes = setOf("https", TEST_PROTOCOL),
             )
         }
 
@@ -47,15 +60,48 @@ class BenefitApiClientTest {
         exception.assertCredentialSafe()
     }
 
+    @Test
+    fun `리다이렉트는 자동 추적하지 않고 HTTP 오류로 차단한다`() {
+        val exception = withTestUrlHandler {
+            requestFailure(
+                apiUrl = "$TEST_PROTOCOL://example.test/redirect",
+                serviceKey = SENTINEL_SERVICE_KEY,
+                allowedSchemes = setOf("https", TEST_PROTOCOL),
+            )
+        }
+
+        assertEquals("HTTP 오류가 발생했습니다. (302)", exception.message)
+        exception.assertCredentialSafe()
+    }
+
+    @Test
+    fun `응답 크기가 상한을 초과하면 파싱 전에 차단한다`() {
+        val exception = withTestUrlHandler {
+            requestFailure(
+                apiUrl = "$TEST_PROTOCOL://example.test/oversized",
+                serviceKey = SENTINEL_SERVICE_KEY,
+                allowedSchemes = setOf("https", TEST_PROTOCOL),
+                maxResponseBytes = 1024,
+            )
+        }
+
+        assertEquals("API 응답 크기가 허용 한도를 초과했습니다.", exception.message)
+        exception.assertCredentialSafe()
+    }
+
     private fun requestFailure(
         apiUrl: String,
         serviceKey: String,
+        allowedSchemes: Set<String> = setOf("https"),
+        maxResponseBytes: Int = 10 * 1024 * 1024,
     ): BenefitNetworkException = assertThrows(BenefitNetworkException::class.java) {
         runBlocking {
             BenefitApiClient(
                 apiUrl = apiUrl,
                 serviceKey = serviceKey,
                 xmlParser = BenefitXmlParser(),
+                allowedSchemes = allowedSchemes,
+                maxResponseBytes = maxResponseBytes,
             ).getBenefitPage(pageNo = 1, numOfRows = 100)
         }
     }

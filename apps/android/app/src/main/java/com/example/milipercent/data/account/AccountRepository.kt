@@ -5,8 +5,10 @@ import com.example.milipercent.data.local.BenefitDatabase
 import com.example.milipercent.data.local.UserEntity
 import com.example.milipercent.model.LocalUser
 import java.util.Locale
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.withContext
 
 interface AccountRepository {
     fun observeUser(id: Long): Flow<LocalUser?>
@@ -31,12 +33,14 @@ class RoomAccountRepository(
         val normalizedEmail = normalizeEmail(email)
         val normalizedName = displayName.trim()
         validateRegistration(normalizedEmail, normalizedName, password)
+        val digest = withContext(Dispatchers.Default) {
+            passwordHasher.create(password)
+        }
         database.withTransaction {
             val dao = database.accountDao()
             if (dao.findByEmail(normalizedEmail) != null) {
                 throw AccountValidationException(DUPLICATE_EMAIL_MESSAGE)
             }
-            val digest = passwordHasher.create(password)
             val isAdmin = dao.count() == 0
             val id = dao.insert(
                 UserEntity(
@@ -53,10 +57,13 @@ class RoomAccountRepository(
 
     override suspend fun login(email: String, password: String): Result<LocalUser> = runCatching {
         val user = database.accountDao().findByEmail(normalizeEmail(email))
-        if (user == null || !passwordHasher.verify(password, user.passwordSalt, user.passwordHash)) {
+        val verified = user != null && withContext(Dispatchers.Default) {
+            passwordHasher.verify(password, user.passwordSalt, user.passwordHash)
+        }
+        if (!verified) {
             throw AccountValidationException(INVALID_CREDENTIALS_MESSAGE)
         }
-        user.toLocalUser()
+        requireNotNull(user).toLocalUser()
     }
 
     private fun validateRegistration(email: String, displayName: String, password: String) {

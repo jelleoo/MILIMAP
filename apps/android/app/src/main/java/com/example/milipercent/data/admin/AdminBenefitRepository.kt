@@ -7,6 +7,7 @@ import com.example.milipercent.data.local.BenefitSourceType
 import com.example.milipercent.data.local.toDomain
 import com.example.milipercent.model.Benefit
 import com.example.milipercent.model.BenefitStatus
+import com.example.milipercent.model.SafeExternalUri
 import java.util.UUID
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
@@ -96,6 +97,11 @@ class RoomAdminBenefitRepository(
         require(input.benefitType.isNotBlank()) { "혜택 유형을 입력하세요." }
         require(input.benefitDescription.isNotBlank()) { "혜택 내용을 입력하세요." }
         require(input.sourceLabel.isNotBlank()) { "출처를 입력하세요." }
+        if (!input.sourceUrl.isNullOrBlank()) {
+            require(SafeExternalUri.resolveSafeHttpUrl(input.sourceUrl) != null) {
+                "출처 URL은 http 또는 https 주소여야 합니다."
+            }
+        }
     }
 
     private fun AdminBenefitInput.toEntity(id: String, syncedAt: Long, sourceType: String) = BenefitEntity(

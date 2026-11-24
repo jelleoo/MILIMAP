@@ -29,6 +29,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.example.milipercent.model.Benefit
+import com.example.milipercent.model.SafeExternalUri
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -229,10 +230,11 @@ fun BenefitDetailScreen(
                 TextButton(onClick = onFavorite, modifier = Modifier.weight(1f)) {
                     Text(if (isFavorite) "♥ 찜 해제" else "♡ 찜하기")
                 }
-                if (!benefit.phone.isNullOrBlank()) {
+                val dialablePhone = SafeExternalUri.sanitizeDialablePhone(benefit.phone)
+                if (dialablePhone != null) {
                     TextButton(
                         onClick = {
-                            val intent = Intent(Intent.ACTION_DIAL, Uri.parse("tel:${benefit.phone}"))
+                            val intent = Intent(Intent.ACTION_DIAL, Uri.parse("tel:$dialablePhone"))
                             runCatching { context.startActivity(intent) }
                         },
                         modifier = Modifier.weight(1f),
@@ -242,10 +244,10 @@ fun BenefitDetailScreen(
             TextButton(onClick = onOpenNaverMap, modifier = Modifier.fillMaxWidth()) {
                 Text(if (locationNeedsVerification) "지도에서 위치 확인" else "네이버 지도에서 보기")
             }
-            benefit.sourceUrl?.takeIf(String::isNotBlank)?.let { sourceUrl ->
+            SafeExternalUri.resolveSafeHttpUrl(benefit.sourceUrl)?.let { safeUrl ->
                 TextButton(
                     onClick = {
-                        val intent = Intent(Intent.ACTION_VIEW, Uri.parse(sourceUrl.substringBefore(" | ").trim()))
+                        val intent = Intent(Intent.ACTION_VIEW, Uri.parse(safeUrl))
                         runCatching { context.startActivity(intent) }
                     },
                     modifier = Modifier.fillMaxWidth(),

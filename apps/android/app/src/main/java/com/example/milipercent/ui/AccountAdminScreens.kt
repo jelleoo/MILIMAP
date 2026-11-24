@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -27,6 +28,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import com.example.milipercent.data.admin.AdminBenefitInput
 import com.example.milipercent.data.local.BenefitSourceType
@@ -111,9 +114,38 @@ fun AccountScreen(
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
         Text(if (loginMode) "로그인" else "회원가입", color = Navy, fontWeight = FontWeight.ExtraBold)
-        OutlinedTextField(email, { email = it }, Modifier.fillMaxWidth(), label = { Text("이메일") })
-        if (!loginMode) OutlinedTextField(displayName, { displayName = it }, Modifier.fillMaxWidth(), label = { Text("이름") })
-        OutlinedTextField(password, { password = it }, Modifier.fillMaxWidth(), label = { Text("비밀번호") })
+        OutlinedTextField(
+            value = email,
+            onValueChange = { email = it },
+            modifier = Modifier.fillMaxWidth(),
+            label = { Text("이메일") },
+            singleLine = true,
+            keyboardOptions = KeyboardOptions(
+                keyboardType = KeyboardType.Email,
+                autoCorrectEnabled = false,
+            ),
+        )
+        if (!loginMode) {
+            OutlinedTextField(
+                value = displayName,
+                onValueChange = { displayName = it },
+                modifier = Modifier.fillMaxWidth(),
+                label = { Text("이름") },
+                singleLine = true,
+            )
+        }
+        OutlinedTextField(
+            value = password,
+            onValueChange = { password = it },
+            modifier = Modifier.fillMaxWidth(),
+            label = { Text("비밀번호") },
+            singleLine = true,
+            visualTransformation = PasswordVisualTransformation(),
+            keyboardOptions = KeyboardOptions(
+                keyboardType = KeyboardType.Password,
+                autoCorrectEnabled = false,
+            ),
+        )
         errorMessage?.let { Text(it, color = Danger) }
         Button(
             onClick = {

@@ -46,6 +46,7 @@ class MiliSpotViewModel(
         ),
     )
     val uiState: StateFlow<MiliSpotUiState> = _uiState.asStateFlow()
+    private var sessionJob: kotlinx.coroutines.Job? = null
     private var favoriteJob: kotlinx.coroutines.Job? = null
     private var locationTrackingJob: kotlinx.coroutines.Job? = null
     private var locationFocusState = LocationFocusState()
@@ -330,6 +331,8 @@ class MiliSpotViewModel(
     }
 
     fun logout() {
+        sessionJob?.cancel()
+        sessionJob = null
         sessionStore.clear()
         setUser(null)
         _uiState.value = _uiState.value.copy(destination = AppDestination.DISCOVER, transientMessage = "로그아웃되었습니다.")
@@ -436,8 +439,9 @@ class MiliSpotViewModel(
     }
 
     private fun restoreSession() {
+        sessionJob?.cancel()
         val userId = sessionStore.userId() ?: return
-        viewModelScope.launch {
+        sessionJob = viewModelScope.launch {
             accountRepository.observeUser(userId)
                 .collectLatest { user ->
                     if (user == null) sessionStore.clear()
@@ -534,6 +538,8 @@ class MiliSpotViewModel(
     }
 
     private fun completeLogin(user: LocalUser, message: String) {
+        sessionJob?.cancel()
+        sessionJob = null
         sessionStore.save(user)
         setUser(user)
         _uiState.value = _uiState.value.copy(destination = AppDestination.DISCOVER, transientMessage = message)

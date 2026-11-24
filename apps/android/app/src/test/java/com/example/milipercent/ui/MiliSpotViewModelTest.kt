@@ -381,6 +381,72 @@ class MiliSpotViewModelTest {
         assertEquals(1_763_900_060_000L, syncPrefs.lastSuccessfulSyncAtMillis())
     }
 
+    @Test
+    fun logoutCancelsSessionObserverSoLateEmissionCannotResurrectSession() = runTest(dispatcher.scheduler) {
+        val user1 = LocalUser(1L, "user1@test.com", "사용자1", false)
+        val userFlow = MutableStateFlow<LocalUser?>(user1)
+        val session = FakeSessionStorage(1L)
+        val accountRepo = FakeAccountRepository(
+            observedUsers = mapOf(1L to userFlow),
+        )
+        val viewModel = MiliSpotViewModel(
+            FakeBenefitRepository(listOf(benefit("seed-1"))),
+            accountRepo,
+            FakeFavoriteRepository(),
+            FakeAdminRepository(),
+            FakeSeedInstaller(),
+            session,
+            mmaConfigured = false,
+        )
+        advanceUntilIdle()
+        assertEquals(user1, viewModel.uiState.value.user)
+
+        viewModel.logout()
+        advanceUntilIdle()
+        assertEquals(null, viewModel.uiState.value.user)
+        assertEquals(null, session.userId())
+
+        userFlow.value = user1.copy(displayName = "변경된 사용자1")
+        advanceUntilIdle()
+
+        assertEquals(null, viewModel.uiState.value.user)
+        assertEquals(null, session.userId())
+    }
+
+    @Test
+    fun loginCancelsPreviousSessionObserverSoOldUserCannotOverwriteNewUser() = runTest(dispatcher.scheduler) {
+        val user1 = LocalUser(1L, "user1@test.com", "사용자1", false)
+        val user2 = LocalUser(2L, "user2@test.com", "사용자2", true)
+        val user1Flow = MutableStateFlow<LocalUser?>(user1)
+        val session = FakeSessionStorage(1L)
+        val accountRepo = FakeAccountRepository(
+            observedUsers = mapOf(1L to user1Flow),
+            loginResult = Result.success(user2),
+        )
+        val viewModel = MiliSpotViewModel(
+            FakeBenefitRepository(listOf(benefit("seed-1"))),
+            accountRepo,
+            FakeFavoriteRepository(),
+            FakeAdminRepository(),
+            FakeSeedInstaller(),
+            session,
+            mmaConfigured = false,
+        )
+        advanceUntilIdle()
+        assertEquals(user1, viewModel.uiState.value.user)
+
+        assertTrue(viewModel.login("user2@test.com", "secret2").isSuccess)
+        advanceUntilIdle()
+        assertEquals(user2, viewModel.uiState.value.user)
+        assertEquals(2L, session.userId())
+
+        user1Flow.value = user1.copy(displayName = "뒤늦은 갱신")
+        advanceUntilIdle()
+
+        assertEquals(user2, viewModel.uiState.value.user)
+        assertEquals(2L, session.userId())
+    }
+
     private class FakeSessionStorage(initial: Long? = null) : SessionStorage {
         private var id = initial
         override fun userId(): Long? = id
@@ -424,10 +490,16 @@ class MiliSpotViewModelTest {
 
     private class FakeAccountRepository(
         private val user: LocalUser? = null,
+        private val observedUsers: Map<Long, Flow<LocalUser?>> = emptyMap(),
+        private val loginResult: Result<LocalUser> = Result.failure(UnsupportedOperationException()),
     ) : AccountRepository {
-        override fun observeUser(id: Long): Flow<LocalUser?> = flowOf(user?.takeIf { it.id == id })
-        override suspend fun register(email: String, displayName: String, password: String) = Result.failure<LocalUser>(UnsupportedOperationException())
-        override suspend fun login(email: String, password: String) = Result.failure<LocalUser>(UnsupportedOperationException())
+        override fun observeUser(id: Long): Flow<LocalUser?> =
+            observedUsers[id] ?: flowOf(user?.takeIf { it.id == id })
+
+        override suspend fun register(email: String, displayName: String, password: String) =
+            Result.failure<LocalUser>(UnsupportedOperationException())
+
+        override suspend fun login(email: String, password: String) = loginResult
     }
     private class FakeFavoriteRepository(
         private val idsFlow: Flow<Set<String>> = flowOf(emptySet()),

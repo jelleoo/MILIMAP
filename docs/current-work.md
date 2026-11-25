@@ -2,18 +2,20 @@
 
 이 문서는 팀원과 Codex가 저장소를 clone한 뒤 가장 먼저 확인하는 현재 개발 진입점입니다.
 
-## 최신 `dev` 상태 (2026-11-24)
+## 최신 `dev` 상태 (2026-11-25)
 
-- **Android 지도 탐색·성능·안정성·보안 개선 완료 (PR #202~#237):**
+- **Android 지도 탐색·성능·안정성·보안 개선 완료 (PR #202~#243):**
   - 풀스크린 지도 중심 탐색, 현 지도 영역 재검색, 바텀시트 UX 및 마커 재사용/IO 분리/검색 인덱스 최적화 (`#202`, `#204`, `#208`, `#210`)
   - 찜 보존 diff 기반 Room 동기화 및 병무청 API 업체의 내장 시드 승격 시 단일 트랜잭션 찜 이관 (`#206`, `#229`)
   - 앱 시작 시 6시간 API 자동 동기화 쿨다운 적용 (`#216`, `#217`)
   - Android 보안 하드닝 및 세션 복원 코루틴 누수 수정 (`#234`, `#235`): PBKDF2-HMAC-SHA256 비밀번호 해싱(기존 SHA-256 하위 호환), 비밀번호 마스킹, `allowBackup="false"` 및 DB/SharedPreferences 백업 제외, `cleartextTrafficPermitted="false"`, `sourceUrl`/`tel:` URI 검증, `sessionJob` 취소, `BenefitApiClient` HTTPS/리다이렉트 차단/응답 크기 제한
   - Android 안정화 (`#236`, `#237`): 단일 루트 셸 내비게이션 통합, 관리자 `observeAll()`(`ENDED` 포함) 및 수동 편집 메타데이터 보존·좌표쌍 검증, 경기·인천 MMA API 수도권 시군구 분류, `_uiState.update` 원자적 갱신 및 `Dispatchers.Default` 분리, GPS/네트워크 위치 최신성·정확도 선택 및 한글 안내
-- **수도권 정본·번들 시드 확장 및 자동화 운영 도구 보강 (`seedVersion 14`, PR #214~#238):**
-  - 행정안전부 위치정보요약DB(출입구 DB) 기반 수도권 좌표 182건 보강(`#214`, `#215`) 및 원클릭 릴리스 컷 도구(`tools/data/invoke-benefit-seed-release-cut.ps1`)의 버전 증가 강제·사전 검증·실패 복구 반영 (`#224`, `#228`)
+  - Android 성능 최적화 (`#240`, `#241`): `BundledSeedSynchronizer` manifest 선확인 fast-path·스트리밍 `sha256LfUtf8`·`ThreadLocal<SimpleDateFormat>`, Compose `mapBenefits`/`LocationVerificationSummary` `remember` 메모이제이션, `MiliSpotViewModel` `computeDispatcher` 오프로드 및 관리자 지연 구독, `BenefitReconciler` 정규식·날짜 포맷 최적화
+  - Android 잔여 엣지 버그 및 인증 마무리 (`#242`, `#243`): 로그인/관리자 중복 제출 방지, 관리자 저장 성공 시 폼 초기화 및 `ENDED` 복구 버튼, `tel:` `Uri.fromParts` `#` 인코딩, `toggleFavorite`/`refresh`/`favoriteJob` 동시성 방어, 레거시 SHA-256 로그인 시 PBKDF2 자동 승격 및 가입 입력 검증
+- **수도권 정본·번들 시드 확장 및 자동화 운영 도구 보강 (`seedVersion 14`, PR #214~#244):**
+  - 행정안전부 위치정보요약DB(출입구 DB) 기반 수도권 좌표 182건 보강(`#214`, `#215`) 및 원클릭 릴리스 컷 도구(`tools/data/invoke-benefit-seed-release-cut.ps1`)의 버전 증가 강제·사전 검증·실패 복구·`-DistrictReferenceJson` 정합성 반영 (`#224`, `#228`, `#244`)
   - 주간 공식 출처 변경 점검 워크플로(`.github/workflows/weekly-benefit-drift-check.yml`, `tools/data/run-weekly-benefit-drift-check.ps1`) 도입 및 응답 구조 검증·양주 최신 XLSX 공고 탐색 반영 (`#218`, `#219`, `#233`)
-  - 네이버 POI 검증 캐시 `COMPLETE` 응답 전용 저장 (`#232`), 파이프라인 SSRF/ZIP/CSV 수식 주입/Markdown 이스케이프 하드닝 및 CI GitHub Actions 커밋 SHA 고정 (`#238`)
+  - 네이버 POI 검증 캐시 `COMPLETE` 응답 전용 저장 (`#232`), 파이프라인 SSRF/ZIP/공용 CSV 수식 중화/Markdown 이스케이프/스트리밍 HTTPS 크기 제한 하드닝 및 CI GitHub Actions 커밋 SHA 고정 (`#238`, `#239`, `#244`)
 - **Approval-to-Public-Release MVP & C-Lite 기본 활성화 완료 (2026-11-20, PR #152~#162):**
   - PR 0 ([#153](https://github.com/jelleoo/MILIMAP/issues/153) / [#154](https://github.com/jelleoo/MILIMAP/pull/154)): Android `BenefitXmlParser` `DefaultHandler2` (`startDTD`/`resolveEntity`) 호환 수정
   - Design v0.2 ([#151](https://github.com/jelleoo/MILIMAP/issues/151) / [#152](https://github.com/jelleoo/MILIMAP/pull/152)): 승인-배포 데이터 흐름 사양 확정
@@ -32,8 +34,8 @@
 ## 현재 기준선
 
 - 개발 기준 브랜치: `dev`
-- 기준일: 2026-11-24
-- current dev baseline: `2482e903b535b3b7dc2c38b4c0466abf6e08a12e` (PR #237 merged; 후속 PR #238 진행 중)
+- 기준일: 2026-11-25
+- current dev baseline: `e6033ea983aa3777995d6cf8b2758125631c76c8` (PR #239, #241, #243 merged; PR #244 반영 중)
 - 정본 CSV (`data/canonical/capital-area-military-benefits.csv`): `1,137`건 (23열 + `businessId`)
 - Android 번들 시드 (`apps/android/app/src/main/assets/benefits.seed.json`, `benefits.seed.manifest.json`): `seedVersion: 14`, `1,018`건 (전부 `ACTIVE`; `PUBLIC_EVIDENCE` 757건 + `LOCAL_GOV` 261건)
 - 지도 핀 커버리지: `998`건 (`98.0%`), 좌표 미확정 `20`건 (`2.0%`)

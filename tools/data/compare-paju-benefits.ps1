@@ -15,6 +15,8 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
+. (Join-Path $PSScriptRoot 'lib/benefit-source/safe-output-and-http.ps1')
+
 function ConvertFrom-PajuHtmlText {
     param([string]$Value)
 
@@ -179,29 +181,20 @@ if ($canonicalRows.Count -eq 0) { throw '지정한 파주 공식 출처 URL을 �
 
 $officialRows = [System.Collections.Generic.List[object]]::new()
 foreach ($sourceUrl in $SourceUrls) {
-    $response = Invoke-WebRequest -Uri $sourceUrl -MaximumRedirection 0 -TimeoutSec $TimeoutSeconds
-    if ([int]$response.StatusCode -ne 200) { throw "파주 공식 페이지 응답 코드가 200이 아닙니다: $($response.StatusCode)" }
-    if ([Text.Encoding]::UTF8.GetByteCount([string]$response.Content) -gt 10MB) { throw '파주 공식 페이지 응답 크기가 허용 한도(10MB)를 초과했습니다.' }
-    foreach ($officialRow in @(ConvertFrom-PajuOfficialListHtml -Html $response.Content -SourceUrl $sourceUrl)) {
+    $response = Invoke-BenefitBoundedHttpsGet `
+        -Uri ([uri]$sourceUrl) `
+        -TimeoutSeconds $TimeoutSeconds `
+        -MaxResponseBytes 10MB `
+        -MaximumRedirection 0 `
+        -ErrorPrefix 'PAJU'
+    foreach ($officialRow in @(ConvertFrom-PajuOfficialListHtml -Html $response.Text -SourceUrl $sourceUrl)) {
         $officialRows.Add($officialRow)
     }
 }
 if ($officialRows.Count -eq 0) { throw '파주 공식 페이지에서 할인업소 표를 읽지 못했습니다.' }
 $comparisonRows = @(Compare-PajuBenefits -CanonicalRows $canonicalRows -OfficialRows @($officialRows))
 
-$safeComparisonRows = @(
-    foreach ($row in $comparisonRows) {
-        $ordered = [ordered]@{}
-        foreach ($prop in $row.PSObject.Properties) {
-            $text = if ($null -eq $prop.Value) { '' } else { [string]$prop.Value }
-            if ($text -match '^[\t\r]*[=+\-@]' -or ($text.Length -gt 0 -and ($text[0] -eq "`t" -or $text[0] -eq "`r"))) {
-                $text = "'" + $text
-            }
-            $ordered[$prop.Name] = $text
-        }
-        [pscustomobject]$ordered
-    }
-)
+$safeComparisonRows = @(ConvertTo-BenefitSafeCsvRows -Rows $comparisonRows)
 
 $resolvedOutputCsv = [IO.Path]::GetFullPath($OutputCsv)
 New-Item -ItemType Directory -Force -Path (Split-Path -Parent $resolvedOutputCsv) | Out-Null

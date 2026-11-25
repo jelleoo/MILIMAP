@@ -11,6 +11,8 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
+. (Join-Path $PSScriptRoot 'lib/benefit-source/safe-output-and-http.ps1')
+
 function ConvertFrom-DdcHtmlText {
     param([string]$Value)
 
@@ -208,26 +210,17 @@ $canonicalRows = @(
 )
 if ($canonicalRows.Count -eq 0) { throw '지정한 동두천 공식 출처 URL을 사용하는 정본 행이 없습니다.' }
 
-$response = Invoke-WebRequest -Uri $SourceUrl -MaximumRedirection 0 -TimeoutSec $TimeoutSeconds
-if ([int]$response.StatusCode -ne 200) { throw "동두천 공식 페이지 응답 코드가 200이 아닙니다: $($response.StatusCode)" }
-if ([Text.Encoding]::UTF8.GetByteCount([string]$response.Content) -gt 10MB) { throw '동두천 공식 페이지 응답 크기가 허용 한도(10MB)를 초과했습니다.' }
-$officialRows = @(ConvertFrom-DdcOfficialListHtml -Html $response.Content)
+$response = Invoke-BenefitBoundedHttpsGet `
+    -Uri ([uri]$SourceUrl) `
+    -TimeoutSeconds $TimeoutSeconds `
+    -MaxResponseBytes 10MB `
+    -MaximumRedirection 0 `
+    -ErrorPrefix 'DDC'
+$officialRows = @(ConvertFrom-DdcOfficialListHtml -Html $response.Text)
 if ($officialRows.Count -eq 0) { throw '동두천 공식 페이지에서 할인업소 표를 읽지 못했습니다.' }
 $comparisonRows = @(Compare-DdcBenefits -CanonicalRows $canonicalRows -OfficialRows $officialRows)
 
-$safeComparisonRows = @(
-    foreach ($row in $comparisonRows) {
-        $ordered = [ordered]@{}
-        foreach ($prop in $row.PSObject.Properties) {
-            $text = if ($null -eq $prop.Value) { '' } else { [string]$prop.Value }
-            if ($text -match '^[\t\r]*[=+\-@]' -or ($text.Length -gt 0 -and ($text[0] -eq "`t" -or $text[0] -eq "`r"))) {
-                $text = "'" + $text
-            }
-            $ordered[$prop.Name] = $text
-        }
-        [pscustomobject]$ordered
-    }
-)
+$safeComparisonRows = @(ConvertTo-BenefitSafeCsvRows -Rows $comparisonRows)
 
 $resolvedOutputCsv = [IO.Path]::GetFullPath($OutputCsv)
 New-Item -ItemType Directory -Force -Path (Split-Path -Parent $resolvedOutputCsv) | Out-Null

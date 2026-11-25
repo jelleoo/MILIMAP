@@ -230,7 +230,7 @@ if ($md -notmatch 'ProductionAction.*NONE' -or $md -notmatch 'FETCH_FAILED' -or 
     throw 'Generated weekly drift markdown report is missing expected fields.'
 }
 
-# 3b. Markdown escaping & CSV formula neutralization
+# 3b. Markdown escaping & CSV formula neutralization (including markdown links/images and leading whitespace/newlines)
 $maliciousSummary = [pscustomobject][ordered]@{
     contractType = 'WeeklyBenefitDriftSummary'
     contractVersion = 1
@@ -239,19 +239,29 @@ $maliciousSummary = [pscustomobject][ordered]@{
     automaticCanonicalMutation = $false
     productionAction = 'NONE'
     sources = @(
-        [pscustomobject][ordered]@{ id = 'mma'; name = '병무청'; status = 'FETCH_FAILED'; officialCount = $null; canonicalCount = 1; detail = '조회 실패'; error = "<script>alert(1)</script>`n|injected|" }
+        [pscustomobject][ordered]@{ id = 'mma'; name = '병무청'; status = 'FETCH_FAILED'; officialCount = $null; canonicalCount = 1; detail = '조회 실패'; error = "<script>alert(1)</script>`n|injected|[link](https://evil.example)![img](https://evil.example/a.png)" }
     )
 }
 $safeMd = New-WeeklyDriftMarkdownReport -Summary $maliciousSummary
-if ($safeMd.Contains('<script>') -or -not $safeMd.Contains('&lt;script&gt;') -or -not $safeMd.Contains('\|injected\|')) {
-    throw "Markdown report must escape HTML tags and pipe characters: $safeMd"
+if ($safeMd.Contains('<script>') -or -not $safeMd.Contains('&lt;script&gt;') -or -not $safeMd.Contains('\|injected\|') -or $safeMd.Contains('[link](https://evil.example)')) {
+    throw "Markdown report must escape HTML tags, pipes, and markdown link syntax: $safeMd"
 }
 
 Assert-WeeklyEqual (ConvertTo-WeeklySafeCsvCell -Value '=CMD|" /C calc"!A0') "'=CMD|"" /C calc""!A0" 'Leading = must be neutralized for CSV'
+Assert-WeeklyEqual (ConvertTo-WeeklySafeCsvCell -Value ' =HYPERLINK("https://evil.example")') "' =HYPERLINK(""https://evil.example"")" 'Leading space before = must be neutralized for CSV'
+Assert-WeeklyEqual (ConvertTo-WeeklySafeCsvCell -Value "`n+1") "'`n+1" 'Leading newline before + must be neutralized for CSV'
 Assert-WeeklyEqual (ConvertTo-WeeklySafeCsvCell -Value '+1+1') "'+1+1" 'Leading + must be neutralized for CSV'
 Assert-WeeklyEqual (ConvertTo-WeeklySafeCsvCell -Value '-2+3') "'-2+3" 'Leading - must be neutralized for CSV'
 Assert-WeeklyEqual (ConvertTo-WeeklySafeCsvCell -Value '@SUM(1,2)') "'@SUM(1,2)" 'Leading @ must be neutralized for CSV'
 Assert-WeeklyEqual (ConvertTo-WeeklySafeCsvCell -Value '일반 가게') '일반 가게' 'Normal Korean text must remain unchanged'
+
+# 3c. Bounded HTTPS GET rejects unsafe/plain-HTTP URIs before transport
+Assert-WeeklyThrows {
+    Invoke-BenefitBoundedHttpsGet -Uri ([uri]'http://www.ddc.go.kr/ddc/contents.do?key=1570') -ErrorPrefix 'DDC'
+} 'DDC_URL_UNSAFE*' 'Plain HTTP URI must be rejected before request dispatch'
+Assert-WeeklyThrows {
+    Invoke-BenefitBoundedHttpsGet -Uri ([uri]'https://169.254.169.254/latest') -ErrorPrefix 'PAJU'
+} 'PAJU_URL_UNSAFE*' 'Link-local metadata URI must be rejected before request dispatch'
 
 # 4. Path safety guard rejects writing inside data/ or apps/
 $unsafeRejected = $false

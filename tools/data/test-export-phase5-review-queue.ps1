@@ -428,6 +428,8 @@ try {
 
     # CSV formula injection neutralization
     Assert-RqTestEqual (ConvertTo-InternalPhase5ReviewQueueSafeCsvCell '=HYPERLINK("https://evil.example")') "'=HYPERLINK(""https://evil.example"")" 'Leading = must be neutralized'
+    Assert-RqTestEqual (ConvertTo-InternalPhase5ReviewQueueSafeCsvCell ' =HYPERLINK("https://evil.example")') "' =HYPERLINK(""https://evil.example"")" 'Leading space before = must be neutralized'
+    Assert-RqTestEqual (ConvertTo-InternalPhase5ReviewQueueSafeCsvCell "`n+1+1") "'`n+1+1" 'Leading newline before + must be neutralized'
     Assert-RqTestEqual (ConvertTo-InternalPhase5ReviewQueueSafeCsvCell '+1+1') "'+1+1" 'Leading + must be neutralized'
     Assert-RqTestEqual (ConvertTo-InternalPhase5ReviewQueueSafeCsvCell '-2+3') "'-2+3" 'Leading - must be neutralized'
     Assert-RqTestEqual (ConvertTo-InternalPhase5ReviewQueueSafeCsvCell '@SUM(1,2)') "'@SUM(1,2)" 'Leading @ must be neutralized'

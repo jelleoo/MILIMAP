@@ -265,9 +265,14 @@ function Invoke-BenefitSeedReleaseCut {
             -MmaComparisonCsv $resolvedMmaCsv `
             -OutputCsv $stagedCandidatesCsv | Out-Null
 
-        & (Join-Path $PSScriptRoot 'convert-benefits.ps1') `
-            -SourceCsv $resolvedCanonicalCsv `
-            -DestinationJson $stagedIntermediateJson | Out-Null
+        $convertParams = @{
+            SourceCsv = $resolvedCanonicalCsv
+            DestinationJson = $stagedIntermediateJson
+        }
+        if (Test-Path -LiteralPath $resolvedDestSeedJson -PathType Leaf) {
+            $convertParams.DistrictReferenceJson = $resolvedDestSeedJson
+        }
+        & (Join-Path $PSScriptRoot 'convert-benefits.ps1') @convertParams | Out-Null
 
         & (Join-Path $PSScriptRoot 'build-release-benefit-seed.ps1') `
             -CanonicalCsv $resolvedCanonicalCsv `

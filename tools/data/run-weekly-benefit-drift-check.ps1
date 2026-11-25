@@ -15,6 +15,7 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
 . (Join-Path $PSScriptRoot 'lib/benefit-source/discover-official-benefit-sources.ps1')
+. (Join-Path $PSScriptRoot 'lib/benefit-source/safe-output-and-http.ps1')
 
 function Normalize-WeeklyDriftIdentityPart {
     param([AllowNull()][string]$Value)
@@ -303,11 +304,13 @@ function Get-WeeklyYangjuBoardId {
 function Get-WeeklyYangjuPageAnchors {
     param([string]$Html)
 
-    $pattern = '(?is)<a\b[^>]*\shref\s*=\s*(?<quote>["''])(?<href>.*?)\k<quote>[^>]*>(?<label>.*?)</a\s*>'
-    foreach ($anchor in [regex]::Matches($Html, $pattern)) {
+    $regexTimeout = [TimeSpan]::FromSeconds(5)
+    $regexOptions = [Text.RegularExpressions.RegexOptions]::IgnoreCase -bor [Text.RegularExpressions.RegexOptions]::Singleline
+    $pattern = '<a\b[^>]*\shref\s*=\s*(?<quote>["''])(?<href>.*?)\k<quote>[^>]*>(?<label>.*?)</a\s*>'
+    foreach ($anchor in [regex]::Matches($Html, $pattern, $regexOptions, $regexTimeout)) {
         [pscustomobject]@{
             Href = $anchor.Groups['href'].Value
-            Label = [Net.WebUtility]::HtmlDecode(($anchor.Groups['label'].Value -replace '<[^>]+>', '')).Trim()
+            Label = [Net.WebUtility]::HtmlDecode(([regex]::Replace($anchor.Groups['label'].Value, '<[^>]+>', '', $regexOptions, $regexTimeout))).Trim()
         }
     }
 }
@@ -315,10 +318,11 @@ function Get-WeeklyYangjuPageAnchors {
 function Find-WeeklyYangjuNoticeUrl {
     param([uri]$BoardUrl, [string]$Html)
 
+    $regexTimeout = [TimeSpan]::FromSeconds(5)
     $path = '/health/selectBbsNttView.do'
     $newestId = 0L
     foreach ($anchor in @(Get-WeeklyYangjuPageAnchors -Html $Html)) {
-        if ($anchor.Label -notmatch '군\s*장병\s*할인\s*[·ㆍ・‧∙/]?\s*우대\s*업소.*현황') { continue }
+        if (-not [regex]::IsMatch($anchor.Label, '군\s*장병\s*할인\s*[·ㆍ・‧∙/]?\s*우대\s*업소.*현황', [Text.RegularExpressions.RegexOptions]::None, $regexTimeout)) { continue }
         $id = Get-WeeklyYangjuBoardId -PageUrl $BoardUrl -Href $anchor.Href -Path $path -IdParameter 'nttNo'
         if ($id -gt $newestId) { $newestId = $id }
     }
@@ -331,14 +335,16 @@ function Find-WeeklyYangjuNoticeUrl {
 function Find-WeeklyYangjuAttachmentUrl {
     param([uri]$NoticeUrl, [string]$Html)
 
+    $regexTimeout = [TimeSpan]::FromSeconds(5)
+    $regexOptions = [Text.RegularExpressions.RegexOptions]::IgnoreCase -bor [Text.RegularExpressions.RegexOptions]::Singleline
     $path = '/health/downloadBbsFile.do'
     $ids = [Collections.Generic.HashSet[long]]::new()
-    $pattern = '(?is)<div\b[^>]*\sclass\s*=\s*["''][^"'']*\bdown_view\b[^"'']*["''][^>]*>(?<body>.*?)</div\s*>'
-    foreach ($block in [regex]::Matches($Html, $pattern)) {
+    $pattern = '<div\b[^>]*\sclass\s*=\s*["''][^"'']*\bdown_view\b[^"'']*["''][^>]*>(?<body>.*?)</div\s*>'
+    foreach ($block in [regex]::Matches($Html, $pattern, $regexOptions, $regexTimeout)) {
         $body = $block.Groups['body'].Value
-        $filename = [regex]::Match($body, '(?is)<span\b[^>]*>(.*?)</span\s*>').Groups[1].Value
-        $filename = [Net.WebUtility]::HtmlDecode(($filename -replace '<[^>]+>', '')).Trim()
-        if ($filename -notmatch '군\s*장병\s*할인\s*[·ㆍ・‧∙/]?\s*우대\s*업소\s*현황.*\.xlsx$') { continue }
+        $filename = [regex]::Match($body, '<span\b[^>]*>(.*?)</span\s*>', $regexOptions, $regexTimeout).Groups[1].Value
+        $filename = [Net.WebUtility]::HtmlDecode(([regex]::Replace($filename, '<[^>]+>', '', $regexOptions, $regexTimeout))).Trim()
+        if (-not [regex]::IsMatch($filename, '군\s*장병\s*할인\s*[·ㆍ・‧∙/]?\s*우대\s*업소\s*현황.*\.xlsx$', [Text.RegularExpressions.RegexOptions]::None, $regexTimeout)) { continue }
 
         $downloadIds = @(
             foreach ($anchor in @(Get-WeeklyYangjuPageAnchors -Html $body)) {
@@ -364,51 +370,25 @@ function Invoke-WeeklyYangjuRequest {
         [int]$MaxResponseBytes = 20MB
     )
 
-    if (-not (Test-BenefitSafeHttpUri -Url $Uri.AbsoluteUri) -or $Uri.Scheme -cne 'https') {
-        throw "WEEKLY_YANGJU_URL_UNSAFE: $($Uri.AbsoluteUri)"
-    }
-    $response = Invoke-WebRequest -Uri $Uri -Headers @{ 'User-Agent' = 'MILIMAP-Phase5-EvidenceVerifier/1.0' } -MaximumRedirection $MaximumRedirection -TimeoutSec $TimeoutSeconds
-    if ([int]$response.StatusCode -ne 200) {
-        throw "WEEKLY_YANGJU_HTTP_FAILED: HTTP status $($response.StatusCode)"
-    }
-    $rawStreamProp = $response.PSObject.Properties['RawContentStream']
-    $contentLength = if ($response.Content -is [byte[]]) {
-        [long]$response.Content.Length
-    } elseif ($null -ne $rawStreamProp -and $null -ne $rawStreamProp.Value) {
-        [long]$rawStreamProp.Value.Length
-    } else {
-        [long][Text.Encoding]::UTF8.GetByteCount([string]$response.Content)
-    }
-    if ($contentLength -gt $MaxResponseBytes) {
-        throw "WEEKLY_YANGJU_RESPONSE_TOO_LARGE: $contentLength bytes"
-    }
-    return $response
+    return Invoke-BenefitBoundedHttpsGet `
+        -Uri $Uri `
+        -Headers @{ 'User-Agent' = 'MILIMAP-Phase5-EvidenceVerifier/1.0' } `
+        -TimeoutSeconds $TimeoutSeconds `
+        -MaxResponseBytes $MaxResponseBytes `
+        -MaximumRedirection $MaximumRedirection `
+        -ErrorPrefix 'WEEKLY_YANGJU'
 }
 
 function ConvertTo-WeeklySafeCsvCell {
     param([AllowNull()][string]$Value)
 
-    if ([string]::IsNullOrEmpty($Value)) { return '' }
-    if ($Value -match '^[\t\r]*[=+\-@]' -or $Value[0] -eq "`t" -or $Value[0] -eq "`r") {
-        return "'" + $Value
-    }
-    return $Value
+    return ConvertTo-BenefitSafeCsvCell -Value $Value
 }
 
 function ConvertTo-WeeklySafeCsvRows {
     param([AllowEmptyCollection()][object[]]$Rows)
 
-    $safe = [Collections.Generic.List[object]]::new()
-    foreach ($row in @($Rows)) {
-        if ($null -eq $row) { continue }
-        $ordered = [ordered]@{}
-        foreach ($prop in $row.PSObject.Properties) {
-            $rawVal = if ($null -eq $prop.Value) { '' } else { [string]$prop.Value }
-            $ordered[$prop.Name] = ConvertTo-WeeklySafeCsvCell -Value $rawVal
-        }
-        $safe.Add([pscustomobject]$ordered)
-    }
-    return @($safe)
+    return ConvertTo-BenefitSafeCsvRows -Rows $Rows
 }
 
 function Test-WeeklyYangjuAttachmentDrift {
@@ -438,14 +418,7 @@ function Test-WeeklyYangjuAttachmentDrift {
 function Format-WeeklyMarkdownCell {
     param([AllowNull()][string]$Value)
 
-    if ([string]::IsNullOrWhiteSpace($Value)) { return '-' }
-    $sanitized = ($Value -replace '[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]', '')
-    $sanitized = ($sanitized -replace '[\r\n]+', ' ').Trim()
-    $sanitized = $sanitized.Replace('&', '&amp;').Replace('<', '&lt;').Replace('>', '&gt;').Replace('|', '\|').Replace('`', '\`')
-    if ($sanitized.Length -gt 500) {
-        $sanitized = $sanitized.Substring(0, 497) + '...'
-    }
-    return $sanitized
+    return Format-BenefitSafeMarkdownCell -Value $Value
 }
 
 function New-WeeklyDriftMarkdownReport {
@@ -589,19 +562,13 @@ $mmaNewCsv = Join-Path $resolvedOutDir 'mma-new-candidates.csv'
 $mmaMissingCsv = Join-Path $resolvedOutDir 'mma-missing-canonical.csv'
 $mmaSummaryJson = Join-Path $resolvedOutDir 'mma-summary.json'
 try {
-    if (-not (Test-BenefitSafeHttpUri -Url $MmaListUrl) -or ([uri]$MmaListUrl).Scheme -cne 'https') {
-        throw "WEEKLY_MMA_URL_UNSAFE: $MmaListUrl"
-    }
-    $mmaResp = Invoke-WebRequest -Uri $MmaListUrl -MaximumRedirection 0 -TimeoutSec $TimeoutSeconds
-    if ([int]$mmaResp.StatusCode -ne 200) {
-        throw "HTTP status $($mmaResp.StatusCode)"
-    }
-    $mmaRawStreamProp = $mmaResp.PSObject.Properties['RawContentStream']
-    $mmaByteCount = if ($null -ne $mmaRawStreamProp -and $null -ne $mmaRawStreamProp.Value) { [long]$mmaRawStreamProp.Value.Length } else { [long][Text.Encoding]::UTF8.GetByteCount([string]$mmaResp.Content) }
-    if ($mmaByteCount -gt 20MB) {
-        throw "WEEKLY_MMA_RESPONSE_TOO_LARGE: $mmaByteCount bytes"
-    }
-    $mmaText = Read-WeeklyUtf8WebResponseText -Response $mmaResp
+    $mmaResp = Invoke-BenefitBoundedHttpsGet `
+        -Uri ([uri]$MmaListUrl) `
+        -TimeoutSeconds $TimeoutSeconds `
+        -MaxResponseBytes 20MB `
+        -MaximumRedirection 0 `
+        -ErrorPrefix 'WEEKLY_MMA'
+    $mmaText = $mmaResp.Text
     $mmaCallback = [System.Web.HttpUtility]::ParseQueryString(([uri]$MmaListUrl).Query)['callback']
     if (-not $mmaCallback) { $mmaCallback = 'MmaBenefitList' }
     $mmaLiveItems = @(ConvertFrom-WeeklyMmaJsonpListText -RawText $mmaText -ExpectedCallback $mmaCallback)
@@ -657,24 +624,18 @@ try {
     }
     $yjBaseline = Get-Content -Raw -Encoding utf8 -LiteralPath $resolvedYangjuControlPath | ConvertFrom-Json
     $yjNoticeUrl = $null
-    $yjRedirectLimit = 3
+    $yjRedirectLimit = 0
     $yjAttachmentUrl = $YangjuAttachmentUrl
     if ([string]::IsNullOrWhiteSpace($yjAttachmentUrl)) {
-        $yjRedirectLimit = 0
         $yjBoardUrl = [uri]'https://www.yangju.go.kr/health/selectBbsNttList.do?key=2716&bbsNo=81&searchCnd=SJ&searchKrwd=%EA%B5%B0%EC%9E%A5%EB%B3%91'
         $yjBoard = Invoke-WeeklyYangjuRequest -Uri $yjBoardUrl -TimeoutSeconds $TimeoutSeconds
-        $yjNoticeUrl = Find-WeeklyYangjuNoticeUrl -BoardUrl $yjBoardUrl -Html (Read-WeeklyUtf8WebResponseText -Response $yjBoard)
+        $yjNoticeUrl = Find-WeeklyYangjuNoticeUrl -BoardUrl $yjBoardUrl -Html $yjBoard.Text
         $yjNotice = Invoke-WeeklyYangjuRequest -Uri $yjNoticeUrl -TimeoutSeconds $TimeoutSeconds
-        $yjAttachmentUrl = Find-WeeklyYangjuAttachmentUrl -NoticeUrl $yjNoticeUrl -Html (Read-WeeklyUtf8WebResponseText -Response $yjNotice)
+        $yjAttachmentUrl = Find-WeeklyYangjuAttachmentUrl -NoticeUrl $yjNoticeUrl -Html $yjNotice.Text
     }
     $yjResp = Invoke-WeeklyYangjuRequest -Uri $yjAttachmentUrl -TimeoutSeconds $TimeoutSeconds -MaximumRedirection $yjRedirectLimit
 
-    $yjBytes = if ($yjResp.Content -is [byte[]]) {
-        [byte[]]$yjResp.Content
-    } else {
-        $yjResp.RawContentStream.Position = 0
-        $yjResp.RawContentStream.ToArray()
-    }
+    $yjBytes = [byte[]]$yjResp.Bytes
     $yjCheck = Test-WeeklyYangjuAttachmentDrift -AttachmentBytes $yjBytes -BaselineHash ([string]$yjBaseline.ContentHash) -BaselineByteSize ([long]$yjBaseline.WorkbookByteSize)
     $yjSummary = [pscustomobject][ordered]@{
         generatedAtUtc = [DateTimeOffset]::UtcNow.ToString('yyyy-MM-ddTHH:mm:ssZ', [Globalization.CultureInfo]::InvariantCulture)

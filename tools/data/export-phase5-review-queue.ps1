@@ -27,6 +27,7 @@ $script:ExportReviewQueueCliParams = @{
 . (Join-Path $PSScriptRoot 'invoke-phase5-benefit-cycle.ps1')
 . (Join-Path $PSScriptRoot 'lib/identity/canonical-business-id.ps1')
 . (Join-Path $PSScriptRoot 'lib/history/location-history-adapter.ps1')
+. (Join-Path $PSScriptRoot 'lib/benefit-source/safe-output-and-http.ps1')
 
 function Assert-InternalPhase5ReviewQueueExternalOutputDirectory {
     param(
@@ -190,11 +191,7 @@ function Get-InternalPhase5ReviewQueueRowValue {
 function ConvertTo-InternalPhase5ReviewQueueSafeCsvCell {
     param([AllowNull()][string]$Value)
 
-    if ([string]::IsNullOrEmpty($Value)) { return '' }
-    if ($Value -match '^[\t\r]*[=+\-@]' -or $Value[0] -eq "`t" -or $Value[0] -eq "`r") {
-        return "'" + $Value
-    }
-    return $Value
+    return ConvertTo-BenefitSafeCsvCell -Value $Value
 }
 
 function Export-Phase5ReviewQueue {

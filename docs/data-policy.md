@@ -62,17 +62,18 @@ POI가 정확하다는 사실만으로 군 혜택이 현재 유효하다고 판�
 
 ## 현재 release seed 기준
 
-2026-09-10 P3 병합 직후 기준 Android release seed는 249건입니다.
+2026-11-25 기준 (`seedVersion 14`) Android release seed는 `1,018`건입니다(역사적 2026-09-10 P3 직후 기준은 `249`건 / 핀 `111`건 / `seedVersion 7`).
 
-- release candidates: 249
-- exact map pins: 111
-- coordinate-unconfirmed: 138
-- bundled seed version: 7
-- 최신 혜택 근거 부족으로 release에서 보류된 canonical 행: 247
+- canonical rows: `1,137` (`data/canonical/capital-area-military-benefits.csv`)
+- release candidates: `1,018` (전부 `ACTIVE`; `PUBLIC_EVIDENCE` 757건 + `LOCAL_GOV` 261건)
+- exact map pins: `998` (`98.0%`)
+- coordinate-unconfirmed: `20` (`2.0%`)
+- bundled seed version: `14`
+- 최신 혜택 근거 부족·종료 등으로 release에서 보류된 canonical 행: `119`
 
-정확 지도 핀은 실제 POI의 동일 영업장임이 상호·주소·지점 등 엄격한 근거로 검증된 행만 유지합니다. 좌표가 확정되지 않은 release candidate는 목록/상세에서 유지할 수 있지만 잘못된 지도 핀을 만들기 위해 좌표를 추정하지 않습니다.
+정확 지도 핀은 실제 POI 또는 행정안전부 출입구 DB 등 엄격한 근거로 검증된 행만 유지합니다. 좌표가 확정되지 않은 release candidate는 목록/상세에서 유지할 수 있지만 잘못된 지도 핀을 만들기 위해 좌표를 추정하지 않습니다.
 
-P2/P3에서 이미 검토했으나 좌표 미확정인 보류·반려는 23건이고, 그 외 신규 우선순위 검증 대상은 115건입니다. 다음 대규모 수동 캠페인보다 Phase 1 POI Verification Core를 먼저 구현해 P1/P2/P3 수동 결과를 Golden Dataset으로 사용합니다.
+상세 진행 이력과 최신 기준선은 [`docs/current-work.md`](current-work.md)를 우선 참조합니다.
 
 ## Geocoding과 POI 검증
 

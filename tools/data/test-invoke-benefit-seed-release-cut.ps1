@@ -215,6 +215,16 @@ try {
         throw 'The changed official benefit must yield a changed seed payload'
     }
 
+    # Re-applying against an existing destination seed must preserve finer-grained district overrides (via -DistrictReferenceJson).
+    $seedItemsForRef = @(Get-Content -Raw -Encoding utf8 -LiteralPath $destSeedJson | ConvertFrom-Json)
+    ($seedItemsForRef | Where-Object { $_.name -ceq '파주테스트' }).district = '금촌동'
+    ($seedItemsForRef | ConvertTo-Json -Depth 10) | Set-Content -LiteralPath $destSeedJson -Encoding utf8
+    $applyV101Params = $applyParams.Clone()
+    $applyV101Params.SeedVersion = 101
+    [void](Invoke-BenefitSeedReleaseCut @applyV101Params)
+    $v101Items = @(Get-Content -Raw -Encoding utf8 -LiteralPath $destSeedJson | ConvertFrom-Json)
+    Assert-ReleaseCutEqual ($v101Items | Where-Object { $_.name -ceq '파주테스트' }).district '금촌동' 'Release cut must preserve finer-grained district from existing destination seed'
+
     # 3. Zero-Kakao coordinate provenance guard
     $kakaoRows = Import-Csv -LiteralPath $canonicalCsv -Encoding utf8
     $kakaoRows[0].좌표출처 = '카카오맵'

@@ -35,7 +35,7 @@
 
 - 개발 기준 브랜치: `dev`
 - 기준일: 2026-11-25
-- current dev baseline: `e6033ea983aa3777995d6cf8b2758125631c76c8` (PR #239, #241, #243 merged; PR #244 반영 중)
+- current dev baseline: `3f00a561c15787c4e3b7cedd695acf0cd9c28676` (PR #239, #241, #243, #245 merged; 후속 마무리 PR #246 반영)
 - 정본 CSV (`data/canonical/capital-area-military-benefits.csv`): `1,137`건 (23열 + `businessId`)
 - Android 번들 시드 (`apps/android/app/src/main/assets/benefits.seed.json`, `benefits.seed.manifest.json`): `seedVersion: 14`, `1,018`건 (전부 `ACTIVE`; `PUBLIC_EVIDENCE` 757건 + `LOCAL_GOV` 261건)
 - 지도 핀 커버리지: `998`건 (`98.0%`), 좌표 미확정 `20`건 (`2.0%`)

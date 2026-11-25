@@ -155,8 +155,8 @@ fun AccountScreen(
         Button(
             onClick = {
                 if (isSubmitting) return@Button
+                isSubmitting = true
                 scope.launch {
-                    isSubmitting = true
                     try {
                         val result = if (loginMode) onLogin(email, password) else onRegister(email, displayName, password)
                         errorMessage = result.exceptionOrNull()?.message
@@ -229,6 +229,7 @@ fun AdminScreen(
                 Button(
                     onClick = {
                         if (isSaving) return@Button
+                        isSaving = true
                         val existing = editingBenefit
                         val input = buildAdminBenefitInput(
                             name = name,
@@ -237,7 +238,6 @@ fun AdminScreen(
                             existing = existing,
                         )
                         scope.launch {
-                            isSaving = true
                             try {
                                 if (onSave(input, existing?.id)) {
                                     resetForm()
@@ -279,8 +279,8 @@ fun AdminScreen(
                                 TextButton(
                                     onClick = {
                                         if (isSaving) return@TextButton
+                                        isSaving = true
                                         scope.launch {
-                                            isSaving = true
                                             try {
                                                 onSave(
                                                     buildAdminBenefitInput(

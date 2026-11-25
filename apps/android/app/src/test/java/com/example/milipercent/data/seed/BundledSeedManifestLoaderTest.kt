@@ -1,6 +1,8 @@
 package com.example.milipercent.data.seed
 
 import java.io.File
+import java.security.MessageDigest
+import java.util.Locale
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertThrows
@@ -34,6 +36,20 @@ class BundledSeedManifestLoaderTest {
         assertEquals(expected, sha256LfUtf8(cr))
         assertEquals(expected, sha256LfUtf8(bomCrlf))
         assertEquals(64, expected.length)
+    }
+
+    @Test
+    fun `8192자 청크 경계에 걸린 서러게이트 페어와 BOM CRLF도 손실 없이 해시한다`() {
+        val boundaryEmoji = "\uD83D\uDE00"
+        val rawCrlf = "a".repeat(8191) + boundaryEmoji + "b\r\nc"
+        val bomRawCrlf = "\uFEFF$rawCrlf"
+        val normalizedLf = "a".repeat(8191) + boundaryEmoji + "b\nc"
+        val expectedHex = MessageDigest.getInstance("SHA-256")
+            .digest(normalizedLf.toByteArray(Charsets.UTF_8))
+            .joinToString("") { byte -> "%02x".format(Locale.ROOT, byte.toInt() and 0xFF) }
+
+        assertEquals(expectedHex, sha256LfUtf8(rawCrlf))
+        assertEquals(expectedHex, sha256LfUtf8(bomRawCrlf))
     }
 
     @Test

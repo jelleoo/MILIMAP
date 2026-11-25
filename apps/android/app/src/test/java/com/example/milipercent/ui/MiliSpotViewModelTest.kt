@@ -620,6 +620,27 @@ class MiliSpotViewModelTest {
         assertEquals("혜택 정보를 저장했습니다.", succeedingViewModel.uiState.value.transientMessage)
     }
 
+    @Test
+    fun deleteManualBenefitFailureShowsMessageWithoutCrashing() = runTest(dispatcher.scheduler) {
+        val admin = LocalUser(1L, "admin@test.com", "관리자", isAdmin = true)
+        val viewModel = MiliSpotViewModel(
+            FakeBenefitRepository(emptyList()),
+            FakeAccountRepository(admin),
+            FakeFavoriteRepository(),
+            FailingAdminRepository(),
+            FakeSeedInstaller(),
+            FakeSessionStorage(1L),
+            mmaConfigured = false,
+            computeDispatcher = dispatcher,
+        )
+        advanceUntilIdle()
+
+        viewModel.deleteManualBenefit("manual_local_1")
+        advanceUntilIdle()
+
+        assertEquals("수동 혜택 삭제에 실패했습니다.", viewModel.uiState.value.transientMessage)
+    }
+
     private class FakeSessionStorage(initial: Long? = null) : SessionStorage {
         private var id = initial
         override fun userId(): Long? = id
@@ -708,7 +729,9 @@ class MiliSpotViewModelTest {
         }
         override suspend fun update(id: String, input: com.example.milipercent.data.admin.AdminBenefitInput) = Unit
         override suspend fun end(id: String) = Unit
-        override suspend fun deleteManual(id: String) = false
+        override suspend fun deleteManual(id: String): Boolean {
+            throw IllegalStateException("삭제 오류")
+        }
     }
 
     private companion object {

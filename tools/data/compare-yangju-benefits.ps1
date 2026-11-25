@@ -1,4 +1,4 @@
-[CmdletBinding()]
+﻿[CmdletBinding()]
 param(
     [switch]$LibraryOnly,
     [string]$CanonicalCsv,
@@ -11,6 +11,8 @@ param(
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
+
+. (Join-Path $PSScriptRoot 'lib/benefit-source/safe-output-and-http.ps1')
 
 function Get-YangjuRowValue {
     param($Row, [string]$Name)
@@ -122,9 +124,10 @@ $canonicalRows = @(
 if ($canonicalRows.Count -eq 0) { throw '지정한 양주시 기존 출처 URL을 사용하는 정본 행이 없습니다.' }
 
 $comparisonRows = @(Compare-YangjuBenefits -CanonicalRows $canonicalRows -OfficialRows $officialRows)
+$safeComparisonRows = @(ConvertTo-BenefitSafeCsvRows -Rows $comparisonRows)
 $resolvedOutputCsv = [IO.Path]::GetFullPath($OutputCsv)
 New-Item -ItemType Directory -Force -Path (Split-Path -Parent $resolvedOutputCsv) | Out-Null
-$comparisonRows | Export-Csv -LiteralPath $resolvedOutputCsv -NoTypeInformation -Encoding utf8
+$safeComparisonRows | Export-Csv -LiteralPath $resolvedOutputCsv -NoTypeInformation -Encoding utf8
 
 $summary = [ordered]@{
     generatedAt = [DateTimeOffset]::Now.ToString('o')

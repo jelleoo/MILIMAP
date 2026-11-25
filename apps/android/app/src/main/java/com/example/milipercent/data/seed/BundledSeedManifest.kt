@@ -125,11 +125,26 @@ internal fun sha256LfUtf8(text: String): String {
         charArray[bufferedChars++] = normalized
         i += 1
         if (bufferedChars == charArray.size) {
-            flushUtf8Chunk(charBuffer, byteBuffer, byteArray, bufferedChars, endOfInput = false, encoder, digest)
-            bufferedChars = 0
+            bufferedChars = flushUtf8Chunk(
+                charBuffer = charBuffer,
+                byteBuffer = byteBuffer,
+                byteArray = byteArray,
+                charCount = bufferedChars,
+                endOfInput = false,
+                encoder = encoder,
+                digest = digest,
+            )
         }
     }
-    flushUtf8Chunk(charBuffer, byteBuffer, byteArray, bufferedChars, endOfInput = true, encoder, digest)
+    flushUtf8Chunk(
+        charBuffer = charBuffer,
+        byteBuffer = byteBuffer,
+        byteArray = byteArray,
+        charCount = bufferedChars,
+        endOfInput = true,
+        encoder = encoder,
+        digest = digest,
+    )
 
     return digest.digest().joinToString(separator = "") { byte ->
         "%02x".format(Locale.ROOT, byte.toInt() and 0xFF)
@@ -144,7 +159,7 @@ private fun flushUtf8Chunk(
     endOfInput: Boolean,
     encoder: java.nio.charset.CharsetEncoder,
     digest: MessageDigest,
-) {
+): Int {
     charBuffer.limit(charCount)
     charBuffer.position(0)
     while (true) {
@@ -157,18 +172,22 @@ private fun flushUtf8Chunk(
         if (result.isOverflow) continue
         break
     }
-    if (endOfInput) {
-        while (true) {
-            byteBuffer.clear()
-            val flushResult = encoder.flush(byteBuffer)
-            val written = byteBuffer.position()
-            if (written > 0) {
-                digest.update(byteArray, 0, written)
-            }
-            if (flushResult.isOverflow) continue
-            break
-        }
+    if (!endOfInput) {
+        // Carry over an incomplete leading surrogate across the 8192-char boundary.
+        charBuffer.compact()
+        return charBuffer.position()
     }
+    while (true) {
+        byteBuffer.clear()
+        val flushResult = encoder.flush(byteBuffer)
+        val written = byteBuffer.position()
+        if (written > 0) {
+            digest.update(byteArray, 0, written)
+        }
+        if (flushResult.isOverflow) continue
+        break
+    }
+    return 0
 }
 
 internal fun isValidIso8601WithOffset(value: String): Boolean {

@@ -45,14 +45,42 @@ class RoomAccountRepositoryTest {
     @Test
     fun registrationValidatesInputAndNormalizesDuplicateEmail() = runBlocking {
         assertTrue(repository.register("invalid", "이름", "secret1").isFailure)
+        assertTrue(repository.register("@", "이름", "secret1").isFailure)
+        assertTrue(repository.register("a@b", "이름", "secret1").isFailure)
         assertTrue(repository.register("a@b.com", "가", "secret1").isFailure)
         assertTrue(repository.register("a@b.com", "이름", "short").isFailure)
+        assertTrue(repository.register("a@b.com", "이름", "      ").isFailure)
 
         repository.register("soldier@example.com", "군인", "secret1").getOrThrow()
         val duplicate = repository.register(" SOLDIER@EXAMPLE.COM ", "군인", "secret1")
 
         assertTrue(duplicate.isFailure)
         assertEquals("이미 등록된 이메일입니다.", duplicate.exceptionOrNull()?.message)
+    }
+
+    @Test
+    fun legacySha256AccountAutomaticallyUpgradesToPbkdf2OnLogin() = runBlocking {
+        val saltHex = "00112233445566778899aabbccddeeff"
+        val saltBytes = saltHex.chunked(2).map { it.toInt(16).toByte() }.toByteArray()
+        val legacyHashHex = java.security.MessageDigest.getInstance("SHA-256")
+            .digest(saltBytes + "legacySecret1".toByteArray(java.nio.charset.StandardCharsets.UTF_8))
+            .joinToString("") { "%02x".format(it.toInt() and 0xff) }
+        database.accountDao().insert(
+            com.example.milipercent.data.local.UserEntity(
+                email = "legacy@example.com",
+                displayName = "기존사용자",
+                passwordSalt = saltHex,
+                passwordHash = legacyHashHex,
+                isAdmin = false,
+            ),
+        )
+
+        val loggedIn = repository.login("legacy@example.com", "legacySecret1").getOrThrow()
+        val upgraded = requireNotNull(database.accountDao().findByEmail("legacy@example.com"))
+
+        assertEquals("legacy@example.com", loggedIn.email)
+        assertTrue(upgraded.passwordHash.startsWith("${PasswordHasher.PBKDF2_PREFIX}\$"))
+        assertTrue(repository.login("legacy@example.com", "legacySecret1").isSuccess)
     }
 
     @Test

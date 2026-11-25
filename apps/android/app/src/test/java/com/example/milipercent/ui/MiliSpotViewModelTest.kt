@@ -544,6 +544,82 @@ class MiliSpotViewModelTest {
         assertEquals("성남시", edited.district)
     }
 
+    @Test
+    fun toggleFavoriteFailureShowsMessageWithoutCrashing() = runTest(dispatcher.scheduler) {
+        val user = LocalUser(1L, "user@test.com", "사용자", false)
+        val viewModel = MiliSpotViewModel(
+            FakeBenefitRepository(listOf(benefit("b1"))),
+            FakeAccountRepository(user),
+            FailingFavoriteRepository(),
+            FakeAdminRepository(),
+            FakeSeedInstaller(),
+            FakeSessionStorage(1L),
+            mmaConfigured = false,
+            computeDispatcher = dispatcher,
+        )
+        advanceUntilIdle()
+
+        viewModel.toggleFavorite("b1")
+        advanceUntilIdle()
+
+        assertEquals("찜 상태를 변경하지 못했습니다.", viewModel.uiState.value.transientMessage)
+    }
+
+    @Test
+    fun concurrentRefreshCallsDeduplicateViaActiveRefreshJob() = runTest(dispatcher.scheduler) {
+        val repository = FakeBenefitRepository(listOf(benefit("b1")))
+        val viewModel = MiliSpotViewModel(
+            repository,
+            FakeAccountRepository(),
+            FakeFavoriteRepository(),
+            FakeAdminRepository(),
+            FakeSeedInstaller(),
+            FakeSessionStorage(),
+            mmaConfigured = false,
+            computeDispatcher = dispatcher,
+        )
+        advanceUntilIdle()
+
+        viewModel.refresh()
+        viewModel.refresh()
+        advanceUntilIdle()
+
+        assertEquals(1, repository.refreshCalls)
+    }
+
+    @Test
+    fun saveAdminReturnsFalseOnFailureAndTrueOnSuccess() = runTest(dispatcher.scheduler) {
+        val admin = LocalUser(1L, "admin@test.com", "관리자", isAdmin = true)
+        val validInput = buildAdminBenefitInput("가게", "서울특별시 마포구 1", "할인", null)
+        val failingViewModel = MiliSpotViewModel(
+            FakeBenefitRepository(emptyList()),
+            FakeAccountRepository(admin),
+            FakeFavoriteRepository(),
+            FailingAdminRepository(),
+            FakeSeedInstaller(),
+            FakeSessionStorage(1L),
+            mmaConfigured = false,
+            computeDispatcher = dispatcher,
+        )
+        advanceUntilIdle()
+        assertFalse(failingViewModel.saveAdmin(validInput, null))
+        assertEquals("저장 오류", failingViewModel.uiState.value.transientMessage)
+
+        val succeedingViewModel = MiliSpotViewModel(
+            FakeBenefitRepository(emptyList()),
+            FakeAccountRepository(admin),
+            FakeFavoriteRepository(),
+            FakeAdminRepository(),
+            FakeSeedInstaller(),
+            FakeSessionStorage(1L),
+            mmaConfigured = false,
+            computeDispatcher = dispatcher,
+        )
+        advanceUntilIdle()
+        assertTrue(succeedingViewModel.saveAdmin(validInput, null))
+        assertEquals("혜택 정보를 저장했습니다.", succeedingViewModel.uiState.value.transientMessage)
+    }
+
     private class FakeSessionStorage(initial: Long? = null) : SessionStorage {
         private var id = initial
         override fun userId(): Long? = id
@@ -613,6 +689,23 @@ class MiliSpotViewModelTest {
     ) : AdminBenefitRepository {
         override fun observeAll(): Flow<List<Benefit>> = allBenefits
         override suspend fun create(input: com.example.milipercent.data.admin.AdminBenefitInput) = ""
+        override suspend fun update(id: String, input: com.example.milipercent.data.admin.AdminBenefitInput) = Unit
+        override suspend fun end(id: String) = Unit
+        override suspend fun deleteManual(id: String) = false
+    }
+
+    private class FailingFavoriteRepository : FavoriteRepository {
+        override fun observeIds(userId: Long) = flowOf(emptySet<String>())
+        override suspend fun toggle(userId: Long, benefitId: String): Boolean {
+            throw IllegalStateException("FOREIGN KEY constraint failed")
+        }
+    }
+
+    private class FailingAdminRepository : AdminBenefitRepository {
+        override fun observeAll(): Flow<List<Benefit>> = flowOf(emptyList())
+        override suspend fun create(input: com.example.milipercent.data.admin.AdminBenefitInput): String {
+            throw IllegalArgumentException("저장 오류")
+        }
         override suspend fun update(id: String, input: com.example.milipercent.data.admin.AdminBenefitInput) = Unit
         override suspend fun end(id: String) = Unit
         override suspend fun deleteManual(id: String) = false

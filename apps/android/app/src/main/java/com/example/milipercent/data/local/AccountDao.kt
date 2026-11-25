@@ -19,6 +19,9 @@ interface AccountDao {
     @Query("SELECT * FROM users WHERE id = :id LIMIT 1")
     fun observeById(id: Long): Flow<UserEntity?>
 
+    @Query("UPDATE users SET passwordSalt = :passwordSalt, passwordHash = :passwordHash WHERE id = :id")
+    suspend fun updatePasswordDigest(id: Long, passwordSalt: String, passwordHash: String): Int
+
     @Query("DELETE FROM users WHERE id = :id")
     suspend fun deleteById(id: Long): Int
 }

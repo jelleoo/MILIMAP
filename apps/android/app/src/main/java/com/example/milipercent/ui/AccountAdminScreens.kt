@@ -110,6 +110,7 @@ fun AccountScreen(
     var displayName by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     var errorMessage by remember { mutableStateOf<String?>(null) }
+    var isSubmitting by remember { mutableStateOf(false) }
     Column(
         modifier = modifier.fillMaxSize().padding(24.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp),
@@ -121,6 +122,7 @@ fun AccountScreen(
             modifier = Modifier.fillMaxWidth(),
             label = { Text("이메일") },
             singleLine = true,
+            enabled = !isSubmitting,
             keyboardOptions = KeyboardOptions(
                 keyboardType = KeyboardType.Email,
                 autoCorrectEnabled = false,
@@ -133,6 +135,7 @@ fun AccountScreen(
                 modifier = Modifier.fillMaxWidth(),
                 label = { Text("이름") },
                 singleLine = true,
+                enabled = !isSubmitting,
             )
         }
         OutlinedTextField(
@@ -141,6 +144,7 @@ fun AccountScreen(
             modifier = Modifier.fillMaxWidth(),
             label = { Text("비밀번호") },
             singleLine = true,
+            enabled = !isSubmitting,
             visualTransformation = PasswordVisualTransformation(),
             keyboardOptions = KeyboardOptions(
                 keyboardType = KeyboardType.Password,
@@ -150,15 +154,23 @@ fun AccountScreen(
         errorMessage?.let { Text(it, color = Danger) }
         Button(
             onClick = {
+                if (isSubmitting) return@Button
                 scope.launch {
-                    val result = if (loginMode) onLogin(email, password) else onRegister(email, displayName, password)
-                    errorMessage = result.exceptionOrNull()?.message
+                    isSubmitting = true
+                    try {
+                        val result = if (loginMode) onLogin(email, password) else onRegister(email, displayName, password)
+                        errorMessage = result.exceptionOrNull()?.message
+                    } finally {
+                        isSubmitting = false
+                    }
                 }
             },
+            enabled = !isSubmitting,
             modifier = Modifier.fillMaxWidth(),
-        ) { Text(if (loginMode) "로그인" else "회원가입") }
+        ) { Text(if (isSubmitting) "처리 중..." else if (loginMode) "로그인" else "회원가입") }
         TextButton(
             onClick = { loginMode = !loginMode; errorMessage = null },
+            enabled = !isSubmitting,
             modifier = Modifier.testTag("account_login_mode"),
         ) { Text(if (loginMode) "회원가입으로 전환" else "로그인으로 전환") }
     }
@@ -168,7 +180,7 @@ fun AccountScreen(
 fun AdminScreen(
     user: LocalUser?,
     benefits: List<Benefit>,
-    onSave: (AdminBenefitInput, String?) -> Unit,
+    onSave: suspend (AdminBenefitInput, String?) -> Boolean,
     onEnd: (String) -> Unit,
     onDeleteManual: (String) -> Unit,
     modifier: Modifier = Modifier,
@@ -177,10 +189,12 @@ fun AdminScreen(
         PlaceholderScreen("관리", "관리자 권한이 필요합니다.", modifier)
         return
     }
+    val scope = rememberCoroutineScope()
     var name by remember { mutableStateOf("") }
     var address by remember { mutableStateOf("") }
     var description by remember { mutableStateOf("") }
     var editingBenefit by remember { mutableStateOf<Benefit?>(null) }
+    var isSaving by remember { mutableStateOf(false) }
 
     fun resetForm() {
         editingBenefit = null
@@ -205,34 +219,41 @@ fun AdminScreen(
     ) {
         item {
             Text("혜택 관리", color = Navy, fontWeight = FontWeight.ExtraBold)
-            OutlinedTextField(name, { name = it }, Modifier.fillMaxWidth(), label = { Text("업체명") })
-            OutlinedTextField(address, { address = it }, Modifier.fillMaxWidth(), label = { Text("주소") })
-            OutlinedTextField(description, { description = it }, Modifier.fillMaxWidth(), label = { Text("혜택 내용") })
+            OutlinedTextField(name, { name = it }, Modifier.fillMaxWidth(), label = { Text("업체명") }, enabled = !isSaving)
+            OutlinedTextField(address, { address = it }, Modifier.fillMaxWidth(), label = { Text("주소") }, enabled = !isSaving)
+            OutlinedTextField(description, { description = it }, Modifier.fillMaxWidth(), label = { Text("혜택 내용") }, enabled = !isSaving)
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 Button(
                     onClick = {
+                        if (isSaving) return@Button
                         val existing = editingBenefit
-                        onSave(
-                            buildAdminBenefitInput(
-                                name = name,
-                                address = address,
-                                description = description,
-                                existing = existing,
-                            ),
-                            existing?.id,
+                        val input = buildAdminBenefitInput(
+                            name = name,
+                            address = address,
+                            description = description,
+                            existing = existing,
                         )
-                        if (name.isNotBlank() && address.isNotBlank() && description.isNotBlank()) {
-                            resetForm()
+                        scope.launch {
+                            isSaving = true
+                            try {
+                                if (onSave(input, existing?.id)) {
+                                    resetForm()
+                                }
+                            } finally {
+                                isSaving = false
+                            }
                         }
                     },
+                    enabled = !isSaving,
                     modifier = Modifier.weight(1f),
-                ) { Text(if (editingBenefit == null) "수동 혜택 등록" else "수정 내용 저장") }
+                ) { Text(if (isSaving) "저장 중..." else if (editingBenefit == null) "수동 혜택 등록" else "수정 내용 저장") }
                 if (editingBenefit != null) {
                     TextButton(
                         onClick = ::resetForm,
+                        enabled = !isSaving,
                         modifier = Modifier.testTag("admin_cancel_edit"),
                     ) { Text("편집 취소") }
                 }
@@ -252,9 +273,35 @@ fun AdminScreen(
                                     address = benefit.address
                                     description = benefit.benefitDescription
                                 },
+                                enabled = !isSaving,
                             ) { Text("수정") }
-                            TextButton(onClick = { onEnd(benefit.id) }) { Text("종료") }
-                            TextButton(onClick = { onDeleteManual(benefit.id) }) { Text("삭제") }
+                            if (benefit.status == BenefitStatus.ENDED) {
+                                TextButton(
+                                    onClick = {
+                                        if (isSaving) return@TextButton
+                                        scope.launch {
+                                            isSaving = true
+                                            try {
+                                                onSave(
+                                                    buildAdminBenefitInput(
+                                                        name = benefit.name,
+                                                        address = benefit.address,
+                                                        description = benefit.benefitDescription,
+                                                        existing = benefit,
+                                                    ).copy(status = BenefitStatus.ACTIVE),
+                                                    benefit.id,
+                                                )
+                                            } finally {
+                                                isSaving = false
+                                            }
+                                        }
+                                    },
+                                    enabled = !isSaving,
+                                ) { Text("복구") }
+                            } else {
+                                TextButton(onClick = { onEnd(benefit.id) }, enabled = !isSaving) { Text("종료") }
+                            }
+                            TextButton(onClick = { onDeleteManual(benefit.id) }, enabled = !isSaving) { Text("삭제") }
                         }
                     }
                 }

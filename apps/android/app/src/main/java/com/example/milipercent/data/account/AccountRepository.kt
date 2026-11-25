@@ -33,11 +33,14 @@ class RoomAccountRepository(
         val normalizedEmail = normalizeEmail(email)
         val normalizedName = displayName.trim()
         validateRegistration(normalizedEmail, normalizedName, password)
+        val dao = database.accountDao()
+        if (dao.findByEmail(normalizedEmail) != null) {
+            throw AccountValidationException(DUPLICATE_EMAIL_MESSAGE)
+        }
         val digest = withContext(Dispatchers.Default) {
             passwordHasher.create(password)
         }
         database.withTransaction {
-            val dao = database.accountDao()
             if (dao.findByEmail(normalizedEmail) != null) {
                 throw AccountValidationException(DUPLICATE_EMAIL_MESSAGE)
             }
@@ -63,13 +66,28 @@ class RoomAccountRepository(
         if (!verified) {
             throw AccountValidationException(INVALID_CREDENTIALS_MESSAGE)
         }
-        requireNotNull(user).toLocalUser()
+        val authenticated = requireNotNull(user)
+        if (passwordHasher.needsUpgrade(authenticated.passwordHash)) {
+            runCatching {
+                val upgraded = withContext(Dispatchers.Default) {
+                    passwordHasher.create(password)
+                }
+                database.accountDao().updatePasswordDigest(
+                    id = authenticated.id,
+                    passwordSalt = upgraded.saltHex,
+                    passwordHash = upgraded.hashHex,
+                )
+            }
+        }
+        authenticated.toLocalUser()
     }
 
     private fun validateRegistration(email: String, displayName: String, password: String) {
-        if (!email.contains('@')) throw AccountValidationException("올바른 이메일을 입력해 주세요.")
+        if (!EMAIL_PATTERN.matches(email)) throw AccountValidationException("올바른 이메일을 입력해 주세요.")
         if (displayName.length < 2) throw AccountValidationException("이름은 두 글자 이상 입력해 주세요.")
-        if (password.length < 6) throw AccountValidationException("비밀번호는 여섯 글자 이상 입력해 주세요.")
+        if (password.isBlank() || password.length < 6) {
+            throw AccountValidationException("비밀번호는 여섯 글자 이상 입력해 주세요.")
+        }
     }
 
     private fun normalizeEmail(email: String): String = email.trim().lowercase(Locale.ROOT)
@@ -79,6 +97,7 @@ class RoomAccountRepository(
     private companion object {
         const val DUPLICATE_EMAIL_MESSAGE = "이미 등록된 이메일입니다."
         const val INVALID_CREDENTIALS_MESSAGE = "이메일 또는 비밀번호를 확인해 주세요."
+        val EMAIL_PATTERN = Regex("^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$")
     }
 }
 

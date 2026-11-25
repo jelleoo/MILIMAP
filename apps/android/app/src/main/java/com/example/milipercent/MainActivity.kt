@@ -65,6 +65,8 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        locationTrackingRequested =
+            savedInstanceState?.getBoolean(KEY_LOCATION_TRACKING_REQUESTED, false) ?: false
         setContent {
             val state by viewModel.uiState.collectAsStateWithLifecycle()
             val locationPermissionLauncher = rememberLauncherForActivityResult(
@@ -92,13 +94,12 @@ class MainActivity : ComponentActivity() {
                         onFavorite = viewModel::toggleFavorite,
                         onRefresh = viewModel::refresh,
                         onCurrentLocation = {
-                            if (!viewModel.requestCurrentLocationFocus()) {
-                                if (hasLocationPermission()) {
-                                    locationTrackingRequested = true
-                                    viewModel.startLocationTracking(locationDataSource)
-                                } else {
-                                    locationPermissionLauncher.launch(LOCATION_PERMISSIONS)
-                                }
+                            val focusedExisting = viewModel.requestCurrentLocationFocus()
+                            if (hasLocationPermission()) {
+                                locationTrackingRequested = true
+                                viewModel.startLocationTracking(locationDataSource)
+                            } else if (!focusedExisting) {
+                                locationPermissionLauncher.launch(LOCATION_PERMISSIONS)
                             }
                         },
                         onMessageShown = viewModel::clearMessage,
@@ -113,10 +114,16 @@ class MainActivity : ComponentActivity() {
                         onCameraRequestApplied = viewModel::markCameraRequestApplied,
                         onSearchInMapBounds = viewModel::searchInCurrentMapBounds,
                         onMapBenefitSelected = viewModel::selectMapBenefit,
+                        onCloseDetail = viewModel::closeDetail,
                     )
                 }
             }
         }
+    }
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        super.onSaveInstanceState(outState)
+        outState.putBoolean(KEY_LOCATION_TRACKING_REQUESTED, locationTrackingRequested)
     }
 
     override fun onStart() {
@@ -136,6 +143,7 @@ class MainActivity : ComponentActivity() {
     }
 
     private companion object {
+        const val KEY_LOCATION_TRACKING_REQUESTED = "location_tracking_requested"
         val LOCATION_PERMISSIONS = arrayOf(
             Manifest.permission.ACCESS_FINE_LOCATION,
             Manifest.permission.ACCESS_COARSE_LOCATION,

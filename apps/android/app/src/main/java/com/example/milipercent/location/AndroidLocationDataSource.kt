@@ -69,6 +69,18 @@ internal object LocationFixSelector {
         LocationManager.PASSIVE_PROVIDER -> "보조"
         else -> "기기"
     }
+
+    fun registrationFailureMessage(
+        registeredProviders: Collection<String>,
+        failedProviders: Collection<String>,
+    ): String? {
+        if (registeredProviders.isNotEmpty()) return null
+        return if (failedProviders.size == 1) {
+            "${providerDisplayName(failedProviders.single())} 위치를 시작할 수 없습니다."
+        } else {
+            "사용 가능한 위치 제공자가 없습니다."
+        }
+    }
 }
 
 class AndroidLocationDataSource(context: Context) : LocationDataSource {
@@ -76,7 +88,12 @@ class AndroidLocationDataSource(context: Context) : LocationDataSource {
 
     @SuppressLint("MissingPermission") // Runtime permission gates above distinguish fine GPS from coarse network access.
     override fun updates(): Flow<LocationUpdate> = callbackFlow {
-        val manager = appContext.getSystemService(Context.LOCATION_SERVICE) as LocationManager
+        val manager = appContext.getSystemService(Context.LOCATION_SERVICE) as? LocationManager
+        if (manager == null) {
+            trySend(LocationUpdate.Unavailable("위치 서비스를 사용할 수 없습니다."))
+            close()
+            return@callbackFlow
+        }
         val hasFine = appContext.hasPermission(Manifest.permission.ACCESS_FINE_LOCATION)
         val hasCoarse = appContext.hasPermission(Manifest.permission.ACCESS_COARSE_LOCATION)
         if (!hasFine && !hasCoarse) {
@@ -87,6 +104,7 @@ class AndroidLocationDataSource(context: Context) : LocationDataSource {
 
         var bestCandidate: LocationFixCandidate? = null
         val registeredProviders = mutableListOf<String>()
+        val failedProviders = mutableListOf<String>()
 
         val listener = object : LocationListener {
             override fun onLocationChanged(location: Location) {
@@ -118,13 +136,13 @@ class AndroidLocationDataSource(context: Context) : LocationDataSource {
                     listener,
                     Looper.getMainLooper(),
                 )
+            }.onSuccess {
                 registeredProviders += provider
-                manager.getLastKnownLocation(provider)?.let { location ->
+                runCatching { manager.getLastKnownLocation(provider) }.getOrNull()?.let { location ->
                     lastKnownCandidates += location.toCandidate(fallbackProvider = provider)
                 }
             }.onFailure {
-                val label = LocationFixSelector.providerDisplayName(provider)
-                trySend(LocationUpdate.Unavailable("$label 위치를 시작할 수 없습니다."))
+                failedProviders += provider
             }
         }
 
@@ -135,11 +153,11 @@ class AndroidLocationDataSource(context: Context) : LocationDataSource {
             bestCandidate = best
             trySend(LocationUpdate.Position(best.point))
         }
-        if (registeredProviders.isEmpty()) {
-            trySend(LocationUpdate.Unavailable("사용 가능한 위치 제공자가 없습니다."))
+        LocationFixSelector.registrationFailureMessage(registeredProviders, failedProviders)?.let { message ->
+            trySend(LocationUpdate.Unavailable(message))
         }
 
-        awaitClose { manager.removeUpdates(listener) }
+        awaitClose { runCatching { manager.removeUpdates(listener) } }
     }
 
     private fun Context.hasPermission(permission: String): Boolean =

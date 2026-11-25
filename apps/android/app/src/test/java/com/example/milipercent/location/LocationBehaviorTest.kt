@@ -53,4 +53,29 @@ class LocationBehaviorTest {
         assertEquals("GPS", LocationFixSelector.providerDisplayName("gps"))
         assertEquals("네트워크", LocationFixSelector.providerDisplayName("network"))
     }
+
+    @Test
+    fun registrationFailureMessageSuppressesPartialProviderFailures() {
+        assertEquals(
+            null,
+            LocationFixSelector.registrationFailureMessage(
+                registeredProviders = listOf("gps"),
+                failedProviders = listOf("network"),
+            ),
+        )
+        assertEquals(
+            "네트워크 위치를 시작할 수 없습니다.",
+            LocationFixSelector.registrationFailureMessage(
+                registeredProviders = emptyList(),
+                failedProviders = listOf("network"),
+            ),
+        )
+        assertEquals(
+            "사용 가능한 위치 제공자가 없습니다.",
+            LocationFixSelector.registrationFailureMessage(
+                registeredProviders = emptyList(),
+                failedProviders = listOf("gps", "network"),
+            ),
+        )
+    }
 }

@@ -262,6 +262,9 @@ Assert-WeeklyThrows {
 Assert-WeeklyThrows {
     Invoke-BenefitBoundedHttpsGet -Uri ([uri]'https://169.254.169.254/latest') -ErrorPrefix 'PAJU'
 } 'PAJU_URL_UNSAFE*' 'Link-local metadata URI must be rejected before request dispatch'
+Assert-WeeklyThrows {
+    Invoke-BenefitBoundedHttpsGet -Uri ([uri]'https://www.ddc.go.kr/ddc/contents.do?key=1570') -MaximumRedirection 1 -ErrorPrefix 'DDC'
+} 'DDC_REDIRECT_NOT_SUPPORTED*' 'Non-zero redirect limit must fail closed'
 
 # 4. Path safety guard rejects writing inside data/ or apps/
 $unsafeRejected = $false

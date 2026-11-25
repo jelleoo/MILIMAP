@@ -191,6 +191,7 @@ internal fun isHttpUrl(value: String): Boolean = runCatching {
 internal fun String?.cleanOptional(): String? = this?.trim()?.takeIf { it.isNotEmpty() }
 
 private val DATE_PATTERN = Regex("\\d{4}-\\d{2}-\\d{2}")
-private val DATE_FORMATTER: ThreadLocal<SimpleDateFormat> = ThreadLocal.withInitial {
-    SimpleDateFormat("yyyy-MM-dd", Locale.ROOT).apply { isLenient = false }
+private val DATE_FORMATTER: ThreadLocal<SimpleDateFormat> = object : ThreadLocal<SimpleDateFormat>() {
+    override fun initialValue(): SimpleDateFormat =
+        SimpleDateFormat("yyyy-MM-dd", Locale.ROOT).apply { isLenient = false }
 }

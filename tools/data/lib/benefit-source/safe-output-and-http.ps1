@@ -69,7 +69,9 @@ function Invoke-BenefitBoundedHttpsGet {
     if (-not $Uri.IsAbsoluteUri -or $Uri.Scheme -cne 'https' -or -not (Test-BenefitSafeHttpUri -Url $Uri.AbsoluteUri)) {
         throw "${ErrorPrefix}_URL_UNSAFE: $($Uri.OriginalString)"
     }
-    if ($MaximumRedirection -lt 0) { $MaximumRedirection = 0 }
+    if ($MaximumRedirection -ne 0) {
+        throw "${ErrorPrefix}_REDIRECT_NOT_SUPPORTED: Redirects are disabled to preserve safe URI enforcement."
+    }
     if ($MaxResponseBytes -lt 1) {
         throw "${ErrorPrefix}_INVALID_LIMIT: MaxResponseBytes must be positive."
     }
@@ -115,10 +117,7 @@ function Invoke-BenefitBoundedHttpsGet {
     }
 
     $handler = [Net.Http.HttpClientHandler]::new()
-    $handler.AllowAutoRedirect = ($MaximumRedirection -gt 0)
-    if ($MaximumRedirection -gt 0) {
-        $handler.MaxAutomaticRedirections = $MaximumRedirection
-    }
+    $handler.AllowAutoRedirect = $false
     $client = [Net.Http.HttpClient]::new($handler, $true)
     $client.Timeout = [TimeSpan]::FromSeconds([Math]::Max(1, $TimeoutSeconds))
     try {

@@ -388,15 +388,25 @@ class MiliSpotViewModel(
         viewModelScope.launch {
             runCatching { adminRepository.end(benefitId) }
                 .onSuccess { showMessage("혜택을 종료 처리했습니다.") }
-                .onFailure { error -> showMessage(error.message ?: "종료 처리에 실패했습니다.") }
+                .onFailure { error ->
+                    if (error is CancellationException) throw error
+                    showMessage(error.message ?: "종료 처리에 실패했습니다.")
+                }
         }
     }
 
     fun deleteManualBenefit(benefitId: String) {
         if (!requireAdmin()) return
         viewModelScope.launch {
-            if (adminRepository.deleteManual(benefitId)) showMessage("수동 혜택을 삭제했습니다.")
-            else showMessage("수동 등록 혜택만 삭제할 수 있습니다.")
+            runCatching { adminRepository.deleteManual(benefitId) }
+                .onSuccess { deleted ->
+                    if (deleted) showMessage("수동 혜택을 삭제했습니다.")
+                    else showMessage("수동 등록 혜택만 삭제할 수 있습니다.")
+                }.onFailure { error ->
+                    if (error is CancellationException) throw error
+                    runCatching { Log.w(TAG, "Manual benefit delete failed: ${error.javaClass.simpleName}") }
+                    showMessage("수동 혜택 삭제에 실패했습니다.")
+                }
         }
     }
 

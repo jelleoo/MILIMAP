@@ -96,19 +96,6 @@ function ConvertFrom-WeeklyMmaJsonpListText {
     return $list.Value
 }
 
-function Read-WeeklyUtf8WebResponseText {
-    param([Parameter(Mandatory)]$Response)
-
-    if ($Response.PSObject.Properties.Name -contains 'RawContentStream' -and $null -ne $Response.RawContentStream -and $Response.RawContentStream.Length -gt 0) {
-        $Response.RawContentStream.Position = 0
-        return [IO.StreamReader]::new($Response.RawContentStream, [Text.UTF8Encoding]::new($false), $true).ReadToEnd()
-    }
-    if ($Response.Content -is [byte[]]) {
-        return [Text.Encoding]::UTF8.GetString($Response.Content)
-    }
-    return [string]$Response.Content
-}
-
 function Compare-WeeklyMmaMetroToCanonical {
     param(
         [Parameter(Mandatory)][AllowEmptyCollection()][object[]]$LiveItems,

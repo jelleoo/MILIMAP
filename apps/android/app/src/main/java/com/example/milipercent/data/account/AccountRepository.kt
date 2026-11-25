@@ -5,6 +5,7 @@ import com.example.milipercent.data.local.BenefitDatabase
 import com.example.milipercent.data.local.UserEntity
 import com.example.milipercent.model.LocalUser
 import java.util.Locale
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
@@ -77,6 +78,8 @@ class RoomAccountRepository(
                     passwordSalt = upgraded.saltHex,
                     passwordHash = upgraded.hashHex,
                 )
+            }.onFailure { error ->
+                if (error is CancellationException) throw error
             }
         }
         authenticated.toLocalUser()

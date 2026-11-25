@@ -20,10 +20,26 @@ class LocationBehaviorTest {
     @Test
     fun sameCoordinateCanBeExplicitlyFocusedAgainAndSearchCancelsPendingFocus() {
         val initial = LocationFocusState(latestLocation = GeoPoint(37.5, 126.9))
-        val focused = initial.requestFocus()
+        val pending = initial.requestFocus()
+        assertTrue(pending.focusPending)
+        assertEquals(0, pending.cameraRequestId)
+        val focused = pending.withLocation(GeoPoint(37.5, 126.9))
         assertEquals(1, focused.cameraRequestId)
-        assertEquals(2, focused.requestFocus().cameraRequestId)
+        assertEquals(2, focused.requestFocus().withLocation(GeoPoint(37.5, 126.9)).cameraRequestId)
         assertTrue(LocationFocusState().requestFocus().cancelPendingFocus().let { !it.focusPending })
+    }
+
+    @Test
+    fun onlyRecentValidDeviceFixesAreUsable() {
+        val now = 100_000_000_000L
+        val fresh = LocationFixCandidate(GeoPoint(37.5, 126.9), "gps", 1L, 5f, now - 5_000_000_000L)
+        assertTrue(LocationFixSelector.isUsable(fresh, now))
+        assertTrue(LocationFixSelector.isUsable(fresh.copy(elapsedRealtimeNanos = now - 30_000_000_000L), now))
+        assertFalse(LocationFixSelector.isUsable(fresh.copy(elapsedRealtimeNanos = now - 31_000_000_000L), now))
+        assertFalse(LocationFixSelector.isUsable(fresh.copy(elapsedRealtimeNanos = now + 1L), now))
+        assertFalse(LocationFixSelector.isUsable(fresh.copy(elapsedRealtimeNanos = 0L), now))
+        assertFalse(LocationFixSelector.isUsable(fresh.copy(point = GeoPoint(Double.NaN, 126.9)), now))
+        assertFalse(LocationFixSelector.isUsable(fresh.copy(point = GeoPoint(91.0, 181.0)), now))
     }
 
     @Test

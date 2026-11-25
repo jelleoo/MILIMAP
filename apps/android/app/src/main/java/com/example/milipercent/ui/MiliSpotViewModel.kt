@@ -24,6 +24,7 @@ import com.example.milipercent.model.LocalUser
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -31,6 +32,7 @@ import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlin.math.abs
 
 class MiliSpotViewModel(
     private val benefitRepository: BenefitDataRepository,
@@ -56,6 +58,7 @@ class MiliSpotViewModel(
     private var adminBenefitsJob: kotlinx.coroutines.Job? = null
     private var refreshJob: kotlinx.coroutines.Job? = null
     private var locationTrackingJob: kotlinx.coroutines.Job? = null
+    private var locationFocusTimeoutJob: kotlinx.coroutines.Job? = null
     private var locationFocusState = LocationFocusState()
     private var indexedBenefits: List<SearchableBenefit> = emptyList()
     private var benefitsById: Map<String, Benefit> = emptyMap()
@@ -148,6 +151,7 @@ class MiliSpotViewModel(
     }
 
     fun selectDistrict(district: com.example.milipercent.model.BenefitDistrict) {
+        cancelPendingLocationFocus()
         if (district == com.example.milipercent.model.BenefitDistrict.ALL) {
             publishUpdate { state ->
                 state.copy(
@@ -270,6 +274,25 @@ class MiliSpotViewModel(
         byUserGesture: Boolean,
         zoom: Double = DEFAULT_MAP_ZOOM,
     ) {
+        if (_uiState.value.isLocationSearchPending) {
+            publishUpdate { state ->
+                val target = (state.cameraTarget as? MapCameraTarget.Point)?.point
+                val reachedLocation = state.appliedCameraRequestId == state.cameraRequestId &&
+                    target != null && center.isNear(target)
+                // Ignore idle callbacks from the previous camera while the new move is in flight.
+                val currentMoveApplied = state.appliedCameraRequestId == state.cameraRequestId
+                val applyBounds = reachedLocation || (byUserGesture && currentMoveApplied)
+                state.copy(
+                    mapBounds = bounds,
+                    lastCameraSnapshot = MapCameraSnapshot(center, zoom),
+                    searchBounds = if (applyBounds) bounds else state.searchBounds,
+                    isLocationSearchPending = !applyBounds,
+                    isSearchInMapBoundsAvailable = false,
+                    locationLabel = if (applyBounds && byUserGesture) "현재 지도 영역" else state.locationLabel,
+                )
+            }
+            return
+        }
         _uiState.update { state ->
             state.copy(
                 mapBounds = bounds,
@@ -290,6 +313,7 @@ class MiliSpotViewModel(
     }
 
     fun searchInCurrentMapBounds() {
+        cancelPendingLocationFocus()
         publishUpdate { state ->
             val bounds = state.mapBounds
             state.copy(
@@ -414,13 +438,30 @@ class MiliSpotViewModel(
         _uiState.update { it.copy(transientMessage = null) }
     }
 
-    fun startLocationTracking(dataSource: LocationDataSource) {
+    fun startLocationTracking(dataSource: LocationDataSource, restart: Boolean = false) {
+        if (restart) {
+            locationTrackingJob?.cancel()
+            locationTrackingJob = null
+        }
         if (locationTrackingJob?.isActive == true) return
+        if (locationFocusState.focusPending) {
+            locationFocusTimeoutJob?.cancel()
+            locationFocusTimeoutJob = viewModelScope.launch {
+                delay(LOCATION_FOCUS_TIMEOUT_MILLIS)
+                if (locationFocusState.focusPending) {
+                    cancelPendingLocationFocus()
+                    showMessage("현재 위치를 확인하지 못했습니다. 위치 설정을 확인한 후 다시 시도해 주세요.")
+                }
+            }
+        }
         locationTrackingJob = viewModelScope.launch {
             dataSource.updates().collectLatest { update ->
                 when (update) {
                     is LocationUpdate.Position -> updateLocation(update.point)
-                    is LocationUpdate.Unavailable -> showMessage(update.message)
+                    is LocationUpdate.Unavailable -> {
+                        if (locationFocusState.focusPending) cancelPendingLocationFocus()
+                        showMessage(update.message)
+                    }
                 }
             }
         }
@@ -429,42 +470,21 @@ class MiliSpotViewModel(
     fun stopLocationTracking() {
         locationTrackingJob?.cancel()
         locationTrackingJob = null
+        locationFocusTimeoutJob?.cancel()
+        locationFocusTimeoutJob = null
+        locationFocusState = locationFocusState.cancelPendingFocus()
+        _uiState.update { it.copy(isLocationFocusPending = false) }
     }
 
-    /** Returns true when an existing location was focused; false means a fresh fix is still needed. */
-    fun requestCurrentLocationFocus(): Boolean {
+    fun requestCurrentLocationFocus() {
+        locationFocusTimeoutJob?.cancel()
         locationFocusState = locationFocusState.copy(cameraRequestId = _uiState.value.cameraRequestId).requestFocus()
-        val latest = locationFocusState.latestLocation
-        if (latest == null) {
-            _uiState.update { it.copy(isLocationFocusPending = true) }
-            return false
-        }
-        val requestId = locationFocusState.cameraRequestId
-        publishUpdate(recomputeSaved = true) { state ->
-            state.copy(
-                searchText = "",
-                activeSearch = "",
-                selectedCategory = "전체",
-                selectedDistrict = com.example.milipercent.model.BenefitDistrict.ALL,
-                mapBounds = null,
-                searchBounds = null,
-                showMapMarkers = false,
-                selectedMapBenefitId = null,
-                isSearchInMapBoundsAvailable = false,
-                center = latest,
-                currentLocation = latest,
-                cameraTarget = MapCameraTarget.Point(latest, CURRENT_LOCATION_ZOOM),
-                isLocationFocusPending = false,
-                cameraRequestId = requestId,
-                locationLabel = "현재 위치",
-            )
-        }
-        return true
+        _uiState.update { it.copy(isLocationFocusPending = true, transientMessage = null) }
     }
 
     fun locationPermissionDenied() {
         cancelPendingLocationFocus()
-        showMessage("위치 권한이 없어 서울 전체를 표시합니다.")
+        showMessage("현재 위치를 보려면 위치 권한을 허용해 주세요. 기존 지도는 유지됩니다.")
     }
 
     private fun observeBenefits() {
@@ -524,16 +544,22 @@ class MiliSpotViewModel(
         locationFocusState = locationFocusState.withLocation(point)
         val focused = locationFocusState.cameraRequestId > previousCameraRequest
         val requestId = locationFocusState.cameraRequestId
+        if (focused) {
+            locationFocusTimeoutJob?.cancel()
+            locationFocusTimeoutJob = null
+        }
         publishUpdate(recomputeSaved = true) { state ->
             if (focused) {
+                val alreadyAtLocation = state.mapBounds != null && state.lastCameraSnapshot?.let {
+                    it.center.isNear(point) && abs(it.zoom - CURRENT_LOCATION_ZOOM) < 0.001
+                } == true
                 state.copy(
                     searchText = "",
                     activeSearch = "",
-                    selectedCategory = "전체",
                     selectedDistrict = com.example.milipercent.model.BenefitDistrict.ALL,
-                    mapBounds = null,
-                    searchBounds = null,
-                    showMapMarkers = false,
+                    mapBounds = if (alreadyAtLocation) state.mapBounds else null,
+                    searchBounds = if (alreadyAtLocation) state.mapBounds else null,
+                    showMapMarkers = true,
                     selectedMapBenefitId = null,
                     isSearchInMapBoundsAvailable = false,
                     currentLocation = point,
@@ -542,6 +568,7 @@ class MiliSpotViewModel(
                     locationLabel = "현재 위치",
                     cameraRequestId = requestId,
                     isLocationFocusPending = false,
+                    isLocationSearchPending = !alreadyAtLocation,
                 )
             } else {
                 state.copy(currentLocation = point, isLocationFocusPending = false)
@@ -550,9 +577,11 @@ class MiliSpotViewModel(
     }
 
     private fun cancelPendingLocationFocus() {
+        locationFocusTimeoutJob?.cancel()
+        locationFocusTimeoutJob = null
         locationFocusState = locationFocusState.cancelPendingFocus()
         _uiState.update { state ->
-            if (state.isLocationFocusPending) state.copy(isLocationFocusPending = false) else state
+            state.copy(isLocationFocusPending = false, isLocationSearchPending = false)
         }
     }
 
@@ -562,7 +591,7 @@ class MiliSpotViewModel(
     ) {
         _uiState.update { current ->
             val state = transform(current)
-            val visible = createBenefitListItemsFromIndex(
+            val visible = if (state.isLocationSearchPending) emptyList() else createBenefitListItemsFromIndex(
                 indexedBenefits = indexedBenefits,
                 category = state.selectedCategory,
                 district = state.selectedDistrict,
@@ -669,6 +698,9 @@ class MiliSpotViewModel(
         _uiState.update { it.copy(transientMessage = message) }
     }
 
+    private fun GeoPoint.isNear(other: GeoPoint): Boolean =
+        abs(latitude - other.latitude) < 0.00001 && abs(longitude - other.longitude) < 0.00001
+
     class Factory(
         private val benefitRepository: BenefitDataRepository,
         private val accountRepository: AccountRepository,
@@ -703,5 +735,6 @@ class MiliSpotViewModel(
 
     private companion object {
         const val TAG = "MiliSpotViewModel"
+        const val LOCATION_FOCUS_TIMEOUT_MILLIS = 15_000L
     }
 }

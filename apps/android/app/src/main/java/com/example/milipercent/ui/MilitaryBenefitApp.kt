@@ -29,6 +29,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
@@ -50,6 +51,9 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
@@ -57,6 +61,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavHostController
+import com.example.milipercent.R
 import com.example.milipercent.data.admin.AdminBenefitInput
 import com.example.milipercent.model.BenefitDistrict
 import com.example.milipercent.model.BenefitStatus
@@ -349,22 +354,23 @@ private fun DiscoverScreen(
                     }
                 }
                 Spacer(Modifier.weight(1f))
+                val locationButtonLabel = stringResource(R.string.current_location_button)
                 Surface(
                     modifier = Modifier
                         .size(46.dp)
                         .testTag("current_location")
+                        .semantics { contentDescription = locationButtonLabel }
                         .clickable(onClick = handleCurrentLocation),
                     shape = CircleShape,
                     color = Color.White,
                     shadowElevation = 6.dp,
                 ) {
                     Box(contentAlignment = Alignment.Center) {
-                        Text(
-                            "◎",
-                            color = if (state.isLocationFocusPending) PrimaryDark else Navy,
-                            fontSize = 20.sp,
-                            fontWeight = FontWeight.Bold,
-                        )
+                        if (state.isLocationFocusPending || state.isLocationSearchPending) {
+                            CircularProgressIndicator(Modifier.size(20.dp), color = PrimaryDark, strokeWidth = 2.dp)
+                        } else {
+                            Text("◎", color = Navy, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+                        }
                     }
                 }
             }
@@ -592,10 +598,11 @@ private fun DiscoverBottomSheetContent(
                     val categoryLabel = if (state.selectedCategory == "전체") "전체" else state.selectedCategory
                     "${state.locationLabel} · $categoryLabel (${state.visibleBenefits.size}곳)"
                 }
-                val subtitle = if (!state.showMapMarkers) {
-                    "카테고리 칩이나 검색으로 지도 핀을 띄워보세요"
-                } else {
-                    state.lastSyncLabel
+                val subtitle = when {
+                    state.isLocationFocusPending -> stringResource(R.string.current_location_checking)
+                    state.isLocationSearchPending -> stringResource(R.string.current_location_searching)
+                    !state.showMapMarkers -> "카테고리 칩이나 검색으로 지도 핀을 띄워보세요"
+                    else -> state.lastSyncLabel
                 }
                 Text(title, color = Navy, fontWeight = FontWeight.ExtraBold, fontSize = 15.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 Text(subtitle, color = Muted, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -673,7 +680,12 @@ private fun DiscoverBottomSheetContent(
             }
         } else if (state.visibleBenefits.isEmpty()) {
             Box(Modifier.fillMaxWidth().padding(20.dp), contentAlignment = Alignment.Center) {
-                Text("조건에 맞는 혜택이 없어요. 지도를 옮기거나 필터를 바꿔보세요.", color = Muted, fontSize = 12.sp)
+                Text(
+                    if (state.isLocationSearchPending) stringResource(R.string.current_location_searching)
+                    else "조건에 맞는 혜택이 없어요. 지도를 옮기거나 필터를 바꿔보세요.",
+                    color = Muted,
+                    fontSize = 12.sp,
+                )
             }
         } else if (isSheetExpanded) {
             LazyColumn(

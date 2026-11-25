@@ -182,6 +182,7 @@ private fun NaverMapView(
                     map.setOnMapClickListener { _, _ -> latestOnMapBlankClick() }
                 }
                 if (!initializedCamera && appliedCameraRequestId == cameraRequestId && lastCameraSnapshot != null) {
+                    gestureState.sawUserGesture = false
                     map.moveCamera(
                         CameraUpdate.scrollAndZoomTo(
                             LatLng(lastCameraSnapshot.center.latitude, lastCameraSnapshot.center.longitude),
@@ -222,6 +223,8 @@ private fun NaverMapView(
                     } else {
                         baseUpdate
                     }
+                    // A cancelled drag must not label this new location move as a user gesture.
+                    gestureState.sawUserGesture = false
                     map.moveCamera(cameraUpdate)
                     initializedCamera = true
                     handledCameraRequestId = cameraRequestId

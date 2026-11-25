@@ -16,6 +16,7 @@ import com.example.milipercent.location.LocationUpdate
 import com.example.milipercent.model.Benefit
 import com.example.milipercent.model.BenefitCollection
 import com.example.milipercent.model.BenefitDetail
+import com.example.milipercent.model.BenefitDistrict
 import com.example.milipercent.model.BenefitStatus
 import com.example.milipercent.model.BenefitUiModel
 import com.example.milipercent.model.CollectionProgress
@@ -30,6 +31,8 @@ import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
+import kotlinx.coroutines.test.advanceTimeBy
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
@@ -66,34 +69,31 @@ class LocationViewModelTest {
     }
 
     @Test
-    fun pendingFocusUsesFirstFreshFixAndUnavailableKeepsSearchStateUntilResolved() = runTest(dispatcher.scheduler) {
+    fun unavailableFixKeepsPreviousMapAndDoesNotMoveWhenALateFixArrives() = runTest(dispatcher.scheduler) {
         val source = FakeLocationSource()
         val viewModel = viewModel()
         viewModel.updateSearchText("마포")
         viewModel.submitSearch()
         val searchCameraRequestId = viewModel.uiState.value.cameraRequestId
-        assertFalse(viewModel.requestCurrentLocationFocus())
+        viewModel.requestCurrentLocationFocus()
         viewModel.startLocationTracking(source)
-        advanceUntilIdle()
+        runCurrent()
         source.emit(LocationUpdate.Unavailable("위치를 찾을 수 없습니다."))
         advanceUntilIdle()
 
         assertEquals("마포", viewModel.uiState.value.activeSearch)
+        assertFalse(viewModel.uiState.value.isLocationFocusPending)
         assertTrue(viewModel.uiState.value.transientMessage?.contains("위치를 찾을 수 없습니다.") == true)
 
         source.emit(LocationUpdate.Position(GeoPoint(37.55, 126.92)))
         advanceUntilIdle()
 
-        assertEquals("", viewModel.uiState.value.activeSearch)
-        assertEquals("", viewModel.uiState.value.searchText)
-        assertFalse(viewModel.uiState.value.showMapMarkers)
-        assertEquals(GeoPoint(37.55, 126.92), viewModel.uiState.value.center)
-        assertEquals(MapCameraTarget.Point(GeoPoint(37.55, 126.92), CURRENT_LOCATION_ZOOM), viewModel.uiState.value.cameraTarget)
-        assertEquals(searchCameraRequestId + 1, viewModel.uiState.value.cameraRequestId)
+        assertEquals("마포", viewModel.uiState.value.activeSearch)
+        assertEquals(searchCameraRequestId, viewModel.uiState.value.cameraRequestId)
     }
 
     @Test
-    fun currentLocationFocusClearsPreviousSearchAndSubsequentCategoryShowsViewportMarkers() = runTest(dispatcher.scheduler) {
+    fun currentLocationWaitsForNewFixThenShowsMatchingViewportMarkersAndListKeepingCategory() = runTest(dispatcher.scheduler) {
         val foodHere = benefit("food-here", "내주변 식당", "음식", 37.551, 126.921)
         val foodFar = benefit("food-far", "먼 식당", "음식", 37.905, 127.055)
         val cafeHere = benefit("cafe-here", "내주변 카페", "카페", 37.552, 126.922)
@@ -106,21 +106,153 @@ class LocationViewModelTest {
 
         viewModel.updateSearchText("먼 식당")
         viewModel.submitSearch()
+        viewModel.selectCategory("음식")
+        viewModel.selectDistrict(BenefitDistrict.MAPO)
         assertTrue(viewModel.uiState.value.showMapMarkers)
         assertEquals(listOf("food-far"), viewModel.uiState.value.visibleBenefits.map { it.benefit.id })
 
-        assertTrue(viewModel.requestCurrentLocationFocus())
+        val previousCenter = viewModel.uiState.value.center
+        val previousRequest = viewModel.uiState.value.cameraRequestId
+        viewModel.requestCurrentLocationFocus()
+        assertEquals(previousCenter, viewModel.uiState.value.center)
+        assertEquals(previousRequest, viewModel.uiState.value.cameraRequestId)
+        viewModel.startLocationTracking(source, restart = true)
+        runCurrent()
+        source.emit(LocationUpdate.Position(GeoPoint(37.55, 126.92)))
+        runCurrent()
+
         assertEquals("", viewModel.uiState.value.activeSearch)
-        assertFalse(viewModel.uiState.value.showMapMarkers)
+        assertEquals("", viewModel.uiState.value.searchText)
+        assertEquals("음식", viewModel.uiState.value.selectedCategory)
+        assertEquals(BenefitDistrict.ALL, viewModel.uiState.value.selectedDistrict)
+        assertTrue(viewModel.uiState.value.showMapMarkers)
+        assertTrue(viewModel.uiState.value.isLocationSearchPending)
         assertTrue(viewModel.uiState.value.mapBenefits.isEmpty())
+        assertEquals(previousRequest + 1, viewModel.uiState.value.cameraRequestId)
+        assertEquals(MapCameraTarget.Point(GeoPoint(37.55, 126.92), CURRENT_LOCATION_ZOOM), viewModel.uiState.value.cameraTarget)
+
+        // A late idle callback from the previous search must not reuse that viewport.
+        viewModel.onMapCameraIdle(previousCenter, GeoBounds(37.89, 127.04, 37.92, 127.07), false)
+        assertTrue(viewModel.uiState.value.isLocationSearchPending)
+        viewModel.onMapCameraIdle(previousCenter, GeoBounds(37.89, 127.04, 37.92, 127.07), true)
+        assertTrue(viewModel.uiState.value.isLocationSearchPending)
+        assertEquals("현재 위치", viewModel.uiState.value.locationLabel)
 
         val myBounds = GeoBounds(37.54, 126.91, 37.56, 126.93)
-        viewModel.onMapCameraIdle(GeoPoint(37.55, 126.92), myBounds, byUserGesture = false)
-        viewModel.selectCategory("음식")
+        viewModel.markCameraRequestApplied(viewModel.uiState.value.cameraRequestId)
+        viewModel.onMapCameraIdle(GeoPoint(37.55, 126.92), myBounds, false, CURRENT_LOCATION_ZOOM)
 
+        assertFalse(viewModel.uiState.value.isLocationSearchPending)
         assertTrue(viewModel.uiState.value.showMapMarkers)
         assertEquals("음식", viewModel.uiState.value.selectedCategory)
         assertEquals(listOf("food-here"), viewModel.uiState.value.mapBenefits.map { it.id })
+        assertEquals(listOf("food-here"), viewModel.uiState.value.visibleBenefits.map { it.benefit.id })
+        assertEquals(myBounds, viewModel.uiState.value.searchBounds)
+        assertEquals("현재 위치", viewModel.uiState.value.locationLabel)
+    }
+
+    @Test
+    fun repeatedTapAtSameLocationRefreshesResultsWithoutWaitingForAnotherCameraMove() = runTest(dispatcher.scheduler) {
+        val point = GeoPoint(37.55, 126.92)
+        val source = FakeLocationSource()
+        val viewModel = viewModel(listOf(benefit("near", "가까운 가게", "음식", 37.551, 126.921)))
+        viewModel.requestCurrentLocationFocus()
+        viewModel.startLocationTracking(source)
+        runCurrent()
+        source.emit(LocationUpdate.Position(point))
+        runCurrent()
+        viewModel.markCameraRequestApplied(viewModel.uiState.value.cameraRequestId)
+        viewModel.onMapCameraIdle(point, GeoBounds(37.54, 126.91, 37.56, 126.93), false, CURRENT_LOCATION_ZOOM)
+        val firstRequest = viewModel.uiState.value.cameraRequestId
+
+        viewModel.requestCurrentLocationFocus()
+        viewModel.startLocationTracking(source, restart = true)
+        runCurrent()
+        assertTrue(viewModel.uiState.value.isLocationFocusPending)
+        source.emit(LocationUpdate.Position(point))
+        runCurrent()
+
+        assertEquals(firstRequest + 1, viewModel.uiState.value.cameraRequestId)
+        assertFalse(viewModel.uiState.value.isLocationSearchPending)
+        assertEquals(listOf("near"), viewModel.uiState.value.mapBenefits.map { it.id })
+        assertEquals(listOf("near"), viewModel.uiState.value.visibleBenefits.map { it.benefit.id })
+    }
+
+    @Test
+    fun timeoutKeepsPreviousSearchAndLateFixDoesNotMoveCamera() = runTest(dispatcher.scheduler) {
+        val source = FakeLocationSource()
+        val viewModel = viewModel()
+        viewModel.updateSearchText("파주")
+        viewModel.submitSearch()
+        val oldCamera = viewModel.uiState.value.cameraTarget
+        val oldRequest = viewModel.uiState.value.cameraRequestId
+        viewModel.requestCurrentLocationFocus()
+        viewModel.startLocationTracking(source)
+        runCurrent()
+        advanceTimeBy(15_000)
+        runCurrent()
+
+        assertFalse(viewModel.uiState.value.isLocationFocusPending)
+        assertTrue(viewModel.uiState.value.transientMessage?.contains("현재 위치를 확인하지 못했습니다") == true)
+        source.emit(LocationUpdate.Position(GeoPoint(37.55, 126.92)))
+        runCurrent()
+        assertEquals("파주", viewModel.uiState.value.activeSearch)
+        assertEquals(oldCamera, viewModel.uiState.value.cameraTarget)
+        assertEquals(oldRequest, viewModel.uiState.value.cameraRequestId)
+    }
+
+    @Test
+    fun deniedPermissionKeepsExistingMapAndCategory() = runTest(dispatcher.scheduler) {
+        val viewModel = viewModel()
+        viewModel.updateSearchText("파주")
+        viewModel.submitSearch()
+        viewModel.selectCategory("카페")
+        val oldCamera = viewModel.uiState.value.cameraTarget
+        viewModel.requestCurrentLocationFocus()
+        viewModel.locationPermissionDenied()
+        advanceUntilIdle()
+
+        assertFalse(viewModel.uiState.value.isLocationFocusPending)
+        assertEquals("파주", viewModel.uiState.value.activeSearch)
+        assertEquals("카페", viewModel.uiState.value.selectedCategory)
+        assertEquals(oldCamera, viewModel.uiState.value.cameraTarget)
+        assertTrue(viewModel.uiState.value.transientMessage?.contains("권한") == true)
+    }
+
+    @Test
+    fun newSearchCancelsPendingFocusSoLateGpsDoesNotOverrideIt() = runTest(dispatcher.scheduler) {
+        val source = FakeLocationSource()
+        val viewModel = viewModel()
+        viewModel.requestCurrentLocationFocus()
+        viewModel.startLocationTracking(source)
+        runCurrent()
+        viewModel.selectPreset("파주")
+        val searchTarget = viewModel.uiState.value.cameraTarget
+        source.emit(LocationUpdate.Position(GeoPoint(37.55, 126.92)))
+        advanceUntilIdle()
+
+        assertEquals("파주", viewModel.uiState.value.activeSearch)
+        assertEquals(searchTarget, viewModel.uiState.value.cameraTarget)
+        assertFalse(viewModel.uiState.value.isLocationFocusPending)
+    }
+
+    @Test
+    fun noNearbyBenefitsKeepsDeviceLocationInsteadOfFallingBackToSeoul() = runTest(dispatcher.scheduler) {
+        val source = FakeLocationSource()
+        val viewModel = viewModel(listOf(benefit("seoul", "서울 가게", "음식", 37.55, 126.92)))
+        val devicePoint = GeoPoint(37.421998, -122.084)
+        viewModel.requestCurrentLocationFocus()
+        viewModel.startLocationTracking(source)
+        runCurrent()
+        source.emit(LocationUpdate.Position(devicePoint))
+        runCurrent()
+        viewModel.markCameraRequestApplied(viewModel.uiState.value.cameraRequestId)
+        viewModel.onMapCameraIdle(devicePoint, GeoBounds(37.41, -122.10, 37.44, -122.07), false, CURRENT_LOCATION_ZOOM)
+
+        assertEquals(devicePoint, viewModel.uiState.value.center)
+        assertFalse(viewModel.uiState.value.isLocationSearchPending)
+        assertTrue(viewModel.uiState.value.visibleBenefits.isEmpty())
+        assertTrue(viewModel.uiState.value.mapBenefits.isEmpty())
     }
 
     private fun viewModel(benefits: List<Benefit> = emptyList()) = MiliSpotViewModel(

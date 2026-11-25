@@ -32,6 +32,7 @@ class BenefitReconciler {
         val existingByKey = existing
             .groupBy { BenefitIdentity.normalizedKey(it.name, it.address) }
             .mapValues { (_, rows) -> rows.sortedWith(existingComparator()).first() }
+        val verifiedDateText = verifiedDate(syncedAt)
 
         var matched = 0
         val entities = canonicalRemote.map { (key, row) ->
@@ -54,7 +55,7 @@ class BenefitReconciler {
                         verificationMethod = MMA_VERIFICATION_METHOD,
                         sourceLabel = MMA_SOURCE_LABEL,
                         sourceUrl = MMA_SOURCE_URL,
-                        lastVerifiedAt = verifiedDate(syncedAt),
+                        lastVerifiedAt = verifiedDateText,
                         status = BenefitStatus.ACTIVE.name,
                         district = resolvedDistrict,
                         syncedAt = syncedAt,
@@ -63,7 +64,7 @@ class BenefitReconciler {
                     current
                 }
             } else {
-                row.toNewEntity(syncedAt)
+                row.toNewEntity(syncedAt, verifiedDateText)
             }
         }
         return ReconciliationResult(
@@ -74,7 +75,7 @@ class BenefitReconciler {
     }
 
     fun isCurrentProductRegion(address: String?): Boolean {
-        val normalized = address?.trim()?.replace(Regex("\\s+"), "").orEmpty()
+        val normalized = address?.trim()?.replace(WHITESPACE_REGEX, "").orEmpty()
         return normalized.startsWith("서울특별시") || normalized.startsWith("서울시") ||
             normalized.startsWith("경기도") || normalized.startsWith("경기") ||
             normalized.startsWith("인천광역시") || normalized.startsWith("인천")
@@ -104,7 +105,7 @@ class BenefitReconciler {
         )
     }
 
-    private fun MmaBenefit.toNewEntity(syncedAt: Long): BenefitEntity {
+    private fun MmaBenefit.toNewEntity(syncedAt: Long, verifiedDateText: String): BenefitEntity {
         val address = requireNotNull(address)
         return BenefitEntity(
             id = BenefitIdentity.mmaId(name, address),
@@ -123,7 +124,7 @@ class BenefitReconciler {
             verificationMethod = MMA_VERIFICATION_METHOD,
             sourceLabel = MMA_SOURCE_LABEL,
             sourceUrl = MMA_SOURCE_URL,
-            lastVerifiedAt = verifiedDate(syncedAt),
+            lastVerifiedAt = verifiedDateText,
             status = BenefitStatus.ACTIVE.name,
             district = BenefitAnalyzer.extractCapitalAreaDistrict(address) ?: BenefitAnalyzer.UNKNOWN_DISTRICT,
             syncedAt = syncedAt,
@@ -147,6 +148,7 @@ class BenefitReconciler {
         const val MMA_VERIFICATION_METHOD = "병무청 나라사랑가게조회서비스 최신 API 응답"
         const val MMA_SOURCE_LABEL = "병무청 나라사랑가게조회서비스 · 최신 확인"
         const val MMA_SOURCE_URL = "https://www.mma.go.kr/about/udgg/list.do?mc=mma0003357"
+        val WHITESPACE_REGEX = Regex("\\s+")
     }
 }
 

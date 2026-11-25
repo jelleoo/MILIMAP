@@ -45,12 +45,20 @@ internal interface BundledSeedTransactionScope {
 }
 
 internal interface BundledSeedStore {
+    suspend fun seedVersion(name: String): Int?
+
+    suspend fun countAllBenefits(): Int
+
     suspend fun <T> inTransaction(block: suspend BundledSeedTransactionScope.() -> T): T
 }
 
 private class RoomBundledSeedStore(
     private val database: BenefitDatabase,
 ) : BundledSeedStore {
+    override suspend fun seedVersion(name: String): Int? = database.seedStateDao().version(name)
+
+    override suspend fun countAllBenefits(): Int = database.benefitDao().countAll()
+
     override suspend fun <T> inTransaction(block: suspend BundledSeedTransactionScope.() -> T): T =
         database.withTransaction {
             val benefitDao = database.benefitDao()
@@ -109,9 +117,19 @@ class BundledSeedSynchronizer internal constructor(
     )
 
     override suspend fun synchronizeIfNeeded(): BundledSeedSyncResult {
+        val manifest = withContext(ioDispatcher) {
+            BundledSeedManifestLoader(manifestSource).loadAndValidate()
+        }
+        val installedBeforeLoad = store.seedVersion(manifest.seedName)
+        if (installedBeforeLoad != null && installedBeforeLoad >= manifest.seedVersion) {
+            return BundledSeedSyncResult(
+                installed = false,
+                storedCount = store.countAllBenefits(),
+            )
+        }
+
         // 모든 입력은 transaction 진입 전에 IO 스레드에서 단일 읽기, checksum, parsing과 validation을 끝낸다.
-        val prepared = withContext(ioDispatcher) { prepareBundledSeed() }
-        val manifest = prepared.manifest
+        val prepared = withContext(ioDispatcher) { prepareBundledSeed(manifest) }
         val entities = prepared.entities
         val expectedTotalCount = prepared.expectedTotalCount
 
@@ -144,8 +162,7 @@ class BundledSeedSynchronizer internal constructor(
         }
     }
 
-    private fun prepareBundledSeed(): PreparedBundledSeed {
-        val manifest = BundledSeedManifestLoader(manifestSource).loadAndValidate()
+    private fun prepareBundledSeed(manifest: BundledSeedManifest): PreparedBundledSeed {
 
         val legacyRawText = legacySeedSource.readText()
         val actualSeedSha256 = sha256LfUtf8(legacyRawText)
@@ -225,7 +242,9 @@ internal fun normalizedDuplicateCount(benefits: List<BenefitEntity>): Int = bene
 
 private fun normalizeIdentityPart(value: String): String = value
     .trim()
-    .replace(Regex("\\s+"), "")
+    .replace(WHITESPACE_REGEX, "")
     .lowercase(Locale.ROOT)
+
+private val WHITESPACE_REGEX = Regex("\\s+")
 
 class BundledSeedValidationException(message: String) : IllegalArgumentException(message)

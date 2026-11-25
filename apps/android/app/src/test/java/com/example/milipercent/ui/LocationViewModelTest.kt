@@ -125,7 +125,7 @@ class LocationViewModelTest {
 
     private fun viewModel(benefits: List<Benefit> = emptyList()) = MiliSpotViewModel(
         FakeBenefitRepository(benefits), FakeAccountRepository(), FakeFavoriteRepository(), FakeAdminRepository(),
-        FakeSeedInstaller(), FakeSessionStorage(), mmaConfigured = false,
+        FakeSeedInstaller(), FakeSessionStorage(), mmaConfigured = false, computeDispatcher = dispatcher,
     )
 
     private fun benefit(id: String, name: String, category: String, lat: Double, lng: Double) = Benefit(

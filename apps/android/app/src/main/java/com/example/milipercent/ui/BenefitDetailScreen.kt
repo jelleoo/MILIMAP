@@ -234,7 +234,7 @@ fun BenefitDetailScreen(
                 if (dialablePhone != null) {
                     TextButton(
                         onClick = {
-                            val intent = Intent(Intent.ACTION_DIAL, Uri.parse("tel:$dialablePhone"))
+                            val intent = Intent(Intent.ACTION_DIAL, Uri.fromParts("tel", dialablePhone, null))
                             runCatching { context.startActivity(intent) }
                         },
                         modifier = Modifier.weight(1f),

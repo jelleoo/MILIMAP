@@ -54,6 +54,7 @@ class MiliSpotViewModel(
     private var sessionJob: kotlinx.coroutines.Job? = null
     private var favoriteJob: kotlinx.coroutines.Job? = null
     private var adminBenefitsJob: kotlinx.coroutines.Job? = null
+    private var refreshJob: kotlinx.coroutines.Job? = null
     private var locationTrackingJob: kotlinx.coroutines.Job? = null
     private var locationFocusState = LocationFocusState()
     private var indexedBenefits: List<SearchableBenefit> = emptyList()
@@ -66,8 +67,8 @@ class MiliSpotViewModel(
     }
 
     fun refresh() {
-        if (_uiState.value.isRefreshing) return
-        viewModelScope.launch {
+        if (refreshJob?.isActive == true) return
+        refreshJob = viewModelScope.launch {
             _uiState.update { it.copy(isRefreshing = true, refreshFailed = false) }
             try {
                 benefitRepository.refreshBenefits()
@@ -337,7 +338,12 @@ class MiliSpotViewModel(
             return
         }
         viewModelScope.launch {
-            favoriteRepository.toggle(user.id, benefitId)
+            runCatching { favoriteRepository.toggle(user.id, benefitId) }
+                .onFailure { exception ->
+                    if (exception is CancellationException) throw exception
+                    runCatching { Log.w(TAG, "Favorite toggle failed: ${exception.javaClass.simpleName}") }
+                    showMessage("찜 상태를 변경하지 못했습니다.")
+                }
         }
     }
 
@@ -365,17 +371,16 @@ class MiliSpotViewModel(
         _uiState.update { it.copy(destination = AppDestination.DISCOVER, transientMessage = "로그아웃되었습니다.") }
     }
 
-    fun saveAdmin(input: AdminBenefitInput, existingId: String? = null) {
-        if (!requireAdmin()) return
-        viewModelScope.launch {
-            runCatching {
-                if (existingId == null) adminRepository.create(input) else adminRepository.update(existingId, input)
-            }.onSuccess {
-                showMessage("혜택 정보를 저장했습니다.")
-            }.onFailure { error ->
-                showMessage(error.message ?: "혜택 저장에 실패했습니다.")
-            }
-        }
+    suspend fun saveAdmin(input: AdminBenefitInput, existingId: String? = null): Boolean {
+        if (!requireAdmin()) return false
+        return runCatching {
+            if (existingId == null) adminRepository.create(input) else adminRepository.update(existingId, input)
+        }.onSuccess {
+            showMessage("혜택 정보를 저장했습니다.")
+        }.onFailure { error ->
+            if (error is CancellationException) throw error
+            showMessage(error.message ?: "혜택 저장에 실패했습니다.")
+        }.isSuccess
     }
 
     fun endAdminBenefit(benefitId: String) {
@@ -606,6 +611,7 @@ class MiliSpotViewModel(
         favoriteJob = viewModelScope.launch {
             favoriteRepository.observeIds(user.id).collectLatest { favoriteIds ->
                 _uiState.update { current ->
+                    if (current.user?.id != user.id) return@update current
                     current.copy(
                         user = user,
                         favoriteIds = favoriteIds,

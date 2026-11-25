@@ -50,7 +50,7 @@ class PasswordHasherTest {
     }
 
     @Test
-    fun `legacy single round sha256 hash remains verifiable for backward compatibility`() {
+    fun `legacy single round sha256 hash remains verifiable and signals upgrade need`() {
         val saltHex = "00112233445566778899aabbccddeeff"
         val saltBytes = saltHex.chunked(2).map { it.toInt(16).toByte() }.toByteArray()
         val legacyHashHex = MessageDigest.getInstance("SHA-256")
@@ -59,7 +59,11 @@ class PasswordHasherTest {
         val hasher = PasswordHasher(SecureRandom())
 
         assertTrue(hasher.verify("legacyPass1", saltHex, legacyHashHex))
+        assertTrue(hasher.needsUpgrade(legacyHashHex))
         assertFalse(hasher.verify("wrongPass1", saltHex, legacyHashHex))
+
+        val modernDigest = hasher.create("legacyPass1")
+        assertFalse(hasher.needsUpgrade(modernDigest.hashHex))
     }
 
     @Test

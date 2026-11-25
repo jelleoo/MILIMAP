@@ -76,7 +76,7 @@ class AccountAdminScreenTest {
                 AdminScreen(
                     user = LocalUser(2, "user@test.com", "사용자", false),
                     benefits = listOf(item.benefit),
-                    onSave = { _, _ -> },
+                    onSave = { _, _ -> true },
                     onEnd = {},
                     onDeleteManual = {},
                 )

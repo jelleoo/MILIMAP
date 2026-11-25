@@ -30,6 +30,9 @@ class PasswordHasher(
         )
     }
 
+    fun needsUpgrade(expectedHashHex: String): Boolean =
+        !expectedHashHex.startsWith("$PBKDF2_PREFIX\$")
+
     fun verify(password: String, saltHex: String, expectedHashHex: String): Boolean = runCatching {
         val salt = saltHex.hexToBytes()
         if (salt.isEmpty() || expectedHashHex.isBlank()) return false

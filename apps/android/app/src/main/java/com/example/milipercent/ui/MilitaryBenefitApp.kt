@@ -82,7 +82,7 @@ fun MilitaryBenefitApp(
     onRegister: suspend (String, String, String) -> Result<com.example.milipercent.model.LocalUser> = { _, _, _ -> Result.failure(UnsupportedOperationException()) },
     onLogin: suspend (String, String) -> Result<com.example.milipercent.model.LocalUser> = { _, _ -> Result.failure(UnsupportedOperationException()) },
     onLogout: () -> Unit = {},
-    onAdminSave: (AdminBenefitInput, String?) -> Unit = { _, _ -> },
+    onAdminSave: suspend (AdminBenefitInput, String?) -> Boolean = { _, _ -> false },
     onAdminEnd: (String) -> Unit = {},
     onAdminDelete: (String) -> Unit = {},
     onClearSearch: () -> Unit = {},

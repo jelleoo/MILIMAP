@@ -220,6 +220,7 @@ private fun DiscoverScreen(
     var showFilters by remember { mutableStateOf(false) }
     val focusManager = LocalFocusManager.current
     val categories = remember(state.benefits) { orderedCategories(state.benefits) }
+    val mapBenefits = remember(state.showMapMarkers, state.visibleBenefits) { state.mapBenefits }
 
     val handleSearch = {
         focusManager.clearFocus()
@@ -259,7 +260,7 @@ private fun DiscoverScreen(
 
     Box(modifier.fillMaxSize()) {
         BenefitMap(
-            benefits = state.mapBenefits,
+            benefits = mapBenefits,
             center = state.center,
             currentLocation = state.currentLocation,
             cameraRequestId = state.cameraRequestId,
@@ -884,8 +885,10 @@ private fun LocationVerificationSummary(
     benefits: List<BenefitListItem>,
     onBenefitSelected: (String) -> Unit,
 ) {
-    val unlocatedBenefits = benefits.filter { item ->
-        item.benefit.latitude == null || item.benefit.longitude == null
+    val unlocatedBenefits = remember(benefits) {
+        benefits.filter { item ->
+            item.benefit.latitude == null || item.benefit.longitude == null
+        }
     }
     if (unlocatedBenefits.isEmpty()) return
 

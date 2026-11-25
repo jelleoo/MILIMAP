@@ -52,7 +52,7 @@ class MiliSpotViewModelTest {
         val seed = FakeSeedInstaller()
         val repository = FakeBenefitRepository(listOf(benefit("seed-1")))
 
-        val viewModel = MiliSpotViewModel(repository, FakeAccountRepository(), FakeFavoriteRepository(), FakeAdminRepository(), seed, FakeSessionStorage(), mmaConfigured = false)
+        val viewModel = MiliSpotViewModel(repository, FakeAccountRepository(), FakeFavoriteRepository(), FakeAdminRepository(), seed, FakeSessionStorage(), mmaConfigured = false, computeDispatcher = dispatcher)
         advanceUntilIdle()
 
         assertEquals(1, seed.calls)
@@ -65,7 +65,7 @@ class MiliSpotViewModelTest {
         val session = FakeSessionStorage(42)
         val repository = FakeBenefitRepository(listOf(benefit("cached")), refreshError = IllegalStateException("offline"))
 
-        val viewModel = MiliSpotViewModel(repository, FakeAccountRepository(), FakeFavoriteRepository(), FakeAdminRepository(), FakeSeedInstaller(), session, mmaConfigured = true)
+        val viewModel = MiliSpotViewModel(repository, FakeAccountRepository(), FakeFavoriteRepository(), FakeAdminRepository(), FakeSeedInstaller(), session, mmaConfigured = true, computeDispatcher = dispatcher)
         advanceUntilIdle()
 
         assertEquals(null, session.userId())
@@ -85,6 +85,7 @@ class MiliSpotViewModelTest {
             FakeSeedInstaller(),
             FakeSessionStorage(),
             mmaConfigured = false,
+            computeDispatcher = dispatcher,
         )
         advanceUntilIdle()
 
@@ -115,6 +116,7 @@ class MiliSpotViewModelTest {
             FakeSeedInstaller(),
             FakeSessionStorage(),
             mmaConfigured = false,
+            computeDispatcher = dispatcher,
         )
         advanceUntilIdle()
 
@@ -146,6 +148,7 @@ class MiliSpotViewModelTest {
             FakeSeedInstaller(),
             FakeSessionStorage(),
             mmaConfigured = false,
+            computeDispatcher = dispatcher,
         )
         advanceUntilIdle()
 
@@ -169,6 +172,7 @@ class MiliSpotViewModelTest {
             FakeSeedInstaller(),
             FakeSessionStorage(),
             mmaConfigured = false,
+            computeDispatcher = dispatcher,
         )
         advanceUntilIdle()
 
@@ -194,6 +198,7 @@ class MiliSpotViewModelTest {
             FakeSeedInstaller(),
             FakeSessionStorage(),
             mmaConfigured = false,
+            computeDispatcher = dispatcher,
         )
         advanceUntilIdle()
 
@@ -226,6 +231,7 @@ class MiliSpotViewModelTest {
             FakeSeedInstaller(),
             FakeSessionStorage(1L),
             mmaConfigured = false,
+            computeDispatcher = dispatcher,
         )
         advanceUntilIdle()
 
@@ -251,6 +257,7 @@ class MiliSpotViewModelTest {
             FakeSeedInstaller(),
             FakeSessionStorage(),
             mmaConfigured = false,
+            computeDispatcher = dispatcher,
         )
         advanceUntilIdle()
 
@@ -279,6 +286,7 @@ class MiliSpotViewModelTest {
             mmaConfigured = true,
             syncPreferences = syncPrefs,
             currentTimeMillis = { now },
+            computeDispatcher = dispatcher,
         )
         advanceUntilIdle()
 
@@ -304,6 +312,7 @@ class MiliSpotViewModelTest {
             mmaConfigured = true,
             syncPreferences = syncPrefs,
             currentTimeMillis = { now },
+            computeDispatcher = dispatcher,
         )
         advanceUntilIdle()
 
@@ -329,6 +338,7 @@ class MiliSpotViewModelTest {
             mmaConfigured = true,
             syncPreferences = syncPrefs,
             currentTimeMillis = { now },
+            computeDispatcher = dispatcher,
         )
         advanceUntilIdle()
         assertEquals(0, repository.refreshCalls)
@@ -357,6 +367,7 @@ class MiliSpotViewModelTest {
             mmaConfigured = true,
             syncPreferences = syncPrefs,
             currentTimeMillis = { 1_763_900_000_000L },
+            computeDispatcher = dispatcher,
         )
         advanceUntilIdle()
 
@@ -374,6 +385,7 @@ class MiliSpotViewModelTest {
             mmaConfigured = true,
             syncPreferences = syncPrefs,
             currentTimeMillis = { 1_763_900_060_000L },
+            computeDispatcher = dispatcher,
         )
         advanceUntilIdle()
 
@@ -397,6 +409,7 @@ class MiliSpotViewModelTest {
             FakeSeedInstaller(),
             session,
             mmaConfigured = false,
+            computeDispatcher = dispatcher,
         )
         advanceUntilIdle()
         assertEquals(user1, viewModel.uiState.value.user)
@@ -431,6 +444,7 @@ class MiliSpotViewModelTest {
             FakeSeedInstaller(),
             session,
             mmaConfigured = false,
+            computeDispatcher = dispatcher,
         )
         advanceUntilIdle()
         assertEquals(user1, viewModel.uiState.value.user)
@@ -448,7 +462,7 @@ class MiliSpotViewModelTest {
     }
 
     @Test
-    fun adminUserObservesAllBenefitsIncludingEndedAndLogoutClearsAdminBenefits() = runTest(dispatcher.scheduler) {
+    fun adminUserObservesAllBenefitsIncludingEndedLazilyAndLogoutClearsAdminBenefits() = runTest(dispatcher.scheduler) {
         val activeItem = benefit("manual-active", name = "활성 수동 가게")
         val endedItem = Benefit(
             "manual-ended", "종료 수동 가게", "서울", 37.5, 126.9, "음식", "할인", "설명", null, null, null, null,
@@ -465,10 +479,15 @@ class MiliSpotViewModelTest {
             FakeSeedInstaller(),
             FakeSessionStorage(1L),
             mmaConfigured = false,
+            computeDispatcher = dispatcher,
         )
         advanceUntilIdle()
 
         assertEquals(listOf("manual-active"), viewModel.uiState.value.benefits.map(Benefit::id))
+        assertTrue(viewModel.uiState.value.adminBenefits.isEmpty())
+
+        viewModel.navigate(AppDestination.ADMIN)
+        advanceUntilIdle()
         assertEquals(listOf("manual-active", "manual-ended"), viewModel.uiState.value.adminBenefits.map(Benefit::id))
 
         viewModel.logout()

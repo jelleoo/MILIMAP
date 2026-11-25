@@ -178,7 +178,7 @@ internal fun validateRequired(value: String, label: String) {
 
 internal fun isValidDate(value: String): Boolean {
     if (!DATE_PATTERN.matches(value)) return false
-    val parser = SimpleDateFormat("yyyy-MM-dd", Locale.ROOT).apply { isLenient = false }
+    val parser = requireNotNull(DATE_FORMATTER.get())
     val position = ParsePosition(0)
     return parser.parse(value, position) != null && position.index == value.length
 }
@@ -191,3 +191,6 @@ internal fun isHttpUrl(value: String): Boolean = runCatching {
 internal fun String?.cleanOptional(): String? = this?.trim()?.takeIf { it.isNotEmpty() }
 
 private val DATE_PATTERN = Regex("\\d{4}-\\d{2}-\\d{2}")
+private val DATE_FORMATTER: ThreadLocal<SimpleDateFormat> = ThreadLocal.withInitial {
+    SimpleDateFormat("yyyy-MM-dd", Locale.ROOT).apply { isLenient = false }
+}

@@ -277,6 +277,47 @@ class BundledSeedSynchronizerUnitTest {
     }
 
     @Test
+    fun `이미 설치된 버전이 최신이면 시드 본문을 읽거나 쓰기 트랜잭션을 열지 않고 건너뛴다`() {
+        var manifestReads = 0
+        var legacyReads = 0
+        var manualReads = 0
+        val legacy = legacySeedJson(
+            legacyItem(id = "seed-1", name = "업체1", address = "서울특별시 마포구 테스트로 1", latitude = null, longitude = null),
+        )
+        val manual = """{"items":[]}"""
+        val manifest = buildManifestJson(
+            seedVersion = 5,
+            legacyText = legacy,
+            manualText = manual,
+            totalCount = 1,
+            exactPinCount = 0,
+            unconfirmedCoordinateCount = 1,
+            manualSeedCount = 0,
+        )
+        val store = FakeBundledSeedStore(
+            initialBenefits = listOf(entity("seed-1", BenefitSourceType.LOCAL_GOV, sourceRowNumber = null)),
+            initialStates = listOf(SeedStateEntity(name = BUNDLED_SEED_NAME, version = 5, installedAt = 10L)),
+        )
+
+        val result = runBlocking {
+            BundledSeedSynchronizer(
+                store = store,
+                manifestSource = SeedJsonSource { manifestReads++; manifest },
+                legacySeedSource = SeedJsonSource { legacyReads++; legacy },
+                manualSeedSource = SeedJsonSource { manualReads++; manual },
+                currentTimeMillis = { 500L },
+            ).synchronizeIfNeeded()
+        }
+
+        assertFalse(result.installed)
+        assertEquals(1, result.storedCount)
+        assertEquals(1, manifestReads)
+        assertEquals(0, legacyReads)
+        assertEquals(0, manualReads)
+        assertEquals(0, store.transactionCount)
+    }
+
+    @Test
     fun `시드 읽기와 무결성 검증은 주입된 ioDispatcher에서 실행된다`() {
         val observedThreads = mutableSetOf<String>()
         val legacy = legacySeedJson(
@@ -422,6 +463,10 @@ class BundledSeedSynchronizerUnitTest {
         fun seedStateVersion(name: String): Int? = seedStates[name]?.version
 
         fun findById(id: String): BenefitEntity? = benefits[id]
+
+        override suspend fun seedVersion(name: String): Int? = seedStates[name]?.version
+
+        override suspend fun countAllBenefits(): Int = benefits.size
 
         override suspend fun <T> inTransaction(block: suspend BundledSeedTransactionScope.() -> T): T {
             transactionCount += 1

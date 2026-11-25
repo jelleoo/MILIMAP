@@ -22,12 +22,15 @@ import com.example.milipercent.model.GeoBounds
 import com.example.milipercent.model.GeoPoint
 import com.example.milipercent.model.LocalUser
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 class MiliSpotViewModel(
     private val benefitRepository: BenefitDataRepository,
@@ -40,6 +43,7 @@ class MiliSpotViewModel(
     private val syncPreferences: BenefitSyncPreferenceStore = InMemoryBenefitSyncPreferences(),
     private val currentTimeMillis: () -> Long = System::currentTimeMillis,
     private val autoRefreshCooldownMillis: Long = BenefitSyncPolicy.DEFAULT_AUTO_REFRESH_COOLDOWN_MILLIS,
+    private val computeDispatcher: CoroutineDispatcher = Dispatchers.Default,
 ) : ViewModel() {
     private val _uiState = MutableStateFlow(
         MiliSpotUiState(
@@ -102,6 +106,7 @@ class MiliSpotViewModel(
                 current.copy(destination = destination)
             }
         }
+        syncAdminObservation()
     }
 
     fun selectCategory(category: String) {
@@ -450,8 +455,11 @@ class MiliSpotViewModel(
     private fun observeBenefits() {
         viewModelScope.launch {
             benefitRepository.observeDomainBenefits().collectLatest { benefits ->
-                indexedBenefits = benefits.toSearchableBenefits()
-                benefitsById = benefits.associateBy(Benefit::id)
+                val (nextIndexed, nextById) = withContext(computeDispatcher) {
+                    benefits.toSearchableBenefits() to benefits.associateBy(Benefit::id)
+                }
+                indexedBenefits = nextIndexed
+                benefitsById = nextById
                 publishUpdate(recomputeSaved = true) { state ->
                     state.copy(benefits = benefits, isLoading = false)
                 }
@@ -611,12 +619,25 @@ class MiliSpotViewModel(
                 }
             }
         }
-        if (user.isAdmin) {
-            adminBenefitsJob = viewModelScope.launch {
-                adminRepository.observeAll().collectLatest { allBenefits ->
-                    _uiState.update { current ->
-                        current.copy(adminBenefits = allBenefits)
-                    }
+        syncAdminObservation()
+    }
+
+    private fun syncAdminObservation() {
+        val state = _uiState.value
+        val shouldObserve = state.user?.isAdmin == true && state.destination == AppDestination.ADMIN
+        if (!shouldObserve) {
+            adminBenefitsJob?.cancel()
+            adminBenefitsJob = null
+            if (state.adminBenefits.isNotEmpty() && state.user?.isAdmin != true) {
+                _uiState.update { it.copy(adminBenefits = emptyList()) }
+            }
+            return
+        }
+        if (adminBenefitsJob?.isActive == true) return
+        adminBenefitsJob = viewModelScope.launch {
+            adminRepository.observeAll().collectLatest { allBenefits ->
+                _uiState.update { current ->
+                    if (current.user?.isAdmin == true) current.copy(adminBenefits = allBenefits) else current
                 }
             }
         }
@@ -643,6 +664,7 @@ class MiliSpotViewModel(
         private val syncPreferences: BenefitSyncPreferenceStore = InMemoryBenefitSyncPreferences(),
         private val currentTimeMillis: () -> Long = System::currentTimeMillis,
         private val autoRefreshCooldownMillis: Long = BenefitSyncPolicy.DEFAULT_AUTO_REFRESH_COOLDOWN_MILLIS,
+        private val computeDispatcher: CoroutineDispatcher = Dispatchers.Default,
     ) : ViewModelProvider.Factory {
         @Suppress("UNCHECKED_CAST")
         override fun <T : ViewModel> create(modelClass: Class<T>): T {
@@ -658,6 +680,7 @@ class MiliSpotViewModel(
                 syncPreferences,
                 currentTimeMillis,
                 autoRefreshCooldownMillis,
+                computeDispatcher,
             ) as T
         }
     }

@@ -1,5 +1,8 @@
 package com.example.milipercent.data.seed
 
+import java.nio.ByteBuffer
+import java.nio.CharBuffer
+import java.nio.charset.CodingErrorAction
 import java.security.MessageDigest
 import java.util.Locale
 import kotlinx.serialization.Serializable
@@ -96,11 +99,75 @@ class BundledSeedManifestLoader(
 }
 
 internal fun sha256LfUtf8(text: String): String {
-    val stripped = text.removePrefix("\uFEFF")
-    val normalized = stripped.replace("\r\n", "\n").replace("\r", "\n")
-    val digest = MessageDigest.getInstance("SHA-256").digest(normalized.toByteArray(Charsets.UTF_8))
-    return digest.joinToString(separator = "") { byte ->
+    val digest = MessageDigest.getInstance("SHA-256")
+    val startIndex = if (text.startsWith("\uFEFF")) 1 else 0
+    val charArray = CharArray(8192)
+    val charBuffer = CharBuffer.wrap(charArray)
+    val byteArray = ByteArray(8192 * 3)
+    val byteBuffer = ByteBuffer.wrap(byteArray)
+    val encoder = Charsets.UTF_8.newEncoder()
+        .onMalformedInput(CodingErrorAction.REPLACE)
+        .onUnmappableCharacter(CodingErrorAction.REPLACE)
+
+    var bufferedChars = 0
+    var i = startIndex
+    val length = text.length
+    while (i < length) {
+        val ch = text[i]
+        val normalized = if (ch == '\r') {
+            if (i + 1 < length && text[i + 1] == '\n') {
+                i += 1
+            }
+            '\n'
+        } else {
+            ch
+        }
+        charArray[bufferedChars++] = normalized
+        i += 1
+        if (bufferedChars == charArray.size) {
+            flushUtf8Chunk(charBuffer, byteBuffer, byteArray, bufferedChars, endOfInput = false, encoder, digest)
+            bufferedChars = 0
+        }
+    }
+    flushUtf8Chunk(charBuffer, byteBuffer, byteArray, bufferedChars, endOfInput = true, encoder, digest)
+
+    return digest.digest().joinToString(separator = "") { byte ->
         "%02x".format(Locale.ROOT, byte.toInt() and 0xFF)
+    }
+}
+
+private fun flushUtf8Chunk(
+    charBuffer: CharBuffer,
+    byteBuffer: ByteBuffer,
+    byteArray: ByteArray,
+    charCount: Int,
+    endOfInput: Boolean,
+    encoder: java.nio.charset.CharsetEncoder,
+    digest: MessageDigest,
+) {
+    charBuffer.limit(charCount)
+    charBuffer.position(0)
+    while (true) {
+        byteBuffer.clear()
+        val result = encoder.encode(charBuffer, byteBuffer, endOfInput)
+        val written = byteBuffer.position()
+        if (written > 0) {
+            digest.update(byteArray, 0, written)
+        }
+        if (result.isOverflow) continue
+        break
+    }
+    if (endOfInput) {
+        while (true) {
+            byteBuffer.clear()
+            val flushResult = encoder.flush(byteBuffer)
+            val written = byteBuffer.position()
+            if (written > 0) {
+                digest.update(byteArray, 0, written)
+            }
+            if (flushResult.isOverflow) continue
+            break
+        }
     }
 }
 

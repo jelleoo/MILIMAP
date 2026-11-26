@@ -53,3 +53,53 @@ jobs:
           path: ${{ runner.temp }}/weekly-drift-report
           if-no-files-found: warn
           retention-days: 30
+
+      - name: Check Cloudflare Pages secrets for dashboard refresh
+        id: cf
+        if: success()
+        shell: bash
+        env:
+          CF_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CF_ACCOUNT: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          DRIFT_SUMMARY: ${{ runner.temp }}/weekly-drift-report/weekly-drift-summary.json
+        run: |
+          if [ -n "$CF_TOKEN" ] && [ -n "$CF_ACCOUNT" ] && [ -f "$DRIFT_SUMMARY" ]; then
+            echo "deploy=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "deploy=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Build ops-snapshot.json with weekly drift
+        if: success() && steps.cf.outputs.deploy == 'true'
+        shell: pwsh
+        env:
+          DRIFT_SUMMARY: ${{ runner.temp }}/weekly-drift-report/weekly-drift-summary.json
+        run: |
+          $ErrorActionPreference = 'Stop'
+          & tools/data/build-ops-dashboard-snapshot.ps1 `
+            -WeeklyDriftSummaryJson $env:DRIFT_SUMMARY `
+            -OutputJson 'apps/ops-web/public/ops-snapshot.json' | Out-Null
+
+      - name: Set up Node.js 24 for ops-web
+        if: success() && steps.cf.outputs.deploy == 'true'
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: apps/ops-web/package-lock.json
+
+      - name: Build ops-web bundle
+        if: success() && steps.cf.outputs.deploy == 'true'
+        working-directory: apps/ops-web
+        run: |
+          npm ci
+          npm run build
+
+      - name: Publish refreshed dashboard to Cloudflare Pages
+        if: success() && steps.cf.outputs.deploy == 'true'
+        uses: cloudflare/wrangler-action@953926a2e2182532811c01a25e53647d93bf07c0 # v4.1.3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          workingDirectory: apps/ops-web
+          command: pages deploy dist --project-name=milimap-ops-web --branch=main --commit-dirty=true

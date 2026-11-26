@@ -37,9 +37,9 @@ class ProductionSeedAssetTest {
         assertEquals(manifest.unconfirmedCoordinateCount, benefits.count { it.latitude == null && it.longitude == null })
         assertEquals(manifest.seedSha256, sha256LfUtf8(legacyRawText))
         assertEquals(manifest.manualSeedSha256, sha256LfUtf8(manualRawText))
-        assertEquals(1018, benefits.size)
-        assertEquals(998, benefits.count { it.latitude != null && it.longitude != null })
-        assertEquals(20, benefits.count { it.latitude == null && it.longitude == null })
+        assertEquals(1187, benefits.size)
+        assertEquals(1170, benefits.count { it.latitude != null && it.longitude != null })
+        assertEquals(17, benefits.count { it.latitude == null && it.longitude == null })
         assertTrue(benefits.all { it.sourceLabel.endsWith("최신 확인") })
     }
 }

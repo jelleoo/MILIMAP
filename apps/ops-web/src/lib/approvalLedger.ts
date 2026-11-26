@@ -286,7 +286,7 @@ export function buildValidateLedgerCommand(ledgerFilePath: string = 'C:/path/to/
     '& tools/data/validate-benefit-release-approvals.ps1 `',
     '  -HistoryRoot "C:/path/to/history-store" `',
     '  -CanonicalCsvPath "data/canonical/capital-area-military-benefits.csv" `',
-    '  -CoordinateReviewCsvPath "data/canonical/reports/poi-coordinate-review-candidates-20261123-v14.csv" `',
+    '  -CoordinateReviewCsvPath "data/canonical/reports/poi-coordinate-review-candidates-20261126-v15.csv" `',
     `  -ApprovalLedgerJsonPath "${ledgerFilePath}"`,
   ].join('\n');
 }

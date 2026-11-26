@@ -41,16 +41,16 @@ function Get-ReleaseCutFileHash {
 $repoRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../..'))
 $committedManifest = Get-Content -Raw -Encoding utf8 -LiteralPath (Join-Path $repoRoot 'apps/android/app/src/main/assets/benefits.seed.manifest.json') | ConvertFrom-Json
 
-# 1. Default DryRun verification against committed v14 repository assets
+# 1. Default DryRun verification against committed v15 repository assets
 $dryRun = Invoke-BenefitSeedReleaseCut
 Assert-ReleaseCutEqual $dryRun.Mode 'DRY_RUN' 'Default execution mode must be DRY_RUN'
-Assert-ReleaseCutEqual $dryRun.SeedVersion 14 'SeedVersion should default to committed manifest seedVersion 14'
-Assert-ReleaseCutEqual $dryRun.CanonicalCount 1137 'Canonical row count must match 1137'
-Assert-ReleaseCutEqual $dryRun.CandidateCount 1018 'Candidate count must match 1018'
-Assert-ReleaseCutEqual $dryRun.TotalCount 1018 'Total release seed count must match 1018'
-Assert-ReleaseCutEqual $dryRun.ExactPinCount 998 'Exact pin count must match 998'
-Assert-ReleaseCutEqual $dryRun.UnconfirmedCoordinateCount 20 'Unconfirmed coordinate count must match 20'
-Assert-ReleaseCutEqual $dryRun.PublicEvidenceCount 757 'PUBLIC_EVIDENCE count must match 757'
+Assert-ReleaseCutEqual $dryRun.SeedVersion 15 'SeedVersion should default to committed manifest seedVersion 15'
+Assert-ReleaseCutEqual $dryRun.CanonicalCount 1298 'Canonical row count must match 1298'
+Assert-ReleaseCutEqual $dryRun.CandidateCount 1187 'Candidate count must match 1187'
+Assert-ReleaseCutEqual $dryRun.TotalCount 1187 'Total release seed count must match 1187'
+Assert-ReleaseCutEqual $dryRun.ExactPinCount 1170 'Exact pin count must match 1170'
+Assert-ReleaseCutEqual $dryRun.UnconfirmedCoordinateCount 17 'Unconfirmed coordinate count must match 17'
+Assert-ReleaseCutEqual $dryRun.PublicEvidenceCount 926 'PUBLIC_EVIDENCE count must match 926'
 Assert-ReleaseCutEqual $dryRun.LocalGovCount 261 'LOCAL_GOV count must match 261'
 Assert-ReleaseCutEqual $dryRun.SeedSha256 ([string]$committedManifest.seedSha256) 'DryRun seedSha256 must deterministically match committed manifest'
 
@@ -260,7 +260,7 @@ try {
 
 $cli = & (Join-Path $PSScriptRoot 'invoke-benefit-seed-release-cut.ps1')
 Assert-ReleaseCutEqual $cli.Mode 'DRY_RUN' 'Bare script execution must report DRY_RUN'
-Assert-ReleaseCutEqual $cli.SeedVersion 14 'Bare script execution must read the bundled manifest version'
+Assert-ReleaseCutEqual $cli.SeedVersion 15 'Bare script execution must read the bundled manifest version'
 Assert-ReleaseCutEqual $cli.SeedSha256 $dryRun.SeedSha256 'Bare script execution must stage the same seed as library mode'
 
 Write-Output 'PASS: benefit seed release cut tests'

@@ -168,8 +168,58 @@ InstitutionCode,BusinessName,RoadAddress,Phone,Category,RegionalOffice
     Assert-OpsSnapshotTrue ($null -ne $parsedBacklog.CanonicalBacklog) 'CanonicalBacklog should be populated'
     $sum = $parsedBacklog.CanonicalBacklog.Summary
     Assert-OpsSnapshotEqual ([int]$sum.TotalBacklogCount) ([int]$sum.UnpinnedInAppCount + [int]$sum.HeldCount) 'TotalBacklogCount must equal Unpinned + Held'
-    Assert-OpsSnapshotEqual ([int]$sum.CanonicalTotalCount) ([int]$sum.SeedActiveCount + [int]$sum.HeldCount) 'CanonicalTotalCount must equal SeedActive + Held'
+    Assert-OpsSnapshotEqual ([int]$sum.CanonicalTotalCount) ([int]$sum.SeedMatchedCount + [int]$sum.HeldCount) 'CanonicalTotalCount must equal SeedMatched + Held'
     Assert-OpsSnapshotTrue ([int]$parsedBacklog.CanonicalBacklog.Items.Count -eq [int]$sum.TotalBacklogCount) 'Backlog Items length must match Summary.TotalBacklogCount'
+    $brokenPipeInReal = @($parsedBacklog.CanonicalBacklog.Items | ForEach-Object { $_.sourceUrls } | Where-Object { $_ -match '\|' })
+    Assert-OpsSnapshotEqual $brokenPipeInReal.Count 0 'Real backlog sourceUrls must not contain pipe characters'
+
+    # 2c. Regression tests: whitespace/province normalization, canonical/seed drift mismatch, and pipe URL splitting
+    Assert-OpsSnapshotTrue (-not (Test-OpsSafeHttpUrl 'https://a.example | https://b.example')) 'Test-OpsSafeHttpUrl must reject pipe characters'
+    Assert-OpsSnapshotTrue (-not (Test-OpsSafeHttpUrl 'https://a.example/foo bar')) 'Test-OpsSafeHttpUrl must reject whitespace'
+
+    $normCsvPath = Join-Path $tempRoot 'norm-canonical.csv'
+    $normSeedPath = Join-Path $tempRoot 'norm-seed.json'
+    $normOut = Join-Path $tempRoot 'norm-out.json'
+    @(
+        [pscustomobject][ordered]@{
+            businessId='biz-norm-1'; 업종명='음식'; 업소명='테스트   식당'; 시도='서울특별시'; 시군구='강남구'
+            소재지도로명주소='서울특별시  강남구   테스트로 1'; 소재지지번주소=''; 위도=''; 경도=''; 좌표출처=''
+            좌표출처URL=''; 좌표검증상태='미확인'; 할인정보='10%'; 적용대상='현역'; 이용조건='없음'; 인증방법='신분증'
+            업소전화번호=''; 출처유형='지자체 공식 자료'; 출처URL='https://c.example/row'; 최근확인일='2026-11-26'
+            혜택상태='이용 가능'; 수집자='test'; 비고=''
+        }
+    ) | Export-Csv -LiteralPath $normCsvPath -NoTypeInformation -Encoding utf8
+    [IO.File]::WriteAllText($normSeedPath, (@(
+        [pscustomobject][ordered]@{
+            id='seed-norm-1'; name='테스트 식당'; address='서울 강남구 테스트로 1'; latitude=$null; longitude=$null
+            category='음식'; benefitDescription='10%'; sourceType='LOCAL_GOV'
+            sourceUrl='https://a.example/page | https://b.example/list'; lastVerifiedAt='2026-11-26'; status='ACTIVE'; district='강남구'
+        }
+    ) | ConvertTo-Json -Depth 5), [Text.UTF8Encoding]::new($false))
+    [void](Build-OpsDashboardSnapshot -SeedManifestJson $realManifestPath -CanonicalCsv $normCsvPath -BundledSeedJson $normSeedPath -OutputJson $normOut)
+    $parsedNorm = (Get-Content -Raw -Encoding utf8 -LiteralPath $normOut) | ConvertFrom-Json
+    Assert-OpsSnapshotEqual ([int]$parsedNorm.CanonicalBacklog.Summary.SeedMatchedCount) 1 'Normalized spaces and province prefix should match canonical to seed'
+    Assert-OpsSnapshotEqual ([int]$parsedNorm.CanonicalBacklog.Summary.HeldCount) 0 'Matched normalized row must not be counted as held'
+    Assert-OpsSnapshotEqual ([int]$parsedNorm.CanonicalBacklog.Summary.CanonicalTotalCount) ([int]$parsedNorm.CanonicalBacklog.Summary.SeedMatchedCount + [int]$parsedNorm.CanonicalBacklog.Summary.HeldCount) 'Invariant Canonical == SeedMatched + Held must hold'
+    Assert-OpsSnapshotEqual $parsedNorm.CanonicalBacklog.Items[0].sourceUrls.Count 3 'Pipe-separated seed sourceUrl plus canonical 출처URL should produce 3 clean URLs'
+    $brokenPipeNorm = @($parsedNorm.CanonicalBacklog.Items[0].sourceUrls | Where-Object { $_ -match '\|' })
+    Assert-OpsSnapshotEqual $brokenPipeNorm.Count 0 'Fixture sourceUrls must contain no pipe characters'
+
+    $mismatchSeedPath = Join-Path $tempRoot 'mismatch-seed.json'
+    $mismatchOut = Join-Path $tempRoot 'mismatch-out.json'
+    [IO.File]::WriteAllText($mismatchSeedPath, (@(
+        [pscustomobject][ordered]@{
+            id='seed-mismatch-1'; name='테스트 식당'; address='경기도 파주시 변경된주소 99'; latitude=37.76; longitude=126.78
+            category='음식'; benefitDescription='10%'; sourceType='LOCAL_GOV'
+            sourceUrl='https://a.example/page'; lastVerifiedAt='2026-11-26'; status='ACTIVE'; district='파주시'
+        }
+    ) | ConvertTo-Json -Depth 5), [Text.UTF8Encoding]::new($false))
+    [void](Build-OpsDashboardSnapshot -SeedManifestJson $realManifestPath -CanonicalCsv $normCsvPath -BundledSeedJson $mismatchSeedPath -OutputJson $mismatchOut)
+    $parsedMismatch = (Get-Content -Raw -Encoding utf8 -LiteralPath $mismatchOut) | ConvertFrom-Json
+    Assert-OpsSnapshotEqual ([int]$parsedMismatch.CanonicalBacklog.Summary.SeedActiveCount) 1 'SeedActiveCount should reflect bundled seed count'
+    Assert-OpsSnapshotEqual ([int]$parsedMismatch.CanonicalBacklog.Summary.SeedMatchedCount) 0 'Divergent canonical address should report SeedMatchedCount=0'
+    Assert-OpsSnapshotEqual ([int]$parsedMismatch.CanonicalBacklog.Summary.HeldCount) 1 'Divergent canonical row should report HeldCount=1'
+    Assert-OpsSnapshotEqual ([int]$parsedMismatch.CanonicalBacklog.Summary.CanonicalTotalCount) ([int]$parsedMismatch.CanonicalBacklog.Summary.SeedMatchedCount + [int]$parsedMismatch.CanonicalBacklog.Summary.HeldCount) 'CanonicalTotalCount == SeedMatched + Held must hold even when canonical diverges from seed'
     Assert-OpsSnapshotEqual ([string]$parsed2.WeeklyDrift.reviewItems[0].category) 'CONTENT_CHANGED' 'First drift item should be MMA changed candidate'
     Assert-OpsSnapshotTrue ([string]$parsed2.WeeklyDrift.reviewItems[0].officialDetail -like '*=15% 할인*') 'Safe CSV leading apostrophe should be stripped cleanly'
     Assert-OpsSnapshotEqual ([string]$parsed2.WeeklyDrift.reviewItems[3].category) 'ATTACHMENT_CHANGED' 'Fourth drift item should be Yangju attachment drift'

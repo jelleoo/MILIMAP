@@ -281,12 +281,19 @@ export function buildApprovalLedger(records: ReadonlyArray<BenefitReleaseApprova
   };
 }
 
-export function buildValidateLedgerCommand(ledgerFilePath: string = 'C:/path/to/benefit-release-approval-ledger.json'): string {
+export function buildValidateLedgerCommand(
+  ledgerFilePath: string = 'C:/path/to/benefit-release-approval-ledger.json',
+  seedVersion?: number,
+): string {
+  const versionToken =
+    typeof seedVersion === 'number' && Number.isFinite(seedVersion) && seedVersion > 0
+      ? `v${seedVersion}`
+      : 'v<N>';
   return [
     '& tools/data/validate-benefit-release-approvals.ps1 `',
     '  -HistoryRoot "C:/path/to/history-store" `',
     '  -CanonicalCsvPath "data/canonical/capital-area-military-benefits.csv" `',
-    '  -CoordinateReviewCsvPath "data/canonical/reports/poi-coordinate-review-candidates-20261126-v15.csv" `',
+    `  -CoordinateReviewCsvPath "data/canonical/reports/poi-coordinate-review-candidates-<YYYYMMDD>-${versionToken}.csv" \``,
     `  -ApprovalLedgerJsonPath "${ledgerFilePath}"`,
   ].join('\n');
 }

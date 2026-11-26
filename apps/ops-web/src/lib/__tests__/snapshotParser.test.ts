@@ -9,7 +9,20 @@ describe('snapshotParser', () => {
         ContractVersion: 1,
         GeneratedAtUtc: '2026-11-26T00:00:00Z',
         ProductionAction: 'NONE',
-        SeedBaseline: { totalCount: 1018 },
+        SeedBaseline: {
+          manifestVersion: 1,
+          seedName: 'benefits',
+          seedVersion: 14,
+          hashAlgorithm: 'SHA-256-LF-UTF8',
+          generatedAt: '2026-11-23T11:22:09Z',
+          canonicalCsvSha256: 'abc',
+          totalCount: 1018,
+          exactPinCount: 998,
+          unconfirmedCoordinateCount: 20,
+          seedSha256: 'def',
+          manualSeedCount: 0,
+          manualSeedSha256: 'ghi',
+        },
         WeeklyDrift: null,
         ReviewQueue: null,
         CanonicalBacklog: {
@@ -38,7 +51,12 @@ describe('snapshotParser', () => {
         ContractType: 'Phase5ReviewQueueExport',
         ContractVersion: 1,
         ExportedAt: '2026-11-26T00:00:00Z',
-        Summary: { ExportedItemCount: 0 },
+        Summary: {
+          ExportedItemCount: 0,
+          FastReviewCount: 0,
+          DomainReviewCount: 0,
+          DiagnosticHoldCount: 0,
+        },
         Items: [],
       }),
     );
@@ -93,5 +111,47 @@ describe('snapshotParser', () => {
     expect(parseUploadedOpsJson(withBom).kind).toBe('approval-ledger');
     expect(() => parseUploadedOpsJson('{"ContractType":"Unknown"}')).toThrow(/지원하지 않는 JSON/);
     expect(() => parseUploadedOpsJson('{broken')).toThrow(/올바른 JSON/);
+  });
+
+  it('rejects malformed SeedBaseline, invalid ledger records, and duplicate businessIds', () => {
+    expect(() =>
+      parseUploadedOpsJson(
+        JSON.stringify({
+          ContractType: 'OpsDashboardSnapshot',
+          ContractVersion: 1,
+          SeedBaseline: { totalCount: 'bad' },
+        }),
+      ),
+    ).toThrow(/SeedBaseline/);
+
+    expect(() =>
+      parseUploadedOpsJson(
+        JSON.stringify({
+          ContractType: 'BenefitReleaseApprovalLedger',
+          ContractVersion: 1,
+          Records: ['not-an-object'],
+        }),
+      ),
+    ).toThrow(/businessId/);
+
+    expect(() =>
+      parseUploadedOpsJson(
+        JSON.stringify({
+          ContractType: 'BenefitReleaseApprovalLedger',
+          ContractVersion: 1,
+          Records: [{ businessId: '   ' }],
+        }),
+      ),
+    ).toThrow(/businessId/);
+
+    expect(() =>
+      parseUploadedOpsJson(
+        JSON.stringify({
+          ContractType: 'BenefitReleaseApprovalLedger',
+          ContractVersion: 1,
+          Records: [{ businessId: 'biz-dup-1' }, { businessId: 'biz-dup-1' }],
+        }),
+      ),
+    ).toThrow(/중복 businessId/);
   });
 });

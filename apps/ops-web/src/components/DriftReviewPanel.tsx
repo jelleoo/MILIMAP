@@ -87,6 +87,12 @@ export function DriftReviewPanel({
         ? (checksById[selectedItem.id]?.memo ?? '')
         : '';
 
+  const selectItem = (item: WeeklyDriftReviewItem) => {
+    setSelectedId(item.id);
+    setMemoEditingId(item.id);
+    setMemoInput(checksById[item.id]?.memo ?? '');
+  };
+
   const sourceTabs: Array<{ id: 'ALL' | 'mma' | 'ddc' | 'paju' | 'yangju'; label: string }> = [
     { id: 'ALL', label: '전체 출처' },
     { id: 'mma', label: '병무청' },
@@ -193,15 +199,11 @@ export function DriftReviewPanel({
                   key={item.id}
                   role="button"
                   tabIndex={0}
-                  onClick={() => {
-                    setSelectedId(item.id);
-                    setMemoEditingId(item.id);
-                    setMemoInput(checksById[item.id]?.memo ?? '');
-                  }}
+                  onClick={() => selectItem(item)}
                   onKeyDown={(e) => {
                     if (e.key === 'Enter' || e.key === ' ') {
                       e.preventDefault();
-                      setSelectedId(item.id);
+                      selectItem(item);
                     }
                   }}
                   className={`rounded-xl border p-4 transition cursor-pointer ${

@@ -11,22 +11,27 @@ describe('safeUrl', () => {
     expect(sanitizeHttpUrl('data:text/html,<script>alert(1)</script>')).toBeNull();
     expect(sanitizeHttpUrl('file:///etc/passwd')).toBeNull();
     expect(sanitizeHttpUrl('https://user:pass@example.com/path')).toBeNull();
+    expect(sanitizeHttpUrl('https://example.com/foo bar')).toBeNull();
+    expect(sanitizeHttpUrl('https://example.com/a\nb')).toBeNull();
+    expect(sanitizeHttpUrl('https://example.com/a|https://example.com/b')).toBeNull();
   });
 
   it('deduplicates pipe-separated canonical and source urls safely', () => {
     const urls = extractSafeUrls(
       'https://www.ddc.go.kr/a | javascript:evil() | https://www.paju.go.kr/b',
-      ['https://www.ddc.go.kr/a', 'https://www.yangju.go.kr/c'],
+      ['https://www.ddc.go.kr/a', 'https://www.yangju.go.kr/c|https://www.mma.go.kr/d'],
     );
     expect(urls).toEqual([
       'https://www.ddc.go.kr/a',
       'https://www.paju.go.kr/b',
       'https://www.yangju.go.kr/c',
+      'https://www.mma.go.kr/d',
     ]);
   });
 
   it('matches PowerShell Test-ReleaseHttpUrlList pipe delimiter contract', () => {
     expect(validateHttpUrlList('https://www.ddc.go.kr/a | https://www.paju.go.kr/b')).toBe(true);
+    expect(validateHttpUrlList('https://a.com|https://b.com')).toBe(false);
     expect(validateHttpUrlList(' https://www.ddc.go.kr/a')).toBe(false);
     expect(validateHttpUrlList('https://www.ddc.go.kr/a | ')).toBe(false);
     expect(validateHttpUrlList('ftp://example.com/file')).toBe(false);

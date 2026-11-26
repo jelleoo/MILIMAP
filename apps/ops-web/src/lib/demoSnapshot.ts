@@ -158,6 +158,9 @@ export function createDemoSnapshot(baseline: BenefitReleaseSeedManifest): OpsDas
           ValidatedClaims: [
             {
               ClaimType: 'BENEFIT_DESCRIPTION',
+              SemanticValue: '현역 장병 평일 10% 할인 (음료 제외)',
+              ClaimResult: 'CONFLICTED',
+              BusinessBound: true,
               Value: '현역 장병 평일 10% 할인 (음료 제외)',
               EvidenceText: '정본: 15% 할인 / 공식 표: 10% 할인(음료 제외)',
               EvidenceReference: 'TABLE_ROW:14:CELL:4',
@@ -293,6 +296,9 @@ export function createDemoSnapshot(baseline: BenefitReleaseSeedManifest): OpsDas
           ValidatedClaims: [
             {
               ClaimType: 'BENEFIT_DESCRIPTION',
+              SemanticValue: '커트 20% 할인',
+              ClaimResult: 'SUPPORTED',
+              BusinessBound: true,
               Value: '커트 20% 할인',
               EvidenceText: '커트 20% 할인',
               EvidenceReference: 'JSONP:cd=12345',
@@ -310,6 +316,7 @@ export function createDemoSnapshot(baseline: BenefitReleaseSeedManifest): OpsDas
       Summary: {
         CanonicalTotalCount: 1137,
         SeedActiveCount: 1018,
+        SeedMatchedCount: 1018,
         ExactPinCount: 998,
         UnpinnedInAppCount: 20,
         HeldCount: 119,

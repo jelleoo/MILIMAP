@@ -108,6 +108,7 @@ export interface CanonicalBacklogItem {
 export interface CanonicalBacklogSummary {
   CanonicalTotalCount: number;
   SeedActiveCount: number;
+  SeedMatchedCount?: number;
   ExactPinCount: number;
   UnpinnedInAppCount: number;
   HeldCount: number;
@@ -125,6 +126,9 @@ export interface CanonicalBacklog {
 export interface ValidatedClaimSummary {
   ClaimType?: string;
   Value?: string | null;
+  SemanticValue?: string | null;
+  ClaimResult?: string | null;
+  BusinessBound?: boolean | null;
   EvidenceText?: string | null;
   EvidenceReference?: string | null;
   SourceUrl?: string | null;

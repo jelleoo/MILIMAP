@@ -46,7 +46,7 @@ npm.cmd run build
 powershell -NoProfile -ExecutionPolicy Bypass -File tools/data/validate-benefit-release-approvals.ps1 `
   -HistoryRoot "C:/path/to/history-store" `
   -CanonicalCsvPath "data/canonical/capital-area-military-benefits.csv" `
-  -CoordinateReviewCsvPath "data/canonical/reports/poi-coordinate-review-candidates-20261123-v14.csv" `
+  -CoordinateReviewCsvPath "data/canonical/reports/poi-coordinate-review-candidates-20261126-v15.csv" `
   -ApprovalLedgerJsonPath "C:/path/to/benefit-release-approval-ledger.json"
 ```
 

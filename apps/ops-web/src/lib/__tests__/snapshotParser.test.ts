@@ -12,9 +12,26 @@ describe('snapshotParser', () => {
         SeedBaseline: { totalCount: 1018 },
         WeeklyDrift: null,
         ReviewQueue: null,
+        CanonicalBacklog: {
+          Summary: {
+            CanonicalTotalCount: 1137,
+            SeedActiveCount: 1018,
+            ExactPinCount: 998,
+            UnpinnedInAppCount: 20,
+            HeldCount: 119,
+            CoordRecheckCount: 55,
+            OutdatedOrOcrCount: 38,
+            UnofficialSourceCount: 26,
+            TotalBacklogCount: 139,
+          },
+          Items: [],
+        },
       }),
     );
     expect(snap.kind).toBe('snapshot');
+    if (snap.kind === 'snapshot') {
+      expect(snap.data.CanonicalBacklog?.Summary.TotalBacklogCount).toBe(139);
+    }
 
     const rq = parseUploadedOpsJson(
       JSON.stringify({

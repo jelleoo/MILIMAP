@@ -3,6 +3,8 @@ param(
     [string]$SeedManifestJson = 'apps/android/app/src/main/assets/benefits.seed.manifest.json',
     [string]$WeeklyDriftSummaryJson = '',
     [string]$ReviewQueueSummaryJson = '',
+    [string]$CanonicalCsv = 'data/canonical/capital-area-military-benefits.csv',
+    [string]$BundledSeedJson = 'apps/android/app/src/main/assets/benefits.seed.json',
     [string]$OutputJson = ''
 )
 
@@ -293,11 +295,229 @@ function Read-OpsSiblingDriftReviewItems {
     return @($items.ToArray())
 }
 
+function Read-OpsSiblingDriftNewCandidates {
+    param([Parameter(Mandatory)][string]$DriftSummaryJsonPath)
+
+    $driftDir = Split-Path -Parent (Assert-ReleaseSafeFilePath -Path $DriftSummaryJsonPath)
+    if ([string]::IsNullOrWhiteSpace($driftDir) -or -not (Test-Path -LiteralPath $driftDir -PathType Container)) {
+        return @()
+    }
+
+    $mmaNewPath = Join-Path $driftDir 'mma-new-candidates.csv'
+    if (-not (Test-Path -LiteralPath $mmaNewPath -PathType Leaf)) {
+        return @()
+    }
+
+    $mmaListWebUrl = 'https://www.mma.go.kr/about/udgg/list.do?mc=mma0003357'
+    $list = [Collections.Generic.List[object]]::new()
+    $idx = 0
+    foreach ($row in @(Import-Csv -LiteralPath $mmaNewPath -Encoding utf8)) {
+        $idx++
+        $code = Get-OpsDriftCsvCell $row 'InstitutionCode'
+        $name = Get-OpsDriftCsvCell $row 'BusinessName'
+        if (-not $name -and -not $code) { continue }
+        $list.Add([pscustomobject][ordered]@{
+            id             = "new-mma-$idx-$code"
+            sourceId       = 'mma'
+            sourceName     = '병무청 나라사랑가게'
+            institutionCode = $code
+            businessName   = $name
+            roadAddress    = (Get-OpsDriftCsvCell $row 'RoadAddress')
+            phone          = (Get-OpsDriftCsvCell $row 'Phone')
+            category       = (Get-OpsDriftCsvCell $row 'Category')
+            regionalOffice = (Get-OpsDriftCsvCell $row 'RegionalOffice')
+            sourceUrls     = @($mmaListWebUrl)
+        })
+    }
+    return @($list.ToArray())
+}
+
+function Read-OpsCanonicalBacklog {
+    param(
+        [Parameter(Mandatory)][string]$CanonicalCsvPath,
+        [Parameter(Mandatory)][string]$BundledSeedJsonPath
+    )
+
+    $safeCsv = Assert-ReleaseSafeFilePath -Path $CanonicalCsvPath
+    $safeSeed = Assert-ReleaseSafeFilePath -Path $BundledSeedJsonPath
+    if (-not (Test-Path -LiteralPath $safeCsv -PathType Leaf)) {
+        throw "OPS_SNAPSHOT_CANONICAL_MISSING: $safeCsv"
+    }
+    if (-not (Test-Path -LiteralPath $safeSeed -PathType Leaf)) {
+        throw "OPS_SNAPSHOT_SEED_MISSING: $safeSeed"
+    }
+
+    $canonicalRows = @(Import-Csv -LiteralPath $safeCsv -Encoding utf8)
+    $seedItems = @(Read-OpsSnapshotJsonObject -Path $safeSeed)
+
+    $seedKeySet = [Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
+    $seedExactPins = 0
+    foreach ($s in $seedItems) {
+        if ($null -ne $s.latitude -and $null -ne $s.longitude) {
+            $seedExactPins++
+        }
+        $k = "$([string]$s.name.Trim())|$([string]$s.address.Trim())"
+        [void]$seedKeySet.Add($k)
+    }
+
+    $canonicalByKey = @{}
+    for ($i = 0; $i -lt $canonicalRows.Count; $i++) {
+        $row = $canonicalRows[$i]
+        $road = Get-OpsDriftCsvCell $row '소재지도로명주소'
+        $jibun = Get-OpsDriftCsvCell $row '소재지지번주소'
+        $addr = if ($road) { $road } else { $jibun }
+        $key = "$(Get-OpsDriftCsvCell $row '업소명')|$addr"
+        if (-not $canonicalByKey.ContainsKey($key)) {
+            $canonicalByKey[$key] = [pscustomobject]@{
+                RowNumber = ($i + 2)
+                Row       = $row
+                Address   = $addr
+            }
+        }
+    }
+
+    $backlogItems = [Collections.Generic.List[object]]::new()
+    $unpinnedInAppCount = 0
+    foreach ($s in $seedItems) {
+        if ($null -ne $s.latitude -and $null -ne $s.longitude) { continue }
+        $unpinnedInAppCount++
+        $key = "$([string]$s.name.Trim())|$([string]$s.address.Trim())"
+        $canEntry = if ($canonicalByKey.ContainsKey($key)) { $canonicalByKey[$key] } else { $null }
+        $canRow = if ($null -ne $canEntry) { $canEntry.Row } else { $null }
+        $rawUrls = @()
+        if ($s.PSObject.Properties['sourceUrl'] -and (Test-OpsSafeHttpUrl ([string]$s.sourceUrl))) {
+            $rawUrls += [string]$s.sourceUrl
+        }
+        if ($null -ne $canRow) {
+            foreach ($part in ((Get-OpsDriftCsvCell $canRow '출처URL') -split '\s*\|\s*')) {
+                if ((Test-OpsSafeHttpUrl $part) -and ($rawUrls -notcontains $part)) {
+                    $rawUrls += $part
+                }
+            }
+        }
+        $backlogItems.Add([pscustomobject][ordered]@{
+            id                 = "backlog-unpinned-$([string]$s.id)"
+            backlogGroup       = 'UNPINNED_IN_APP'
+            backlogLabel       = '앱 노출 중 · 지도 핀 미확정'
+            severity           = 'amber'
+            businessId         = if ($null -ne $canRow) { Get-OpsDriftCsvCell $canRow 'businessId' } else { $null }
+            canonicalRowNumber = if ($null -ne $canEntry) { [int]$canEntry.RowNumber } else { $null }
+            businessName       = [string]$s.name
+            sido               = if ($null -ne $canRow) { Get-OpsDriftCsvCell $canRow '시도' } else { '' }
+            district           = [string]$s.district
+            roadAddress        = [string]$s.address
+            category           = [string]$s.category
+            benefitDescription = [string]$s.benefitDescription
+            sourceType         = [string]$s.sourceType
+            benefitStatus      = [string]$s.status
+            coordStatus        = if ($null -ne $canRow) { Get-OpsDriftCsvCell $canRow '좌표검증상태' } else { '미확정' }
+            lastVerifiedAt     = [string]$s.lastVerifiedAt
+            reasonDetail       = '앱 목록·검색에는 노출되지만 좌표가 확정되지 않아 지도 마커(핀)가 숨겨진 상태입니다.'
+            sourceUrls         = @($rawUrls)
+        })
+    }
+
+    $heldCount = 0
+    $coordRecheckCount = 0
+    $outdatedOrOcrCount = 0
+    $unofficialSourceCount = 0
+
+    for ($i = 0; $i -lt $canonicalRows.Count; $i++) {
+        $row = $canonicalRows[$i]
+        $name = Get-OpsDriftCsvCell $row '업소명'
+        $road = Get-OpsDriftCsvCell $row '소재지도로명주소'
+        $jibun = Get-OpsDriftCsvCell $row '소재지지번주소'
+        $addr = if ($road) { $road } else { $jibun }
+        $key = "$name|$addr"
+        if ($seedKeySet.Contains($key)) { continue }
+
+        $heldCount++
+        $srcType = Get-OpsDriftCsvCell $row '출처유형'
+        $coordStatus = Get-OpsDriftCsvCell $row '좌표검증상태'
+        $benefitStatus = Get-OpsDriftCsvCell $row '혜택상태'
+        $lastVerified = Get-OpsDriftCsvCell $row '최근확인일'
+        $note = Get-OpsDriftCsvCell $row '비고'
+        $isOfficial = ($srcType -match '공공데이터|지자체')
+
+        if ($isOfficial -and $coordStatus -ceq '재확인 필요') {
+            $group = 'COORD_RECHECK'
+            $label = '공식 출처 · 좌표 재확인 필요'
+            $sev = 'amber'
+            $coordRecheckCount++
+        } elseif ($isOfficial) {
+            $group = 'OUTDATED_OR_OCR'
+            $label = '공식 공고 재확인 · OCR 보류'
+            $sev = 'amber'
+            $outdatedOrOcrCount++
+        } else {
+            $group = 'UNOFFICIAL_SOURCE'
+            $label = '비공식 출처 · 공식 근거 필요'
+            $sev = 'red'
+            $unofficialSourceCount++
+        }
+
+        $safeUrls = @()
+        foreach ($part in ((Get-OpsDriftCsvCell $row '출처URL') -split '\s*\|\s*')) {
+            if ((Test-OpsSafeHttpUrl $part) -and ($safeUrls -notcontains $part)) {
+                $safeUrls += $part
+            }
+        }
+        $coordUrl = Get-OpsDriftCsvCell $row '좌표출처URL'
+        if ((Test-OpsSafeHttpUrl $coordUrl) -and ($safeUrls -notcontains $coordUrl)) {
+            $safeUrls += $coordUrl
+        }
+
+        $reasonDetail = if ($note) {
+            $note
+        } else {
+            "출처: $srcType · 혜택상태: $benefitStatus · 좌표상태: $coordStatus · 최근확인일: $lastVerified"
+        }
+
+        $backlogItems.Add([pscustomobject][ordered]@{
+            id                 = "backlog-held-$($i + 2)-$(Get-OpsDriftCsvCell $row 'businessId')"
+            backlogGroup       = $group
+            backlogLabel       = $label
+            severity           = $sev
+            businessId         = (Get-OpsDriftCsvCell $row 'businessId')
+            canonicalRowNumber = ($i + 2)
+            businessName       = $name
+            sido               = (Get-OpsDriftCsvCell $row '시도')
+            district           = (Get-OpsDriftCsvCell $row '시군구')
+            roadAddress        = $addr
+            category           = (Get-OpsDriftCsvCell $row '업종명')
+            benefitDescription = (Get-OpsDriftCsvCell $row '할인정보')
+            sourceType         = $srcType
+            benefitStatus      = $benefitStatus
+            coordStatus        = $coordStatus
+            lastVerifiedAt     = $lastVerified
+            reasonDetail       = $reasonDetail
+            sourceUrls         = @($safeUrls)
+        })
+    }
+
+    return [pscustomobject][ordered]@{
+        Summary = [pscustomobject][ordered]@{
+            CanonicalTotalCount   = $canonicalRows.Count
+            SeedActiveCount       = $seedItems.Count
+            ExactPinCount         = $seedExactPins
+            UnpinnedInAppCount    = $unpinnedInAppCount
+            HeldCount             = $heldCount
+            CoordRecheckCount     = $coordRecheckCount
+            OutdatedOrOcrCount    = $outdatedOrOcrCount
+            UnofficialSourceCount = $unofficialSourceCount
+            TotalBacklogCount     = $backlogItems.Count
+        }
+        Items = @($backlogItems.ToArray())
+    }
+}
+
 function Build-OpsDashboardSnapshot {
     param(
         [Parameter(Mandatory)][string]$SeedManifestJson,
         [string]$WeeklyDriftSummaryJson = '',
         [string]$ReviewQueueSummaryJson = '',
+        [string]$CanonicalCsv = '',
+        [string]$BundledSeedJson = '',
         [Parameter(Mandatory)][string]$OutputJson
     )
 
@@ -311,6 +531,7 @@ function Build-OpsDashboardSnapshot {
             throw "OPS_SNAPSHOT_INVALID_WEEKLY_DRIFT: Unexpected contractType '$($driftObj.contractType)'"
         }
         $driftReviewItems = @(Read-OpsSiblingDriftReviewItems -DriftSummaryJsonPath $WeeklyDriftSummaryJson)
+        $driftNewCandidates = @(Read-OpsSiblingDriftNewCandidates -DriftSummaryJsonPath $WeeklyDriftSummaryJson)
         $weeklyDrift = [pscustomobject][ordered]@{
             contractType               = [string]$driftObj.contractType
             contractVersion            = [int]$driftObj.contractVersion
@@ -320,7 +541,13 @@ function Build-OpsDashboardSnapshot {
             productionAction           = if ($driftObj.PSObject.Properties['productionAction']) { [string]$driftObj.productionAction } else { 'NONE' }
             sources                    = @($driftObj.sources)
             reviewItems                = @($driftReviewItems)
+            newCandidates              = @($driftNewCandidates)
         }
+    }
+
+    $canonicalBacklog = $null
+    if (-not [string]::IsNullOrWhiteSpace($CanonicalCsv) -and -not [string]::IsNullOrWhiteSpace($BundledSeedJson)) {
+        $canonicalBacklog = Read-OpsCanonicalBacklog -CanonicalCsvPath $CanonicalCsv -BundledSeedJsonPath $BundledSeedJson
     }
 
     $reviewQueue = $null
@@ -373,6 +600,7 @@ function Build-OpsDashboardSnapshot {
         SeedBaseline     = $manifest
         WeeklyDrift      = $weeklyDrift
         ReviewQueue      = $reviewQueue
+        CanonicalBacklog = $canonicalBacklog
     }
 
     $writtenPath = Write-OpsSnapshotAtomicJson -OutputPath $OutputJson -Value $snapshot
@@ -391,5 +619,7 @@ if ($MyInvocation.InvocationName -ne '.' -and $PSBoundParameters.Count -gt 0) {
         -SeedManifestJson $SeedManifestJson `
         -WeeklyDriftSummaryJson $WeeklyDriftSummaryJson `
         -ReviewQueueSummaryJson $ReviewQueueSummaryJson `
+        -CanonicalCsv $CanonicalCsv `
+        -BundledSeedJson $BundledSeedJson `
         -OutputJson $OutputJson | Out-Null
 }

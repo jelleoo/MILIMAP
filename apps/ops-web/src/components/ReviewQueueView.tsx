@@ -4,12 +4,16 @@ import { BUCKET_META, formatCodeLabel, getItemReasonSummary, isNeedsHumanAttenti
 import { extractSafeUrls } from '../lib/safeUrl';
 import type {
   BenefitReleaseApprovalRecord,
+  CanonicalBacklog,
   ReviewDomain,
   ReviewQueueItem,
+  WeeklyDriftNewCandidate,
   WeeklyDriftReviewItem,
 } from '../types/ops';
 import { ApprovalDrawer } from './ApprovalDrawer';
+import { CanonicalBacklogPanel } from './CanonicalBacklogPanel';
 import { DriftReviewPanel, type DriftCheckEntry } from './DriftReviewPanel';
+import { NewCandidatesPanel } from './NewCandidatesPanel';
 import type { QueueSourceTab, QueueTargetFilter } from './OverviewView';
 import { Badge, Button, Card, Input, Select } from './ui/primitives';
 
@@ -17,9 +21,11 @@ interface ReviewQueueViewProps {
   queueSource: QueueSourceTab;
   onChangeQueueSource: (source: QueueSourceTab) => void;
   driftItems: WeeklyDriftReviewItem[];
-  driftChecksById: Record<string, DriftCheckEntry>;
-  onSaveDriftCheck: (id: string, entry: DriftCheckEntry) => void;
-  onClearDriftCheck: (id: string) => void;
+  newCandidates: WeeklyDriftNewCandidate[];
+  canonicalBacklog: CanonicalBacklog | null;
+  checksById: Record<string, DriftCheckEntry>;
+  onSaveCheck: (id: string, entry: DriftCheckEntry) => void;
+  onClearCheck: (id: string) => void;
   items: ReviewQueueItem[];
   bucketFilter: QueueTargetFilter;
   onChangeBucketFilter: (filter: QueueTargetFilter) => void;
@@ -47,9 +53,11 @@ export function ReviewQueueView({
   queueSource,
   onChangeQueueSource,
   driftItems,
-  driftChecksById,
-  onSaveDriftCheck,
-  onClearDriftCheck,
+  newCandidates,
+  canonicalBacklog,
+  checksById,
+  onSaveCheck,
+  onClearCheck,
   items,
   bucketFilter,
   onChangeBucketFilter,
@@ -131,9 +139,16 @@ export function ReviewQueueView({
   const filterTabs: Array<{ id: QueueTargetFilter; label: string; count: number }> = [
     { id: 'ATTENTION', label: '직접 확인 필요', count: counts.attention },
     { id: 'DOMAIN_REVIEW', label: '내용 애매', count: counts.domainReview },
-    { id: 'DIAGNOSTIC_HOLD', label: '진단 보류', count: counts.diagnosticHold },
-    { id: 'FAST_REVIEW', label: '빠른 검토', count: counts.fastReview },
+    { id: 'DIAGNOSTIC_HOLD', label: '수집·읽기 오류', count: counts.diagnosticHold },
+    { id: 'FAST_REVIEW', label: '이상 없음', count: counts.fastReview },
     { id: 'ALL', label: '전체', count: counts.total },
+  ];
+
+  const sourceTabs: Array<{ id: QueueSourceTab; label: string; count: number; highlight?: boolean }> = [
+    { id: 'drift', label: '변경·재확인 필요', count: driftItems.length, highlight: driftItems.length > 0 },
+    { id: 'new-candidates', label: '신규 추가 후보', count: newCandidates.length },
+    { id: 'backlog', label: '미배포·좌표 미확정', count: canonicalBacklog?.Summary.TotalBacklogCount ?? 0 },
+    { id: 'phase5', label: '심층 검증·승인', count: counts.total },
   ];
 
   return (
@@ -142,69 +157,75 @@ export function ReviewQueueView({
         <div className="flex flex-wrap items-center gap-2">
           <Button variant="outline" size="sm" onClick={onBackOverview}>
             <ArrowLeft className="h-3.5 w-3.5" />
-            자동화 현황 대시보드로 돌아가기
+            전체 현황으로 돌아가기
           </Button>
-          <div className="inline-flex rounded-lg border border-slate-200 bg-white p-0.5">
-            <button
-              type="button"
-              onClick={() => onChangeQueueSource('drift')}
-              className={`inline-flex items-center gap-1.5 rounded-md px-3 py-1 text-xs font-medium transition cursor-pointer ${
-                queueSource === 'drift' ? 'bg-slate-900 text-white' : 'text-slate-700 hover:bg-slate-100'
-              }`}
-            >
-              <span>주간 출처 변경·재확인</span>
-              <span
-                className={`tabular-nums rounded px-1.5 py-0.2 text-[11px] ${
-                  queueSource === 'drift' ? 'bg-white/20 text-white' : 'bg-amber-100 text-amber-900'
+          <div className="inline-flex flex-wrap rounded-lg border border-slate-200 bg-white p-0.5">
+            {sourceTabs.map((tab) => (
+              <button
+                key={tab.id}
+                type="button"
+                onClick={() => onChangeQueueSource(tab.id)}
+                className={`inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition cursor-pointer ${
+                  queueSource === tab.id ? 'bg-slate-900 text-white' : 'text-slate-700 hover:bg-slate-100'
                 }`}
               >
-                {driftItems.length}
-              </span>
-            </button>
-            <button
-              type="button"
-              onClick={() => onChangeQueueSource('phase5')}
-              className={`inline-flex items-center gap-1.5 rounded-md px-3 py-1 text-xs font-medium transition cursor-pointer ${
-                queueSource === 'phase5' ? 'bg-slate-900 text-white' : 'text-slate-700 hover:bg-slate-100'
-              }`}
-            >
-              <span>Phase 5 승인 큐</span>
-              <span
-                className={`tabular-nums rounded px-1.5 py-0.2 text-[11px] ${
-                  queueSource === 'phase5' ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-700'
-                }`}
-              >
-                {counts.total}
-              </span>
-            </button>
+                <span>{tab.label}</span>
+                <span
+                  className={`tabular-nums rounded px-1.5 py-0.2 text-[11px] ${
+                    queueSource === tab.id
+                      ? 'bg-white/20 text-white'
+                      : tab.highlight
+                        ? 'bg-amber-100 text-amber-900'
+                        : 'bg-slate-100 text-slate-700'
+                  }`}
+                >
+                  {tab.count}
+                </span>
+              </button>
+            ))}
           </div>
-        </div>
-
-        <div className="text-xs text-slate-500">
-          {queueSource === 'drift'
-            ? `주간 드리프트 직접 확인 항목 ${driftItems.length}건`
-            : `필터 결과 ${filteredItems.length}건 / 전체 ${counts.total}건`}
         </div>
       </div>
 
-      {queueSource === 'drift' ? (
+      {queueSource === 'drift' && (
         <DriftReviewPanel
           items={driftItems}
-          checksById={driftChecksById}
-          onSaveCheck={onSaveDriftCheck}
-          onClearCheck={onClearDriftCheck}
+          checksById={checksById}
+          onSaveCheck={onSaveCheck}
+          onClearCheck={onClearCheck}
         />
-      ) : (
+      )}
+
+      {queueSource === 'new-candidates' && (
+        <NewCandidatesPanel
+          items={newCandidates}
+          checksById={checksById}
+          onSaveCheck={onSaveCheck}
+          onClearCheck={onClearCheck}
+        />
+      )}
+
+      {queueSource === 'backlog' && (
+        <CanonicalBacklogPanel
+          summary={canonicalBacklog?.Summary ?? null}
+          items={canonicalBacklog?.Items ?? []}
+          checksById={checksById}
+          onSaveCheck={onSaveCheck}
+          onClearCheck={onClearCheck}
+        />
+      )}
+
+      {queueSource === 'phase5' && (
         <>
           <div className="flex items-start gap-3 rounded-xl border border-amber-300 bg-amber-50 px-4 py-3.5 text-amber-950">
             <ShieldAlert className="mt-0.5 h-5 w-5 shrink-0 text-amber-800" />
             <div className="space-y-0.5">
               <div className="text-sm font-semibold">
-                직접 확인이 필요합니다 — 애매하게 걸친 데이터를 모아둔 Phase 5 승인 대기열입니다.
+                직접 확인이 필요합니다 — 심층 검증에서 확인이 필요한 항목을 승인 파일로 내보내는 화면입니다.
               </div>
               <p className="text-xs text-amber-900">
                 각 항목의 <span className="font-semibold">공식 출처 직접 확인 ↗</span> 또는{' '}
-                <span className="font-semibold">네이버 지도 확인 ↗</span> 링크로 실제 공고·영업 상태를 확인한 뒤, 오른쪽 패널에서 승인 원장을 작성해 검증기로 내보내세요.
+                <span className="font-semibold">네이버 지도 확인 ↗</span> 링크로 실제 공고·영업 상태를 확인한 뒤, 오른쪽 패널에서 승인 내용을 작성해 주세요.
               </p>
             </div>
           </div>
@@ -248,11 +269,11 @@ export function ReviewQueueView({
                 <Select
                   value={domainFilter}
                   onChange={(e) => onChangeDomainFilter(e.target.value as 'ALL' | ReviewDomain)}
-                  aria-label="도메인 필터"
+                  aria-label="종류 필터"
                 >
-                  <option value="ALL">전체 도메인</option>
-                  <option value="BENEFIT">BENEFIT (혜택)</option>
-                  <option value="LOCATION">LOCATION (좌표)</option>
+                  <option value="ALL">전체 종류</option>
+                  <option value="BENEFIT">혜택 정보</option>
+                  <option value="LOCATION">위치 좌표</option>
                 </Select>
                 <Select
                   value={draftStatusFilter}
@@ -261,9 +282,9 @@ export function ReviewQueueView({
                   }
                   aria-label="작성 상태 필터"
                 >
-                  <option value="ALL">원장 전체</option>
+                  <option value="ALL">전체 상태</option>
                   <option value="PENDING">미작성</option>
-                  <option value="DRAFTED">원장 작성 완료</option>
+                  <option value="DRAFTED">작성 완료</option>
                 </Select>
               </div>
             </div>
@@ -273,7 +294,7 @@ export function ReviewQueueView({
             <div className="space-y-2.5 xl:col-span-5">
               {filteredItems.length === 0 ? (
                 <Card className="p-8 text-center text-sm text-slate-500">
-                  현재 필터 조건에 해당하는 Phase 5 리뷰 큐 항목이 없습니다.
+                  현재 조건에 해당하는 심층 검증 항목이 없습니다.
                 </Card>
               ) : (
                 filteredItems.map((item) => {

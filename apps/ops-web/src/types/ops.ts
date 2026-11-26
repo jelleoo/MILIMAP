@@ -53,6 +53,19 @@ export interface WeeklyDriftReviewItem {
   sourceUrls: string[];
 }
 
+export interface WeeklyDriftNewCandidate {
+  id: string;
+  sourceId: string;
+  sourceName: string;
+  institutionCode: string;
+  businessName: string;
+  roadAddress: string;
+  phone: string;
+  category: string;
+  regionalOffice: string;
+  sourceUrls: string[];
+}
+
 export interface WeeklyBenefitDriftSummary {
   contractType: 'WeeklyBenefitDriftSummary';
   contractVersion: number;
@@ -62,6 +75,51 @@ export interface WeeklyBenefitDriftSummary {
   productionAction?: string;
   sources: WeeklyDriftSource[];
   reviewItems?: WeeklyDriftReviewItem[];
+  newCandidates?: WeeklyDriftNewCandidate[];
+}
+
+export type CanonicalBacklogGroup =
+  | 'UNPINNED_IN_APP'
+  | 'COORD_RECHECK'
+  | 'OUTDATED_OR_OCR'
+  | 'UNOFFICIAL_SOURCE';
+
+export interface CanonicalBacklogItem {
+  id: string;
+  backlogGroup: CanonicalBacklogGroup;
+  backlogLabel: string;
+  severity: 'amber' | 'red';
+  businessId?: string | null;
+  canonicalRowNumber?: number | null;
+  businessName: string;
+  sido?: string | null;
+  district?: string | null;
+  roadAddress?: string | null;
+  category?: string | null;
+  benefitDescription?: string | null;
+  sourceType?: string | null;
+  benefitStatus?: string | null;
+  coordStatus?: string | null;
+  lastVerifiedAt?: string | null;
+  reasonDetail: string;
+  sourceUrls: string[];
+}
+
+export interface CanonicalBacklogSummary {
+  CanonicalTotalCount: number;
+  SeedActiveCount: number;
+  ExactPinCount: number;
+  UnpinnedInAppCount: number;
+  HeldCount: number;
+  CoordRecheckCount: number;
+  OutdatedOrOcrCount: number;
+  UnofficialSourceCount: number;
+  TotalBacklogCount: number;
+}
+
+export interface CanonicalBacklog {
+  Summary: CanonicalBacklogSummary;
+  Items: CanonicalBacklogItem[];
 }
 
 export interface ValidatedClaimSummary {
@@ -153,6 +211,7 @@ export interface OpsDashboardSnapshot {
   SeedBaseline: BenefitReleaseSeedManifest;
   WeeklyDrift: WeeklyBenefitDriftSummary | null;
   ReviewQueue: Phase5ReviewQueueExport | null;
+  CanonicalBacklog?: CanonicalBacklog | null;
 }
 
 export interface BenefitReleaseApprovalRecord {

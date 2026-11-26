@@ -180,6 +180,32 @@ class BenefitRepositoryTest {
     }
 
     @Test
+    fun `비정상적으로 큰 totalCount 응답은 2페이지 요청 없이 즉시 실패하고 캐시를 보존한다`() {
+        val old = entity(id = "mma_old", sourceRowNumber = 999, name = "기존 가게")
+        val local = FakeLocalDataSource(listOf(old))
+        val requestedPages = mutableListOf<Int>()
+        val hugeSource = object : BenefitPageSource {
+            override suspend fun getBenefitPage(pageNo: Int, numOfRows: Int): BenefitPage {
+                requestedPages += pageNo
+                return BenefitPage(
+                    benefits = listOf(Benefit(1, "단일 가게", "서울특별시 마포구 월드컵로 1", "02-1", "할인")),
+                    pageNo = pageNo,
+                    numOfRows = 1,
+                    totalCount = 1_000_000,
+                )
+            }
+        }
+
+        assertThrows(IncompleteBenefitCollectionException::class.java) {
+            runBlocking { BenefitRepository(hugeSource, local).refreshBenefits() }
+        }
+
+        assertEquals(listOf(1), requestedPages)
+        assertEquals(0, local.replaceCallCount)
+        assertEquals(listOf(old), local.current)
+    }
+
+    @Test
     fun `캐시 관찰은 API 응답을 기다리거나 호출하지 않는다`() = runBlocking {
         val cached = entity(id = "mma_cached", sourceRowNumber = 1, name = "저장된 가게")
         val local = FakeLocalDataSource(listOf(cached))

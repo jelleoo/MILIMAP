@@ -6,6 +6,44 @@ internal data class MarkerDiffPlan(
     val toUpdate: List<BenefitMapItem>,
 )
 
+internal const val DEFAULT_MAX_RENDERED_MARKERS = 300
+
+internal fun selectMapMarkerCandidates(
+    benefits: List<BenefitMapItem>,
+    selectedBenefitId: String?,
+    maxMarkers: Int = DEFAULT_MAX_RENDERED_MARKERS,
+    isInView: (BenefitMapItem) -> Boolean,
+): List<BenefitMapItem> {
+    if (maxMarkers <= 0) return emptyList()
+    if (benefits.size <= maxMarkers) return benefits
+
+    val result = ArrayList<BenefitMapItem>(maxMarkers)
+    val includedIds = HashSet<String>(maxMarkers)
+    if (selectedBenefitId != null) {
+        benefits.firstOrNull { it.id == selectedBenefitId }?.let { selected ->
+            result += selected
+            includedIds += selected.id
+        }
+    }
+    for (item in benefits) {
+        if (result.size == maxMarkers) break
+        if (item.id !in includedIds && isInView(item)) {
+            result += item
+            includedIds += item.id
+        }
+    }
+    if (result.size < maxMarkers) {
+        for (item in benefits) {
+            if (result.size == maxMarkers) break
+            if (item.id !in includedIds) {
+                result += item
+                includedIds += item.id
+            }
+        }
+    }
+    return result
+}
+
 internal fun computeMarkerDiff(
     renderedItems: Map<String, BenefitMapItem>,
     previousSelectedId: String?,

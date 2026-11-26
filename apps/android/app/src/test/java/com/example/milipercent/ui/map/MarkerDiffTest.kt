@@ -48,6 +48,36 @@ class MarkerDiffTest {
         assertEquals(listOf("b"), diff.toUpdate.map(BenefitMapItem::id))
     }
 
+    @Test
+    fun `selected marker is always retained even beyond marker cap`() {
+        val items = (1..350).map { item("id-$it") }
+
+        val selected = selectMapMarkerCandidates(
+            benefits = items,
+            selectedBenefitId = "id-340",
+            isInView = { true },
+        )
+
+        assertEquals(DEFAULT_MAX_RENDERED_MARKERS, selected.size)
+        assertEquals(DEFAULT_MAX_RENDERED_MARKERS, selected.map(BenefitMapItem::id).toSet().size)
+        assertTrue(selected.any { it.id == "id-340" })
+    }
+
+    @Test
+    fun `out-of-view selected marker is retained when in-view markers exceed cap`() {
+        val items = listOf(item("selected")) + (1..350).map { item("id-$it") }
+
+        val selected = selectMapMarkerCandidates(
+            benefits = items,
+            selectedBenefitId = "selected",
+            isInView = { it.id != "selected" },
+        )
+
+        assertEquals(DEFAULT_MAX_RENDERED_MARKERS, selected.size)
+        assertEquals("selected", selected.first().id)
+        assertEquals(DEFAULT_MAX_RENDERED_MARKERS, selected.map(BenefitMapItem::id).toSet().size)
+    }
+
     private fun item(
         id: String,
         name: String = "가게 $id",

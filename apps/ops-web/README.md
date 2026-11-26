@@ -52,16 +52,18 @@ powershell -NoProfile -ExecutionPolicy Bypass -File tools/data/validate-benefit-
 
 ---
 
-## 3. 무료 배포 및 개발자 전용 잠금 (Cloudflare Pages + Access)
+## 3. 무료 배포 및 개발자 전용 잠금 (Cloudflare Pages + Access + GitHub Actions)
 
-1. **Cloudflare Pages 연결**
-   - Git 저장소 연결 후 아래 설정 지정:
-     - **Root directory:** `apps/ops-web`
-     - **Build command:** `npm run build`
-     - **Build output directory:** `dist`
-     - (`public/_redirects`로 SPA 라우팅 폴백 처리, `wrangler.jsonc` 포함)
-2. **Cloudflare Zero Trust Access로 개발자 전용 잠금 (50명까지 영구 무료)**
-   - Cloudflare Dashboard → **Zero Trust** → **Access** → **Applications** → **Add an application (Self-hosted)**
-   - 배포된 `<project>.pages.dev` (또는 커스텀 도메인) 등록
-   - **Policy**에 `Allow` 규칙으로 팀 개발자 이메일/도메인 또는 GitHub 조직 멤버만 허용
-   - 별도 로그인 서버나 인증 DB 코드 없이 외부 사용자의 무단 접근을 앞단에서 차단할 수 있습니다.
+### A. 수동 초기 배포 + GitHub Actions 자동 재배포 (`dev` 연동)
+1. Cloudflare Pages에서 Direct Upload 프로젝트(`milimap-ops-web`)를 생성합니다.
+2. GitHub 저장소(`Settings → Secrets and variables → Actions`)에 아래 2개 Secret을 등록합니다:
+   - `CLOUDFLARE_API_TOKEN`: Cloudflare Profile → API Tokens → `Create Token` → `Account · Cloudflare Pages · Edit` 권한 토큰
+   - `CLOUDFLARE_ACCOUNT_ID`: Cloudflare 대시보드 Account ID
+3. 이후 아래 두 워크플로가 자동으로 `milimap-ops-web.pages.dev`를 최신 상태로 유지합니다:
+   - `.github/workflows/deploy-ops-web.yml`: `dev` 브랜치에 `apps/ops-web/**` 또는 시드 매니페스트 변경이 머지되면 자동 검증·빌드 후 Cloudflare Pages 배포 (`workflow_dispatch`로 수동 배포 및 실시간 드리프트 포함 배포도 가능)
+   - `.github/workflows/weekly-benefit-drift-check.yml`: 매주 주간 출처 점검 결과를 `ops-snapshot.json`에 반영해 자동 재배포
+
+### B. Cloudflare Zero Trust Access로 개발자 전용 잠금 (50명까지 영구 무료)
+- Cloudflare Zero Trust → **Access controls** → **Applications** → **Add an application (Self-hosted)**
+- **Public hostname:** Custom input으로 `milimap-ops-web.pages.dev` 입력
+- **Policy:** `Allow` + `Emails`에 팀 개발자 이메일만 추가 (기본 One-time PIN 인증으로 외부 접근 차단)

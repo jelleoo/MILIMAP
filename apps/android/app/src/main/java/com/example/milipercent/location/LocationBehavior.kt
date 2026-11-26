@@ -7,9 +7,8 @@ data class LocationFocusState(
     val focusPending: Boolean = false,
     val cameraRequestId: Long = 0L,
 ) {
-    fun requestFocus(): LocationFocusState =
-        if (latestLocation == null) copy(focusPending = true)
-        else copy(focusPending = false, cameraRequestId = cameraRequestId + 1)
+    // An explicit tap must recheck the device, not reuse an indefinitely cached point.
+    fun requestFocus(): LocationFocusState = copy(focusPending = true)
 
     fun cancelPendingFocus(): LocationFocusState = copy(focusPending = false)
 

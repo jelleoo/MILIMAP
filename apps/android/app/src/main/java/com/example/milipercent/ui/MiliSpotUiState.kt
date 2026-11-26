@@ -50,6 +50,7 @@ data class MiliSpotUiState(
     val searchBounds: GeoBounds? = null,
     val isSearchInMapBoundsAvailable: Boolean = false,
     val isLocationFocusPending: Boolean = false,
+    val isLocationSearchPending: Boolean = false,
     val cameraRequestId: Long = 0,
     val appliedCameraRequestId: Long = -1L,
     val cameraTarget: MapCameraTarget = MapCameraTarget.Point(SEOUL_CENTER),

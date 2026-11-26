@@ -74,7 +74,7 @@ class MainActivity : ComponentActivity() {
             ) { permissions ->
                 if (permissions.values.any { it }) {
                     locationTrackingRequested = true
-                    viewModel.startLocationTracking(locationDataSource)
+                    viewModel.startLocationTracking(locationDataSource, restart = true)
                 } else {
                     viewModel.locationPermissionDenied()
                 }
@@ -94,11 +94,11 @@ class MainActivity : ComponentActivity() {
                         onFavorite = viewModel::toggleFavorite,
                         onRefresh = viewModel::refresh,
                         onCurrentLocation = {
-                            val focusedExisting = viewModel.requestCurrentLocationFocus()
+                            viewModel.requestCurrentLocationFocus()
                             if (hasLocationPermission()) {
                                 locationTrackingRequested = true
-                                viewModel.startLocationTracking(locationDataSource)
-                            } else if (!focusedExisting) {
+                                viewModel.startLocationTracking(locationDataSource, restart = true)
+                            } else {
                                 locationPermissionLauncher.launch(LOCATION_PERMISSIONS)
                             }
                         },

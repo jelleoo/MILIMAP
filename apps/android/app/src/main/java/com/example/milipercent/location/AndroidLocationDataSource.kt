@@ -8,6 +8,7 @@ import android.location.Location
 import android.location.LocationListener
 import android.location.LocationManager
 import android.os.Looper
+import android.os.SystemClock
 import androidx.core.content.ContextCompat
 import com.example.milipercent.model.GeoPoint
 import kotlinx.coroutines.channels.awaitClose
@@ -19,11 +20,19 @@ internal data class LocationFixCandidate(
     val provider: String,
     val timeMillis: Long,
     val accuracyMeters: Float,
+    val elapsedRealtimeNanos: Long = 0L,
 )
 
 internal object LocationFixSelector {
+    private const val MAX_FIX_AGE_NANOS = 30_000_000_000L
     private const val SIGNIFICANT_TIME_DELTA_MS = 2 * 60 * 1_000L
     private const val SIGNIFICANT_ACCURACY_WORSE_METERS = 200f
+
+    fun isUsable(candidate: LocationFixCandidate, nowElapsedRealtimeNanos: Long): Boolean =
+        candidate.point.latitude.isFinite() && candidate.point.latitude in -90.0..90.0 &&
+            candidate.point.longitude.isFinite() && candidate.point.longitude in -180.0..180.0 &&
+            candidate.elapsedRealtimeNanos > 0L &&
+            nowElapsedRealtimeNanos - candidate.elapsedRealtimeNanos in 0L..MAX_FIX_AGE_NANOS
 
     fun isBetterCandidate(
         candidate: LocationFixCandidate,
@@ -109,7 +118,9 @@ class AndroidLocationDataSource(context: Context) : LocationDataSource {
         val listener = object : LocationListener {
             override fun onLocationChanged(location: Location) {
                 val candidate = location.toCandidate()
-                if (LocationFixSelector.isBetterCandidate(candidate, bestCandidate)) {
+                if (LocationFixSelector.isUsable(candidate, SystemClock.elapsedRealtimeNanos()) &&
+                    LocationFixSelector.isBetterCandidate(candidate, bestCandidate)
+                ) {
                     bestCandidate = candidate
                     trySend(LocationUpdate.Position(candidate.point))
                 }
@@ -122,6 +133,7 @@ class AndroidLocationDataSource(context: Context) : LocationDataSource {
                 if (!otherEnabled) {
                     val label = LocationFixSelector.providerDisplayName(provider)
                     trySend(LocationUpdate.Unavailable("$label 위치를 사용할 수 없습니다."))
+                    close()
                 }
             }
         }
@@ -129,6 +141,7 @@ class AndroidLocationDataSource(context: Context) : LocationDataSource {
         val lastKnownCandidates = mutableListOf<LocationFixCandidate>()
         fun register(provider: String) {
             runCatching {
+                if (!manager.isProviderEnabled(provider)) return
                 manager.requestLocationUpdates(
                     provider,
                     LOCATION_UPDATE_INTERVAL_MS,
@@ -149,12 +162,15 @@ class AndroidLocationDataSource(context: Context) : LocationDataSource {
         if (hasFine) register(LocationManager.GPS_PROVIDER)
         if (hasFine || hasCoarse) register(LocationManager.NETWORK_PROVIDER)
 
-        LocationFixSelector.selectBest(lastKnownCandidates)?.let { best ->
+        LocationFixSelector.selectBest(
+            lastKnownCandidates.filter { LocationFixSelector.isUsable(it, SystemClock.elapsedRealtimeNanos()) },
+        )?.let { best ->
             bestCandidate = best
             trySend(LocationUpdate.Position(best.point))
         }
         LocationFixSelector.registrationFailureMessage(registeredProviders, failedProviders)?.let { message ->
             trySend(LocationUpdate.Unavailable(message))
+            close()
         }
 
         awaitClose { runCatching { manager.removeUpdates(listener) } }
@@ -169,5 +185,6 @@ class AndroidLocationDataSource(context: Context) : LocationDataSource {
             provider = provider ?: fallbackProvider,
             timeMillis = time,
             accuracyMeters = if (hasAccuracy()) accuracy else Float.MAX_VALUE,
+            elapsedRealtimeNanos = elapsedRealtimeNanos,
         )
 }

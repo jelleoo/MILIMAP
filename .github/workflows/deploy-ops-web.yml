@@ -22,7 +22,7 @@ on:
       include_live_drift:
         description: "Include live weekly official source drift check in ops-snapshot.json"
         required: false
-        default: false
+        default: true
         type: boolean
 
 permissions:

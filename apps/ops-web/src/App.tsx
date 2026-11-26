@@ -7,8 +7,9 @@ import {
   ShieldCheck,
   Upload,
 } from 'lucide-react';
+import type { DriftCheckEntry } from './components/DriftReviewPanel';
 import { LedgerExportModal } from './components/LedgerExportModal';
-import { OverviewView, type QueueTargetFilter } from './components/OverviewView';
+import { OverviewView, type QueueSourceTab, type QueueTargetFilter } from './components/OverviewView';
 import { ReviewQueueView, itemUniqueKey } from './components/ReviewQueueView';
 import { Badge, Button } from './components/ui/primitives';
 import { createDemoSnapshot } from './lib/demoSnapshot';
@@ -23,6 +24,7 @@ type ActiveTab = 'overview' | 'review-queue';
 
 const STORAGE_RECORDS_KEY = 'milimap_ops_approval_records_v1';
 const STORAGE_APPROVER_KEY = 'milimap_ops_approver_v1';
+const STORAGE_DRIFT_CHECKS_KEY = 'milimap_ops_drift_checks_v1';
 
 const FALLBACK_MANIFEST = {
   manifestVersion: 1,
@@ -42,6 +44,7 @@ const FALLBACK_MANIFEST = {
 export function App() {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [activeTab, setActiveTab] = useState<ActiveTab>('overview');
+  const [queueSource, setQueueSource] = useState<QueueSourceTab>('drift');
   const [bucketFilter, setBucketFilter] = useState<QueueTargetFilter>('ATTENTION');
   const [domainFilter, setDomainFilter] = useState<'ALL' | ReviewDomain>('ALL');
   const [draftStatusFilter, setDraftStatusFilter] = useState<'ALL' | 'PENDING' | 'DRAFTED'>('ALL');
@@ -75,6 +78,14 @@ export function App() {
       return localStorage.getItem(STORAGE_APPROVER_KEY) ?? '';
     } catch {
       return '';
+    }
+  });
+  const [driftChecksById, setDriftChecksById] = useState<Record<string, DriftCheckEntry>>(() => {
+    try {
+      const raw = localStorage.getItem(STORAGE_DRIFT_CHECKS_KEY);
+      return raw ? (JSON.parse(raw) as Record<string, DriftCheckEntry>) : {};
+    } catch {
+      return {};
     }
   });
 
@@ -114,18 +125,35 @@ export function App() {
     }
   }, [defaultApprover]);
 
+  useEffect(() => {
+    try {
+      localStorage.setItem(STORAGE_DRIFT_CHECKS_KEY, JSON.stringify(driftChecksById));
+    } catch {
+      // Ignore storage errors.
+    }
+  }, [driftChecksById]);
+
   const displayedSnapshot = useMemo(
     () => (isDemo ? createDemoSnapshot(snapshot.SeedBaseline) : snapshot),
     [isDemo, snapshot],
   );
 
+  const driftReviewItems = displayedSnapshot.WeeklyDrift?.reviewItems ?? [];
   const reviewItems = displayedSnapshot.ReviewQueue?.Items ?? [];
-  const attentionCount =
+  const phase5AttentionCount =
     (displayedSnapshot.ReviewQueue?.Summary.DomainReviewCount ?? 0) +
     (displayedSnapshot.ReviewQueue?.Summary.DiagnosticHoldCount ?? 0);
+  const attentionCount = driftReviewItems.length + phase5AttentionCount;
   const draftedRecords = useMemo(() => Object.values(recordsByBusinessId), [recordsByBusinessId]);
+  const driftCheckedCount = useMemo(
+    () => Object.values(driftChecksById).filter((entry) => entry.checked).length,
+    [driftChecksById],
+  );
 
-  const handleOpenQueue = (filter: QueueTargetFilter) => {
+  const handleOpenQueue = (filter: QueueTargetFilter, preferredSource?: QueueSourceTab) => {
+    const targetSource: QueueSourceTab =
+      preferredSource ?? (phase5AttentionCount > 0 ? 'phase5' : driftReviewItems.length > 0 ? 'drift' : 'phase5');
+    setQueueSource(targetSource);
     setBucketFilter(filter);
     setSelectedKey(null);
     setActiveTab('review-queue');
@@ -134,7 +162,7 @@ export function App() {
   const handleFiles = async (files: FileList | null) => {
     if (!files || files.length === 0) return;
     try {
-      let messages: string[] = [];
+      const messages: string[] = [];
       for (const file of Array.from(files)) {
         const text = await file.text();
         const parsed = parseUploadedOpsJson(text);
@@ -197,6 +225,18 @@ export function App() {
     });
   };
 
+  const handleSaveDriftCheck = (id: string, entry: DriftCheckEntry) => {
+    setDriftChecksById((prev) => ({ ...prev, [id]: entry }));
+  };
+
+  const handleClearDriftCheck = (id: string) => {
+    setDriftChecksById((prev) => {
+      const next = { ...prev };
+      delete next[id];
+      return next;
+    });
+  };
+
   return (
     <div
       className="min-h-screen bg-slate-50 text-slate-900"
@@ -229,7 +269,6 @@ export function App() {
       />
 
       <div className="flex min-h-screen flex-col lg:flex-row">
-        {/* Left Navigation Sidebar */}
         <aside className="w-full shrink-0 border-b border-slate-200 bg-white lg:w-64 lg:border-r lg:border-b-0">
           <div className="flex h-full flex-col justify-between p-4">
             <div className="space-y-5">
@@ -296,7 +335,6 @@ export function App() {
           </div>
         </aside>
 
-        {/* Main Workspace */}
         <div className="flex min-w-0 flex-1 flex-col">
           <header className="sticky top-0 z-20 flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 bg-white/95 px-6 py-3 backdrop-blur-xs">
             <div>
@@ -306,9 +344,13 @@ export function App() {
               <p className="text-xs text-slate-500">
                 {isDemo
                   ? 'DEMO 샘플 데이터 미리보기 중'
-                  : displayedSnapshot.ReviewQueue || displayedSnapshot.WeeklyDrift
-                    ? '로드된 파이프라인 리포트 기준'
-                    : '기본 번들 시드 기준선 (리포트 JSON을 끌어다 놓아 확장)'}
+                  : displayedSnapshot.WeeklyDrift && displayedSnapshot.ReviewQueue
+                    ? '주간 드리프트 + Phase 5 리뷰 큐 모두 연결됨'
+                    : displayedSnapshot.WeeklyDrift
+                      ? '주간 드리프트 리포트 연결됨 (Phase 5 큐 미연결)'
+                      : displayedSnapshot.ReviewQueue
+                        ? 'Phase 5 리뷰 큐 연결됨 (주간 드리프트 미연결)'
+                        : '기본 번들 시드 기준선 (리포트 JSON을 끌어다 놓아 확장)'}
               </p>
             </div>
 
@@ -357,12 +399,19 @@ export function App() {
                 snapshot={displayedSnapshot}
                 isDemo={isDemo}
                 recordsByBusinessId={recordsByBusinessId}
+                driftCheckedCount={driftCheckedCount}
                 onOpenQueue={handleOpenQueue}
                 onTriggerUpload={() => fileInputRef.current?.click()}
                 onEnableDemo={() => setIsDemo(true)}
               />
             ) : (
               <ReviewQueueView
+                queueSource={queueSource}
+                onChangeQueueSource={setQueueSource}
+                driftItems={driftReviewItems}
+                driftChecksById={driftChecksById}
+                onSaveDriftCheck={handleSaveDriftCheck}
+                onClearDriftCheck={handleClearDriftCheck}
                 items={reviewItems}
                 bucketFilter={bucketFilter}
                 onChangeBucketFilter={(next) => {

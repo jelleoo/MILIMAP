@@ -2,12 +2,24 @@ import { useMemo } from 'react';
 import { ArrowLeft, CheckCircle2, ExternalLink, Search, ShieldAlert } from 'lucide-react';
 import { BUCKET_META, formatCodeLabel, getItemReasonSummary, isNeedsHumanAttention } from '../lib/reasonLabels';
 import { extractSafeUrls } from '../lib/safeUrl';
-import type { BenefitReleaseApprovalRecord, ReviewDomain, ReviewQueueItem } from '../types/ops';
+import type {
+  BenefitReleaseApprovalRecord,
+  ReviewDomain,
+  ReviewQueueItem,
+  WeeklyDriftReviewItem,
+} from '../types/ops';
 import { ApprovalDrawer } from './ApprovalDrawer';
-import type { QueueTargetFilter } from './OverviewView';
+import { DriftReviewPanel, type DriftCheckEntry } from './DriftReviewPanel';
+import type { QueueSourceTab, QueueTargetFilter } from './OverviewView';
 import { Badge, Button, Card, Input, Select } from './ui/primitives';
 
 interface ReviewQueueViewProps {
+  queueSource: QueueSourceTab;
+  onChangeQueueSource: (source: QueueSourceTab) => void;
+  driftItems: WeeklyDriftReviewItem[];
+  driftChecksById: Record<string, DriftCheckEntry>;
+  onSaveDriftCheck: (id: string, entry: DriftCheckEntry) => void;
+  onClearDriftCheck: (id: string) => void;
   items: ReviewQueueItem[];
   bucketFilter: QueueTargetFilter;
   onChangeBucketFilter: (filter: QueueTargetFilter) => void;
@@ -32,6 +44,12 @@ export function itemUniqueKey(item: ReviewQueueItem): string {
 }
 
 export function ReviewQueueView({
+  queueSource,
+  onChangeQueueSource,
+  driftItems,
+  driftChecksById,
+  onSaveDriftCheck,
+  onClearDriftCheck,
   items,
   bucketFilter,
   onChangeBucketFilter,
@@ -121,191 +139,237 @@ export function ReviewQueueView({
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <Button variant="outline" size="sm" onClick={onBackOverview}>
-          <ArrowLeft className="h-3.5 w-3.5" />
-          자동화 현황 대시보드로 돌아가기
-        </Button>
-        <div className="text-xs text-slate-500">
-          필터 결과 <span className="font-semibold text-slate-900">{filteredItems.length}</span>건 / 전체{' '}
-          {counts.total}건
-        </div>
-      </div>
-
-      {/* Explicit instruction banner required for ambiguous items */}
-      <div className="flex items-start gap-3 rounded-xl border border-amber-300 bg-amber-50 px-4 py-3.5 text-amber-950">
-        <ShieldAlert className="mt-0.5 h-5 w-5 shrink-0 text-amber-800" />
-        <div className="space-y-0.5">
-          <div className="text-sm font-semibold">
-            직접 확인이 필요합니다 — 애매하게 걸친 데이터를 모아둔 수동 확인 화면입니다.
-          </div>
-          <p className="text-xs text-amber-900">
-            각 항목의 <span className="font-semibold">공식 출처 직접 확인 ↗</span> 또는{' '}
-            <span className="font-semibold">네이버 지도 확인 ↗</span> 링크로 실제 공고·영업 상태를 확인한 뒤, 오른쪽 패널에서 승인 원장을 작성해 검증기로 내보내세요.
-          </p>
-        </div>
-      </div>
-
-      {/* Filter Bar */}
-      <Card className="p-3.5">
-        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-          <div className="flex flex-wrap gap-1.5">
-            {filterTabs.map((tab) => (
-              <button
-                key={tab.id}
-                type="button"
-                onClick={() => onChangeBucketFilter(tab.id)}
-                className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition cursor-pointer ${
-                  bucketFilter === tab.id
-                    ? 'bg-slate-900 text-white shadow-2xs'
-                    : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+        <div className="flex flex-wrap items-center gap-2">
+          <Button variant="outline" size="sm" onClick={onBackOverview}>
+            <ArrowLeft className="h-3.5 w-3.5" />
+            자동화 현황 대시보드로 돌아가기
+          </Button>
+          <div className="inline-flex rounded-lg border border-slate-200 bg-white p-0.5">
+            <button
+              type="button"
+              onClick={() => onChangeQueueSource('drift')}
+              className={`inline-flex items-center gap-1.5 rounded-md px-3 py-1 text-xs font-medium transition cursor-pointer ${
+                queueSource === 'drift' ? 'bg-slate-900 text-white' : 'text-slate-700 hover:bg-slate-100'
+              }`}
+            >
+              <span>주간 출처 변경·재확인</span>
+              <span
+                className={`tabular-nums rounded px-1.5 py-0.2 text-[11px] ${
+                  queueSource === 'drift' ? 'bg-white/20 text-white' : 'bg-amber-100 text-amber-900'
                 }`}
               >
-                <span>{tab.label}</span>
-                <span
-                  className={`tabular-nums rounded px-1.5 py-0.2 text-[11px] ${
-                    bucketFilter === tab.id ? 'bg-white/20 text-white' : 'bg-white text-slate-700'
-                  }`}
-                >
-                  {tab.count}
-                </span>
-              </button>
-            ))}
-          </div>
-
-          <div className="flex flex-wrap items-center gap-2">
-            <div className="relative min-w-[210px] flex-1">
-              <Search className="pointer-events-none absolute top-2.5 left-2.5 h-4 w-4 text-slate-400" />
-              <Input
-                className="pl-8"
-                placeholder="업소명, 시군구, 사유 검색..."
-                value={searchQuery}
-                onChange={(e) => onChangeSearchQuery(e.target.value)}
-              />
-            </div>
-            <Select
-              value={domainFilter}
-              onChange={(e) => onChangeDomainFilter(e.target.value as 'ALL' | ReviewDomain)}
-              aria-label="도메인 필터"
+                {driftItems.length}
+              </span>
+            </button>
+            <button
+              type="button"
+              onClick={() => onChangeQueueSource('phase5')}
+              className={`inline-flex items-center gap-1.5 rounded-md px-3 py-1 text-xs font-medium transition cursor-pointer ${
+                queueSource === 'phase5' ? 'bg-slate-900 text-white' : 'text-slate-700 hover:bg-slate-100'
+              }`}
             >
-              <option value="ALL">전체 도메인</option>
-              <option value="BENEFIT">BENEFIT (혜택)</option>
-              <option value="LOCATION">LOCATION (좌표)</option>
-            </Select>
-            <Select
-              value={draftStatusFilter}
-              onChange={(e) =>
-                onChangeDraftStatusFilter(e.target.value as 'ALL' | 'PENDING' | 'DRAFTED')
-              }
-              aria-label="작성 상태 필터"
-            >
-              <option value="ALL">원장 전체</option>
-              <option value="PENDING">미작성</option>
-              <option value="DRAFTED">작성 완료</option>
-            </Select>
+              <span>Phase 5 승인 큐</span>
+              <span
+                className={`tabular-nums rounded px-1.5 py-0.2 text-[11px] ${
+                  queueSource === 'phase5' ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-700'
+                }`}
+              >
+                {counts.total}
+              </span>
+            </button>
           </div>
         </div>
-      </Card>
 
-      {/* Split Master-Detail */}
-      <div className="grid grid-cols-1 gap-4 xl:grid-cols-12">
-        <div className="space-y-2.5 xl:col-span-5">
-          {filteredItems.length === 0 ? (
-            <Card className="p-8 text-center text-sm text-slate-500">
-              현재 필터 조건에 해당하는 항목이 없습니다.
-            </Card>
-          ) : (
-            filteredItems.map((item) => {
-              const key = itemUniqueKey(item);
-              const isSelected = selectedItem ? itemUniqueKey(selectedItem) === key : false;
-              const bucketMeta = BUCKET_META[item.OperatorBucket];
-              const reasons = getItemReasonSummary(item).slice(0, 3);
-              const firstSafeUrl = extractSafeUrls(item.CanonicalSourceUrl, item.SourceUrls)[0];
-              const drafted = recordsByBusinessId[item.BusinessId];
-
-              return (
-                <div
-                  key={key}
-                  onClick={() => onSelectKey(key)}
-                  role="button"
-                  tabIndex={0}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' || e.key === ' ') {
-                      e.preventDefault();
-                      onSelectKey(key);
-                    }
-                  }}
-                  className={`rounded-xl border p-4 transition cursor-pointer ${
-                    isSelected
-                      ? 'border-slate-900 bg-white ring-2 ring-slate-900/10'
-                      : 'border-slate-200 bg-white hover:border-slate-300'
-                  }`}
-                >
-                  <div className="flex flex-wrap items-center justify-between gap-1.5">
-                    <div className="flex flex-wrap items-center gap-1.5">
-                      <Badge tone={bucketMeta.tone}>{bucketMeta.shortLabel}</Badge>
-                      <Badge tone="neutral">{item.Domain}</Badge>
-                      {drafted && (
-                        <Badge tone="emerald">
-                          <CheckCircle2 className="h-3 w-3" />
-                          {drafted.benefitDecision}
-                        </Badge>
-                      )}
-                    </div>
-                    {firstSafeUrl && (
-                      <a
-                        href={firstSafeUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        onClick={(e) => e.stopPropagation()}
-                        className="inline-flex items-center gap-1 rounded-md border border-slate-200 bg-slate-50 px-2 py-0.5 text-[11px] font-medium text-slate-700 hover:bg-slate-100"
-                      >
-                        직접 확인
-                        <ExternalLink className="h-3 w-3" />
-                      </a>
-                    )}
-                  </div>
-
-                  <div className="mt-2 font-semibold text-slate-900">
-                    {item.BusinessName || '(업소명 미상)'}
-                  </div>
-                  <div className="mt-0.5 text-xs text-slate-500">
-                    {[item.District, item.RoadAddress].filter(Boolean).join(' · ') || item.BusinessId}
-                  </div>
-
-                  {reasons.length > 0 && (
-                    <div className="mt-2.5 flex flex-wrap gap-1">
-                      {reasons.map((code) => (
-                        <span
-                          key={code}
-                          className="rounded bg-slate-100 px-1.5 py-0.5 text-[11px] text-slate-700"
-                        >
-                          {formatCodeLabel(code)}
-                        </span>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              );
-            })
-          )}
-        </div>
-
-        <div className="xl:col-span-7">
-          <ApprovalDrawer
-            item={selectedItem}
-            existingRecord={selectedItem ? recordsByBusinessId[selectedItem.BusinessId] : undefined}
-            defaultApprover={defaultApprover}
-            relatedBenefitRecord={
-              selectedItem && selectedItem.Domain === 'LOCATION'
-                ? recordsByBusinessId[selectedItem.BusinessId]
-                : undefined
-            }
-            onSaveRecord={onSaveRecord}
-            onDeleteRecord={onDeleteRecord}
-            onAttachLocationObservation={onAttachLocationObservation}
-          />
+        <div className="text-xs text-slate-500">
+          {queueSource === 'drift'
+            ? `주간 드리프트 직접 확인 항목 ${driftItems.length}건`
+            : `필터 결과 ${filteredItems.length}건 / 전체 ${counts.total}건`}
         </div>
       </div>
+
+      {queueSource === 'drift' ? (
+        <DriftReviewPanel
+          items={driftItems}
+          checksById={driftChecksById}
+          onSaveCheck={onSaveDriftCheck}
+          onClearCheck={onClearDriftCheck}
+        />
+      ) : (
+        <>
+          <div className="flex items-start gap-3 rounded-xl border border-amber-300 bg-amber-50 px-4 py-3.5 text-amber-950">
+            <ShieldAlert className="mt-0.5 h-5 w-5 shrink-0 text-amber-800" />
+            <div className="space-y-0.5">
+              <div className="text-sm font-semibold">
+                직접 확인이 필요합니다 — 애매하게 걸친 데이터를 모아둔 Phase 5 승인 대기열입니다.
+              </div>
+              <p className="text-xs text-amber-900">
+                각 항목의 <span className="font-semibold">공식 출처 직접 확인 ↗</span> 또는{' '}
+                <span className="font-semibold">네이버 지도 확인 ↗</span> 링크로 실제 공고·영업 상태를 확인한 뒤, 오른쪽 패널에서 승인 원장을 작성해 검증기로 내보내세요.
+              </p>
+            </div>
+          </div>
+
+          <Card className="p-3.5">
+            <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+              <div className="flex flex-wrap gap-1.5">
+                {filterTabs.map((tab) => (
+                  <button
+                    key={tab.id}
+                    type="button"
+                    onClick={() => onChangeBucketFilter(tab.id)}
+                    className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition cursor-pointer ${
+                      bucketFilter === tab.id
+                        ? 'bg-slate-900 text-white shadow-2xs'
+                        : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                    }`}
+                  >
+                    <span>{tab.label}</span>
+                    <span
+                      className={`tabular-nums rounded px-1.5 py-0.2 text-[11px] ${
+                        bucketFilter === tab.id ? 'bg-white/20 text-white' : 'bg-white text-slate-700'
+                      }`}
+                    >
+                      {tab.count}
+                    </span>
+                  </button>
+                ))}
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2">
+                <div className="relative min-w-[210px] flex-1">
+                  <Search className="pointer-events-none absolute top-2.5 left-2.5 h-4 w-4 text-slate-400" />
+                  <Input
+                    className="pl-8"
+                    placeholder="업소명, 시군구, 사유 검색..."
+                    value={searchQuery}
+                    onChange={(e) => onChangeSearchQuery(e.target.value)}
+                  />
+                </div>
+                <Select
+                  value={domainFilter}
+                  onChange={(e) => onChangeDomainFilter(e.target.value as 'ALL' | ReviewDomain)}
+                  aria-label="도메인 필터"
+                >
+                  <option value="ALL">전체 도메인</option>
+                  <option value="BENEFIT">BENEFIT (혜택)</option>
+                  <option value="LOCATION">LOCATION (좌표)</option>
+                </Select>
+                <Select
+                  value={draftStatusFilter}
+                  onChange={(e) =>
+                    onChangeDraftStatusFilter(e.target.value as 'ALL' | 'PENDING' | 'DRAFTED')
+                  }
+                  aria-label="작성 상태 필터"
+                >
+                  <option value="ALL">원장 전체</option>
+                  <option value="PENDING">미작성</option>
+                  <option value="DRAFTED">원장 작성 완료</option>
+                </Select>
+              </div>
+            </div>
+          </Card>
+
+          <div className="grid grid-cols-1 gap-4 xl:grid-cols-12">
+            <div className="space-y-2.5 xl:col-span-5">
+              {filteredItems.length === 0 ? (
+                <Card className="p-8 text-center text-sm text-slate-500">
+                  현재 필터 조건에 해당하는 Phase 5 리뷰 큐 항목이 없습니다.
+                </Card>
+              ) : (
+                filteredItems.map((item) => {
+                  const key = itemUniqueKey(item);
+                  const isSelected = selectedItem ? itemUniqueKey(selectedItem) === key : false;
+                  const bucketMeta = BUCKET_META[item.OperatorBucket];
+                  const reasons = getItemReasonSummary(item).slice(0, 3);
+                  const firstSafeUrl = extractSafeUrls(item.CanonicalSourceUrl, item.SourceUrls)[0];
+                  const drafted = recordsByBusinessId[item.BusinessId];
+
+                  return (
+                    <div
+                      key={key}
+                      onClick={() => onSelectKey(key)}
+                      role="button"
+                      tabIndex={0}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault();
+                          onSelectKey(key);
+                        }
+                      }}
+                      className={`rounded-xl border p-4 transition cursor-pointer ${
+                        isSelected
+                          ? 'border-slate-900 bg-white ring-2 ring-slate-900/10'
+                          : 'border-slate-200 bg-white hover:border-slate-300'
+                      }`}
+                    >
+                      <div className="flex flex-wrap items-center justify-between gap-1.5">
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          <Badge tone={bucketMeta.tone}>{bucketMeta.shortLabel}</Badge>
+                          <Badge tone="neutral">{item.Domain}</Badge>
+                          {drafted && (
+                            <Badge tone="emerald">
+                              <CheckCircle2 className="h-3 w-3" />
+                              {drafted.benefitDecision}
+                            </Badge>
+                          )}
+                        </div>
+                        {firstSafeUrl && (
+                          <a
+                            href={firstSafeUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            onClick={(e) => e.stopPropagation()}
+                            className="inline-flex items-center gap-1 rounded-md border border-slate-200 bg-slate-50 px-2 py-0.5 text-[11px] font-medium text-slate-700 hover:bg-slate-100"
+                          >
+                            직접 확인
+                            <ExternalLink className="h-3 w-3" />
+                          </a>
+                        )}
+                      </div>
+
+                      <div className="mt-2 font-semibold text-slate-900">
+                        {item.BusinessName || '(업소명 미상)'}
+                      </div>
+                      <div className="mt-0.5 text-xs text-slate-500">
+                        {[item.District, item.RoadAddress].filter(Boolean).join(' · ') || item.BusinessId}
+                      </div>
+
+                      {reasons.length > 0 && (
+                        <div className="mt-2.5 flex flex-wrap gap-1">
+                          {reasons.map((code) => (
+                            <span
+                              key={code}
+                              className="rounded bg-slate-100 px-1.5 py-0.5 text-[11px] text-slate-700"
+                            >
+                              {formatCodeLabel(code)}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })
+              )}
+            </div>
+
+            <div className="xl:col-span-7">
+              <ApprovalDrawer
+                item={selectedItem}
+                existingRecord={selectedItem ? recordsByBusinessId[selectedItem.BusinessId] : undefined}
+                defaultApprover={defaultApprover}
+                relatedBenefitRecord={
+                  selectedItem && selectedItem.Domain === 'LOCATION'
+                    ? recordsByBusinessId[selectedItem.BusinessId]
+                    : undefined
+                }
+                onSaveRecord={onSaveRecord}
+                onDeleteRecord={onDeleteRecord}
+                onAttachLocationObservation={onAttachLocationObservation}
+              />
+            </div>
+          </div>
+        </>
+      )}
     </div>
   );
 }

@@ -28,6 +28,31 @@ export interface WeeklyDriftSource {
   error: string;
 }
 
+export type WeeklyDriftReviewCategory =
+  | 'CONTENT_CHANGED'
+  | 'MISSING_IN_OFFICIAL'
+  | 'DETAIL_RECHECK'
+  | 'ADDRESS_RECHECK'
+  | 'ATTACHMENT_CHANGED';
+
+export interface WeeklyDriftReviewItem {
+  id: string;
+  sourceId: string;
+  sourceName: string;
+  category: WeeklyDriftReviewCategory;
+  categoryLabel: string;
+  severity: 'amber' | 'red';
+  businessId?: string | null;
+  canonicalRowNumber?: number | null;
+  businessName: string;
+  district?: string | null;
+  roadAddress?: string | null;
+  reasonSummary: string;
+  canonicalDetail?: string | null;
+  officialDetail?: string | null;
+  sourceUrls: string[];
+}
+
 export interface WeeklyBenefitDriftSummary {
   contractType: 'WeeklyBenefitDriftSummary';
   contractVersion: number;
@@ -36,6 +61,7 @@ export interface WeeklyBenefitDriftSummary {
   automaticCanonicalMutation: boolean;
   productionAction?: string;
   sources: WeeklyDriftSource[];
+  reviewItems?: WeeklyDriftReviewItem[];
 }
 
 export interface ValidatedClaimSummary {

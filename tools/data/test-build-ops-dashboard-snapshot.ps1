@@ -76,6 +76,30 @@ try {
     }
     [IO.File]::WriteAllText($driftPath, ($driftObj | ConvertTo-Json -Depth 10), [Text.UTF8Encoding]::new($false))
 
+    # Write sibling weekly drift review files to verify reviewItems aggregation
+    [IO.File]::WriteAllText((Join-Path $tempRoot 'mma-changed-candidates.csv'), @"
+BusinessId,InstitutionCode,BusinessName,RoadAddress,ChangedFields,CanonicalDiscount,LiveDiscount,CanonicalTarget,LiveTarget,CanonicalPhone,LivePhone
+biz-00000000000000000000000000000010,1001,테스트변경식당,서울특별시 강남구 테스트로 1,DISCOUNT,10% 할인,'=15% 할인,현역,현역,02-111-1111,02-111-1111
+"@, [Text.UTF8Encoding]::new($false))
+    [IO.File]::WriteAllText((Join-Path $tempRoot 'mma-missing-canonical.csv'), @"
+BusinessId,BusinessName,Sido,District,RoadAddress,InstitutionCode,LastVerifiedAt,CoordStatus
+biz-00000000000000000000000000000011,테스트미관측카페,경기도,성남시,경기도 성남시 분당구 테스트로 2,1002,2026-10-01,확인 완료
+"@, [Text.UTF8Encoding]::new($false))
+    [IO.File]::WriteAllText((Join-Path $tempRoot 'ddc-comparison.csv'), @"
+정본CSV행번호,업소명,소재지도로명주소,기존전화번호,기존할인정보,공식업소명,공식주소,공식전화번호,공식할인정보,상호주소일치,전화일치,할인일치,판정,검토결정,정본반영여부
+10,일치업소,경기도 동두천시 평화로 1,031-1,10%,일치업소,경기도 동두천시 평화로 1,031-1,10%,True,True,True,현재 공식 목록 일치 후보,미검토,아니오
+11,재확인업소,경기도 동두천시 평화로 2,031-2,10%,재확인업소,경기도 동두천시 평화로 2,031-9,15%,True,False,False,상세정보 재확인 필요,미검토,아니오
+"@, [Text.UTF8Encoding]::new($false))
+    [IO.File]::WriteAllText((Join-Path $tempRoot 'yangju-summary.json'), (@{
+        status           = 'DRIFT_DETECTED'
+        noticeUrl        = 'https://www.yangju.go.kr/health/selectBbsNttView.do?key=2716&bbsNo=81&nttNo=208699'
+        attachmentUrl    = 'https://www.yangju.go.kr/health/downloadBbsFile.do?atchmnflNo=204211'
+        actualHash       = 'abc'
+        baselineHash     = 'def'
+        actualByteSize   = 19019
+        baselineByteSize = 18800
+    } | ConvertTo-Json), [Text.UTF8Encoding]::new($false))
+
     $rqPath = Join-Path $tempRoot 'review-queue-summary.json'
     $rqObj = [pscustomobject][ordered]@{
         ContractType    = 'Phase5ReviewQueueExport'
@@ -127,6 +151,10 @@ try {
     [void](Build-OpsDashboardSnapshot -SeedManifestJson $realManifestPath -WeeklyDriftSummaryJson $driftPath -ReviewQueueSummaryJson $rqPath -OutputJson $fullOut)
     $parsed2 = (Get-Content -Raw -Encoding utf8 -LiteralPath $fullOut) | ConvertFrom-Json
     Assert-OpsSnapshotEqual ([int]$parsed2.WeeklyDrift.sources.Count) 1 'WeeklyDrift sources count mismatch'
+    Assert-OpsSnapshotEqual ([int]$parsed2.WeeklyDrift.reviewItems.Count) 4 'WeeklyDrift reviewItems should include 4 non-matched items (skipping exact match row)'
+    Assert-OpsSnapshotEqual ([string]$parsed2.WeeklyDrift.reviewItems[0].category) 'CONTENT_CHANGED' 'First drift item should be MMA changed candidate'
+    Assert-OpsSnapshotTrue ([string]$parsed2.WeeklyDrift.reviewItems[0].officialDetail -like '*=15% 할인*') 'Safe CSV leading apostrophe should be stripped cleanly'
+    Assert-OpsSnapshotEqual ([string]$parsed2.WeeklyDrift.reviewItems[3].category) 'ATTACHMENT_CHANGED' 'Fourth drift item should be Yangju attachment drift'
     Assert-OpsSnapshotEqual ([int]$parsed2.ReviewQueue.Summary.DomainReviewCount) 1 'DomainReviewCount mismatch'
     Assert-OpsSnapshotEqual ([int]$parsed2.ReviewQueue.Items.Count) 2 'ReviewQueue items count mismatch'
     Assert-OpsSnapshotTrue (-not ($parsed2.ReviewQueue.Items[0].PSObject.Properties.Name -contains 'RAW_SOURCE_PAYLOAD')) 'Unexpected raw payload property must be stripped'

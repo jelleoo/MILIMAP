@@ -35,9 +35,25 @@ describe('snapshotParser', () => {
         canonicalRowCount: 1137,
         automaticCanonicalMutation: false,
         sources: [],
+        reviewItems: [
+          {
+            id: 'drift-mma-changed-1',
+            sourceId: 'mma',
+            sourceName: '병무청 나라사랑가게',
+            category: 'CONTENT_CHANGED',
+            categoryLabel: '내용 변경',
+            severity: 'amber',
+            businessName: '테스트',
+            reasonSummary: 'DISCOUNT',
+            sourceUrls: ['https://www.mma.go.kr/about/udgg/list.do?mc=mma0003357'],
+          },
+        ],
       }),
     );
     expect(drift.kind).toBe('weekly-drift');
+    if (drift.kind === 'weekly-drift') {
+      expect(drift.data.reviewItems).toHaveLength(1);
+    }
 
     const ledger = parseUploadedOpsJson(
       JSON.stringify({

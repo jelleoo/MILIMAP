@@ -48,6 +48,11 @@ try {
     Assert-OpsSnapshotTrue ($null -eq $parsed1.WeeklyDrift) 'WeeklyDrift should be null when omitted'
     Assert-OpsSnapshotTrue ($null -eq $parsed1.ReviewQueue) 'ReviewQueue should be null when omitted'
 
+    # Overwriting an existing output JSON must succeed across Windows and Linux pwsh
+    [void](Build-OpsDashboardSnapshot -SeedManifestJson $realManifestPath -OutputJson $baselineOut)
+    $parsedOverwrite = (Get-Content -Raw -Encoding utf8 -LiteralPath $baselineOut) | ConvertFrom-Json
+    Assert-OpsSnapshotEqual $parsedOverwrite.ContractType 'OpsDashboardSnapshot' 'Overwritten snapshot ContractType mismatch'
+
     # 2. Full snapshot with synthetic WeeklyDrift & ReviewQueue
     $driftPath = Join-Path $tempRoot 'weekly-drift-summary.json'
     $driftObj = [pscustomobject][ordered]@{

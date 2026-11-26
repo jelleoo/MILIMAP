@@ -35,9 +35,12 @@ import com.example.milipercent.BuildConfig
 import com.example.milipercent.model.GeoBounds
 import com.example.milipercent.model.GeoPoint
 import com.example.milipercent.ui.map.BenefitMapItem
+import com.example.milipercent.ui.map.DEFAULT_MAX_RENDERED_MARKERS
+import com.example.milipercent.ui.map.MapViewLifecycleController
 import com.example.milipercent.ui.map.categoryAccentColorInt
 import com.example.milipercent.ui.map.computeMarkerDiff
 import com.example.milipercent.ui.map.createBenefitMarkerIcon
+import com.example.milipercent.ui.map.selectMapMarkerCandidates as selectBoundedMarkerCandidates
 import com.naver.maps.geometry.LatLng
 import com.naver.maps.geometry.LatLngBounds
 import com.naver.maps.map.CameraAnimation
@@ -115,6 +118,15 @@ private fun NaverMapView(
     val latestOnCameraRequestApplied by rememberUpdatedState(onCameraRequestApplied)
     val latestOnCameraIdle by rememberUpdatedState(onCameraIdle)
     val mapView = remember { MapView(context).also { it.onCreate(null) } }
+    val lifecycleController = remember(mapView) {
+        MapViewLifecycleController(
+            onStart = mapView::onStart,
+            onResume = mapView::onResume,
+            onPause = mapView::onPause,
+            onStop = mapView::onStop,
+            onDestroy = mapView::onDestroy,
+        )
+    }
     val iconCache = remember(context) { mutableMapOf<Pair<String, Boolean>, OverlayImage>() }
     val markerPool = remember { LinkedHashMap<String, Marker>() }
     val renderedItems = remember { LinkedHashMap<String, BenefitMapItem>() }
@@ -134,14 +146,7 @@ private fun NaverMapView(
 
     DisposableEffect(lifecycle, mapView) {
         val observer = LifecycleEventObserver { _, event ->
-            when (event) {
-                Lifecycle.Event.ON_START -> mapView.onStart()
-                Lifecycle.Event.ON_RESUME -> mapView.onResume()
-                Lifecycle.Event.ON_PAUSE -> mapView.onPause()
-                Lifecycle.Event.ON_STOP -> mapView.onStop()
-                Lifecycle.Event.ON_DESTROY -> mapView.onDestroy()
-                else -> Unit
-            }
+            lifecycleController.onEvent(event)
         }
         lifecycle.addObserver(observer)
         onDispose {
@@ -149,7 +154,7 @@ private fun NaverMapView(
             markerPool.values.forEach { it.map = null }
             markerPool.clear()
             renderedItems.clear()
-            mapView.onDestroy()
+            lifecycleController.dispose()
         }
     }
 
@@ -157,7 +162,9 @@ private fun NaverMapView(
         modifier = modifier,
         factory = { mapView },
         update = { view ->
+            if (lifecycleController.isDestroyed) return@AndroidView
             view.getMapAsync { map ->
+                if (lifecycleController.isDestroyed) return@getMapAsync
                 map.uiSettings.isZoomControlEnabled = false
                 map.uiSettings.isLocationButtonEnabled = false
                 if (!listenersAttached) {
@@ -168,6 +175,7 @@ private fun NaverMapView(
                         }
                     }
                     map.addOnCameraIdleListener {
+                        if (lifecycleController.isDestroyed) return@addOnCameraIdleListener
                         val position = map.cameraPosition
                         val bounds = map.contentBounds
                         val byGesture = gestureState.sawUserGesture
@@ -304,15 +312,12 @@ private fun selectMapMarkerCandidates(
     benefits: List<BenefitMapItem>,
     contentBounds: LatLngBounds,
     selectedBenefitId: String?,
-): List<BenefitMapItem> {
-    if (benefits.size <= MAX_RENDERED_MARKERS) return benefits
-    val inView = benefits.filter {
-        it.id == selectedBenefitId || contentBounds.contains(LatLng(it.latitude, it.longitude))
-    }
-    if (inView.size >= MAX_RENDERED_MARKERS) return inView.take(MAX_RENDERED_MARKERS)
-    val inViewIds = inView.mapTo(HashSet(inView.size)) { it.id }
-    val remaining = benefits.asSequence().filter { it.id !in inViewIds }.take(MAX_RENDERED_MARKERS - inView.size)
-    return inView + remaining
+): List<BenefitMapItem> = selectBoundedMarkerCandidates(
+    benefits = benefits,
+    selectedBenefitId = selectedBenefitId,
+    maxMarkers = DEFAULT_MAX_RENDERED_MARKERS,
+) { item ->
+    contentBounds.contains(LatLng(item.latitude, item.longitude))
 }
 
 @Composable
@@ -372,5 +377,3 @@ private fun mapPoint(latitude: Double, longitude: Double, width: Float, height: 
     val y = (1 - ((latitude - 36.85) / (38.30 - 36.85)).coerceIn(.01, .99)).toFloat() * height
     return Offset(x, y)
 }
-
-private const val MAX_RENDERED_MARKERS = 300

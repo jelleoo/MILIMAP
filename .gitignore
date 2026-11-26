@@ -30,6 +30,8 @@ local.properties
 # Server and tooling
 node_modules/
 .pnpm-store/
+apps/ops-web/dist/
+apps/ops-web/.vite/
 .venv/
 __pycache__/
 

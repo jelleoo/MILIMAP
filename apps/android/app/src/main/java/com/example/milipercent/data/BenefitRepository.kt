@@ -41,8 +41,12 @@ interface BenefitDataRepository {
 class BenefitRepository(
     private val apiClient: BenefitPageSource,
     private val localDataSource: BenefitLocalDataSource,
+    private val maxTotalPages: Int = MAX_TOTAL_PAGES,
     private val currentTimeMillis: () -> Long = System::currentTimeMillis,
 ) : BenefitDataRepository {
+    init {
+        require(maxTotalPages > 0) { "maxTotalPages must be positive." }
+    }
     override fun observeBenefits(): Flow<List<BenefitUiModel>> =
         localDataSource.observeUserVisibleBenefits()
             .map { entities -> entities.map { it.toUiModel() } }
@@ -112,6 +116,13 @@ class BenefitRepository(
         val firstPage = requestPageWithRetry(pageNo = 1)
         val effectivePageSize = firstPage.numOfRows
         val totalPages = calculateTotalPages(firstPage.totalCount, effectivePageSize)
+        if (totalPages > maxTotalPages) {
+            throw IncompleteBenefitCollectionException(
+                expectedCount = firstPage.totalCount,
+                actualCount = firstPage.benefits.size,
+                detail = "API 전체 페이지 수(${totalPages})가 허용 상한(${maxTotalPages})을 초과했습니다.",
+            )
+        }
         val allBenefits = firstPage.benefits.toMutableList()
 
         onProgress(
@@ -188,12 +199,17 @@ class BenefitRepository(
     }
 
     private fun calculateTotalPages(totalCount: Int, pageSize: Int): Int {
+        require(totalCount >= 0) { "totalCount must not be negative." }
+        require(pageSize > 0) { "pageSize must be positive." }
         if (totalCount == 0) return 1
-        return (totalCount + pageSize - 1) / pageSize
+        return ((totalCount.toLong() + pageSize.toLong() - 1L) / pageSize.toLong())
+            .coerceAtMost(Int.MAX_VALUE.toLong())
+            .toInt()
     }
 
     companion object {
         const val REQUEST_PAGE_SIZE = 100
+        const val MAX_TOTAL_PAGES = 200
         const val ADDITIONAL_RETRY_COUNT = 2
         private const val TOTAL_ATTEMPTS = ADDITIONAL_RETRY_COUNT + 1
         private const val RETRY_DELAY_MILLIS = 500L

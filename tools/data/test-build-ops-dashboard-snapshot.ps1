@@ -1,0 +1,246 @@
+﻿Set-StrictMode -Version Latest
+$ErrorActionPreference = 'Stop'
+
+. (Join-Path $PSScriptRoot 'build-ops-dashboard-snapshot.ps1')
+
+function Assert-OpsSnapshotEqual {
+    param([AllowNull()]$Actual, [AllowNull()]$Expected, [Parameter(Mandatory)][string]$Message)
+    if ($Actual -cne $Expected) {
+        throw "$Message (expected: $Expected, actual: $Actual)"
+    }
+}
+
+function Assert-OpsSnapshotTrue {
+    param([bool]$Condition, [Parameter(Mandatory)][string]$Message)
+    if (-not $Condition) {
+        throw $Message
+    }
+}
+
+function Assert-OpsSnapshotThrowsMatching {
+    param([scriptblock]$Action, [string]$Pattern, [string]$Message)
+    try {
+        & $Action | Out-Null
+    } catch {
+        if ($_.Exception.Message -match $Pattern) { return }
+        throw "$Message (wrong error: $($_.Exception.Message))"
+    }
+    throw "$Message (did not throw)"
+}
+
+$repoRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../..'))
+$realManifestPath = Join-Path $repoRoot 'apps/android/app/src/main/assets/benefits.seed.manifest.json'
+$tempRoot = Join-Path ([IO.Path]::GetTempPath()) ("milimap-ops-snapshot-test-" + [guid]::NewGuid().ToString('N'))
+
+try {
+    [void][IO.Directory]::CreateDirectory($tempRoot)
+
+    # 1. Baseline manifest-only snapshot
+    $baselineOut = Join-Path $tempRoot 'baseline.json'
+    $res1 = Build-OpsDashboardSnapshot -SeedManifestJson $realManifestPath -OutputJson $baselineOut
+    Assert-OpsSnapshotEqual $res1.ProductionAction 'NONE' 'Snapshot builder must always keep ProductionAction=NONE'
+    Assert-OpsSnapshotTrue (Test-Path -LiteralPath $baselineOut -PathType Leaf) 'Baseline snapshot JSON should exist'
+
+    $parsed1 = (Get-Content -Raw -Encoding utf8 -LiteralPath $baselineOut) | ConvertFrom-Json
+    Assert-OpsSnapshotEqual $parsed1.ContractType 'OpsDashboardSnapshot' 'ContractType mismatch'
+    Assert-OpsSnapshotEqual ([int]$parsed1.ContractVersion) 1 'ContractVersion mismatch'
+    Assert-OpsSnapshotTrue ([int]$parsed1.SeedBaseline.totalCount -ge 1) 'SeedBaseline.totalCount should be >= 1'
+    Assert-OpsSnapshotTrue ($null -eq $parsed1.WeeklyDrift) 'WeeklyDrift should be null when omitted'
+    Assert-OpsSnapshotTrue ($null -eq $parsed1.ReviewQueue) 'ReviewQueue should be null when omitted'
+
+    # Overwriting an existing output JSON must succeed across Windows and Linux pwsh
+    [void](Build-OpsDashboardSnapshot -SeedManifestJson $realManifestPath -OutputJson $baselineOut)
+    $parsedOverwrite = (Get-Content -Raw -Encoding utf8 -LiteralPath $baselineOut) | ConvertFrom-Json
+    Assert-OpsSnapshotEqual $parsedOverwrite.ContractType 'OpsDashboardSnapshot' 'Overwritten snapshot ContractType mismatch'
+
+    # 2. Full snapshot with synthetic WeeklyDrift & ReviewQueue
+    $driftPath = Join-Path $tempRoot 'weekly-drift-summary.json'
+    $driftObj = [pscustomobject][ordered]@{
+        contractType               = 'WeeklyBenefitDriftSummary'
+        contractVersion            = 1
+        generatedAtUtc             = '2026-11-26T00:00:00Z'
+        canonicalRowCount          = 1137
+        automaticCanonicalMutation = $false
+        productionAction           = 'NONE'
+        sources                    = @(
+            [pscustomobject][ordered]@{
+                id             = 'mma'
+                name           = '병무청 나라사랑가게 수도권 (open.mma.go.kr)'
+                status         = 'OK'
+                officialCount  = 757
+                canonicalCount = 757
+                detail         = '일치=757, 내용변경=0, 신규후보=0, 정본미관측=0'
+                error          = ''
+            }
+        )
+    }
+    [IO.File]::WriteAllText($driftPath, ($driftObj | ConvertTo-Json -Depth 10), [Text.UTF8Encoding]::new($false))
+
+    # Write sibling weekly drift review files to verify reviewItems aggregation
+    [IO.File]::WriteAllText((Join-Path $tempRoot 'mma-changed-candidates.csv'), @"
+BusinessId,InstitutionCode,BusinessName,RoadAddress,ChangedFields,CanonicalDiscount,LiveDiscount,CanonicalTarget,LiveTarget,CanonicalPhone,LivePhone
+biz-00000000000000000000000000000010,1001,테스트변경식당,서울특별시 강남구 테스트로 1,DISCOUNT,10% 할인,'=15% 할인,현역,현역,02-111-1111,02-111-1111
+"@, [Text.UTF8Encoding]::new($false))
+    [IO.File]::WriteAllText((Join-Path $tempRoot 'mma-missing-canonical.csv'), @"
+BusinessId,BusinessName,Sido,District,RoadAddress,InstitutionCode,LastVerifiedAt,CoordStatus
+biz-00000000000000000000000000000011,테스트미관측카페,경기도,성남시,경기도 성남시 분당구 테스트로 2,1002,2026-10-01,확인 완료
+"@, [Text.UTF8Encoding]::new($false))
+    [IO.File]::WriteAllText((Join-Path $tempRoot 'mma-new-candidates.csv'), @"
+InstitutionCode,BusinessName,RoadAddress,Phone,Category,RegionalOffice
+999001,테스트신규식당,서울특별시 강남구 신규로 1,02-555-0001,음식,서울지방병무청
+"@, [Text.UTF8Encoding]::new($false))
+    [IO.File]::WriteAllText((Join-Path $tempRoot 'ddc-comparison.csv'), @"
+정본CSV행번호,업소명,소재지도로명주소,기존전화번호,기존할인정보,공식업소명,공식주소,공식전화번호,공식할인정보,상호주소일치,전화일치,할인일치,판정,검토결정,정본반영여부
+10,일치업소,경기도 동두천시 평화로 1,031-1,10%,일치업소,경기도 동두천시 평화로 1,031-1,10%,True,True,True,현재 공식 목록 일치 후보,미검토,아니오
+11,재확인업소,경기도 동두천시 평화로 2,031-2,10%,재확인업소,경기도 동두천시 평화로 2,031-9,15%,True,False,False,상세정보 재확인 필요,미검토,아니오
+"@, [Text.UTF8Encoding]::new($false))
+    [IO.File]::WriteAllText((Join-Path $tempRoot 'yangju-summary.json'), (@{
+        status           = 'DRIFT_DETECTED'
+        noticeUrl        = 'https://www.yangju.go.kr/health/selectBbsNttView.do?key=2716&bbsNo=81&nttNo=208699'
+        attachmentUrl    = 'https://www.yangju.go.kr/health/downloadBbsFile.do?atchmnflNo=204211'
+        actualHash       = 'abc'
+        baselineHash     = 'def'
+        actualByteSize   = 19019
+        baselineByteSize = 18800
+    } | ConvertTo-Json), [Text.UTF8Encoding]::new($false))
+
+    $rqPath = Join-Path $tempRoot 'review-queue-summary.json'
+    $rqObj = [pscustomobject][ordered]@{
+        ContractType    = 'Phase5ReviewQueueExport'
+        ContractVersion = 1
+        ExportedAt      = '2026-11-26T00:00:00Z'
+        Summary         = [pscustomobject][ordered]@{
+            ExportedItemCount    = 2
+            FastReviewCount      = 0
+            DomainReviewCount    = 1
+            DiagnosticHoldCount  = 1
+            BenefitItemCount     = 2
+            LocationItemCount    = 0
+            ApprovalRequired     = $true
+            ProductionAction     = 'NONE'
+        }
+        Items           = @(
+            [pscustomobject][ordered]@{
+                OperatorBucket     = 'DOMAIN_REVIEW'
+                BusinessId         = 'biz-00000000000000000000000000000001'
+                BusinessName       = '테스트식당'
+                Domain             = 'BENEFIT'
+                ReviewKey          = 'rk-1'
+                RunId              = 'run-1'
+                CurrentObservationId = 'obs-1'
+                ReviewRoute        = 'HUMAN_DOMAIN_REVIEW'
+                OperationalStatus  = 'COMPLETE'
+                Comparable         = $true
+                RAW_SOURCE_PAYLOAD = 'SHOULD_BE_STRIPPED'
+                ProductionAction   = 'NONE'
+            },
+            [pscustomobject][ordered]@{
+                OperatorBucket     = 'DIAGNOSTIC_HOLD'
+                BusinessId         = 'biz-00000000000000000000000000000002'
+                BusinessName       = '테스트카페'
+                Domain             = 'BENEFIT'
+                ReviewKey          = 'rk-2'
+                RunId              = 'run-1'
+                CurrentObservationId = 'obs-2'
+                ReviewRoute        = 'OPERATIONAL_DIAGNOSTIC'
+                OperationalStatus  = 'PARTIAL'
+                Comparable         = $false
+                ProductionAction   = 'NONE'
+            }
+        )
+    }
+    [IO.File]::WriteAllText($rqPath, ($rqObj | ConvertTo-Json -Depth 10), [Text.UTF8Encoding]::new($false))
+
+    $fullOut = Join-Path $tempRoot 'full.json'
+    [void](Build-OpsDashboardSnapshot -SeedManifestJson $realManifestPath -WeeklyDriftSummaryJson $driftPath -ReviewQueueSummaryJson $rqPath -OutputJson $fullOut)
+    $parsed2 = (Get-Content -Raw -Encoding utf8 -LiteralPath $fullOut) | ConvertFrom-Json
+    Assert-OpsSnapshotEqual ([int]$parsed2.WeeklyDrift.sources.Count) 1 'WeeklyDrift sources count mismatch'
+    Assert-OpsSnapshotEqual ([int]$parsed2.WeeklyDrift.reviewItems.Count) 4 'WeeklyDrift reviewItems should include 4 non-matched items (skipping exact match row)'
+    Assert-OpsSnapshotEqual ([int]$parsed2.WeeklyDrift.newCandidates.Count) 1 'WeeklyDrift newCandidates should include 1 MMA new candidate'
+    Assert-OpsSnapshotEqual ([string]$parsed2.WeeklyDrift.newCandidates[0].businessName) '테스트신규식당' 'New candidate name mismatch'
+
+    # 2b. Verify CanonicalBacklog against committed canonical CSV and bundled seed JSON
+    $realCanonicalPath = Join-Path $repoRoot 'data/canonical/capital-area-military-benefits.csv'
+    $realSeedPath = Join-Path $repoRoot 'apps/android/app/src/main/assets/benefits.seed.json'
+    $backlogOut = Join-Path $tempRoot 'backlog.json'
+    [void](Build-OpsDashboardSnapshot -SeedManifestJson $realManifestPath -CanonicalCsv $realCanonicalPath -BundledSeedJson $realSeedPath -OutputJson $backlogOut)
+    $parsedBacklog = (Get-Content -Raw -Encoding utf8 -LiteralPath $backlogOut) | ConvertFrom-Json
+    Assert-OpsSnapshotTrue ($null -ne $parsedBacklog.CanonicalBacklog) 'CanonicalBacklog should be populated'
+    $sum = $parsedBacklog.CanonicalBacklog.Summary
+    Assert-OpsSnapshotEqual ([int]$sum.TotalBacklogCount) ([int]$sum.UnpinnedInAppCount + [int]$sum.HeldCount) 'TotalBacklogCount must equal Unpinned + Held'
+    Assert-OpsSnapshotEqual ([int]$sum.CanonicalTotalCount) ([int]$sum.SeedMatchedCount + [int]$sum.HeldCount) 'CanonicalTotalCount must equal SeedMatched + Held'
+    Assert-OpsSnapshotTrue ([int]$parsedBacklog.CanonicalBacklog.Items.Count -eq [int]$sum.TotalBacklogCount) 'Backlog Items length must match Summary.TotalBacklogCount'
+    $brokenPipeInReal = @($parsedBacklog.CanonicalBacklog.Items | ForEach-Object { $_.sourceUrls } | Where-Object { $_ -match '\|' })
+    Assert-OpsSnapshotEqual $brokenPipeInReal.Count 0 'Real backlog sourceUrls must not contain pipe characters'
+
+    # 2c. Regression tests: whitespace/province normalization, canonical/seed drift mismatch, and pipe URL splitting
+    Assert-OpsSnapshotTrue (-not (Test-OpsSafeHttpUrl 'https://a.example | https://b.example')) 'Test-OpsSafeHttpUrl must reject pipe characters'
+    Assert-OpsSnapshotTrue (-not (Test-OpsSafeHttpUrl 'https://a.example/foo bar')) 'Test-OpsSafeHttpUrl must reject whitespace'
+
+    $normCsvPath = Join-Path $tempRoot 'norm-canonical.csv'
+    $normSeedPath = Join-Path $tempRoot 'norm-seed.json'
+    $normOut = Join-Path $tempRoot 'norm-out.json'
+    @(
+        [pscustomobject][ordered]@{
+            businessId='biz-norm-1'; 업종명='음식'; 업소명='테스트   식당'; 시도='서울특별시'; 시군구='강남구'
+            소재지도로명주소='서울특별시  강남구   테스트로 1'; 소재지지번주소=''; 위도=''; 경도=''; 좌표출처=''
+            좌표출처URL=''; 좌표검증상태='미확인'; 할인정보='10%'; 적용대상='현역'; 이용조건='없음'; 인증방법='신분증'
+            업소전화번호=''; 출처유형='지자체 공식 자료'; 출처URL='https://c.example/row'; 최근확인일='2026-11-26'
+            혜택상태='이용 가능'; 수집자='test'; 비고=''
+        }
+    ) | Export-Csv -LiteralPath $normCsvPath -NoTypeInformation -Encoding utf8
+    [IO.File]::WriteAllText($normSeedPath, (@(
+        [pscustomobject][ordered]@{
+            id='seed-norm-1'; name='테스트 식당'; address='서울 강남구 테스트로 1'; latitude=$null; longitude=$null
+            category='음식'; benefitDescription='10%'; sourceType='LOCAL_GOV'
+            sourceUrl='https://a.example/page | https://b.example/list'; lastVerifiedAt='2026-11-26'; status='ACTIVE'; district='강남구'
+        }
+    ) | ConvertTo-Json -Depth 5), [Text.UTF8Encoding]::new($false))
+    [void](Build-OpsDashboardSnapshot -SeedManifestJson $realManifestPath -CanonicalCsv $normCsvPath -BundledSeedJson $normSeedPath -OutputJson $normOut)
+    $parsedNorm = (Get-Content -Raw -Encoding utf8 -LiteralPath $normOut) | ConvertFrom-Json
+    Assert-OpsSnapshotEqual ([int]$parsedNorm.CanonicalBacklog.Summary.SeedMatchedCount) 1 'Normalized spaces and province prefix should match canonical to seed'
+    Assert-OpsSnapshotEqual ([int]$parsedNorm.CanonicalBacklog.Summary.HeldCount) 0 'Matched normalized row must not be counted as held'
+    Assert-OpsSnapshotEqual ([int]$parsedNorm.CanonicalBacklog.Summary.CanonicalTotalCount) ([int]$parsedNorm.CanonicalBacklog.Summary.SeedMatchedCount + [int]$parsedNorm.CanonicalBacklog.Summary.HeldCount) 'Invariant Canonical == SeedMatched + Held must hold'
+    Assert-OpsSnapshotEqual $parsedNorm.CanonicalBacklog.Items[0].sourceUrls.Count 3 'Pipe-separated seed sourceUrl plus canonical 출처URL should produce 3 clean URLs'
+    $brokenPipeNorm = @($parsedNorm.CanonicalBacklog.Items[0].sourceUrls | Where-Object { $_ -match '\|' })
+    Assert-OpsSnapshotEqual $brokenPipeNorm.Count 0 'Fixture sourceUrls must contain no pipe characters'
+
+    $mismatchSeedPath = Join-Path $tempRoot 'mismatch-seed.json'
+    $mismatchOut = Join-Path $tempRoot 'mismatch-out.json'
+    [IO.File]::WriteAllText($mismatchSeedPath, (@(
+        [pscustomobject][ordered]@{
+            id='seed-mismatch-1'; name='테스트 식당'; address='경기도 파주시 변경된주소 99'; latitude=37.76; longitude=126.78
+            category='음식'; benefitDescription='10%'; sourceType='LOCAL_GOV'
+            sourceUrl='https://a.example/page'; lastVerifiedAt='2026-11-26'; status='ACTIVE'; district='파주시'
+        }
+    ) | ConvertTo-Json -Depth 5), [Text.UTF8Encoding]::new($false))
+    [void](Build-OpsDashboardSnapshot -SeedManifestJson $realManifestPath -CanonicalCsv $normCsvPath -BundledSeedJson $mismatchSeedPath -OutputJson $mismatchOut)
+    $parsedMismatch = (Get-Content -Raw -Encoding utf8 -LiteralPath $mismatchOut) | ConvertFrom-Json
+    Assert-OpsSnapshotEqual ([int]$parsedMismatch.CanonicalBacklog.Summary.SeedActiveCount) 1 'SeedActiveCount should reflect bundled seed count'
+    Assert-OpsSnapshotEqual ([int]$parsedMismatch.CanonicalBacklog.Summary.SeedMatchedCount) 0 'Divergent canonical address should report SeedMatchedCount=0'
+    Assert-OpsSnapshotEqual ([int]$parsedMismatch.CanonicalBacklog.Summary.HeldCount) 1 'Divergent canonical row should report HeldCount=1'
+    Assert-OpsSnapshotEqual ([int]$parsedMismatch.CanonicalBacklog.Summary.CanonicalTotalCount) ([int]$parsedMismatch.CanonicalBacklog.Summary.SeedMatchedCount + [int]$parsedMismatch.CanonicalBacklog.Summary.HeldCount) 'CanonicalTotalCount == SeedMatched + Held must hold even when canonical diverges from seed'
+    Assert-OpsSnapshotEqual ([string]$parsed2.WeeklyDrift.reviewItems[0].category) 'CONTENT_CHANGED' 'First drift item should be MMA changed candidate'
+    Assert-OpsSnapshotTrue ([string]$parsed2.WeeklyDrift.reviewItems[0].officialDetail -like '*=15% 할인*') 'Safe CSV leading apostrophe should be stripped cleanly'
+    Assert-OpsSnapshotEqual ([string]$parsed2.WeeklyDrift.reviewItems[3].category) 'ATTACHMENT_CHANGED' 'Fourth drift item should be Yangju attachment drift'
+    Assert-OpsSnapshotEqual ([int]$parsed2.ReviewQueue.Summary.DomainReviewCount) 1 'DomainReviewCount mismatch'
+    Assert-OpsSnapshotEqual ([int]$parsed2.ReviewQueue.Items.Count) 2 'ReviewQueue items count mismatch'
+    Assert-OpsSnapshotTrue (-not ($parsed2.ReviewQueue.Items[0].PSObject.Properties.Name -contains 'RAW_SOURCE_PAYLOAD')) 'Unexpected raw payload property must be stripped'
+
+    # 3. Path traversal and contract failure guards
+    Assert-OpsSnapshotThrowsMatching {
+        Build-OpsDashboardSnapshot -SeedManifestJson $realManifestPath -OutputJson (Join-Path $tempRoot '../escape.json')
+    } 'REL_UNSAFE_PATH' 'Should reject .. path traversal'
+
+    $badRqPath = Join-Path $tempRoot 'bad-rq.json'
+    [IO.File]::WriteAllText($badRqPath, '{"ContractType":"WrongType"}', [Text.UTF8Encoding]::new($false))
+    Assert-OpsSnapshotThrowsMatching {
+        Build-OpsDashboardSnapshot -SeedManifestJson $realManifestPath -ReviewQueueSummaryJson $badRqPath -OutputJson (Join-Path $tempRoot 'bad.json')
+    } 'OPS_SNAPSHOT_INVALID_REVIEW_QUEUE' 'Should reject wrong ReviewQueue ContractType'
+
+    Write-Output 'OPS_DASHBOARD_SNAPSHOT_TEST: PASS'
+} finally {
+    if (Test-Path -LiteralPath $tempRoot) {
+        Remove-Item -LiteralPath $tempRoot -Recurse -Force -ErrorAction SilentlyContinue
+    }
+}

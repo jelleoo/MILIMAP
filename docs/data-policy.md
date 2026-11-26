@@ -62,14 +62,14 @@ POI가 정확하다는 사실만으로 군 혜택이 현재 유효하다고 판�
 
 ## 현재 release seed 기준
 
-2026-11-25 기준 (`seedVersion 14`) Android release seed는 `1,018`건입니다(역사적 2026-09-10 P3 직후 기준은 `249`건 / 핀 `111`건 / `seedVersion 7`).
+2026-11-26 기준 (`seedVersion 15`) Android release seed는 `1,187`건입니다(역사적 2026-09-10 P3 직후 기준은 `249`건 / 핀 `111`건 / `seedVersion 7`, `seedVersion 14` 기준은 `1,018`건 / 핀 `998`건).
 
-- canonical rows: `1,137` (`data/canonical/capital-area-military-benefits.csv`)
-- release candidates: `1,018` (전부 `ACTIVE`; `PUBLIC_EVIDENCE` 757건 + `LOCAL_GOV` 261건)
-- exact map pins: `998` (`98.0%`)
-- coordinate-unconfirmed: `20` (`2.0%`)
-- bundled seed version: `14`
-- 최신 혜택 근거 부족·종료 등으로 release에서 보류된 canonical 행: `119`
+- canonical rows: `1,298` (`data/canonical/capital-area-military-benefits.csv`)
+- release candidates: `1,187` (전부 `ACTIVE`; `PUBLIC_EVIDENCE` 926건 + `LOCAL_GOV` 261건)
+- exact map pins: `1,170` (`98.6%`)
+- coordinate-unconfirmed: `17` (`1.4%`)
+- bundled seed version: `15`
+- 최신 혜택 근거 부족·종료 등으로 release에서 보류된 canonical 행: `111`
 
 정확 지도 핀은 실제 POI 또는 행정안전부 출입구 DB 등 엄격한 근거로 검증된 행만 유지합니다. 좌표가 확정되지 않은 release candidate는 목록/상세에서 유지할 수 있지만 잘못된 지도 핀을 만들기 위해 좌표를 추정하지 않습니다.
 

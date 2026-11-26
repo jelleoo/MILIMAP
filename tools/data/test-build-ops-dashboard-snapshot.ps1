@@ -85,6 +85,10 @@ biz-00000000000000000000000000000010,1001,테스트변경식당,서울특별시 
 BusinessId,BusinessName,Sido,District,RoadAddress,InstitutionCode,LastVerifiedAt,CoordStatus
 biz-00000000000000000000000000000011,테스트미관측카페,경기도,성남시,경기도 성남시 분당구 테스트로 2,1002,2026-10-01,확인 완료
 "@, [Text.UTF8Encoding]::new($false))
+    [IO.File]::WriteAllText((Join-Path $tempRoot 'mma-new-candidates.csv'), @"
+InstitutionCode,BusinessName,RoadAddress,Phone,Category,RegionalOffice
+999001,테스트신규식당,서울특별시 강남구 신규로 1,02-555-0001,음식,서울지방병무청
+"@, [Text.UTF8Encoding]::new($false))
     [IO.File]::WriteAllText((Join-Path $tempRoot 'ddc-comparison.csv'), @"
 정본CSV행번호,업소명,소재지도로명주소,기존전화번호,기존할인정보,공식업소명,공식주소,공식전화번호,공식할인정보,상호주소일치,전화일치,할인일치,판정,검토결정,정본반영여부
 10,일치업소,경기도 동두천시 평화로 1,031-1,10%,일치업소,경기도 동두천시 평화로 1,031-1,10%,True,True,True,현재 공식 목록 일치 후보,미검토,아니오
@@ -152,6 +156,20 @@ biz-00000000000000000000000000000011,테스트미관측카페,경기도,성남�
     $parsed2 = (Get-Content -Raw -Encoding utf8 -LiteralPath $fullOut) | ConvertFrom-Json
     Assert-OpsSnapshotEqual ([int]$parsed2.WeeklyDrift.sources.Count) 1 'WeeklyDrift sources count mismatch'
     Assert-OpsSnapshotEqual ([int]$parsed2.WeeklyDrift.reviewItems.Count) 4 'WeeklyDrift reviewItems should include 4 non-matched items (skipping exact match row)'
+    Assert-OpsSnapshotEqual ([int]$parsed2.WeeklyDrift.newCandidates.Count) 1 'WeeklyDrift newCandidates should include 1 MMA new candidate'
+    Assert-OpsSnapshotEqual ([string]$parsed2.WeeklyDrift.newCandidates[0].businessName) '테스트신규식당' 'New candidate name mismatch'
+
+    # 2b. Verify CanonicalBacklog against committed canonical CSV and bundled seed JSON
+    $realCanonicalPath = Join-Path $repoRoot 'data/canonical/capital-area-military-benefits.csv'
+    $realSeedPath = Join-Path $repoRoot 'apps/android/app/src/main/assets/benefits.seed.json'
+    $backlogOut = Join-Path $tempRoot 'backlog.json'
+    [void](Build-OpsDashboardSnapshot -SeedManifestJson $realManifestPath -CanonicalCsv $realCanonicalPath -BundledSeedJson $realSeedPath -OutputJson $backlogOut)
+    $parsedBacklog = (Get-Content -Raw -Encoding utf8 -LiteralPath $backlogOut) | ConvertFrom-Json
+    Assert-OpsSnapshotTrue ($null -ne $parsedBacklog.CanonicalBacklog) 'CanonicalBacklog should be populated'
+    $sum = $parsedBacklog.CanonicalBacklog.Summary
+    Assert-OpsSnapshotEqual ([int]$sum.TotalBacklogCount) ([int]$sum.UnpinnedInAppCount + [int]$sum.HeldCount) 'TotalBacklogCount must equal Unpinned + Held'
+    Assert-OpsSnapshotEqual ([int]$sum.CanonicalTotalCount) ([int]$sum.SeedActiveCount + [int]$sum.HeldCount) 'CanonicalTotalCount must equal SeedActive + Held'
+    Assert-OpsSnapshotTrue ([int]$parsedBacklog.CanonicalBacklog.Items.Count -eq [int]$sum.TotalBacklogCount) 'Backlog Items length must match Summary.TotalBacklogCount'
     Assert-OpsSnapshotEqual ([string]$parsed2.WeeklyDrift.reviewItems[0].category) 'CONTENT_CHANGED' 'First drift item should be MMA changed candidate'
     Assert-OpsSnapshotTrue ([string]$parsed2.WeeklyDrift.reviewItems[0].officialDetail -like '*=15% 할인*') 'Safe CSV leading apostrophe should be stripped cleanly'
     Assert-OpsSnapshotEqual ([string]$parsed2.WeeklyDrift.reviewItems[3].category) 'ATTACHMENT_CHANGED' 'Fourth drift item should be Yangju attachment drift'

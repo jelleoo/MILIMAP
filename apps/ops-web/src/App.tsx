@@ -59,6 +59,7 @@ export function App() {
     SeedBaseline: FALLBACK_MANIFEST,
     WeeklyDrift: null,
     ReviewQueue: null,
+    CanonicalBacklog: null,
   });
   const [isDemo, setIsDemo] = useState(false);
   const [uploadNotice, setUploadNotice] = useState<{ tone: 'info' | 'error'; text: string } | null>(null);
@@ -80,7 +81,7 @@ export function App() {
       return '';
     }
   });
-  const [driftChecksById, setDriftChecksById] = useState<Record<string, DriftCheckEntry>>(() => {
+  const [checksById, setChecksById] = useState<Record<string, DriftCheckEntry>>(() => {
     try {
       const raw = localStorage.getItem(STORAGE_DRIFT_CHECKS_KEY);
       return raw ? (JSON.parse(raw) as Record<string, DriftCheckEntry>) : {};
@@ -113,7 +114,7 @@ export function App() {
     try {
       localStorage.setItem(STORAGE_RECORDS_KEY, JSON.stringify(recordsByBusinessId));
     } catch {
-      // Ignore storage quota errors in restricted browsing modes.
+      // Ignore storage errors.
     }
   }, [recordsByBusinessId]);
 
@@ -127,11 +128,11 @@ export function App() {
 
   useEffect(() => {
     try {
-      localStorage.setItem(STORAGE_DRIFT_CHECKS_KEY, JSON.stringify(driftChecksById));
+      localStorage.setItem(STORAGE_DRIFT_CHECKS_KEY, JSON.stringify(checksById));
     } catch {
       // Ignore storage errors.
     }
-  }, [driftChecksById]);
+  }, [checksById]);
 
   const displayedSnapshot = useMemo(
     () => (isDemo ? createDemoSnapshot(snapshot.SeedBaseline) : snapshot),
@@ -139,20 +140,34 @@ export function App() {
   );
 
   const driftReviewItems = displayedSnapshot.WeeklyDrift?.reviewItems ?? [];
+  const newCandidates = displayedSnapshot.WeeklyDrift?.newCandidates ?? [];
+  const canonicalBacklog = displayedSnapshot.CanonicalBacklog ?? null;
   const reviewItems = displayedSnapshot.ReviewQueue?.Items ?? [];
   const phase5AttentionCount =
     (displayedSnapshot.ReviewQueue?.Summary.DomainReviewCount ?? 0) +
     (displayedSnapshot.ReviewQueue?.Summary.DiagnosticHoldCount ?? 0);
-  const attentionCount = driftReviewItems.length + phase5AttentionCount;
+  const attentionCount =
+    driftReviewItems.length +
+    (canonicalBacklog?.Summary.TotalBacklogCount ?? 0) +
+    phase5AttentionCount;
   const draftedRecords = useMemo(() => Object.values(recordsByBusinessId), [recordsByBusinessId]);
-  const driftCheckedCount = useMemo(
-    () => Object.values(driftChecksById).filter((entry) => entry.checked).length,
-    [driftChecksById],
+  const localCheckedCount = useMemo(
+    () => Object.values(checksById).filter((entry) => entry.checked).length,
+    [checksById],
   );
 
   const handleOpenQueue = (filter: QueueTargetFilter, preferredSource?: QueueSourceTab) => {
     const targetSource: QueueSourceTab =
-      preferredSource ?? (phase5AttentionCount > 0 ? 'phase5' : driftReviewItems.length > 0 ? 'drift' : 'phase5');
+      preferredSource ??
+      (driftReviewItems.length > 0
+        ? 'drift'
+        : (canonicalBacklog?.Summary.TotalBacklogCount ?? 0) > 0
+          ? 'backlog'
+          : phase5AttentionCount > 0
+            ? 'phase5'
+            : newCandidates.length > 0
+              ? 'new-candidates'
+              : 'drift');
     setQueueSource(targetSource);
     setBucketFilter(filter);
     setSelectedKey(null);
@@ -169,29 +184,29 @@ export function App() {
         if (parsed.kind === 'snapshot') {
           setSnapshot(parsed.data);
           setIsDemo(false);
-          messages.push(`스냅샷(${file.name})을 불러왔습니다.`);
+          messages.push(`통합 리포트(${file.name})를 불러왔습니다.`);
         } else if (parsed.kind === 'review-queue') {
           setSnapshot((prev) => ({ ...prev, ReviewQueue: parsed.data }));
           setIsDemo(false);
-          messages.push(`리뷰 큐(${parsed.data.Summary.ExportedItemCount}건)를 불러왔습니다.`);
+          messages.push(`심층 검증 리포트(${parsed.data.Summary.ExportedItemCount}건)를 불러왔습니다.`);
         } else if (parsed.kind === 'weekly-drift') {
           setSnapshot((prev) => ({ ...prev, WeeklyDrift: parsed.data }));
           setIsDemo(false);
-          messages.push(`주간 출처 점검(${parsed.data.sources.length}개 출처)을 불러왔습니다.`);
+          messages.push(`공식 출처 점검 파일(${parsed.data.sources.length}곳)을 불러왔습니다.`);
         } else if (parsed.kind === 'approval-ledger') {
           const nextMap: Record<string, BenefitReleaseApprovalRecord> = {};
           for (const rec of parsed.data.Records) {
             nextMap[rec.businessId] = rec;
           }
           setRecordsByBusinessId(nextMap);
-          messages.push(`기존 승인 원장(${parsed.data.Records.length}건)을 불러왔습니다.`);
+          messages.push(`기존 승인 파일(${parsed.data.Records.length}건)을 불러왔습니다.`);
         }
       }
       setUploadNotice({ tone: 'info', text: messages.join(' ') });
     } catch (err) {
       setUploadNotice({
         tone: 'error',
-        text: err instanceof Error ? err.message : '파일을 해석할 수 없습니다.',
+        text: err instanceof Error ? err.message : '파일을 읽을 수 없습니다.',
       });
     } finally {
       if (fileInputRef.current) fileInputRef.current.value = '';
@@ -225,12 +240,12 @@ export function App() {
     });
   };
 
-  const handleSaveDriftCheck = (id: string, entry: DriftCheckEntry) => {
-    setDriftChecksById((prev) => ({ ...prev, [id]: entry }));
+  const handleSaveCheck = (id: string, entry: DriftCheckEntry) => {
+    setChecksById((prev) => ({ ...prev, [id]: entry }));
   };
 
-  const handleClearDriftCheck = (id: string) => {
-    setDriftChecksById((prev) => {
+  const handleClearCheck = (id: string) => {
+    setChecksById((prev) => {
       const next = { ...prev };
       delete next[id];
       return next;
@@ -254,7 +269,7 @@ export function App() {
       {isDragOver && (
         <div className="pointer-events-none fixed inset-0 z-50 flex items-center justify-center border-4 border-dashed border-amber-500 bg-slate-900/35 backdrop-blur-[1px]">
           <div className="rounded-xl bg-white px-6 py-4 text-sm font-semibold text-slate-900 shadow-lg">
-            여기에 JSON 리포트 파일을 놓으면 대시보드에 바로 반영됩니다
+            여기에 JSON 리포트 파일을 놓으면 관리자 화면에 바로 반영됩니다
           </div>
         </div>
       )}
@@ -274,13 +289,13 @@ export function App() {
             <div className="space-y-5">
               <div className="space-y-2 border-b border-slate-100 pb-4">
                 <div className="flex items-center justify-between">
-                  <span className="text-sm font-bold tracking-tight text-slate-900">MILIMAP Ops</span>
-                  <Badge tone="dark">DEV ONLY</Badge>
+                  <span className="text-sm font-bold tracking-tight text-slate-900">MILIMAP 관리자</span>
+                  <Badge tone="dark">개발자 전용</Badge>
                 </div>
-                <p className="text-xs text-slate-500">내부 데이터 자동화 · 수동 확인 관제</p>
-                <div className="inline-flex items-center gap-1 rounded border border-slate-200 bg-slate-50 px-2 py-0.5 font-mono text-[10px] text-slate-600">
+                <p className="text-xs text-slate-500">혜택 데이터 자동 점검 · 수동 확인</p>
+                <div className="inline-flex items-center gap-1 rounded border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] font-medium text-slate-600">
                   <ShieldCheck className="h-3 w-3 text-emerald-700" />
-                  ProductionAction: {displayedSnapshot.ProductionAction}
+                  자동 수정 차단 (사람 확인 후 반영)
                 </div>
               </div>
 
@@ -296,7 +311,7 @@ export function App() {
                 >
                   <span className="flex items-center gap-2">
                     <Activity className="h-4 w-4" />
-                    자동화 현황
+                    전체 현황
                   </span>
                 </button>
 
@@ -311,7 +326,7 @@ export function App() {
                 >
                   <span className="flex items-center gap-2">
                     <ClipboardCheck className="h-4 w-4" />
-                    직접 확인 대기열
+                    확인할 데이터
                   </span>
                   {attentionCount > 0 && (
                     <span
@@ -329,8 +344,8 @@ export function App() {
             </div>
 
             <div className="mt-6 space-y-2 border-t border-slate-100 pt-4 text-[11px] text-slate-500">
-              <div>실운영 시드: v{displayedSnapshot.SeedBaseline.seedVersion} ({displayedSnapshot.SeedBaseline.totalCount.toLocaleString()}건)</div>
-              <div>자동 정본 변경: 차단 (사람 승인 필수)</div>
+              <div>앱 반영 데이터: v{displayedSnapshot.SeedBaseline.seedVersion} ({displayedSnapshot.SeedBaseline.totalCount.toLocaleString()}곳)</div>
+              <div>자동 변경 차단 · 직접 확인 필수</div>
             </div>
           </div>
         </aside>
@@ -339,18 +354,18 @@ export function App() {
           <header className="sticky top-0 z-20 flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 bg-white/95 px-6 py-3 backdrop-blur-xs">
             <div>
               <h1 className="text-base font-semibold text-slate-900">
-                {activeTab === 'overview' ? '데이터 자동화 파이프라인 현황' : '애매한 데이터 · 직접 확인 대기열'}
+                {activeTab === 'overview' ? '데이터 자동화 전체 현황' : '직접 확인할 데이터 목록'}
               </h1>
               <p className="text-xs text-slate-500">
                 {isDemo
-                  ? 'DEMO 샘플 데이터 미리보기 중'
+                  ? '예시 화면 미리보기 중'
                   : displayedSnapshot.WeeklyDrift && displayedSnapshot.ReviewQueue
-                    ? '주간 드리프트 + Phase 5 리뷰 큐 모두 연결됨'
+                    ? '공식 사이트 자동 점검 + 심층 검증 리포트 모두 연결됨'
                     : displayedSnapshot.WeeklyDrift
-                      ? '주간 드리프트 리포트 연결됨 (Phase 5 큐 미연결)'
-                      : displayedSnapshot.ReviewQueue
-                        ? 'Phase 5 리뷰 큐 연결됨 (주간 드리프트 미연결)'
-                        : '기본 번들 시드 기준선 (리포트 JSON을 끌어다 놓아 확장)'}
+                      ? '공식 사이트 자동 점검 + 미배포 정본 백로그 연결됨'
+                      : displayedSnapshot.CanonicalBacklog
+                        ? '앱 기준선 + 미배포 정본 백로그 로드됨'
+                        : '앱 기본 데이터 기준선 로드됨'}
               </p>
             </div>
 
@@ -361,15 +376,15 @@ export function App() {
                 onClick={() => setIsDemo((prev) => !prev)}
               >
                 <FlaskConical className="h-3.5 w-3.5" />
-                {isDemo ? '샘플 미리보기 끄기' : '샘플 미리보기'}
+                {isDemo ? '예시 화면 끄기' : '예시 화면 보기'}
               </Button>
               <Button variant="outline" size="sm" onClick={() => fileInputRef.current?.click()}>
                 <Upload className="h-3.5 w-3.5" />
-                JSON 불러오기
+                리포트 파일 올리기
               </Button>
               <Button size="sm" onClick={() => setExportModalOpen(true)}>
                 <Download className="h-3.5 w-3.5" />
-                승인 원장 내보내기 ({draftedRecords.length})
+                승인 파일 저장 ({draftedRecords.length})
               </Button>
             </div>
           </header>
@@ -399,7 +414,7 @@ export function App() {
                 snapshot={displayedSnapshot}
                 isDemo={isDemo}
                 recordsByBusinessId={recordsByBusinessId}
-                driftCheckedCount={driftCheckedCount}
+                localCheckedCount={localCheckedCount}
                 onOpenQueue={handleOpenQueue}
                 onTriggerUpload={() => fileInputRef.current?.click()}
                 onEnableDemo={() => setIsDemo(true)}
@@ -409,9 +424,11 @@ export function App() {
                 queueSource={queueSource}
                 onChangeQueueSource={setQueueSource}
                 driftItems={driftReviewItems}
-                driftChecksById={driftChecksById}
-                onSaveDriftCheck={handleSaveDriftCheck}
-                onClearDriftCheck={handleClearDriftCheck}
+                newCandidates={newCandidates}
+                canonicalBacklog={canonicalBacklog}
+                checksById={checksById}
+                onSaveCheck={handleSaveCheck}
+                onClearCheck={handleClearCheck}
                 items={reviewItems}
                 bucketFilter={bucketFilter}
                 onChangeBucketFilter={(next) => {

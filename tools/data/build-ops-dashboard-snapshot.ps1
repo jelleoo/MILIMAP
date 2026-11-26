@@ -90,9 +90,28 @@ function Test-OpsSafeHttpUrl {
     param([AllowNull()][string]$Url)
 
     if ([string]::IsNullOrWhiteSpace($Url)) { return $false }
+    $trimmed = $Url.Trim()
+    if ($trimmed -match '[\s\p{C}|]') { return $false }
     $uri = $null
-    if (-not [uri]::TryCreate($Url.Trim(), [UriKind]::Absolute, [ref]$uri)) { return $false }
+    if (-not [uri]::TryCreate($trimmed, [UriKind]::Absolute, [ref]$uri)) { return $false }
     return ($uri.Scheme -cin @('http', 'https')) -and -not [string]::IsNullOrWhiteSpace($uri.Host) -and [string]::IsNullOrEmpty($uri.UserInfo)
+}
+
+function ConvertTo-OpsMatchKey {
+    param(
+        [AllowNull()][string]$Name,
+        [AllowNull()][string]$Address
+    )
+
+    $normName = if ([string]::IsNullOrWhiteSpace($Name)) { '' } else { ($Name.Trim() -replace '\s+', ' ').ToLowerInvariant() }
+    $normAddr = if ([string]::IsNullOrWhiteSpace($Address)) { '' } else { ($Address.Trim() -replace '\s+', ' ') }
+    if ($normAddr) {
+        $normAddr = $normAddr -replace '^서울(?:특별시|시)', '서울'
+        $normAddr = $normAddr -replace '^경기도', '경기'
+        $normAddr = $normAddr -replace '^인천(?:광역시|시)', '인천'
+        $normAddr = $normAddr.ToLowerInvariant()
+    }
+    return "$normName|$normAddr"
 }
 
 function Read-OpsSiblingDriftReviewItems {
@@ -356,7 +375,7 @@ function Read-OpsCanonicalBacklog {
         if ($null -ne $s.latitude -and $null -ne $s.longitude) {
             $seedExactPins++
         }
-        $k = "$([string]$s.name.Trim())|$([string]$s.address.Trim())"
+        $k = ConvertTo-OpsMatchKey -Name ([string]$s.name) -Address ([string]$s.address)
         [void]$seedKeySet.Add($k)
     }
 
@@ -366,7 +385,7 @@ function Read-OpsCanonicalBacklog {
         $road = Get-OpsDriftCsvCell $row '소재지도로명주소'
         $jibun = Get-OpsDriftCsvCell $row '소재지지번주소'
         $addr = if ($road) { $road } else { $jibun }
-        $key = "$(Get-OpsDriftCsvCell $row '업소명')|$addr"
+        $key = ConvertTo-OpsMatchKey -Name (Get-OpsDriftCsvCell $row '업소명') -Address $addr
         if (-not $canonicalByKey.ContainsKey($key)) {
             $canonicalByKey[$key] = [pscustomobject]@{
                 RowNumber = ($i + 2)
@@ -381,17 +400,23 @@ function Read-OpsCanonicalBacklog {
     foreach ($s in $seedItems) {
         if ($null -ne $s.latitude -and $null -ne $s.longitude) { continue }
         $unpinnedInAppCount++
-        $key = "$([string]$s.name.Trim())|$([string]$s.address.Trim())"
+        $key = ConvertTo-OpsMatchKey -Name ([string]$s.name) -Address ([string]$s.address)
         $canEntry = if ($canonicalByKey.ContainsKey($key)) { $canonicalByKey[$key] } else { $null }
         $canRow = if ($null -ne $canEntry) { $canEntry.Row } else { $null }
         $rawUrls = @()
-        if ($s.PSObject.Properties['sourceUrl'] -and (Test-OpsSafeHttpUrl ([string]$s.sourceUrl))) {
-            $rawUrls += [string]$s.sourceUrl
+        if ($s.PSObject.Properties['sourceUrl'] -and -not [string]::IsNullOrWhiteSpace([string]$s.sourceUrl)) {
+            foreach ($part in (([string]$s.sourceUrl) -split '\s*\|\s*')) {
+                $trimmedPart = $part.Trim()
+                if ((Test-OpsSafeHttpUrl $trimmedPart) -and ($rawUrls -notcontains $trimmedPart)) {
+                    $rawUrls += $trimmedPart
+                }
+            }
         }
         if ($null -ne $canRow) {
             foreach ($part in ((Get-OpsDriftCsvCell $canRow '출처URL') -split '\s*\|\s*')) {
-                if ((Test-OpsSafeHttpUrl $part) -and ($rawUrls -notcontains $part)) {
-                    $rawUrls += $part
+                $trimmedPart = $part.Trim()
+                if ((Test-OpsSafeHttpUrl $trimmedPart) -and ($rawUrls -notcontains $trimmedPart)) {
+                    $rawUrls += $trimmedPart
                 }
             }
         }
@@ -417,6 +442,7 @@ function Read-OpsCanonicalBacklog {
         })
     }
 
+    $seedMatchedCount = 0
     $heldCount = 0
     $coordRecheckCount = 0
     $outdatedOrOcrCount = 0
@@ -428,8 +454,11 @@ function Read-OpsCanonicalBacklog {
         $road = Get-OpsDriftCsvCell $row '소재지도로명주소'
         $jibun = Get-OpsDriftCsvCell $row '소재지지번주소'
         $addr = if ($road) { $road } else { $jibun }
-        $key = "$name|$addr"
-        if ($seedKeySet.Contains($key)) { continue }
+        $key = ConvertTo-OpsMatchKey -Name $name -Address $addr
+        if ($seedKeySet.Contains($key)) {
+            $seedMatchedCount++
+            continue
+        }
 
         $heldCount++
         $srcType = Get-OpsDriftCsvCell $row '출처유형'
@@ -499,6 +528,7 @@ function Read-OpsCanonicalBacklog {
         Summary = [pscustomobject][ordered]@{
             CanonicalTotalCount   = $canonicalRows.Count
             SeedActiveCount       = $seedItems.Count
+            SeedMatchedCount      = $seedMatchedCount
             ExactPinCount         = $seedExactPins
             UnpinnedInAppCount    = $unpinnedInAppCount
             HeldCount             = $heldCount

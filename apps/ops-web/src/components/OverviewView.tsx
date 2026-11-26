@@ -52,7 +52,9 @@ export function OverviewView({
   onEnableDemo,
 }: OverviewViewProps) {
   const { SeedBaseline: seed, WeeklyDrift: drift, ReviewQueue: queue, CanonicalBacklog: backlog } = snapshot;
-  const pinPct = seed.totalCount > 0 ? ((seed.exactPinCount / seed.totalCount) * 100).toFixed(1) : '0.0';
+  const rawPinPct = seed.totalCount > 0 ? (seed.exactPinCount / seed.totalCount) * 100 : 0;
+  const pinPct = rawPinPct.toFixed(1);
+  const clampedPinPct = Math.min(100, Math.max(0, rawPinPct));
 
   const driftReviewCount = drift?.reviewItems?.length ?? 0;
   const newCandidateCount = drift?.newCandidates?.length ?? 0;
@@ -64,7 +66,14 @@ export function OverviewView({
   const phase5AttentionCount = domainReviewCount + diagnosticHoldCount;
 
   const totalActionableCount = driftReviewCount + backlogCount + phase5AttentionCount;
-  const draftedCount = Object.keys(recordsByBusinessId).length;
+  const actionableReviewBusinessIds = new Set(
+    (queue?.Items ?? [])
+      .filter((item) => item.OperatorBucket === 'DOMAIN_REVIEW' || item.OperatorBucket === 'DIAGNOSTIC_HOLD')
+      .map((item) => item.BusinessId),
+  );
+  const draftedCount = Object.keys(recordsByBusinessId).filter((id) =>
+    actionableReviewBusinessIds.has(id),
+  ).length;
 
   const driftSources = drift?.sources ?? [];
   const failedSourceCount = driftSources.filter((s) => s.status === 'FETCH_FAILED').length;
@@ -294,7 +303,7 @@ export function OverviewView({
               <span className="tabular-nums text-xs font-semibold text-emerald-700">{pinPct}%</span>
             </div>
             <div className="h-1.5 w-full overflow-hidden rounded-full bg-slate-100">
-              <div className="h-full rounded-full bg-emerald-600" style={{ width: `${pinPct}%` }} />
+              <div className="h-full rounded-full bg-emerald-600" style={{ width: `${clampedPinPct}%` }} />
             </div>
             <p className="text-xs text-slate-500">
               지도 핀 미확정: {seed.unconfirmedCoordinateCount.toLocaleString()}곳 · 배포 보류: {backlog?.Summary.HeldCount ?? 0}곳

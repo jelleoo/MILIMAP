@@ -81,6 +81,12 @@ export function CanonicalBacklogPanel({
         ? (checksById[selectedItem.id]?.memo ?? '')
         : '';
 
+  const selectItem = (item: CanonicalBacklogItem) => {
+    setSelectedId(item.id);
+    setMemoEditingId(item.id);
+    setMemoInput(checksById[item.id]?.memo ?? '');
+  };
+
   const groupTabs: Array<{ id: 'ALL' | CanonicalBacklogGroup; label: string; count: number }> = [
     { id: 'ALL', label: '전체', count: summary?.TotalBacklogCount ?? items.length },
     {
@@ -199,15 +205,11 @@ export function CanonicalBacklogPanel({
                   key={item.id}
                   role="button"
                   tabIndex={0}
-                  onClick={() => {
-                    setSelectedId(item.id);
-                    setMemoEditingId(item.id);
-                    setMemoInput(checksById[item.id]?.memo ?? '');
-                  }}
+                  onClick={() => selectItem(item)}
                   onKeyDown={(e) => {
                     if (e.key === 'Enter' || e.key === ' ') {
                       e.preventDefault();
-                      setSelectedId(item.id);
+                      selectItem(item);
                     }
                   }}
                   className={`rounded-xl border p-4 transition cursor-pointer ${

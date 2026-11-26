@@ -1,7 +1,7 @@
 export function sanitizeHttpUrl(raw: string | null | undefined): string | null {
   if (!raw) return null;
   const trimmed = raw.trim();
-  if (!trimmed) return null;
+  if (!trimmed || /[\s\u0000-\u001F\u007F|]/.test(trimmed)) return null;
   try {
     const parsed = new URL(trimmed);
     if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
@@ -24,14 +24,14 @@ export function extractSafeUrls(
   const candidates: string[] = [];
 
   if (canonicalUrl) {
-    for (const part of canonicalUrl.split(' | ')) {
+    for (const part of canonicalUrl.split(/\s*\|\s*/)) {
       candidates.push(part);
     }
   }
   if (sourceUrls) {
     for (const url of sourceUrls) {
       if (url) {
-        for (const part of url.split(' | ')) {
+        for (const part of url.split(/\s*\|\s*/)) {
           candidates.push(part);
         }
       }

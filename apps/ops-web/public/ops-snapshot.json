@@ -1,7 +1,7 @@
 {
     "ContractType":  "OpsDashboardSnapshot",
     "ContractVersion":  1,
-    "GeneratedAtUtc":  "2026-11-26T10:09:41Z",
+    "GeneratedAtUtc":  "2026-11-26T10:28:52Z",
     "ProductionAction":  "NONE",
     "SeedBaseline":  {
                          "manifestVersion":  1,
@@ -23,6 +23,7 @@
                              "Summary":  {
                                              "CanonicalTotalCount":  1298,
                                              "SeedActiveCount":  1187,
+                                             "SeedMatchedCount":  1187,
                                              "ExactPinCount":  1170,
                                              "UnpinnedInAppCount":  17,
                                              "HeldCount":  111,
@@ -51,7 +52,7 @@
                                                "lastVerifiedAt":  "2026-11-22",
                                                "reasonDetail":  "앱 목록·검색에는 노출되지만 좌표가 확정되지 않아 지도 마커(핀)가 숨겨진 상태입니다.",
                                                "sourceUrls":  [
-                                                                  "https://www.paju.go.kr/www/www_02/health/health_03/health_03_09/health_03_09_01.jsp | https://www.paju.go.kr/user/soldier/BD_discountStoreList.do?q_ctgCd=1001",
+                                                                  "https://www.paju.go.kr/www/www_02/health/health_03/health_03_09/health_03_09_01.jsp",
                                                                   "https://www.paju.go.kr/user/soldier/BD_discountStoreList.do?q_ctgCd=1001"
                                                               ]
                                            },
@@ -74,7 +75,7 @@
                                                "lastVerifiedAt":  "2026-11-22",
                                                "reasonDetail":  "앱 목록·검색에는 노출되지만 좌표가 확정되지 않아 지도 마커(핀)가 숨겨진 상태입니다.",
                                                "sourceUrls":  [
-                                                                  "https://www.paju.go.kr/www/www_02/health/health_03/health_03_09/health_03_09_01.jsp | https://www.paju.go.kr/user/soldier/BD_discountStoreList.do?q_ctgCd=1001",
+                                                                  "https://www.paju.go.kr/www/www_02/health/health_03/health_03_09/health_03_09_01.jsp",
                                                                   "https://www.paju.go.kr/user/soldier/BD_discountStoreList.do?q_ctgCd=1001"
                                                               ]
                                            },
@@ -185,7 +186,7 @@
                                                "lastVerifiedAt":  "2026-11-22",
                                                "reasonDetail":  "앱 목록·검색에는 노출되지만 좌표가 확정되지 않아 지도 마커(핀)가 숨겨진 상태입니다.",
                                                "sourceUrls":  [
-                                                                  "https://www.paju.go.kr/www/www_02/health/health_03/health_03_09/health_03_09_01.jsp | https://www.paju.go.kr/user/soldier/BD_discountStoreList.do?q_ctgCd=1004",
+                                                                  "https://www.paju.go.kr/www/www_02/health/health_03/health_03_09/health_03_09_01.jsp",
                                                                   "https://www.paju.go.kr/user/soldier/BD_discountStoreList.do?q_ctgCd=1004"
                                                               ]
                                            },
@@ -208,7 +209,7 @@
                                                "lastVerifiedAt":  "2026-11-22",
                                                "reasonDetail":  "앱 목록·검색에는 노출되지만 좌표가 확정되지 않아 지도 마커(핀)가 숨겨진 상태입니다.",
                                                "sourceUrls":  [
-                                                                  "https://www.paju.go.kr/www/www_02/health/health_03/health_03_09/health_03_09_01.jsp | https://www.paju.go.kr/user/soldier/BD_discountStoreList.do?q_ctgCd=1001",
+                                                                  "https://www.paju.go.kr/www/www_02/health/health_03/health_03_09/health_03_09_01.jsp",
                                                                   "https://www.paju.go.kr/user/soldier/BD_discountStoreList.do?q_ctgCd=1001"
                                                               ]
                                            },
@@ -231,7 +232,7 @@
                                                "lastVerifiedAt":  "2026-11-22",
                                                "reasonDetail":  "앱 목록·검색에는 노출되지만 좌표가 확정되지 않아 지도 마커(핀)가 숨겨진 상태입니다.",
                                                "sourceUrls":  [
-                                                                  "https://www.paju.go.kr/www/www_02/health/health_03/health_03_09/health_03_09_01.jsp | https://www.paju.go.kr/user/soldier/BD_discountStoreList.do?q_ctgCd=1001",
+                                                                  "https://www.paju.go.kr/www/www_02/health/health_03/health_03_09/health_03_09_01.jsp",
                                                                   "https://www.paju.go.kr/user/soldier/BD_discountStoreList.do?q_ctgCd=1001"
                                                               ]
                                            },
@@ -254,7 +255,7 @@
                                                "lastVerifiedAt":  "2026-11-22",
                                                "reasonDetail":  "앱 목록·검색에는 노출되지만 좌표가 확정되지 않아 지도 마커(핀)가 숨겨진 상태입니다.",
                                                "sourceUrls":  [
-                                                                  "https://www.paju.go.kr/www/www_02/health/health_03/health_03_09/health_03_09_01.jsp | https://www.paju.go.kr/user/soldier/BD_discountStoreList.do?q_ctgCd=1001",
+                                                                  "https://www.paju.go.kr/www/www_02/health/health_03/health_03_09/health_03_09_01.jsp",
                                                                   "https://www.paju.go.kr/user/soldier/BD_discountStoreList.do?q_ctgCd=1001"
                                                               ]
                                            },
@@ -277,7 +278,7 @@
                                                "lastVerifiedAt":  "2026-11-22",
                                                "reasonDetail":  "앱 목록·검색에는 노출되지만 좌표가 확정되지 않아 지도 마커(핀)가 숨겨진 상태입니다.",
                                                "sourceUrls":  [
-                                                                  "https://www.paju.go.kr/www/www_02/health/health_03/health_03_09/health_03_09_01.jsp | https://www.paju.go.kr/user/soldier/BD_discountStoreList.do?q_ctgCd=1004",
+                                                                  "https://www.paju.go.kr/www/www_02/health/health_03/health_03_09/health_03_09_01.jsp",
                                                                   "https://www.paju.go.kr/user/soldier/BD_discountStoreList.do?q_ctgCd=1004"
                                                               ]
                                            },
@@ -346,7 +347,7 @@
                                                "lastVerifiedAt":  "2026-11-22",
                                                "reasonDetail":  "앱 목록·검색에는 노출되지만 좌표가 확정되지 않아 지도 마커(핀)가 숨겨진 상태입니다.",
                                                "sourceUrls":  [
-                                                                  "https://www.paju.go.kr/www/www_02/health/health_03/health_03_09/health_03_09_01.jsp | https://www.paju.go.kr/user/soldier/BD_discountStoreList.do?q_ctgCd=1001",
+                                                                  "https://www.paju.go.kr/www/www_02/health/health_03/health_03_09/health_03_09_01.jsp",
                                                                   "https://www.paju.go.kr/user/soldier/BD_discountStoreList.do?q_ctgCd=1001"
                                                               ]
                                            },
@@ -369,7 +370,7 @@
                                                "lastVerifiedAt":  "2026-11-22",
                                                "reasonDetail":  "앱 목록·검색에는 노출되지만 좌표가 확정되지 않아 지도 마커(핀)가 숨겨진 상태입니다.",
                                                "sourceUrls":  [
-                                                                  "https://www.paju.go.kr/www/www_02/health/health_03/health_03_09/health_03_09_01.jsp | https://www.paju.go.kr/user/soldier/BD_discountStoreList.do?q_ctgCd=1004",
+                                                                  "https://www.paju.go.kr/www/www_02/health/health_03/health_03_09/health_03_09_01.jsp",
                                                                   "https://www.paju.go.kr/user/soldier/BD_discountStoreList.do?q_ctgCd=1004"
                                                               ]
                                            },
@@ -392,7 +393,7 @@
                                                "lastVerifiedAt":  "2026-11-22",
                                                "reasonDetail":  "앱 목록·검색에는 노출되지만 좌표가 확정되지 않아 지도 마커(핀)가 숨겨진 상태입니다.",
                                                "sourceUrls":  [
-                                                                  "https://www.paju.go.kr/www/www_02/health/health_03/health_03_09/health_03_09_01.jsp | https://www.paju.go.kr/user/soldier/BD_discountStoreList.do?q_ctgCd=1001",
+                                                                  "https://www.paju.go.kr/www/www_02/health/health_03/health_03_09/health_03_09_01.jsp",
                                                                   "https://www.paju.go.kr/user/soldier/BD_discountStoreList.do?q_ctgCd=1001"
                                                               ]
                                            },
@@ -415,7 +416,7 @@
                                                "lastVerifiedAt":  "2026-11-22",
                                                "reasonDetail":  "앱 목록·검색에는 노출되지만 좌표가 확정되지 않아 지도 마커(핀)가 숨겨진 상태입니다.",
                                                "sourceUrls":  [
-                                                                  "https://www.paju.go.kr/www/www_02/health/health_03/health_03_09/health_03_09_01.jsp | https://www.paju.go.kr/user/soldier/BD_discountStoreList.do?q_ctgCd=1001",
+                                                                  "https://www.paju.go.kr/www/www_02/health/health_03/health_03_09/health_03_09_01.jsp",
                                                                   "https://www.paju.go.kr/user/soldier/BD_discountStoreList.do?q_ctgCd=1001"
                                                               ]
                                            },

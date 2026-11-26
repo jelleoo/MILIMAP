@@ -81,6 +81,12 @@ export function NewCandidatesPanel({
         ? (checksById[selectedItem.id]?.memo ?? '')
         : '';
 
+  const selectItem = (item: WeeklyDriftNewCandidate) => {
+    setSelectedId(item.id);
+    setMemoEditingId(item.id);
+    setMemoInput(checksById[item.id]?.memo ?? '');
+  };
+
   return (
     <div className="space-y-4">
       <div className="flex items-start gap-3 rounded-xl border border-blue-200 bg-blue-50/80 px-4 py-3.5 text-blue-950">
@@ -151,15 +157,11 @@ export function NewCandidatesPanel({
                   key={item.id}
                   role="button"
                   tabIndex={0}
-                  onClick={() => {
-                    setSelectedId(item.id);
-                    setMemoEditingId(item.id);
-                    setMemoInput(checksById[item.id]?.memo ?? '');
-                  }}
+                  onClick={() => selectItem(item)}
                   onKeyDown={(e) => {
                     if (e.key === 'Enter' || e.key === ' ') {
                       e.preventDefault();
-                      setSelectedId(item.id);
+                      selectItem(item);
                     }
                   }}
                   className={`rounded-xl border p-4 transition cursor-pointer ${

@@ -43,6 +43,7 @@ const FALLBACK_MANIFEST = {
 
 export function App() {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const dragDepthRef = useRef(0);
   const [activeTab, setActiveTab] = useState<ActiveTab>('overview');
   const [queueSource, setQueueSource] = useState<QueueSourceTab>('drift');
   const [bucketFilter, setBucketFilter] = useState<QueueTargetFilter>('ATTENTION');
@@ -69,7 +70,16 @@ export function App() {
   const [recordsByBusinessId, setRecordsByBusinessId] = useState<Record<string, BenefitReleaseApprovalRecord>>(() => {
     try {
       const raw = localStorage.getItem(STORAGE_RECORDS_KEY);
-      return raw ? (JSON.parse(raw) as Record<string, BenefitReleaseApprovalRecord>) : {};
+      if (!raw) return {};
+      const parsed: unknown = JSON.parse(raw);
+      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return {};
+      const safe: Record<string, BenefitReleaseApprovalRecord> = {};
+      for (const [k, v] of Object.entries(parsed)) {
+        if (v && typeof v === 'object' && !Array.isArray(v) && typeof (v as { businessId?: unknown }).businessId === 'string') {
+          safe[k] = v as BenefitReleaseApprovalRecord;
+        }
+      }
+      return safe;
     } catch {
       return {};
     }
@@ -84,7 +94,16 @@ export function App() {
   const [checksById, setChecksById] = useState<Record<string, DriftCheckEntry>>(() => {
     try {
       const raw = localStorage.getItem(STORAGE_DRIFT_CHECKS_KEY);
-      return raw ? (JSON.parse(raw) as Record<string, DriftCheckEntry>) : {};
+      if (!raw) return {};
+      const parsed: unknown = JSON.parse(raw);
+      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return {};
+      const safe: Record<string, DriftCheckEntry> = {};
+      for (const [k, v] of Object.entries(parsed)) {
+        if (v && typeof v === 'object' && !Array.isArray(v) && typeof (v as { checked?: unknown }).checked === 'boolean') {
+          safe[k] = v as DriftCheckEntry;
+        }
+      }
+      return safe;
     } catch {
       return {};
     }
@@ -95,11 +114,12 @@ export function App() {
     fetch('/ops-snapshot.json')
       .then(async (resp) => {
         if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-        return (await resp.json()) as OpsDashboardSnapshot;
+        return resp.text();
       })
-      .then((loaded) => {
-        if (active && loaded?.ContractType === 'OpsDashboardSnapshot') {
-          setSnapshot(loaded);
+      .then((text) => {
+        const parsed = parseUploadedOpsJson(text);
+        if (active && parsed.kind === 'snapshot') {
+          setSnapshot(parsed.data);
         }
       })
       .catch(() => {
@@ -151,10 +171,13 @@ export function App() {
     (canonicalBacklog?.Summary.TotalBacklogCount ?? 0) +
     phase5AttentionCount;
   const draftedRecords = useMemo(() => Object.values(recordsByBusinessId), [recordsByBusinessId]);
-  const localCheckedCount = useMemo(
-    () => Object.values(checksById).filter((entry) => entry.checked).length,
-    [checksById],
-  );
+  const localCheckedCount = useMemo(() => {
+    const activeIds = new Set<string>([
+      ...driftReviewItems.map((item) => item.id),
+      ...(canonicalBacklog?.Items ?? []).map((item) => item.id),
+    ]);
+    return Object.entries(checksById).filter(([id, entry]) => entry.checked && activeIds.has(id)).length;
+  }, [checksById, driftReviewItems, canonicalBacklog]);
 
   const handleOpenQueue = (filter: QueueTargetFilter, preferredSource?: QueueSourceTab) => {
     const targetSource: QueueSourceTab =
@@ -184,10 +207,12 @@ export function App() {
         if (parsed.kind === 'snapshot') {
           setSnapshot(parsed.data);
           setIsDemo(false);
+          setSelectedKey(null);
           messages.push(`통합 리포트(${file.name})를 불러왔습니다.`);
         } else if (parsed.kind === 'review-queue') {
           setSnapshot((prev) => ({ ...prev, ReviewQueue: parsed.data }));
           setIsDemo(false);
+          setSelectedKey(null);
           messages.push(`심층 검증 리포트(${parsed.data.Summary.ExportedItemCount}건)를 불러왔습니다.`);
         } else if (parsed.kind === 'weekly-drift') {
           setSnapshot((prev) => ({ ...prev, WeeklyDrift: parsed.data }));
@@ -255,13 +280,23 @@ export function App() {
   return (
     <div
       className="min-h-screen bg-slate-50 text-slate-900"
-      onDragOver={(e) => {
+      onDragEnter={(e) => {
         e.preventDefault();
+        dragDepthRef.current += 1;
         setIsDragOver(true);
       }}
-      onDragLeave={() => setIsDragOver(false)}
+      onDragOver={(e) => {
+        e.preventDefault();
+      }}
+      onDragLeave={() => {
+        dragDepthRef.current = Math.max(0, dragDepthRef.current - 1);
+        if (dragDepthRef.current === 0) {
+          setIsDragOver(false);
+        }
+      }}
       onDrop={(e) => {
         e.preventDefault();
+        dragDepthRef.current = 0;
         setIsDragOver(false);
         void handleFiles(e.dataTransfer.files);
       }}
@@ -458,6 +493,7 @@ export function App() {
       <LedgerExportModal
         open={exportModalOpen}
         records={draftedRecords}
+        seedVersion={displayedSnapshot.SeedBaseline.seedVersion}
         onClose={() => setExportModalOpen(false)}
         onClearAll={() => setRecordsByBusinessId({})}
       />

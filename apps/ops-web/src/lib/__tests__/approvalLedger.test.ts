@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   buildApprovalLedger,
   buildApprovalRecord,
+  buildValidateLedgerCommand,
   isValidCalendarDate,
   isValidHumanApprover,
   isValidIso8601WithOffset,
@@ -98,5 +99,14 @@ describe('approvalLedger', () => {
     expect(ledger.ContractVersion).toBe(1);
     expect(ledger.Records).toHaveLength(1);
     expect(() => buildApprovalLedger([record, record])).toThrow(/Duplicate businessId/);
+  });
+
+  it('builds dynamic validator command without hardcoded date paths', () => {
+    const withVersion = buildValidateLedgerCommand('ledger.json', 15);
+    expect(withVersion).toContain('poi-coordinate-review-candidates-<YYYYMMDD>-v15.csv');
+    expect(withVersion).not.toContain('20261123-v14');
+
+    const withoutVersion = buildValidateLedgerCommand('ledger.json');
+    expect(withoutVersion).toContain('poi-coordinate-review-candidates-<YYYYMMDD>-v<N>.csv');
   });
 });

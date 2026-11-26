@@ -247,21 +247,40 @@ export function ApprovalDrawer({
           <div className="rounded-lg border border-slate-200 p-3.5">
             <div className="mb-2 text-xs font-semibold text-slate-700">관측된 혜택 근거 비교</div>
             <div className="space-y-2">
-              {item.ValidatedClaims.map((claim, idx) => (
-                <div key={idx} className="rounded-md bg-slate-50 p-2.5 text-xs">
-                  <div className="font-medium text-slate-900">
-                    [{claim.ClaimType || 'CLAIM'}] {claim.Value || '-'}
-                  </div>
-                  {claim.EvidenceText && (
-                    <div className="mt-1 text-slate-700">근거: {claim.EvidenceText}</div>
-                  )}
-                  {claim.EvidenceReference && (
-                    <div className="mt-0.5 font-mono text-[11px] text-slate-500">
-                      위치: {claim.EvidenceReference}
+              {item.ValidatedClaims.map((claim, idx) => {
+                const claimText = claim.SemanticValue ?? claim.Value ?? '-';
+                const claimTone =
+                  claim.ClaimResult === 'SUPPORTED'
+                    ? 'emerald'
+                    : claim.ClaimResult === 'CONFLICTED'
+                      ? 'red'
+                      : 'amber';
+                return (
+                  <div key={idx} className="rounded-md bg-slate-50 p-2.5 text-xs">
+                    <div className="flex flex-wrap items-center justify-between gap-1.5">
+                      <div className="font-medium text-slate-900">
+                        [{claim.ClaimType || 'CLAIM'}] {claimText}
+                      </div>
+                      <div className="flex flex-wrap items-center gap-1">
+                        {claim.ClaimResult && <Badge tone={claimTone}>{claim.ClaimResult}</Badge>}
+                        {typeof claim.BusinessBound === 'boolean' && (
+                          <Badge tone={claim.BusinessBound ? 'emerald' : 'amber'}>
+                            {claim.BusinessBound ? '업소 귀속 확인' : '귀속 미확인'}
+                          </Badge>
+                        )}
+                      </div>
                     </div>
-                  )}
-                </div>
-              ))}
+                    {claim.EvidenceText && (
+                      <div className="mt-1 text-slate-700">근거: {claim.EvidenceText}</div>
+                    )}
+                    {claim.EvidenceReference && (
+                      <div className="mt-0.5 font-mono text-[11px] text-slate-500">
+                        위치: {claim.EvidenceReference}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           </div>
         )}

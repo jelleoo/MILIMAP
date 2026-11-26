@@ -6,6 +6,8 @@ on:
     paths:
       - "apps/ops-web/**"
       - "apps/android/app/src/main/assets/benefits.seed.manifest.json"
+      - "apps/android/app/src/main/assets/benefits.seed.json"
+      - "data/canonical/capital-area-military-benefits.csv"
       - "tools/data/build-ops-dashboard-snapshot.ps1"
       - "tools/data/test-build-ops-dashboard-snapshot.ps1"
       - ".github/workflows/deploy-ops-web.yml"
@@ -14,6 +16,8 @@ on:
     paths:
       - "apps/ops-web/**"
       - "apps/android/app/src/main/assets/benefits.seed.manifest.json"
+      - "apps/android/app/src/main/assets/benefits.seed.json"
+      - "data/canonical/capital-area-military-benefits.csv"
       - "tools/data/build-ops-dashboard-snapshot.ps1"
       - "tools/data/test-build-ops-dashboard-snapshot.ps1"
       - ".github/workflows/deploy-ops-web.yml"
@@ -108,16 +112,26 @@ jobs:
         if: steps.cf.outputs.configured == 'true'
         shell: pwsh
         env:
-          INCLUDE_LIVE_DRIFT: ${{ github.event_name == 'workflow_dispatch' && inputs.include_live_drift }}
+          INCLUDE_LIVE_DRIFT: ${{ github.event_name == 'push' || inputs.include_live_drift }}
           DRIFT_DIR: ${{ runner.temp }}/ops-drift
         run: |
           $ErrorActionPreference = 'Stop'
           if ($env:INCLUDE_LIVE_DRIFT -eq 'true') {
-            & tools/data/run-weekly-benefit-drift-check.ps1 -OutputDirectory $env:DRIFT_DIR | Out-Null
             $driftJson = Join-Path $env:DRIFT_DIR 'weekly-drift-summary.json'
-            & tools/data/build-ops-dashboard-snapshot.ps1 `
-              -WeeklyDriftSummaryJson $driftJson `
-              -OutputJson 'apps/ops-web/public/ops-snapshot.json' | Out-Null
+            try {
+              & tools/data/run-weekly-benefit-drift-check.ps1 -OutputDirectory $env:DRIFT_DIR | Out-Null
+            } catch {
+              Write-Warning "Weekly drift check failed; falling back to baseline snapshot without live drift: $($_.Exception.Message)"
+            }
+            if (Test-Path -LiteralPath $driftJson -PathType Leaf) {
+              & tools/data/build-ops-dashboard-snapshot.ps1 `
+                -WeeklyDriftSummaryJson $driftJson `
+                -OutputJson 'apps/ops-web/public/ops-snapshot.json' | Out-Null
+            } else {
+              Write-Warning 'weekly-drift-summary.json not generated; building snapshot without live drift.'
+              & tools/data/build-ops-dashboard-snapshot.ps1 `
+                -OutputJson 'apps/ops-web/public/ops-snapshot.json' | Out-Null
+            }
           } else {
             & tools/data/build-ops-dashboard-snapshot.ps1 `
               -OutputJson 'apps/ops-web/public/ops-snapshot.json' | Out-Null

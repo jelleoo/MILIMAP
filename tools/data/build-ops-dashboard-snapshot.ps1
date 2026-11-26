@@ -48,10 +48,10 @@ function Write-OpsSnapshotAtomicJson {
     $tmpPath = "$safeOut.tmp.$([guid]::NewGuid().ToString('N'))"
     try {
         [IO.File]::WriteAllText($tmpPath, $jsonText, [Text.UTF8Encoding]::new($false))
-        if (Test-Path -LiteralPath $safeOut -PathType Leaf) {
-            [IO.File]::Replace($tmpPath, $safeOut, $null)
+        if ($PSVersionTable.PSVersion.Major -ge 7) {
+            [IO.File]::Move($tmpPath, $safeOut, $true)
         } else {
-            [IO.File]::Move($tmpPath, $safeOut)
+            Move-Item -LiteralPath $tmpPath -Destination $safeOut -Force
         }
     } finally {
         if (Test-Path -LiteralPath $tmpPath -PathType Leaf) {

@@ -1,0 +1,90 @@
+name: Deploy Public Benefit Seed
+
+on:
+  pull_request:
+    branches: [dev]
+    paths:
+      - "apps/android/app/src/main/assets/**"
+      - "data/canonical/capital-area-military-benefits.csv"
+      - "tools/data/**"
+      - ".github/workflows/deploy-public-benefit-seed.yml"
+  push:
+    branches: [dev]
+    paths:
+      - "apps/android/app/src/main/assets/benefits.seed.manifest.json"
+      - "apps/android/app/src/main/assets/benefits.seed.json"
+      - "apps/android/app/src/main/assets/manual_benefits_seed.json"
+  workflow_dispatch:
+    inputs:
+      bootstrap:
+        description: "Allow a missing manifest for the first public release"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+env:
+  SEED_ASSETS: apps/android/app/src/main/assets
+  CANONICAL_CSV: data/canonical/capital-area-military-benefits.csv
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Verify public seed package
+        shell: pwsh
+        run: ./tools/data/test-public-benefit-seed-package.ps1
+
+  deploy:
+    needs: verify
+    if: github.ref == 'refs/heads/dev' && github.event_name != 'pull_request' && vars.MILIMAP_PUBLIC_SEED_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    concurrency:
+      group: milimap-public-benefit-seed
+      cancel-in-progress: false
+    environment: public-benefit-seed
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Check published version and stage release
+        id: seed
+        shell: pwsh
+        env:
+          BOOTSTRAP: ${{ github.event_name == 'workflow_dispatch' && inputs.bootstrap }}
+          RELEASE_WORK_DIR: ${{ runner.temp }}/public-benefit-seed
+        run: |
+          $params = @{
+            AssetDirectory = $env:SEED_ASSETS
+            CanonicalCsv = $env:CANONICAL_CSV
+            WorkDirectory = $env:RELEASE_WORK_DIR
+            Bootstrap = ($env:BOOTSTRAP -eq 'true')
+          }
+          $result = ./tools/data/prepare-public-benefit-seed-deploy.ps1 @params
+          "publish=$($result.publish.ToString().ToLowerInvariant())" >> $env:GITHUB_OUTPUT
+          "Public seed v$($result.seedVersion), deployment required: $($result.publish)" >> $env:GITHUB_STEP_SUMMARY
+      - name: Deploy approved assets to Pages
+        if: steps.seed.outputs.publish == 'true'
+        uses: cloudflare/wrangler-action@953926a2e2182532811c01a25e53647d93bf07c0 # v4.1.3
+        with:
+          apiToken: ${{ secrets.PUBLIC_BENEFIT_SEED_CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.PUBLIC_BENEFIT_SEED_CLOUDFLARE_ACCOUNT_ID }}
+          command: pages deploy "${{ runner.temp }}/public-benefit-seed/site" --project-name=milimap-data --branch=dev --commit-dirty=false
+      - name: Verify production response and hashes
+        shell: pwsh
+        env:
+          SMOKE_WORK_DIR: ${{ runner.temp }}/public-benefit-seed-smoke
+        run: |
+          $params = @{
+            AssetDirectory = $env:SEED_ASSETS
+            CanonicalCsv = $env:CANONICAL_CSV
+            WorkDirectory = $env:SMOKE_WORK_DIR
+            VerifyPublished = $true
+          }
+          ./tools/data/prepare-public-benefit-seed-deploy.ps1 @params

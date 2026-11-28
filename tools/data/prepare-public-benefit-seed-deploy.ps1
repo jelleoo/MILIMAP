@@ -23,7 +23,6 @@ function Save-PublicSeedResponse([string]$Path, [string]$Name, [int]$Limit, [str
         '--output', $target, '--write-out', '%{http_code}', '--', "$origin/$Path")
     $status = & curl @curlArgs
     if ($LASTEXITCODE -ne 0) { throw "PUBLIC_SEED_DOWNLOAD_FAILED: $Name" }
-    if ($status -eq '404' -and $Bootstrap -and !$VerifyPublished -and $Name -ceq $manifestName) { return $false }
     if ($status -ne '200') { throw "PUBLIC_SEED_UNEXPECTED_HTTP_STATUS: $Name ($status)" }
     if ($VerifyPublished) {
         $headerText = Get-Content -LiteralPath $headers -Raw
@@ -32,7 +31,6 @@ function Save-PublicSeedResponse([string]$Path, [string]$Name, [int]$Limit, [str
             throw "PUBLIC_SEED_UNEXPECTED_HEADERS: $Name"
         }
     }
-    return $true
 }
 
 $packageParams = @{
@@ -40,13 +38,14 @@ $packageParams = @{
     CanonicalCsv = $CanonicalCsv
     OutputDirectory = Join-Path $WorkDirectory 'site'
 }
-if (Save-PublicSeedResponse $manifestName $manifestName 16KB 'no-cache') {
+if (!$Bootstrap -or $VerifyPublished) {
+    Save-PublicSeedResponse $manifestName $manifestName 16KB 'no-cache'
     $raw = Read-ReleaseUtf8Text -Path (Join-Path $published $manifestName)
     $manifest = ConvertFrom-InternalManifestJson -Text $raw
     Assert-BenefitReleaseSeedManifest -Manifest $manifest
     $prefix = "v/$($manifest.seedVersion)"
-    $null = Save-PublicSeedResponse "$prefix/benefits.seed.json" 'benefits.seed.json' 4MB 'immutable'
-    $null = Save-PublicSeedResponse "$prefix/manual_benefits_seed.json" 'manual_benefits_seed.json' 256KB 'immutable'
+    Save-PublicSeedResponse "$prefix/benefits.seed.json" 'benefits.seed.json' 4MB 'immutable'
+    Save-PublicSeedResponse "$prefix/manual_benefits_seed.json" 'manual_benefits_seed.json' 256KB 'immutable'
     $packageParams.PublishedDirectory = $published
 }
 

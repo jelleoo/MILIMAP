@@ -17,7 +17,7 @@ on:
   workflow_dispatch:
     inputs:
       bootstrap:
-        description: "Allow a missing manifest for the first public release"
+        description: "Allow the first release on a verified Pages project with no production deployments"
         type: boolean
         default: false
 
@@ -47,17 +47,42 @@ jobs:
     timeout-minutes: 10
     concurrency:
       group: milimap-public-benefit-seed
-      cancel-in-progress: false
+      queue: max
     environment: public-benefit-seed
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+      - name: Verify the first release target
+        id: bootstrap
+        if: github.event_name == 'workflow_dispatch' && inputs.bootstrap
+        shell: pwsh
+        env:
+          CF_ACCOUNT: ${{ secrets.PUBLIC_BENEFIT_SEED_CLOUDFLARE_ACCOUNT_ID }}
+          CF_TOKEN: ${{ secrets.PUBLIC_BENEFIT_SEED_CLOUDFLARE_API_TOKEN }}
+        run: |
+          if ($env:CF_ACCOUNT -notmatch '^[0-9a-f]{32}$' -or -not $env:CF_TOKEN) {
+            throw 'Public Pages credentials are missing or invalid'
+          }
+          $endpoint = "https://api.cloudflare.com/client/v4/accounts/$env:CF_ACCOUNT/pages/projects/milimap-data"
+          $request = @{ Headers = @{ Authorization = "Bearer $env:CF_TOKEN" }; TimeoutSec = 15; MaximumRedirection = 0 }
+          try {
+            $project = Invoke-RestMethod -Uri $endpoint @request
+            $deployments = Invoke-RestMethod -Uri "$endpoint/deployments?env=production&per_page=1" @request
+          } catch {
+            throw 'Could not verify the public Pages project and production history'
+          }
+          if (-not $project.success -or $project.result.subdomain -cne 'milimap-data.pages.dev' -or
+              $project.result.production_branch -cne 'dev' -or -not $deployments.success -or
+              $deployments.result -isnot [array]) {
+            throw 'Public Pages project or production history does not match the release contract'
+          }
+          "empty=$(($deployments.result.Count -eq 0).ToString().ToLowerInvariant())" >> $env:GITHUB_OUTPUT
       - name: Check published version and stage release
         id: seed
         shell: pwsh
         env:
-          BOOTSTRAP: ${{ github.event_name == 'workflow_dispatch' && inputs.bootstrap }}
+          BOOTSTRAP: ${{ steps.bootstrap.outputs.empty }}
           RELEASE_WORK_DIR: ${{ runner.temp }}/public-benefit-seed
         run: |
           $params = @{

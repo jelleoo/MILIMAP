@@ -24,7 +24,7 @@ on:
   workflow_dispatch:
     inputs:
       include_live_drift:
-        description: "Include live weekly official source drift check in ops-snapshot.json"
+        description: "Collect live drift and publish. False runs build verification only."
         required: false
         default: true
         type: boolean
@@ -68,9 +68,12 @@ jobs:
 
   deploy-ops-web:
     needs: verify-ops-web
-    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    if: github.ref == 'refs/heads/dev' && (github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.include_live_drift))
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
+    concurrency:
+      group: milimap-ops-web-production
+      queue: max
 
     steps:
       - name: Check Cloudflare Pages secrets
@@ -99,6 +102,9 @@ jobs:
       - name: Checkout
         if: steps.cf.outputs.configured == 'true'
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: dev
+          persist-credentials: false
 
       - name: Set up Node.js 24
         if: steps.cf.outputs.configured == 'true'
@@ -112,30 +118,13 @@ jobs:
         if: steps.cf.outputs.configured == 'true'
         shell: pwsh
         env:
-          INCLUDE_LIVE_DRIFT: ${{ github.event_name == 'push' || inputs.include_live_drift }}
           DRIFT_DIR: ${{ runner.temp }}/ops-drift
         run: |
           $ErrorActionPreference = 'Stop'
-          if ($env:INCLUDE_LIVE_DRIFT -eq 'true') {
-            $driftJson = Join-Path $env:DRIFT_DIR 'weekly-drift-summary.json'
-            try {
-              & tools/data/run-weekly-benefit-drift-check.ps1 -OutputDirectory $env:DRIFT_DIR | Out-Null
-            } catch {
-              Write-Warning "Weekly drift check failed; falling back to baseline snapshot without live drift: $($_.Exception.Message)"
-            }
-            if (Test-Path -LiteralPath $driftJson -PathType Leaf) {
-              & tools/data/build-ops-dashboard-snapshot.ps1 `
-                -WeeklyDriftSummaryJson $driftJson `
-                -OutputJson 'apps/ops-web/public/ops-snapshot.json' | Out-Null
-            } else {
-              Write-Warning 'weekly-drift-summary.json not generated; building snapshot without live drift.'
-              & tools/data/build-ops-dashboard-snapshot.ps1 `
-                -OutputJson 'apps/ops-web/public/ops-snapshot.json' | Out-Null
-            }
-          } else {
-            & tools/data/build-ops-dashboard-snapshot.ps1 `
-              -OutputJson 'apps/ops-web/public/ops-snapshot.json' | Out-Null
-          }
+          $driftJson = Join-Path $env:DRIFT_DIR 'weekly-drift-summary.json'
+          & tools/data/run-weekly-benefit-drift-check.ps1 -OutputDirectory $env:DRIFT_DIR -StepSummaryPath $env:GITHUB_STEP_SUMMARY | Out-Null
+          & tools/data/read-ops-weekly-drift-for-publication.ps1 -SummaryPath $driftJson | Out-Null
+          & tools/data/build-ops-dashboard-snapshot.ps1 -WeeklyDriftSummaryJson $driftJson -OutputJson 'apps/ops-web/public/ops-snapshot.json' | Out-Null
 
       - name: Install dependencies and build production bundle
         if: steps.cf.outputs.configured == 'true'

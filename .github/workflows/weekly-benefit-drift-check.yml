@@ -17,12 +17,21 @@ permissions:
 
 jobs:
   weekly-drift-check:
+    if: github.ref == 'refs/heads/dev'
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    concurrency:
+      group: milimap-ops-web-production
+      queue: max
+    outputs:
+      issue-candidates: ${{ steps.issue-candidates.outputs.candidates }}
 
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: dev
+          persist-credentials: false
 
       - name: Run drift check script self-tests
         shell: pwsh
@@ -31,22 +40,33 @@ jobs:
           & tools/data/test-canonical-business-ids.ps1
           & tools/data/test-release-artifact-pipeline.ps1
           & tools/data/test-run-weekly-benefit-drift-check.ps1
+          & tools/data/test-ops-weekly-drift-for-publication.ps1
+          & tools/data/test-weekly-drift-issue-candidates.ps1
 
       - name: Run read-only official source drift check
         shell: pwsh
         env:
-          FAIL_ON_FETCH_ERROR: ${{ github.event_name == 'schedule' || inputs.fail_on_fetch_error }}
           DRIFT_OUT_DIR: ${{ runner.temp }}/weekly-drift-report
         run: |
           $ErrorActionPreference = 'Stop'
-          $failFlag = ($env:FAIL_ON_FETCH_ERROR -eq 'true')
-          & tools/data/run-weekly-benefit-drift-check.ps1 `
-            -OutputDirectory $env:DRIFT_OUT_DIR `
-            -StepSummaryPath $env:GITHUB_STEP_SUMMARY `
-            -FailOnFetchError:$failFlag
+          & tools/data/run-weekly-benefit-drift-check.ps1 -OutputDirectory $env:DRIFT_OUT_DIR -StepSummaryPath $env:GITHUB_STEP_SUMMARY
+
+      - name: Validate current drift report
+        id: drift
+        shell: pwsh
+        env:
+          DRIFT_OUT_DIR: ${{ runner.temp }}/weekly-drift-report
+        run: |
+          $result = & tools/data/read-ops-weekly-drift-for-publication.ps1 -SummaryPath (Join-Path $env:DRIFT_OUT_DIR 'weekly-drift-summary.json')
+          "failed-count=$($result.failedSources.Count)" >> $env:GITHUB_OUTPUT
+          if ($result.failedSources.Count -gt 0) {
+            $message = "Official source checks failed: $($result.failedSources -join ', ') ($($result.failedSources.Count)/$($result.sourceCount))"
+            Write-Host "::warning::$message"
+            $message >> $env:GITHUB_STEP_SUMMARY
+          }
 
       - name: Upload weekly drift report artifact
-        if: always()
+        if: '!cancelled()'
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: weekly-benefit-drift-report
@@ -54,23 +74,7 @@ jobs:
           if-no-files-found: warn
           retention-days: 30
 
-      - name: Check Cloudflare Pages secrets for dashboard refresh
-        id: cf
-        if: success()
-        shell: bash
-        env:
-          CF_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CF_ACCOUNT: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          DRIFT_SUMMARY: ${{ runner.temp }}/weekly-drift-report/weekly-drift-summary.json
-        run: |
-          if [ -n "$CF_TOKEN" ] && [ -n "$CF_ACCOUNT" ] && [ -f "$DRIFT_SUMMARY" ]; then
-            echo "deploy=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "deploy=false" >> "$GITHUB_OUTPUT"
-          fi
-
       - name: Build ops-snapshot.json with weekly drift
-        if: success() && steps.cf.outputs.deploy == 'true'
         shell: pwsh
         env:
           DRIFT_SUMMARY: ${{ runner.temp }}/weekly-drift-report/weekly-drift-summary.json
@@ -80,8 +84,30 @@ jobs:
             -WeeklyDriftSummaryJson $env:DRIFT_SUMMARY `
             -OutputJson 'apps/ops-web/public/ops-snapshot.json' | Out-Null
 
+      - name: Prepare review issue candidates
+        id: issue-candidates
+        if: vars.MILIMAP_DRIFT_REVIEW_ISSUES == 'true'
+        continue-on-error: true
+        shell: pwsh
+        run: |
+          $items = @(& tools/data/export-weekly-drift-issue-candidates.ps1 -SnapshotPath 'apps/ops-web/public/ops-snapshot.json')
+          if ($items.Count -gt 0) {
+            $json = ConvertTo-Json -InputObject $items -Compress
+            "candidates=$json" >> $env:GITHUB_OUTPUT
+          }
+
+      - name: Check Cloudflare Pages secrets for dashboard refresh
+        shell: bash
+        env:
+          CF_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CF_ACCOUNT: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          if [ -z "$CF_TOKEN" ] || [ -z "$CF_ACCOUNT" ]; then
+            echo "Ops dashboard was not published because Cloudflare credentials are missing." >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+
       - name: Set up Node.js 24 for ops-web
-        if: success() && steps.cf.outputs.deploy == 'true'
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: "24"
@@ -89,17 +115,70 @@ jobs:
           cache-dependency-path: apps/ops-web/package-lock.json
 
       - name: Build ops-web bundle
-        if: success() && steps.cf.outputs.deploy == 'true'
         working-directory: apps/ops-web
         run: |
           npm ci
           npm run build
 
       - name: Publish refreshed dashboard to Cloudflare Pages
-        if: success() && steps.cf.outputs.deploy == 'true'
+        id: publish
         uses: cloudflare/wrangler-action@953926a2e2182532811c01a25e53647d93bf07c0 # v4.1.3
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           workingDirectory: apps/ops-web
           command: pages deploy dist --project-name=milimap-ops-web --branch=main --commit-dirty=true
+
+      - name: Report deployment and enforce source failure policy
+        if: '!cancelled()'
+        shell: pwsh
+        env:
+          DEPLOYMENT: ${{ steps.publish.outcome }}
+          FAILED_COUNT: ${{ steps.drift.outputs.failed-count }}
+          STRICT_FETCH: ${{ github.event_name == 'schedule' || inputs.fail_on_fetch_error }}
+        run: |
+          "Ops dashboard deployment: $env:DEPLOYMENT" >> $env:GITHUB_STEP_SUMMARY
+          if ($env:STRICT_FETCH -eq 'true' -and [int]$env:FAILED_COUNT -gt 0) {
+            throw "Official source checks failed: $env:FAILED_COUNT. Ops dashboard deployment: $env:DEPLOYMENT"
+          }
+
+  review-issues:
+    needs: weekly-drift-check
+    if: "!cancelled() && needs.weekly-drift-check.outputs.issue-candidates != ''"
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      issues: write
+    concurrency:
+      group: milimap-weekly-drift-review-issues
+      queue: max
+    steps:
+      - name: Open review issues for new source changes
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CANDIDATES: ${{ needs.weekly-drift-check.outputs.issue-candidates }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $endpoint = "repos/$env:GITHUB_REPOSITORY/issues"
+          $listEndpoint = $endpoint + '?state=all&per_page=100'
+          $existing = @(& gh api --paginate $listEndpoint --jq '.[] | select(.pull_request | not) | [.title, .html_url] | @tsv')
+          if ($LASTEXITCODE -ne 0) { throw 'Could not check existing review issues' }
+          $runUrl = "$env:GITHUB_SERVER_URL/$env:GITHUB_REPOSITORY/actions/runs/$env:GITHUB_RUN_ID"
+          foreach ($candidate in @($env:CANDIDATES | ConvertFrom-Json)) {
+            if ($candidate.source -cnotin @('ddc', 'paju', 'mma', 'yangju') -or
+                $candidate.fingerprint -cnotmatch '^[a-f0-9]{64}$' -or [int]$candidate.candidateCount -lt 1) {
+              throw 'Invalid review issue candidate'
+            }
+            $title = "[혜택 검토] $($candidate.source) $($candidate.fingerprint)"
+            $matching = $existing | Where-Object { ($_ -split [char]9, 2)[0] -ceq $title } | Select-Object -First 1
+            if ($matching) {
+              $existingUrl = ($matching -split [char]9, 2)[1]
+              "Existing review issue $($candidate.source) $existingUrl" >> $env:GITHUB_STEP_SUMMARY
+              continue
+            }
+            $body = "공식 출처 점검에서 검토 후보 $([int]$candidate.candidateCount)건을 확인했습니다.`n`n실행 및 검토 자료 $runUrl`n`nProductionAction=NONE"
+            $url = & gh api --method POST $endpoint -f "title=$title" -f "body=$body" --jq '.html_url'
+            if ($LASTEXITCODE -ne 0) { throw "Could not create review issue for $($candidate.source)" }
+            "Created review issue $($candidate.source) $url" >> $env:GITHUB_STEP_SUMMARY
+          }

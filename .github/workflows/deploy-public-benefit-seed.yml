@@ -42,24 +42,47 @@ jobs:
 
   deploy:
     needs: verify
-    if: github.ref == 'refs/heads/dev' && github.event_name != 'pull_request' && vars.MILIMAP_PUBLIC_SEED_ENABLED == 'true'
+    if: github.ref == 'refs/heads/dev' && github.event_name != 'pull_request' && vars.MILIMAP_PUBLIC_SEED_ENABLED != 'false'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     concurrency:
       group: milimap-public-benefit-seed
       queue: max
-    environment: public-benefit-seed
+    # Re-enable `environment: public-benefit-seed` once the repository owner configures the protected environment and dedicated secrets.
     steps:
+      - name: Check Cloudflare Pages secrets
+        id: cf
+        shell: bash
+        env:
+          CF_TOKEN: ${{ secrets.PUBLIC_BENEFIT_SEED_CLOUDFLARE_API_TOKEN || secrets.CLOUDFLARE_API_TOKEN }}
+          CF_ACCOUNT: ${{ secrets.PUBLIC_BENEFIT_SEED_CLOUDFLARE_ACCOUNT_ID || secrets.CLOUDFLARE_ACCOUNT_ID }}
+          EVENT_NAME: ${{ github.event_name }}
+        run: |
+          if [ -n "$CF_TOKEN" ] && [ -n "$CF_ACCOUNT" ]; then
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+            {
+              echo "### Cloudflare Pages 공개 시드 자동 배포 대기 중"
+              echo ""
+              echo "\`PUBLIC_BENEFIT_SEED_CLOUDFLARE_API_TOKEN\`/\`CLOUDFLARE_API_TOKEN\` 또는 \`PUBLIC_BENEFIT_SEED_CLOUDFLARE_ACCOUNT_ID\`/\`CLOUDFLARE_ACCOUNT_ID\` GitHub Secret이 설정되지 않아 배포를 건너뛰었습니다."
+            } >> "$GITHUB_STEP_SUMMARY"
+            if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
+              echo "ERROR: Missing Cloudflare Pages credentials." >&2
+              exit 1
+            fi
+          fi
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        if: steps.cf.outputs.configured == 'true'
         with:
           persist-credentials: false
       - name: Verify the first release target
         id: bootstrap
-        if: github.event_name == 'workflow_dispatch' && inputs.bootstrap
+        if: steps.cf.outputs.configured == 'true' && github.event_name == 'workflow_dispatch' && inputs.bootstrap
         shell: pwsh
         env:
-          CF_ACCOUNT: ${{ secrets.PUBLIC_BENEFIT_SEED_CLOUDFLARE_ACCOUNT_ID }}
-          CF_TOKEN: ${{ secrets.PUBLIC_BENEFIT_SEED_CLOUDFLARE_API_TOKEN }}
+          CF_ACCOUNT: ${{ secrets.PUBLIC_BENEFIT_SEED_CLOUDFLARE_ACCOUNT_ID || secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CF_TOKEN: ${{ secrets.PUBLIC_BENEFIT_SEED_CLOUDFLARE_API_TOKEN || secrets.CLOUDFLARE_API_TOKEN }}
         run: |
           if ($env:CF_ACCOUNT -notmatch '^[0-9a-f]{32}$' -or -not $env:CF_TOKEN) {
             throw 'Public Pages credentials are missing or invalid'
@@ -70,7 +93,8 @@ jobs:
             $project = Invoke-RestMethod -Uri $endpoint @request
             $deployments = Invoke-RestMethod -Uri "$endpoint/deployments?env=production&per_page=1" @request
           } catch {
-            throw 'Could not verify the public Pages project and production history'
+            $statusCode = if ($_.Exception.Response -and $_.Exception.Response.StatusCode) { [int]$_.Exception.Response.StatusCode } else { 'unknown' }
+            throw "Could not verify the public Pages project and production history (HTTP $statusCode)"
           }
           if (-not $project.success -or $project.result.subdomain -cne 'milimap-data.pages.dev' -or
               $project.result.production_branch -cne 'dev' -or -not $deployments.success -or
@@ -80,6 +104,7 @@ jobs:
           "empty=$(($deployments.result.Count -eq 0).ToString().ToLowerInvariant())" >> $env:GITHUB_OUTPUT
       - name: Check published version and stage release
         id: seed
+        if: steps.cf.outputs.configured == 'true'
         shell: pwsh
         env:
           BOOTSTRAP: ${{ steps.bootstrap.outputs.empty }}
@@ -95,13 +120,14 @@ jobs:
           "publish=$($result.publish.ToString().ToLowerInvariant())" >> $env:GITHUB_OUTPUT
           "Public seed v$($result.seedVersion), deployment required: $($result.publish)" >> $env:GITHUB_STEP_SUMMARY
       - name: Deploy approved assets to Pages
-        if: steps.seed.outputs.publish == 'true'
+        if: steps.cf.outputs.configured == 'true' && steps.seed.outputs.publish == 'true'
         uses: cloudflare/wrangler-action@953926a2e2182532811c01a25e53647d93bf07c0 # v4.1.3
         with:
-          apiToken: ${{ secrets.PUBLIC_BENEFIT_SEED_CLOUDFLARE_API_TOKEN }}
-          accountId: ${{ secrets.PUBLIC_BENEFIT_SEED_CLOUDFLARE_ACCOUNT_ID }}
+          apiToken: ${{ secrets.PUBLIC_BENEFIT_SEED_CLOUDFLARE_API_TOKEN || secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.PUBLIC_BENEFIT_SEED_CLOUDFLARE_ACCOUNT_ID || secrets.CLOUDFLARE_ACCOUNT_ID }}
           command: pages deploy "${{ runner.temp }}/public-benefit-seed/site" --project-name=milimap-data --branch=dev --commit-dirty=false
       - name: Verify production response and hashes
+        if: steps.cf.outputs.configured == 'true'
         shell: pwsh
         env:
           SMOKE_WORK_DIR: ${{ runner.temp }}/public-benefit-seed-smoke

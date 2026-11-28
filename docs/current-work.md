@@ -2,8 +2,15 @@
 
 이 문서는 팀원과 Codex가 저장소를 clone한 뒤 가장 먼저 확인하는 현재 개발 진입점입니다.
 
-## 최신 `dev` 상태 (2026-11-25)
+## 최신 `dev` 상태 (2026-11-29)
 
+- **공개 원격 시드 호스팅 라이브 완료 및 주간 드리프트 파이프라인 보강 (`seedVersion 15`, PR #257~#259):**
+  - 공개 원격 시드(`https://milimap-data.pages.dev`, Cloudflare Pages Direct Upload, `production_branch=dev`) 배포 및 검증 완료: `/benefits.seed.manifest.json` (`no-cache`), `/v/15/benefits.seed.json`, `/v/15/manual_benefits_seed.json` (`immutable`, 로컬 자산과 `SHA-256-LF-UTF8` 일치).
+  - `.github/workflows/deploy-public-benefit-seed.yml` 자동 배포 구성(`MILIMAP_PUBLIC_SEED_ENABLED=false` kill switch 유지; 소유자 전용 `public-benefit-seed` Environment 구성 전까지 저장소 시크릿 폴백). 상세 계약: [`docs/design/remote-seed-ota.md`](design/remote-seed-ota.md)
+  - `.github/workflows/weekly-benefit-drift-check.yml`(매주 월요일 04:00 KST, `dev` 기준)은 일부 출처 일시 오류 시에도 Ops 대시보드(`https://milimap-ops-web.pages.dev`, Cloudflare Zero Trust Access 잠금 유지)를 갱신한 뒤 마지막 단계에서 schedule 실패 알림을 유지하도록 보강됨.
+- **활성 후속 작업 상태 (2026-11-29):**
+  - **Android Remote Seed OTA (`feat/android-remote-seed-ota`, `938bbff`):** 로컬 기본(`false`)/OTA 활성(`-PmilimapRemoteSeedEnabled=true`) Gradle 빌드·린트·유닛 테스트(177건 중 176 통과, 1 스킵, 실패 0) 및 에뮬레이터(`Medium_Phone_API_37.0`) `BundledSeedSynchronizerTest`(7/7)·라이브 `https://milimap-data.pages.dev` v15 E2E·실제 앱 콜드 스타트(`remote_benefit_seed.xml` `completed=true`) 검증 완료. Issue `#252`(Figma Android 공유 MVP 확장)와 공용 파일(`MainActivity.kt`, `MiliSpotViewModel.kt`, `data/**`, `network/**`, `ui/**`, `app/build.gradle.kts`)이 겹쳐 `#252` 원격 브랜치/Draft PR 조율 후 병합 대기(Option B).
+  - **보안 격리 강화 (`public-benefit-seed` Environment 재연결):** 저장소 소유자(`@jelleoo`)의 GitHub Environment(`dev` 브랜치 제한) 및 전용 시크릿 등록 후 `.github/workflows/deploy-public-benefit-seed.yml`에 `environment: public-benefit-seed` 재연결 예정.
 - **Android 지도 탐색·성능·안정성·보안 개선 완료 (PR #202~#243):**
   - 풀스크린 지도 중심 탐색, 현 지도 영역 재검색, 바텀시트 UX 및 마커 재사용/IO 분리/검색 인덱스 최적화 (`#202`, `#204`, `#208`, `#210`)
   - 찜 보존 diff 기반 Room 동기화 및 병무청 API 업체의 내장 시드 승격 시 단일 트랜잭션 찜 이관 (`#206`, `#229`)
@@ -34,8 +41,8 @@
 ## 현재 기준선
 
 - 개발 기준 브랜치: `dev`
-- 기준일: 2026-11-26
-- current dev baseline: `dfe532eb9e96861db0e9c3c1b43d4bad3db5ad2d` (PR #255 ops-web 개편 반영; `seedVersion 15` 데이터 확장 반영)
+- 기준일: 2026-11-29
+- current dev baseline: `677026204f065ac14c316450756ef5b6d69934c3` (PR #257~#259 공개 시드 배포·주간 드리프트·ops-web 보강 반영; `seedVersion 15`)
 - 정본 CSV (`data/canonical/capital-area-military-benefits.csv`): `1,298`건 (23열 + `businessId`)
 - Android 번들 시드 (`apps/android/app/src/main/assets/benefits.seed.json`, `benefits.seed.manifest.json`): `seedVersion: 15`, `1,187`건 (전부 `ACTIVE`; `PUBLIC_EVIDENCE` 926건 + `LOCAL_GOV` 261건)
 - 지도 핀 커버리지: `1,170`건 (`98.6%`), 좌표 미확정 `17`건 (`1.4%`)
@@ -282,8 +289,9 @@ Task 7 Golden fixture는 real source-cited historical provenance와 synthetic al
 
 ## 다음 액션
 
-1. Phase 3 이후 product/UX 작업을 별도 설계·Issue로 시작한다.
-2. PDF/HWP/OCR, SNS/blog, and general discovery는 source-expansion issue로 별도 판단한다.
-3. 모든 후속 Phase에서도 `ProductionAction=NONE`, canonical/seed automatic write 금지, and GREEN human approval requirement를 유지한다.
+1. Issue `#252` 원격 브랜치/Draft PR 조율 후 `feat/android-remote-seed-ota`(`938bbff`) 통합·`-PmilimapRemoteSeedEnabled` 기본값 전환 확정 및 `dev` 병합을 진행한다.
+2. 저장소 소유자(`@jelleoo`)의 `public-benefit-seed` GitHub Environment 및 전용 Cloudflare 시크릿 설정 후 `deploy-public-benefit-seed.yml`에 `environment: public-benefit-seed`를 재연결한다.
+3. PDF/HWP/OCR, SNS/blog, and general discovery는 source-expansion issue로 별도 판단한다.
+4. 모든 후속 Phase에서도 `ProductionAction=NONE`, canonical/seed automatic write 금지, and GREEN human approval requirement를 유지한다.
 
 장기 개발 방향은 [`docs/roadmap.md`](roadmap.md)를 확인한다.
